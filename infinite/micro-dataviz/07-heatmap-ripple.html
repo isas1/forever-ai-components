@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="12x6 grid of rounded cells in a magma color ramp rippling from a moving source, follows the cursor for the wave origin.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Heatmap Ripple</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#120a18;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  canvas{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
+    color:#ff7ac6;opacity:.45;text-transform:uppercase}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">heatmap</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let W,H,DPR;
+  const COLS=12, ROWS=6; let phase=0;
+  // magma-ish ramp
+  function ramp(v){
+    v=Math.max(0,Math.min(1,v));
+    const stops=[[20,12,40],[120,30,110],[230,60,110],[255,150,80],[255,230,150]];
+    const f=v*(stops.length-1),i=Math.floor(f),fr=f-i;
+    const a=stops[i],b=stops[Math.min(stops.length-1,i+1)];
+    return 'rgb('+Math.round(a[0]+(b[0]-a[0])*fr)+','+Math.round(a[1]+(b[1]-a[1])*fr)+','+Math.round(a[2]+(b[2]-a[2])*fr)+')';
+  }
+  function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  let last=0; let cx=0.5,cy=0.5;
+  function draw(t){
+    if(document.hidden){last=t;return raf()}
+    last=t;if(!reduce)phase+=0.05;
+    ctx.clearRect(0,0,W,H);
+    const pad=W*0.07, gw=(W-2*pad)/COLS, gh=(H-2*pad)/ROWS, gap=Math.min(gw,gh)*0.12;
+    // moving ripple source
+    const sx=cx+(reduce?0:0.32*Math.cos(phase*0.7)), sy=cy+(reduce?0:0.3*Math.sin(phase*0.9));
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      const nx=(c+0.5)/COLS, ny=(r+0.5)/ROWS;
+      const d=Math.hypot(nx-sx,ny-sy);
+      let v=0.5+0.5*Math.sin(phase*1.6 - d*9);
+      v=v*Math.max(0,1-d*0.9);
+      ctx.fillStyle=ramp(v);
+      const x=pad+c*gw+gap/2, y=pad+r*gh+gap/2;
+      rr(x,y,gw-gap,gh-gap,Math.min(4,(gw-gap)/4));ctx.fill();
+    }
+    raf();
+  }
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  function raf(){requestAnimationFrame(draw)}
+  addEventListener('resize',resize);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
+  cv.addEventListener('pointermove',e=>{const b=cv.getBoundingClientRect();cx=(e.clientX-b.left)/b.width;cy=(e.clientY-b.top)/b.height;});
+  resize();raf();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Rebalancing Grid — Piet Mondrian. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Rebalancing Grid</title>
+<style>
+  html,body{margin:0;height:100%;background:#f7f4ec;overflow:hidden}
+  #mon01-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mon01-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mon01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#15110d;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mon01-stage" role="img" aria-label="A Mondrian grid of black lines that slide to new positions while red, blue and yellow fields refill the cells, always resolving into balance.">
+  <canvas id="mon01-cv"></canvas>
+</div>
+<div class="mon01-cap">The Rebalancing Grid</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mon01-cv'); if(!cv) return;
+  const C={white:'#f7f4ec',black:'#15110d',red:'#d6191e',blue:'#1d3bd1',yellow:'#f6c700'};
+  const PRIMARIES=[C.red,C.blue,C.yellow];
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h};
+  }
+  const lerp=(a,b,t)=>a+(b-a)*t, clamp=(v,a,b)=>v<a?a:v>b?b:v;
+  const rand=(a,b)=>a+Math.random()*(b-a), choice=a=>a[(Math.random()*a.length)|0];
+  const easeInOut=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+
+  let S=fitCanvas(cv);
+  let vLines,hLines,vTarget,hTarget,fills=[],t=0,phase=0,last=performance.now();
+  const dur=2600;
+  function newLayout(n){const a=[];while(a.length<n){const v=rand(.12,.88);if(a.every(x=>Math.abs(x-v)>.1))a.push(v);}return a.sort((x,y)=>x-y);}
+  function pickFills(){
+    const cols=[0,...vTarget,1],rows=[0,...hTarget,1],cells=[];
+    for(let i=0;i<cols.length-1;i++)for(let j=0;j<rows.length-1;j++)
+      cells.push({x0:cols[i],x1:cols[i+1],y0:rows[j],y1:rows[j+1]});
+    cells.sort(()=>Math.random()-.5);
+    const k=3+(Math.random()*2|0);
+    fills=cells.slice(0,k).map(c=>({...c,color:choice(PRIMARIES)}));
+  }
+  function reseed(){
+    if(!vLines){vLines=newLayout(3);hLines=newLayout(2);}
+    vTarget=newLayout(3+(Math.random()*2|0));hTarget=newLayout(2+(Math.random()*2|0));
+    function pad(from,to){
+      while(from.length<to.length)from.push(from[from.length-1]??rand(.2,.8));
+      while(from.length>to.length)to.push(to[to.length-1]??rand(.2,.8));
+    }
+    pad(vLines,vTarget);pad(hLines,hTarget);
+    vLines.sort((a,b)=>a-b);vTarget.sort((a,b)=>a-b);
+    hLines.sort((a,b)=>a-b);hTarget.sort((a,b)=>a-b);
+    pickFills();t=0;phase=1;
+  }
+  function draw(now){
+    const dt=now-last;last=now;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    let vNow,hNow,fillAlpha;
+    if(phase===1){
+      t+=dt;const p=clamp(t/dur,0,1),e=easeInOut(p);
+      vNow=vLines.map((v,i)=>lerp(v,vTarget[i],e));
+      hNow=hLines.map((v,i)=>lerp(v,hTarget[i],e));
+      fillAlpha=e;
+      if(p>=1){vLines=vTarget.slice();hLines=hTarget.slice();phase=0;t=0;}
+    }else{
+      vNow=vLines.slice();hNow=hLines.slice();fillAlpha=1;t+=dt;
+      if(t>(REDUCED?4000:1500))reseed();
+    }
+    ctx.fillStyle=C.white;ctx.fillRect(0,0,W,H);
+    fills.forEach(f=>{ctx.globalAlpha=fillAlpha;ctx.fillStyle=f.color;ctx.fillRect(f.x0*W,f.y0*H,(f.x1-f.x0)*W,(f.y1-f.y0)*H);});
+    ctx.globalAlpha=1;
+    ctx.fillStyle=C.black;const lw=7;
+    ctx.fillRect(0,0,W,lw);ctx.fillRect(0,H-lw,W,lw);ctx.fillRect(0,0,lw,H);ctx.fillRect(W-lw,0,lw,H);
+    vNow.forEach(v=>ctx.fillRect(Math.round(v*W-lw/2),0,lw,H));
+    hNow.forEach(v=>ctx.fillRect(0,Math.round(v*H-lw/2),W,lw));
+  }
+
+  let raf=0,running=false;
+  function loop(){if(!running)return;draw(performance.now());raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;last=performance.now();raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  reseed();
+  S.ctx.fillStyle=C.white;S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED)draw(performance.now());},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else start();});
+
+  if(REDUCED){draw(performance.now());}
+  else start();
+})();
+</script>
+</body>
+</html>

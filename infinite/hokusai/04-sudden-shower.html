@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Sudden Shower on the Great Bridge — Katsushika Hokusai. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sudden Shower on the Great Bridge</title>
+<style>
+  html,body{margin:0;height:100%;background:#4d5f74;overflow:hidden}
+  #hok04-stage{position:fixed;inset:0;width:100%;height:100%}
+  #hok04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .hok04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3ead6;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="hok04-stage" role="img" aria-label="Sudden shower on the great bridge: slanting sumi rain over a flat arched bridge silhouette where tiny figures in conical hats hurry through the gust, the wind shifting on its own.">
+  <canvas id="hok04-cv"></canvas>
+</div>
+<div class="hok04-cap">Sudden Shower on the Great Bridge</div>
+<script>
+(function(){
+  "use strict";
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cv=document.getElementById('hok04-cv'); if(!cv) return;
+  var ctx=cv.getContext('2d');
+  var W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+  var drops=[], wind=0.45, targetWind=0.45, t=0;
+
+  function size(){
+    var r=cv.getBoundingClientRect(); W=Math.max(2,r.width); H=Math.max(2,r.height);
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0); seed();
+  }
+  function seed(){
+    drops=[]; var n=Math.min(220,Math.floor(W*0.55));
+    for(var i=0;i<n;i++) drops.push({x:Math.random()*W*1.4-W*0.2,y:Math.random()*H,len:8+Math.random()*16,sp:5+Math.random()*7});
+  }
+  function bridge(){
+    var by=H*0.62;
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(0,by+30); ctx.quadraticCurveTo(W*0.5,by-40,W,by+30);
+    ctx.lineTo(W,by+44); ctx.quadraticCurveTo(W*0.5,by-26,0,by+44); ctx.closePath();
+    ctx.fillStyle="#1f2c1c"; ctx.fill();
+    ctx.strokeStyle="#1f2c1c"; ctx.lineWidth=2.5;
+    for(var i=0;i<=10;i++){ var u=i/10,x=u*W,yy=by-40*(1-Math.pow(2*u-1,2))+22; ctx.beginPath(); ctx.moveTo(x,yy); ctx.lineTo(x,yy-16); ctx.stroke(); }
+    for(var f=0;f<3;f++){ var fx=W*(0.22+f*0.28), fy=by-40*(1-Math.pow(2*(fx/W)-1,2))+18; ctx.fillStyle="#15391f"; ctx.beginPath(); ctx.moveTo(fx-7,fy-14); ctx.lineTo(fx+7,fy-14); ctx.lineTo(fx,fy-24); ctx.closePath(); ctx.fill(); ctx.fillRect(fx-3,fy-14,6,12); }
+    ctx.restore();
+  }
+  function draw(){
+    t+=0.016;
+    targetWind=0.45+Math.sin(t*0.18)*0.35;
+    wind += (targetWind-wind)*0.04;
+    ctx.clearRect(0,0,W,H);
+    var g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,"#4d5f74"); g.addColorStop(0.55,"#73849a"); g.addColorStop(1,"#9aa7b2");
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    bridge();
+    ctx.strokeStyle="rgba(20,28,40,0.55)"; ctx.lineWidth=1;
+    var dx=wind*-1;
+    for(var i=0;i<drops.length;i++){
+      var d=drops[i];
+      ctx.beginPath(); ctx.moveTo(d.x,d.y); ctx.lineTo(d.x-dx*d.len,d.y-d.len*1.4); ctx.stroke();
+      d.y+=d.sp*1.4; d.x-=dx*d.sp*0.6;
+      if(d.y>H){ d.y=-d.len; d.x=Math.random()*W*1.4-W*0.2; }
+      if(d.x<-W*0.25){ d.x=W*1.1; }
+    }
+  }
+
+  var raf=0, running=false;
+  function loop(){ if(!running) return; draw(); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  size();
+  var _rt;
+  window.addEventListener('resize', function(){ clearTimeout(_rt); _rt=setTimeout(function(){ size(); if(REDUCED) draw(); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(); } else start();
+})();
+</script>
+</body>
+</html>

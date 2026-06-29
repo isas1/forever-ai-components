@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Fourteen multicolor gradient bubbles packing toward center with soft collision relaxation and gentle jiggle, repacks on click.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bubble Pack Jiggle</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#06121a;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  canvas{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
+    color:#41d6ff;opacity:.4;text-transform:uppercase}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">bubble pack</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let W,H,DPR;
+  const pal=['#41d6ff','#5af2c4','#ffd166','#ff7eb6','#9b8cff','#73e07a'];
+  const N=14; let b=[];
+  function init(){
+    b=[];for(let i=0;i<N;i++){const r=8+Math.random()*Math.random()*40;
+      b.push({x:Math.random(),y:Math.random(),r:r,vx:0,vy:0,c:pal[i%pal.length],ph:Math.random()*6});}
+  }
+  function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  let last=0,phase=0;
+  function step(){
+    const S=Math.min(W,H);
+    // convert to px, relax overlaps
+    for(let i=0;i<N;i++){const A=b[i];
+      let ax=0,ay=0;
+      // attract to center
+      ax+=(0.5-A.x)*0.6; ay+=(0.5-A.y)*0.6;
+      for(let j=0;j<N;j++){if(i===j)continue;const B=b[j];
+        let dx=(A.x-B.x)*S, dy=(A.y-B.y)*S, d=Math.hypot(dx,dy)||0.001;
+        const min=(A.r+B.r)*1.04;
+        if(d<min){const f=(min-d)/min*0.9; ax+=dx/d*f; ay+=dy/d*f;}
+      }
+      const jig=reduce?0:0.18;
+      A.vx=(A.vx+ax*0.02)*0.85 + Math.cos(phase+A.ph)*jig*0.004;
+      A.vy=(A.vy+ay*0.02)*0.85 + Math.sin(phase*1.2+A.ph)*jig*0.004;
+      A.x+=A.vx; A.y+=A.vy;
+      const m=A.r/S; A.x=Math.max(m,Math.min(1-m,A.x)); A.y=Math.max(m,Math.min(1-m,A.y));
+    }
+  }
+  function draw(t){
+    if(document.hidden){last=t;return raf()}
+    const dt=Math.min(64,t-last);last=t;if(!reduce)phase+=dt/600;
+    step();
+    ctx.clearRect(0,0,W,H);
+    for(const A of b){const x=A.x*W,y=A.y*H, pr=A.r*(1+(reduce?0:0.05*Math.sin(phase*2+A.ph)));
+      const g=ctx.createRadialGradient(x-pr*0.3,y-pr*0.3,pr*0.1,x,y,pr);
+      g.addColorStop(0,A.c);g.addColorStop(1,A.c+'33');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,pr,0,7);ctx.fill();
+      ctx.strokeStyle=A.c+'88';ctx.lineWidth=1;ctx.stroke();
+    }
+    raf();
+  }
+  function raf(){requestAnimationFrame(draw)}
+  addEventListener('resize',resize);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
+  cv.addEventListener('pointerdown',init);
+  resize();init();raf();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Five blue stacked streamgraph ribbons drifting inside-out with smooth bezier flow and a glowing right-edge data-entry seam.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Streamgraph Drift</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0e1424;}
+  #sgd-c{display:block;width:100%;height:100%;}
+  .sgd-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
+       letter-spacing:.14em;color:#6f8cff;opacity:.36;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="sgd-c"></canvas>
+<div class="sgd-cap">Streamgraph Drift</div>
+<script>
+(function(){
+  const cv=document.getElementById('sgd-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize',size);size();
+
+  // Five series, each a column buffer of values that drift over time.
+  const N=5, COLS=120;
+  const hues=['#3a4d8f','#5a6fd0','#6f8cff','#9ab0ff','#c7d4ff'];
+  const series=[];
+  for(let s=0;s<N;s++){
+    const col=[]; for(let i=0;i<COLS;i++) col.push(0.4+0.3*Math.random());
+    series.push({col, phase:Math.random()*6.28, freq:0.5+Math.random()*1.1,
+                 drift:Math.random()*6.28, amp:0.55+Math.random()*0.5});
+  }
+  let t=0, boost=0;
+  cv.addEventListener('pointermove',e=>{boost=Math.min(boost+0.25,1.4);});
+  cv.addEventListener('click',()=>{boost=1.6;});
+
+  function pushColumn(){
+    // generate next value per series from layered sines -> organic swell
+    for(let s=0;s<N;s++){
+      const S=series[s];
+      const v=S.amp*(0.55
+        +0.42*Math.sin(t*0.013*S.freq+S.phase)
+        +0.22*Math.sin(t*0.031*S.freq+S.drift)
+        +0.12*Math.sin(t*0.071+s*1.3));
+      S.col.push(Math.max(0.06,v));
+      if(S.col.length>COLS) S.col.shift();
+    }
+  }
+
+  // wiggle-minimized baseline (Byron/Wattenberg g0): weights earlier-stacked layers.
+  function baseline(vals){
+    let sum=0; for(let s=0;s<N;s++) sum+=vals[s];
+    let wsum=0; for(let s=0;s<N;s++) wsum+=(N-s)*vals[s];
+    return -wsum/(N+1) - sum/2; // centering offset for inside-out look
+  }
+
+  function frame(){
+    if(!reduce){ t+=1+boost*2; boost*=0.95; pushColumn(); pushColumn(); }
+    ctx.clearRect(0,0,W,H);
+    // subtle vertical vignette backdrop
+    const bg=ctx.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0,'#0e1424');bg.addColorStop(1,'#0b1020');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+
+    const cy=H*0.5, vscale=H*0.30;
+    // precompute stacked layer boundaries per column
+    const xs=COLS;
+    // upper[s] and lower[s] arrays of y per column
+    const lo=[],up=[];
+    for(let s=0;s<N;s++){lo.push(new Float32Array(xs));up.push(new Float32Array(xs));}
+    let total=0,cnt=0;
+    for(let i=0;i<xs;i++){
+      const vals=[]; let colSum=0;
+      for(let s=0;s<N;s++){const v=series[s].col[i]||0.1; vals.push(v); colSum+=v;}
+      total+=colSum;cnt++;
+      let y=cy + baseline(vals)*vscale*0.5;
+      for(let s=0;s<N;s++){
+        const h=vals[s]*vscale;
+        lo[s][i]=y; up[s][i]=y+h; y+=h;
+      }
+    }
+    const avg=total/Math.max(cnt,1);
+    const xAt=i=>(i/(xs-1))*W;
+
+    // draw each band as a smooth filled ribbon, newest data at right
+    for(let s=0;s<N;s++){
+      ctx.beginPath();
+      ctx.moveTo(xAt(0),lo[s][0]);
+      for(let i=1;i<xs;i++){const x0=xAt(i-1),x1=xAt(i);ctx.bezierCurveTo((x0+x1)/2,lo[s][i-1],(x0+x1)/2,lo[s][i],x1,lo[s][i]);}
+      for(let i=xs-1;i>0;i--){const x0=xAt(i),x1=xAt(i-1);ctx.bezierCurveTo((x0+x1)/2,up[s][i],(x0+x1)/2,up[s][i-1],x1,up[s][i-1]);}
+      ctx.closePath();
+      // shade by current thickness rank: thicker = brighter accent
+      const cur=series[s].col[xs-1]||0.1;
+      const lum=Math.min(1,cur/(avg*1.8+0.001));
+      const g=ctx.createLinearGradient(0,0,W,0);
+      g.addColorStop(0,hues[s]); g.addColorStop(1,hues[s]);
+      ctx.fillStyle=hues[s];
+      ctx.globalAlpha=0.62+0.30*lum;
+      ctx.fill();
+      // top contour highlight
+      ctx.globalAlpha=0.20+0.4*lum;
+      ctx.lineWidth=1; ctx.strokeStyle='#dbe4ff';
+      ctx.beginPath();ctx.moveTo(xAt(0),lo[s][0]);
+      for(let i=1;i<xs;i++){const x0=xAt(i-1),x1=xAt(i);ctx.bezierCurveTo((x0+x1)/2,lo[s][i-1],(x0+x1)/2,lo[s][i],x1,lo[s][i]);}
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+
+    // right-edge data-entry seam (where new columns arrive)
+    const seam=ctx.createLinearGradient(W-40,0,W,0);
+    seam.addColorStop(0,'rgba(111,140,255,0)');seam.addColorStop(1,'rgba(111,140,255,0.16)');
+    ctx.fillStyle=seam;ctx.fillRect(W-40,0,40,H);
+    ctx.fillStyle='rgba(199,212,255,0.5)';ctx.fillRect(W-1.2,0,1.2,H);
+
+    if(!reduce) raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){for(let k=0;k<200;k++){t+=2;pushColumn();}frame();}else start();
+})();
+</script>
+</body>
+</html>

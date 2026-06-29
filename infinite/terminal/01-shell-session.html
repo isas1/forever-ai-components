@@ -1,0 +1,91 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Shell Session — Terminal. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shell Session</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#00ff41;font:14px/1.6 ui-monospace,Menlo,"Courier New",monospace}
+.trm-screen{padding:14px;height:100%;overflow:hidden;display:flex;flex-direction:column;gap:0}
+.trm-line{white-space:pre;word-break:break-all}
+.trm-prompt{color:#4ade80}
+.trm-cmd{color:#e2e8f0}
+.trm-out{color:#00ff41;opacity:.85}
+.trm-err{color:#ff5555}
+.trm-cursor{display:inline-block;width:8px;height:1em;background:#00ff41;animation:trm-blink 1s step-start infinite;vertical-align:text-bottom;margin-left:1px}
+@keyframes trm-blink{0%,100%{opacity:1}50%{opacity:0}}
+.trm-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#00ff41;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+</style></head><body>
+<div class="trm-screen" id="trm-screen"></div>
+<div class="trm-cap">shell session</div>
+<script>(()=>{
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const screen=document.getElementById('trm-screen');
+  const HOST='dave@bbs-1992:~$ ';
+  const sessions=[
+    {cmd:'ls -la /var/log',out:['total 128','drwxr-xr-x  12 root  root   4096 Jun 28 03:14 .','drwxr-xr-x  14 root  root   4096 Jun 27 22:00 ..','rw-r--r--   1 root  adm   87412 Jun 28 03:14 syslog','-rw-r--r--   1 root  adm    1024 Jun 28 02:00 auth.log']},
+    {cmd:'ps aux | grep node',out:['root       814  0.0  0.2  node /usr/bin/server.js','dave      1337  2.1  1.8  node app.js --port 3000','dave      1338  0.0  0.0  grep --color=auto node']},
+    {cmd:'ping -c 3 192.168.1.1',out:['PING 192.168.1.1: 56 data bytes','64 bytes from 192.168.1.1: icmp_seq=0 ttl=64 time=0.812 ms','64 bytes from 192.168.1.1: icmp_seq=1 ttl=64 time=0.794 ms','64 bytes from 192.168.1.1: icmp_seq=2 ttl=64 time=0.831 ms','--- 192.168.1.1 ping statistics ---','3 packets transmitted, 3 received, 0% packet loss']},
+    {cmd:'cat /etc/hostname',out:['bbs-1992']},
+  ];
+
+  if(reduce){
+    sessions.forEach(s=>{
+      addLine(HOST+s.cmd,'trm-prompt');
+      s.out.forEach(o=>addLine(o,'trm-out'));
+    });
+    return;
+  }
+
+  function addLine(txt,cls){
+    const d=document.createElement('div');
+    d.className='trm-line '+(cls||'');
+    d.textContent=txt;
+    screen.appendChild(d);
+    while(screen.children.length>18)screen.removeChild(screen.firstChild);
+  }
+
+  let si=0,ci=0,phase='typing',timer=null,cmdLine=null,cursor=null;
+
+  function stop(){clearTimeout(timer);}
+  function play(){runPhase();}
+
+  function runPhase(){
+    const s=sessions[si%sessions.length];
+    if(phase==='typing'){
+      if(ci===0){
+        cmdLine=document.createElement('div');
+        cmdLine.className='trm-line';
+        const p=document.createElement('span');p.className='trm-prompt';p.textContent=HOST;
+        cmdLine.appendChild(p);
+        cursor=document.createElement('span');cursor.className='trm-cursor';
+        cmdLine.appendChild(cursor);
+        screen.appendChild(cmdLine);
+        while(screen.children.length>18)screen.removeChild(screen.firstChild);
+      }
+      if(ci<s.cmd.length){
+        const t=document.createElement('span');t.className='trm-cmd';t.textContent=s.cmd[ci];
+        cmdLine.insertBefore(t,cursor);
+        ci++;
+        timer=setTimeout(runPhase,reduce?0:60+Math.random()*40);
+      } else {
+        phase='output';ci=0;
+        timer=setTimeout(runPhase,300);
+      }
+    } else if(phase==='output'){
+      if(ci<s.out.length){
+        addLine(s.out[ci],'trm-out');
+        ci++;timer=setTimeout(runPhase,120);
+      } else {
+        phase='pause';ci=0;
+        timer=setTimeout(()=>{
+          addLine('','');
+          si++;phase='typing';ci=0;runPhase();
+        },1400);
+      }
+    }
+  }
+
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  play();
+})();</script>
+</body></html>

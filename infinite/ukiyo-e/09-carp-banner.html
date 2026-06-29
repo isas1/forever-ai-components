@@ -1,0 +1,186 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Three stacked koi-nobori carp streamers ripple in the wind on a pole above stylised waves, a cream sun, and a distant indigo cone.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carp Banner</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  #uk09-stage{position:fixed;inset:0;display:block}
+  #uk09-c{position:absolute;inset:0;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){#uk09-c{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="uk09-stage" role="img" aria-label="Ukiyo-e woodblock scene: koi-nobori carp streamers rippling in the wind above stylised waves, a cream sun, and a distant indigo cone.">
+  <canvas id="uk09-c"></canvas>
+</div>
+<div class="cap">Carp Banner</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("uk09-stage");
+  var cv=document.getElementById("uk09-c");
+  var g=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // palette
+  var BG="#0f1822", INDIGO="#1d3a5f", INDIGO2="#27517f",
+      CREAM="#e8d5b0", CORAL="#d65a4a", CORAL2="#e8845f",
+      INK="#0a1018", WHITE="#f3ead6", TEAL="#2f6f6a";
+
+  var W=0,H=0,DPR=1,t=0,running=true,raf=0;
+
+  // reusable per-carp segment buffers (allocate once; segs is fixed)
+  var SEGS=18;
+  var topY=new Float32Array(SEGS+1),
+      botY=new Float32Array(SEGS+1),
+      midY=new Float32Array(SEGS+1);
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    g.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  // ---- static backdrop: bokashi sky, sun, distant cone, wave bands ----
+  function backdrop(){
+    var sky=g.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0,"#0c1420"); sky.addColorStop(.55,"#13263c"); sky.addColorStop(1,"#1b3a59");
+    g.fillStyle=sky; g.fillRect(0,0,W,H);
+    // cream sun disc (flat plane), static
+    var cx=W*0.72, cy=H*0.27, r=Math.min(W,H)*0.14;
+    g.fillStyle=CREAM; g.beginPath(); g.arc(cx,cy,r,0,6.2832); g.fill();
+    // distant indigo cone (Fuji-like), bokashi by two flat planes
+    var bx=W*0.22, by=H*0.46, bw=Math.min(W,H)*0.5, bh=Math.min(W,H)*0.30;
+    g.fillStyle=INDIGO; g.beginPath();
+    g.moveTo(bx,by); g.lineTo(bx-bw*0.5,by+bh); g.lineTo(bx+bw*0.5,by+bh); g.closePath(); g.fill();
+    g.fillStyle=WHITE; g.beginPath();
+    g.moveTo(bx,by); g.lineTo(bx-bw*0.14,by+bh*0.32); g.lineTo(bx+bw*0.14,by+bh*0.32); g.closePath(); g.fill();
+    // wave bands at base
+    var baseY=H*0.80;
+    g.fillStyle=INDIGO2; g.fillRect(0,baseY,W,H-baseY);
+    var amp=H*0.018, step=W/9;
+    g.fillStyle=TEAL;
+    for(var b=0;b<2;b++){
+      var yy=baseY+b*amp*2.2+amp;
+      g.beginPath(); g.moveTo(0,yy);
+      for(var x=0;x<=W+step;x+=step){
+        g.quadraticCurveTo(x-step*0.5,yy-amp,x,yy);
+      }
+      g.lineTo(W,H); g.lineTo(0,H); g.closePath(); g.fill();
+    }
+    // foam crests (flat cream arcs)
+    g.fillStyle=CREAM;
+    for(var fx=step*0.5;fx<W;fx+=step){
+      g.beginPath(); g.arc(fx,baseY+amp,amp*0.55,Math.PI,0); g.fill();
+    }
+  }
+
+  // pole
+  function pole(px){
+    g.strokeStyle=INK; g.lineWidth=Math.max(3,W*0.012);
+    g.beginPath(); g.moveTo(px,H*0.05); g.lineTo(px,H*0.82); g.stroke();
+    // crossbar ring
+    g.fillStyle=CORAL; g.beginPath(); g.arc(px,H*0.07,W*0.012,0,6.2832); g.fill();
+  }
+
+  // ---- one carp streamer, body = horizontal ripple of segments ----
+  // anchored at (ax,ay), flows right, length L, color, phase
+  function carp(ax,ay,L,h,col,col2,ph,wind){
+    var segs=SEGS, dx=L/segs;
+    var i,sx,wave,taper;
+    for(i=0;i<=segs;i++){
+      var u=i/segs;
+      sx=ax+u*L;
+      // travelling ripple along length; tail whips more
+      wave=Math.sin(u*6.0 - t*2.4 + ph)*h*0.42*(0.35+u*0.9)
+          + Math.sin(t*0.9+ph)*h*0.12*u;          // slow sway
+      var droop=wind*u*u*h*0.9;                    // gravity sag toward tail
+      var cy=ay+wave+droop;
+      // mouth wide, body full, tail pinched
+      taper = u<0.12 ? (1.0+ (0.12-u)*1.4) : (1.0 - Math.pow((u-0.12)/0.88,1.4)*0.78);
+      midY[i]=cy; topY[i]=cy-h*0.5*taper; botY[i]=cy+h*0.5*taper;
+    }
+    // body fill
+    g.beginPath(); g.moveTo(ax,topY[0]);
+    for(i=0;i<=segs;i++) g.lineTo(ax+i*dx,topY[i]);
+    for(i=segs;i>=0;i--) g.lineTo(ax+i*dx,botY[i]);
+    g.closePath();
+    g.fillStyle=col; g.fill();
+    // belly plane (lower third) lighter — flat color plane
+    g.beginPath(); g.moveTo(ax,midY[0]+ (botY[0]-midY[0])*0.18);
+    for(i=0;i<=segs;i++) g.lineTo(ax+i*dx,midY[i]+(botY[i]-midY[i])*0.18);
+    for(i=segs;i>=0;i--) g.lineTo(ax+i*dx,botY[i]);
+    g.closePath(); g.fillStyle=col2; g.fill();
+    // tail fork notch
+    g.fillStyle=BG; g.beginPath();
+    g.moveTo(ax+L,topY[segs]); g.lineTo(ax+L-dx*1.3,midY[segs]); g.lineTo(ax+L,botY[segs]);
+    g.closePath(); g.fill();
+    // bold outline
+    g.lineJoin="round"; g.strokeStyle=INK; g.lineWidth=Math.max(1.4,W*0.0055);
+    g.beginPath(); g.moveTo(ax,topY[0]);
+    for(i=0;i<=segs;i++) g.lineTo(ax+i*dx,topY[i]);
+    g.lineTo(ax+L-dx*1.3,midY[segs]);
+    for(i=segs;i>=0;i--) g.lineTo(ax+i*dx,botY[i]);
+    g.closePath(); g.stroke();
+    // eye
+    var ey=midY[1];
+    g.fillStyle=WHITE; g.beginPath(); g.arc(ax+dx*1.1,ey,h*0.16,0,6.2832); g.fill();
+    g.fillStyle=INK; g.beginPath(); g.arc(ax+dx*1.1,ey,h*0.07,0,6.2832); g.fill();
+    g.strokeStyle=INK; g.lineWidth=Math.max(1.2,W*0.004);
+    g.beginPath(); g.arc(ax+dx*1.1,ey,h*0.16,0,6.2832); g.stroke();
+    // gill arc
+    g.beginPath(); g.moveTo(ax+dx*2.4,topY[2]);
+    g.quadraticCurveTo(ax+dx*1.6,midY[2],ax+dx*2.4,botY[2]); g.stroke();
+    // scale rows: stacked semicircles (woodblock flat) on first 70%
+    g.lineWidth=Math.max(1,W*0.003);
+    var rows=4, lim=Math.floor(segs*0.72);
+    for(var r=0;r<rows;r++){
+      for(i=3;i<lim;i+=2){
+        var fy=topY[i]+(botY[i]-topY[i])*((r+0.6)/rows);
+        var rr=(botY[i]-topY[i])/(rows*1.7);
+        g.beginPath(); g.arc(ax+i*dx,fy,rr,Math.PI*0.08,Math.PI-Math.PI*0.08); g.stroke();
+      }
+    }
+  }
+
+  function drawScene(){
+    backdrop();
+    var px=W*0.10;
+    pole(px);
+    var L=W*0.74, ax=px+W*0.03;
+    // three carp stacked, big to small, classic koi-nobori order
+    carp(ax, H*0.20, L*0.98, H*0.16, INK,      "#22303f", 0.0, 0.30);  // black father
+    carp(ax, H*0.44, L*0.86, H*0.135, CORAL,   CORAL2,    1.7, 0.34);  // red mother
+    carp(ax, H*0.63, L*0.72, H*0.105, INDIGO2, "#5d86b0", 3.4, 0.40);  // blue child
+  }
+
+  function frame(){
+    if(!running) return;
+    t+=0.016;
+    // keep t bounded: 2000π is a common multiple of all sin frequency coeffs
+    if(t>6283.185307) t-=6283.185307;
+    drawScene();
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){
+    resize();
+    if(reduce){ t=0.6; drawScene(); return; }
+    cancelAnimationFrame(raf); running=true; raf=requestAnimationFrame(frame);
+  }
+
+  window.addEventListener("resize",function(){
+    resize();
+    if(reduce){ drawScene(); }
+  });
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden){ running=false; cancelAnimationFrame(raf); }
+    else if(!running){ running=true; raf=requestAnimationFrame(frame); }
+  });
+
+  start();
+})();
+</script>
+</body></html>

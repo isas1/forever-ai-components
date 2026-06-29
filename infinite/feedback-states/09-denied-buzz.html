@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A red no-entry disk on diagonal steel slabs head-shakes and buzzes with impact sparks, stamping DENIED on each rejected action.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Denied</title>
+<style>
+  :root{--bg:#0b0d12;--ink:#f1e9d8;--red:#e2473d;--steel:#5b6473;--acc:#34d399}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);overflow:hidden;font-family:"Helvetica Neue",Arial,sans-serif}
+  #fb09-stage{position:fixed;inset:0;display:grid;place-items:center;cursor:pointer;outline:none}
+  #fb09-stage:focus-visible #fb09-ring{opacity:1}
+  #fb09-ring{position:absolute;width:min(86vmin,560px);height:min(86vmin,560px);
+    border:2px solid var(--acc);border-radius:6px;opacity:0;transition:opacity .15s;pointer-events:none}
+  /* diagonal constructivist slab, static */
+  .fb09-slab{position:absolute;left:-12%;width:124%;height:34%;background:var(--steel);opacity:.16}
+  #fb09-slabA{top:8%;transform:rotate(-19deg)}
+  #fb09-slabB{bottom:4%;background:var(--red);opacity:.10;transform:rotate(-19deg)}
+  #fb09-rig{position:relative;width:min(60vmin,360px);height:min(60vmin,360px);will-change:transform}
+  #fb09-head{position:absolute;inset:0;will-change:transform}
+  svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .fb09-disk{fill:none;stroke:var(--red);stroke-width:18}
+  .fb09-bar{stroke:var(--red);stroke-width:18;stroke-linecap:butt}
+  .fb09-stamp{fill:var(--ink);font:800 46px/1 "Helvetica Neue",Arial,sans-serif;
+    letter-spacing:.18em;text-anchor:middle}
+  #fb09-spark line{stroke:var(--red);stroke-width:4;stroke-linecap:round;opacity:0}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fb09-stage" tabindex="0" role="button" aria-label="Denied. Activate to attempt the locked action.">
+  <div id="fb09-slabA" class="fb09-slab"></div>
+  <div id="fb09-slabB" class="fb09-slab"></div>
+  <div id="fb09-rig">
+    <div id="fb09-head">
+      <svg viewBox="0 0 360 360" aria-hidden="true">
+        <circle class="fb09-disk" cx="180" cy="180" r="118"/>
+        <line class="fb09-bar" x1="96.6" y1="96.6" x2="263.4" y2="263.4"/>
+        <text class="fb09-stamp" x="180" y="335">DENIED</text>
+      </svg>
+    </div>
+    <svg id="fb09-spark" viewBox="0 0 360 360" aria-hidden="true">
+      <line x1="180" y1="62" x2="180" y2="30"/>
+      <line x1="298" y1="180" x2="330" y2="180"/>
+      <line x1="180" y1="298" x2="180" y2="330"/>
+      <line x1="62" y1="180" x2="30" y2="180"/>
+      <line x1="96" y1="96" x2="72" y2="72"/>
+      <line x1="264" y1="96" x2="288" y2="72"/>
+      <line x1="264" y1="264" x2="288" y2="288"/>
+      <line x1="96" y1="264" x2="72" y2="288"/>
+    </svg>
+  </div>
+  <div id="fb09-ring"></div>
+</div>
+<div class="cap">Denied</div>
+<p class="sr" id="fb09-live" role="status" aria-live="polite"></p>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var rig   = document.getElementById('fb09-rig');
+  var head  = document.getElementById('fb09-head');
+  var spark = document.getElementById('fb09-spark').querySelectorAll('line');
+  var stage = document.getElementById('fb09-stage');
+  var live  = document.getElementById('fb09-live');
+
+  // reduced motion: one calm, locked, legible frame. No loop.
+  if(reduce){
+    rig.style.transform = 'rotate(-1deg)';
+    live.textContent = 'Action denied.';
+    return;
+  }
+
+  var N = spark.length;
+  // spring head-shake state (angular wobble) + buzz (xy jitter)
+  var t = 0;            // ms of current buzz, -1 = idle
+  var dur = 620;        // buzz duration
+  var idle = 0;         // ms since last user input
+  var userHold = false; // user currently driving
+  var running = true, raf = 0, last = 0;
+
+  function trigger(){
+    t = 0;
+    live.textContent = 'Action denied.';
+  }
+
+  // ease: decaying sine — crisp, mechanical "no"
+  function shake(p){           // p 0..1
+    var decay = Math.pow(1-p, 1.7);
+    return Math.sin(p*Math.PI*7.5)*decay;
+  }
+
+  function frame(now){
+    if(!running){return;}
+    if(!last) last = now;
+    var dt = now - last; last = now; if(dt>50) dt=50;
+
+    // self-demo timer: re-trigger when idle and not mid-buzz
+    if(t<0){
+      idle += dt;
+      if(!userHold && idle > 1900){ trigger(); idle = 0; }
+    }
+
+    if(t>=0){
+      t += dt;
+      var p = t/dur;
+      if(p>=1){ t=-1; rig.style.transform='translate(0,0)'; head.style.transform='rotate(0deg)';
+                for(var k=0;k<N;k++){ spark[k].style.opacity=0; } }
+      else{
+        var s = shake(p);
+        // head turns side to side; rig buzzes hard then settles
+        var rot = s*13;                         // degrees
+        var bx  = s*9*(1-p);                    // px lateral buzz
+        var by  = Math.sin(p*Math.PI*23)*2.4*(1-p);
+        head.style.transform = 'rotate('+rot.toFixed(2)+'deg)';
+        rig.style.transform  = 'translate('+bx.toFixed(2)+'px,'+by.toFixed(2)+'px)';
+        // impact sparks on the first beat only, fading fast — slow, small flashes (seizure-safe)
+        var sp = p<0.22 ? (1-p/0.22)*0.85 : 0;
+        for(var i=0;i<N;i++){ spark[i].style.opacity = sp.toFixed(2); }
+      }
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+
+  // real interaction: pointer / keyboard hands control to user, then eases back
+  function userAct(){ userHold = true; idle = 0; trigger();
+    clearTimeout(userAct._h);
+    userAct._h = setTimeout(function(){ userHold = false; idle = 0; }, 2600);
+  }
+  stage.addEventListener('pointerdown', userAct);
+  stage.addEventListener('keydown', function(e){
+    if(e.key===' '||e.key==='Enter'){ e.preventDefault(); userAct(); }
+  });
+
+  // single rAF loop, paused when hidden
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ running=false; cancelAnimationFrame(raf); }
+    else if(!running){ running=true; last=0; raf=requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

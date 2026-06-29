@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Carp in the Still Pond — Katsushika Hokusai. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carp in the Still Pond</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d2347;overflow:hidden}
+  #hok08-stage{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 40%,#284e7e,#0d2347)}
+  #hok08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .hok08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#aecbe4;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="hok08-stage" role="img" aria-label="Carp in the still pond: koi swim slow circles in deep indigo water while seigaiha ripple rings bloom and spread, the fish darting when the rings reach them.">
+  <canvas id="hok08-cv"></canvas>
+</div>
+<div class="hok08-cap">Carp in the Still Pond</div>
+<script>
+(function(){
+  "use strict";
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cv=document.getElementById('hok08-cv'); if(!cv) return;
+  var ctx=cv.getContext('2d');
+  var W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+  var ripples=[], koi=[], t=0, nextRipple=40;
+
+  function size(){
+    var r=cv.getBoundingClientRect(); W=Math.max(2,r.width); H=Math.max(2,r.height);
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    if(koi.length===0) seedKoi();
+  }
+  function seedKoi(){
+    var cols=["#d96a7a","#e9a6ad","#cda85a","#f3ead6","#c98a3c"];
+    for(var i=0;i<5;i++) koi.push({x:Math.random()*W,y:Math.random()*H,a:Math.random()*6.28,sp:0.5+Math.random()*0.6,len:18+Math.random()*14,col:cols[i%cols.length],wob:Math.random()*6.28});
+  }
+  function ripple(x,y){
+    ripples.push({x:x,y:y,r:4,max:60+Math.random()*60,life:1});
+    koi.forEach(function(k){ var dx=k.x-x,dy=k.y-y,d=Math.hypot(dx,dy); if(d<140){ k.a=Math.atan2(dy,dx); k.sp=2.2; } });
+  }
+  function drawKoi(k){
+    ctx.save(); ctx.translate(k.x,k.y); ctx.rotate(k.a);
+    var sway=Math.sin(t*6+k.wob)*0.4;
+    ctx.beginPath(); ctx.moveTo(-k.len*0.5,0);
+    ctx.quadraticCurveTo(-k.len*0.9,sway*10,-k.len*1.1,sway*16);
+    ctx.quadraticCurveTo(-k.len*0.95,0,-k.len*1.1,-sway*16);
+    ctx.quadraticCurveTo(-k.len*0.9,-sway*10,-k.len*0.5,0);
+    ctx.fillStyle=k.col; ctx.globalAlpha=0.85; ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0,0,k.len*0.55,k.len*0.26,0,0,6.28);
+    ctx.fillStyle=k.col; ctx.globalAlpha=0.95; ctx.fill();
+    ctx.lineWidth=1.4; ctx.strokeStyle="rgba(26,23,20,0.45)"; ctx.stroke();
+    ctx.beginPath(); ctx.arc(k.len*0.12,0,k.len*0.12,0,6.28); ctx.fillStyle="rgba(243,234,214,0.7)"; ctx.fill();
+    ctx.globalAlpha=1; ctx.restore();
+  }
+  function draw(){
+    t+=0.016;
+    if(--nextRipple<=0){ ripple(W*(0.15+Math.random()*0.7),H*(0.15+Math.random()*0.7)); nextRipple=70+Math.random()*90; }
+    ctx.fillStyle="rgba(13,35,71,0.22)"; ctx.fillRect(0,0,W,H);
+    for(var i=ripples.length-1;i>=0;i--){
+      var rp=ripples[i]; rp.r+=1.4; rp.life=1-rp.r/rp.max;
+      if(rp.life<=0){ ripples.splice(i,1); continue; }
+      for(var rr=0;rr<3;rr++){ var rad=rp.r-rr*10; if(rad<=0)continue; ctx.beginPath(); ctx.arc(rp.x,rp.y,rad,0,6.28); ctx.strokeStyle="rgba(174,203,228,"+(rp.life*0.5*(1-rr*0.25))+")"; ctx.lineWidth=1.4; ctx.stroke(); }
+    }
+    for(var j=0;j<koi.length;j++){
+      var k=koi[j];
+      k.a += Math.sin(t*0.7+k.wob)*0.02;
+      k.sp += (0.55-k.sp)*0.02;
+      k.x += Math.cos(k.a)*k.sp; k.y += Math.sin(k.a)*k.sp;
+      if(k.x<-30)k.x=W+30; if(k.x>W+30)k.x=-30; if(k.y<-30)k.y=H+30; if(k.y>H+30)k.y=-30;
+      drawKoi(k);
+    }
+  }
+
+  var raf=0, running=false;
+  function loop(){ if(!running) return; draw(); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  size();
+  var _rt;
+  window.addEventListener('resize', function(){ clearTimeout(_rt); _rt=setTimeout(function(){ size(); if(REDUCED) draw(); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ ripple(W*0.3,H*0.4); for(var i=0;i<40;i++) draw(); } else start();
+})();
+</script>
+</body>
+</html>

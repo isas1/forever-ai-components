@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Amber banded gas giant with tilted Saturn-like rings slowly rotates over stars; pointer adjusts ring tilt and shadow terminator.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ringed Planet Rotate</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0710;}
+  #c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.08em;color:#ffe1b0;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Ringed Planet Rotate</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,R;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;R=Math.min(W,H)*0.2;
+  }
+  addEventListener('resize',size);size();
+  const stars=[];for(let i=0;i<55;i++)stars.push({x:Math.random(),y:Math.random(),r:Math.random()*1.1});
+  // banding palette
+  const bands=['#e8a85c','#d98f43','#f0c074','#c87c3a','#ecb568'];
+  let t=0,rot=0,tilt=0.4;
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+    tilt=0.22+((e.clientY-r.top)/H)*0.5;});
+  function frame(){
+    t++;if(!reduce)rot+=0.006;
+    ctx.fillStyle='#0a0710';ctx.fillRect(0,0,W,H);
+    stars.forEach(s=>{ctx.globalAlpha=0.4+0.4*Math.abs(Math.sin(t*0.02+s.x*7));
+      ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);ctx.fill();});
+    ctx.globalAlpha=1;
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(-0.32);
+    // back half of ring
+    drawRing(true);
+    // planet
+    const g=ctx.createRadialGradient(-R*0.35,-R*0.35,R*0.1,0,0,R*1.15);
+    g.addColorStop(0,'#ffd9a0');g.addColorStop(.55,'#d98f43');g.addColorStop(1,'#5e3416');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,R,0,Math.PI*2);ctx.fill();
+    // bands via clipped offset arcs
+    ctx.save();ctx.beginPath();ctx.arc(0,0,R,0,Math.PI*2);ctx.clip();
+    for(let i=0;i<6;i++){
+      const yy=(-R)+ ((i+ (rot*8)%1)/6)*2*R;
+      ctx.globalAlpha=0.28;ctx.fillStyle=bands[i%bands.length];
+      ctx.fillRect(-R,yy,2*R,R*0.16);
+    }
+    ctx.restore();ctx.globalAlpha=1;
+    // shadow terminator
+    ctx.save();ctx.beginPath();ctx.arc(0,0,R,0,Math.PI*2);ctx.clip();
+    const sh=ctx.createLinearGradient(R*0.1,0,R,0);
+    sh.addColorStop(0,'rgba(0,0,0,0)');sh.addColorStop(1,'rgba(0,0,0,0.55)');
+    ctx.fillStyle=sh;ctx.fillRect(-R,-R,2*R,2*R);ctx.restore();
+    // front half of ring
+    drawRing(false);
+    ctx.restore();
+    raf=requestAnimationFrame(frame);
+
+    function drawRing(back){
+      ctx.save();ctx.scale(1,tilt);
+      const segs=[[R*1.35,R*1.5,'rgba(240,210,160,0.55)'],
+                  [R*1.55,R*1.78,'rgba(200,150,90,0.45)'],
+                  [R*1.85,R*2.0,'rgba(230,190,140,0.3)']];
+      segs.forEach(s=>{
+        ctx.strokeStyle=s[2];ctx.lineWidth=(s[1]-s[0]);
+        ctx.beginPath();
+        if(back)ctx.arc(0,0,(s[0]+s[1])/2,Math.PI,Math.PI*2);
+        else ctx.arc(0,0,(s[0]+s[1])/2,0,Math.PI);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+  }
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){frame();}else start();
+})();
+</script>
+</body>
+</html>

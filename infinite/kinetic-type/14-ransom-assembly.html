@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Clashing mixed-font letters on cut-paper swatches fly in from random edges and spring-tumble into the word RANSOM, then reassemble.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ransom Assembly</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#141414;}
+  #ra-c{display:block;width:100%;height:100%;}
+  .ra-cap{position:fixed;right:10px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.14em;color:#e63946;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="ra-c"></canvas>
+<div class="ra-cap">Ransom Assembly</div>
+<script>
+(function(){
+  const cv=document.getElementById('ra-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const WORD="RANSOM", BG="#141414", ACC="#e63946";
+  // each glyph: distinct clashing weight/family/size/case -> ransom-note clash
+  const fams=['Georgia,serif','"Times New Roman",serif','Impact,sans-serif',
+              'Courier,monospace','"Arial Black",sans-serif','Verdana,sans-serif'];
+  const wts =['900','400','700','800','400','900'];
+  const caseFlip=[0,1,0,0,1,0]; // 1 => slightly tinted "cut paper" inverse
+  let W,H,DPR,scale,baseY,gap,sizes=[],xs=[],totalW=0,glyphW=[],sizesMax=0;
+  const G=WORD.length, glyphs=[];
+  function layout(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    scale=Math.min(W,H)/360;
+    const base=Math.min(W,H)*0.18;
+    sizes=[]; totalW=0; const wsc=[1.05,.78,1.15,.82,.95,1.1], pad=base*0.16;
+    sizesMax=0;
+    for(let i=0;i<G;i++){const s=base*wsc[i];sizes.push(s);if(s>sizesMax)sizesMax=s;}
+    // measure widths
+    xs=[]; glyphW=[]; let run=0;
+    for(let i=0;i<G;i++){
+      ctx.font=wts[i]+' '+sizes[i]+'px '+fams[i];
+      const w=ctx.measureText(WORD[i]).width;
+      glyphW[i]=w;                       // cache once — never re-measure per frame
+      xs.push({x:run,w:w}); run+=w+pad;
+    }
+    totalW=run-pad;
+    baseY=H*0.5;
+    const ox=(W-totalW)/2;
+    for(let i=0;i<G;i++){
+      const cxg=ox+xs[i].x+xs[i].w/2;
+      if(!glyphs[i]) glyphs[i]={};
+      glyphs[i].tx=cxg; glyphs[i].ty=baseY; glyphs[i].sz=sizes[i];
+    }
+  }
+  function spawn(i,delay){
+    const g=glyphs[i];
+    // fly in from a random edge
+    const edge=Math.floor(Math.random()*4), m=Math.max(W,H)*0.8;
+    if(edge===0){g.x=-m;g.y=Math.random()*H;}
+    else if(edge===1){g.x=W+m;g.y=Math.random()*H;}
+    else if(edge===2){g.x=Math.random()*W;g.y=-m;}
+    else{g.x=Math.random()*W;g.y=H+m;}
+    g.rot=(Math.random()-0.5)*7;          // tumbling
+    g.vr=(Math.random()-0.5)*0.5;
+    g.delay=delay; g.t=-delay; g.settled=false;
+    g.k=0.10+Math.random()*0.05;          // spring stiffness
+    g.d=0.78+Math.random()*0.06;          // damping (lets it overshoot+correct)
+    g.vx=0; g.vy=0; g.vrot=0;
+    g.tilt=(caseFlip[i]?(Math.random()-0.5)*0.18:(Math.random()-0.5)*0.10); // resting paper tilt
+  }
+  function resetAll(){
+    let d=0;
+    for(let i=0;i<G;i++){ spawn(i, d); d+=6+Math.random()*9; }
+    cycle=0;
+  }
+  let cycle=0, settleHold=0;
+  function step(g){
+    if(g.t<0){g.t++;return;}
+    g.t++;
+    // spring toward target with overshoot
+    const ax=(g.tx-g.x)*g.k, ay=(g.ty-g.y)*g.k;
+    g.vx=(g.vx+ax)*g.d; g.vy=(g.vy+ay)*g.d;
+    g.x+=g.vx; g.y+=g.vy;
+    // rotation eases to resting tilt
+    const ar=(g.tilt-g.rot)*0.14;
+    g.vrot=(g.vrot+ar)*0.80; g.rot+=g.vrot;
+    const dist=Math.abs(g.tx-g.x)+Math.abs(g.ty-g.y);
+    g.settled = dist<0.6 && Math.abs(g.vx)+Math.abs(g.vy)<0.3;
+  }
+  function paper(i,g,statc){
+    const s=g.sz, ch=WORD[i];
+    ctx.save();
+    ctx.translate(g.x,g.y);
+    ctx.rotate(statc?g.tilt:g.rot);
+    // cut-paper background swatch behind the letter (ransom note feel)
+    const pw=g.tx? (xsW(i)+s*0.22): s*0.8, ph=s*1.18;
+    const w=xsW(i)+s*0.24;
+    const inv=caseFlip[i];
+    ctx.fillStyle= inv? ACC : '#ededed';
+    // jagged-ish swatch via slightly rotated rect
+    ctx.save();
+    ctx.rotate((i%2?1:-1)*0.02);
+    rrect(-w/2, -ph/2, w, ph, s*0.06);
+    ctx.fill();
+    ctx.restore();
+    // subtle shadow line at base to seat on the baseline
+    // the glyph
+    ctx.font=wts[i]+' '+s+'px '+fams[i];
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle= inv? '#141414' : '#141414';
+    ctx.fillText(ch, 0, s*0.04);
+    ctx.restore();
+  }
+  function xsW(i){ return glyphW[i]||0; } // cached width (measured once in layout)
+  function rrect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+  }
+  function frame(){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    // faint baseline guide
+    ctx.strokeStyle='rgba(230,57,70,0.16)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(W*0.08,baseY+sizes_max()*0.55);
+    ctx.lineTo(W*0.92,baseY+sizes_max()*0.55);ctx.stroke();
+    let allSet=true;
+    for(let i=0;i<G;i++){const g=glyphs[i];step(g);if(!g.settled)allSet=false;}
+    // draw settled-ish last for crisp overlap; simple z by index
+    for(let i=0;i<G;i++) paper(i,glyphs[i],false);
+    if(allSet){ settleHold++; if(settleHold>120){settleHold=0; resetAll();} }
+    else settleHold=0;
+    raf=requestAnimationFrame(frame);
+  }
+  function sizes_max(){return sizesMax;}
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  addEventListener('resize',()=>{layout();});
+  cv.addEventListener('click',()=>{if(!reduce)resetAll();});
+  cv.addEventListener('pointermove',e=>{ // nudge nearest unsettled glyph
+    if(reduce)return; const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+    for(let i=0;i<G;i++){const g=glyphs[i];const d=Math.hypot(g.x-mx,g.y-my);
+      if(d<g.sz*0.7){g.vx+=(g.x-mx)*0.06;g.vy+=(g.y-my)*0.06;g.vrot+=0.05;}}
+  });
+  layout();
+  if(reduce){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    for(let i=0;i<G;i++){const g=glyphs[i];g.x=g.tx;g.y=g.ty;g.rot=0;g.tilt=(i%2?1:-1)*0.04;}
+    for(let i=0;i<G;i++) paper(i,glyphs[i],true);
+  } else { resetAll(); start(); }
+})();
+</script>
+</body>
+</html>

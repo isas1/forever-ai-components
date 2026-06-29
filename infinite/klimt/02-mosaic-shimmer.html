@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Mosaic Shimmer — Gustav Klimt. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mosaic Shimmer</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0805;overflow:hidden}
+  #kli02-stage{position:fixed;inset:0;width:100%;height:100%}
+  .kli02-grid{position:absolute;inset:0;display:grid;gap:2px;padding:6px}
+  .kli02-tess{position:relative;border-radius:2px;will-change:opacity,transform;
+    background:linear-gradient(135deg,#9a7d28,#c8a951 50%,#e6cf86);
+    opacity:.32;transition:opacity .1s linear, transform .1s linear}
+  .kli02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#e6cf86;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kli02-stage" role="img" aria-label="A field of gold tesserae in Byzantine mosaic manner: diagonal waves of light cross the grid, each tile catching and losing the gleam, with sparse jewel-toned accents.">
+  <div class="kli02-grid" id="kli02-grid"></div>
+</div>
+<div class="kli02-cap">Mosaic Shimmer</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const grid=document.getElementById('kli02-grid'); if(!grid) return;
+  const GOLD='#c8a951', COLS=14, ROWS=10;
+  grid.style.gridTemplateColumns='repeat('+COLS+',1fr)';
+  grid.style.gridTemplateRows='repeat('+ROWS+',1fr)';
+  const cells=[];
+  const accents=['#1f6b4f','#b8331f','#1c3f8f'];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const d=document.createElement('div');d.className='kli02-tess';
+    if(Math.random()<0.12){
+      const a=accents[(Math.random()*accents.length)|0];
+      d.style.background='linear-gradient(135deg,'+a+','+GOLD+')';
+    }
+    grid.appendChild(d);
+    cells.push({d, diag:(c/COLS)+(r/ROWS)});
+  }
+  if(REDUCED){ cells.forEach(c=>c.d.style.opacity=(0.4+Math.random()*0.4).toFixed(2)); return; }
+  let t=0,last=performance.now();
+  function step(){
+    if(!running) return;
+    const now=performance.now();const dt=(now-last)/1000;last=now;t+=dt;
+    for(const c of cells){
+      const w1=Math.sin((c.diag*6.2)-t*1.6);
+      const w2=Math.sin((c.diag*3.0)+t*0.9+1.4);
+      const v=(w1*0.6+w2*0.4);
+      const o=0.22+0.6*(v*0.5+0.5);
+      c.d.style.opacity=o.toFixed(3);
+      c.d.style.transform = v>0.7? 'scale(1.06)' : 'scale(1)';
+    }
+    raf=requestAnimationFrame(step);
+  }
+  let raf=0, running=false;
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(step); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden) stop(); else start(); });
+  start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Guarded military toggle switch where a hazard-striped red safety cover lifts, the chrome lever throws, and slams shut with a commit flash.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Toggle Latch</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0f1410;}
+  #tl-c{display:block;width:100%;height:100%;cursor:pointer;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#9fe870;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="tl-c"></canvas>
+<div class="cap">Toggle Latch</div>
+<script>
+(function(){
+  const cv=document.getElementById('tl-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const AC='#9fe870';
+  let W,H,DPR,S,cx,cy;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;S=Math.min(W,H)/300;
+  }
+  addEventListener('resize',size);size();
+
+  // phase machine: closed -> lifting -> throwing(commit) -> slamming(recoil) -> closed
+  // cover angle: 0 = flat/closed, up to ~1.05rad lifted. lever t: 0 off -> 1 on.
+  let phase=0,pt=0,cover=0,lever=0,recoil=0,flash=0,t=0,on=false;
+  const DUR={lift:46,throw:14,slam:30,rest:64};
+  function trigger(){ if(phase===0){ phase=1; pt=0; } }
+  cv.addEventListener('click',trigger);
+  cv.addEventListener('pointermove',e=>{ if(phase===0&&Math.random()<0.012) trigger(); });
+
+  function ease(x){ return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2; }
+
+  function step(){
+    if(reduce) return;
+    pt++;
+    if(phase===1){ // lift cover
+      cover=ease(Math.min(pt/DUR.lift,1))*1.0;
+      if(pt>=DUR.lift){ phase=2; pt=0; }
+    } else if(phase===2){ // throw lever past tipping point -> COMMIT
+      const p=Math.min(pt/DUR.throw,1);
+      lever=on?1-p:p;
+      // commit at tipping point (p crossing .5)
+      if(p>=.5 && flash<0.01 && recoil===0){ flash=1; recoil=1; }
+      if(pt>=DUR.throw){ on=!on; lever=on?1:0; phase=3; pt=0; }
+    } else if(phase===3){ // slam cover shut with recoil bounce
+      const p=Math.min(pt/DUR.slam,1);
+      const b=1-p; // damped bounce
+      cover=(1-ease(p))*1.0 + Math.sin(p*Math.PI*3)*0.06*b*b;
+      if(pt>=DUR.slam){ cover=0; phase=4; pt=0; }
+    } else if(phase===4){ // rest, settle lever spring
+      if(pt>=DUR.rest){ phase=0; pt=0; }
+    }
+    recoil*=0.86; flash*=0.80; if(flash<0.01)flash=0;
+    t++;
+  }
+
+  function rr(x,y,w,h,r){ ctx.beginPath();ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath(); }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // panel backplate
+    ctx.save();ctx.translate(cx,cy);
+    const pw=150*S,ph=190*S;
+    const pg=ctx.createLinearGradient(0,-ph/2,0,ph/2);
+    pg.addColorStop(0,'#1c241a');pg.addColorStop(.5,'#141a12');pg.addColorStop(1,'#0c1009');
+    ctx.fillStyle=pg;rr(-pw/2,-ph/2,pw,ph,14*S);ctx.fill();
+    ctx.strokeStyle='rgba(159,232,112,0.10)';ctx.lineWidth=1.5*S;ctx.stroke();
+    // recessed well
+    ctx.fillStyle='#080b06';rr(-50*S,-58*S,100*S,116*S,10*S);ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.6)';ctx.lineWidth=2*S;ctx.stroke();
+
+    // status legends
+    ctx.font='700 '+(9*S)+'px ui-monospace,monospace';ctx.textAlign='center';
+    ctx.fillStyle=on?AC:'rgba(159,232,112,0.22)';ctx.fillText('ARMED',0,-72*S);
+    ctx.fillStyle=on?'rgba(159,232,112,0.22)':'rgba(220,90,70,0.55)';ctx.fillText('SAFE',0,82*S);
+
+    // --- LEVER (toggle) in the well ---
+    const baseY=20*S;            // pivot for lever
+    const ang=(lever-0.5)*1.6;   // -.8 .. .8 rad
+    ctx.save();ctx.translate(0,baseY);
+    // socket
+    const sg=ctx.createRadialGradient(0,0,1,0,0,18*S);
+    sg.addColorStop(0,'#2a2a2a');sg.addColorStop(1,'#0a0a0a');
+    ctx.fillStyle=sg;ctx.beginPath();ctx.arc(0,0,16*S,0,Math.PI*2);ctx.fill();
+    ctx.rotate(ang);
+    // lever shaft (chrome)
+    const L=52*S;
+    const lg=ctx.createLinearGradient(-6*S,0,6*S,0);
+    lg.addColorStop(0,'#5a5f58');lg.addColorStop(.42,'#e8efe2');
+    lg.addColorStop(.5,'#fbfff7');lg.addColorStop(.6,'#cfd6c8');lg.addColorStop(1,'#43463f');
+    ctx.fillStyle=lg;rr(-5.5*S,-L,11*S,L+8*S,5*S);ctx.fill();
+    // knob
+    const kg=ctx.createRadialGradient(-3*S,-L-2*S,1,0,-L,13*S);
+    kg.addColorStop(0,'#ffffff');kg.addColorStop(.4,'#d6ddcf');kg.addColorStop(1,'#6a6f66');
+    ctx.fillStyle=kg;ctx.beginPath();ctx.arc(0,-L,11*S,0,Math.PI*2);ctx.fill();
+    // tip glow when on
+    if(lever>0.5){ ctx.fillStyle='rgba(159,232,112,'+(0.5*(lever-.5)*2)+')';
+      ctx.beginPath();ctx.arc(0,-L,5*S,0,Math.PI*2);ctx.fill(); }
+    ctx.restore();ctx.restore();
+
+    // --- SAFETY COVER (lifts from top hinge) ---
+    const hingeY=-58*S;
+    ctx.save();ctx.translate(0,hingeY);
+    ctx.rotate(-cover*1.05);                 // swing up & back
+    const cw=110*S,chh=120*S;
+    // underside shadow
+    ctx.fillStyle='rgba(0,0,0,'+(0.45*cover)+')';
+    rr(-cw/2-2*S,2*S,cw+4*S,chh,12*S);ctx.fill();
+    // cover body brushed metal
+    const cg=ctx.createLinearGradient(0,0,0,chh);
+    cg.addColorStop(0,'#d22f2f');cg.addColorStop(.06,'#9c1f1f');
+    cg.addColorStop(.5,'#7a1717');cg.addColorStop(1,'#5a1010');
+    ctx.fillStyle=cg;rr(-cw/2,0,cw,chh,12*S);ctx.fill();
+    // hazard stripes
+    ctx.save();rr(-cw/2,0,cw,chh,12*S);ctx.clip();
+    ctx.globalAlpha=0.16;ctx.strokeStyle='#f4d03f';ctx.lineWidth=7*S;
+    for(let i=-3;i<14;i++){ ctx.beginPath();ctx.moveTo(-cw/2+i*16*S,0);
+      ctx.lineTo(-cw/2+i*16*S+chh,chh);ctx.stroke(); }
+    ctx.restore();
+    // chrome bezel
+    ctx.lineWidth=4*S;
+    const bz=ctx.createLinearGradient(-cw/2,0,cw/2,0);
+    bz.addColorStop(0,'#3a3d36');bz.addColorStop(.5,'#e9f0e2');bz.addColorStop(1,'#3a3d36');
+    ctx.strokeStyle=bz;rr(-cw/2,0,cw,chh,12*S);ctx.stroke();
+    // hairline highlight RACE across bezel at commit frame
+    if(flash>0.02){
+      const fx=-cw/2 + (1-flash)*cw;
+      ctx.save();rr(-cw/2,0,cw,chh,12*S);ctx.clip();
+      const fg=ctx.createLinearGradient(fx-14*S,0,fx+14*S,0);
+      fg.addColorStop(0,'rgba(255,255,255,0)');
+      fg.addColorStop(.5,'rgba(255,255,255,'+(0.95*flash)+')');
+      fg.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=fg;ctx.fillRect(fx-16*S,0,32*S,chh);
+      ctx.restore();
+    }
+    // grip ridges
+    ctx.strokeStyle='rgba(0,0,0,0.28)';ctx.lineWidth=2*S;
+    for(let i=0;i<3;i++){ ctx.beginPath();ctx.moveTo(-30*S,(80+i*8)*S);
+      ctx.lineTo(30*S,(80+i*8)*S);ctx.stroke(); }
+    // hinge barrel
+    ctx.fillStyle='#23271f';ctx.beginPath();ctx.arc(0,0,7*S,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+
+    // commit pulse ring on panel
+    if(flash>0.02){ ctx.strokeStyle='rgba(159,232,112,'+(flash*0.6)+')';
+      ctx.lineWidth=2*S;ctx.beginPath();
+      ctx.arc(0,0,(60+(1-flash)*30)*S,0,Math.PI*2);ctx.stroke(); }
+    ctx.restore();
+  }
+
+  let raf=0;
+  function loop(){ step();draw();raf=requestAnimationFrame(loop); }
+  function start(){ if(!raf&&!reduce)raf=requestAnimationFrame(loop); }
+  function stop(){ cancelAnimationFrame(raf);raf=0; }
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ draw(); } else start();
+})();
+</script>
+</body>
+</html>

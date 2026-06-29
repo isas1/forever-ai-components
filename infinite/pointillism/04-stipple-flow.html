@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Colored dots drift along a curling flow field, tracing a sweeping diagonal arc with painterly divisionist trails.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stipple Flow</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  #po04-stage{position:fixed;inset:0;background:
+      radial-gradient(120% 120% at 30% 22%,#15171f 0%,#0d0f14 60%,#090a0e 100%)}
+  #po04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+       color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="po04-stage" role="img" aria-label="Pointillist field of colored dots flowing along a vector field to paint a sweeping curve">
+  <canvas id="po04-c"></canvas>
+</div>
+<div class="cap">Stipple Flow</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var stage=document.getElementById("po04-stage");
+  var cv=document.getElementById("po04-c");
+  var ctx=cv.getContext("2d",{alpha:false});
+  var DPR=Math.min(2,window.devicePixelRatio||1);
+  var W=0,H=0,running=false,raf=0,t=0;
+
+  // Divisionist palette: warm accent core, complementary cool shadows, optic-mixing flecks.
+  var PAL=[[240,168,48],[247,200,96],[233,120,52],[88,120,196],[120,84,170],[222,238,250]];
+  var N=108;                 // capped dot agents
+  var px=new Float32Array(N),py=new Float32Array(N);
+  var pa=new Float32Array(N);// age/phase
+  var pc=new Uint8Array(N);  // palette index
+  var pr=new Float32Array(N);// radius
+
+  function rnd(){return Math.random();}
+  function seed(i){
+    px[i]=rnd()*W; py[i]=rnd()*H;
+    pa[i]=rnd(); pc[i]=(rnd()*PAL.length)|0;
+    pr[i]=(1.1+rnd()*2.6)*DPR;
+  }
+  function size(){
+    W=stage.clientWidth*DPR; H=stage.clientHeight*DPR;
+    cv.width=W; cv.height=H;
+    paintBG();
+    for(var i=0;i<N;i++) seed(i);
+  }
+  function paintBG(){
+    ctx.fillStyle="#0d0f14"; ctx.fillRect(0,0,W,H);
+  }
+
+  // Flow field: layered sinusoids form a curling vector field whose dominant
+  // streamlines trace a single sweeping diagonal curve across the frame.
+  function fieldAng(x,y){
+    var nx=x/W, ny=y/H;
+    var curve=Math.sin(nx*2.4-0.6)*1.1 - ny*1.6;     // backbone of the painted arc
+    var swirl=Math.sin(nx*5.7+ny*4.3)*0.55 + Math.cos(ny*6.1-nx*2.0)*0.45;
+    return curve+swirl;
+  }
+
+  function drawOne(){
+    // Static frame for reduced motion / single render: dense stipple along the arc.
+    paintBG();
+    for(var k=0;k<6500;k++){
+      var x=rnd()*W, y=rnd()*H;
+      var a=fieldAng(x,y);
+      // bias deposition toward the field's low-gradient ridge (the curve)
+      var nx=x/W, ny=y/H;
+      var arc=ny-( Math.sin(nx*2.4-0.6)*0.16+0.55 );
+      var w=Math.exp(-(arc*arc)*22);
+      if(rnd()>w*0.9+0.04) continue;
+      var ci=(Math.abs(a)*1.7+rnd()*1.2)|0; ci%=PAL.length;
+      var c=PAL[ci], r=(0.9+rnd()*2.2)*DPR;
+      ctx.globalAlpha=0.30+rnd()*0.5;
+      ctx.fillStyle="rgb("+c[0]+","+c[1]+","+c[2]+")";
+      ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function frame(){
+    if(!running) return;
+    t+=0.0042;
+    // Slow translucent fade leaves divisionist trails without per-frame blur/filter.
+    ctx.globalAlpha=0.052;
+    ctx.fillStyle="#0d0f14";
+    ctx.fillRect(0,0,W,H);
+    ctx.globalAlpha=1;
+
+    var sp=1.5*DPR;
+    for(var i=0;i<N;i++){
+      var x=px[i], y=py[i];
+      var a=fieldAng(x,y)+Math.sin(t*1.7+pa[i]*6.28)*0.22;
+      var nx=Math.cos(a)*sp, ny=Math.sin(a)*sp+0.35*DPR; // gentle downward drift
+      x+=nx; y+=ny;
+      pa[i]+=0.004;
+      if(x<-6||x>W+6||y<-6||y>H+6||pa[i]>1.4){ seed(i); continue; }
+      px[i]=x; py[i]=y;
+      var c=PAL[pc[i]];
+      // dot deposit: two concentric strokes = optic mixing + soft core
+      ctx.globalAlpha=0.14;
+      ctx.fillStyle="rgb("+c[0]+","+c[1]+","+c[2]+")";
+      ctx.beginPath(); ctx.arc(x,y,pr[i]*1.7,0,6.2832); ctx.fill();
+      ctx.globalAlpha=0.62;
+      ctx.beginPath(); ctx.arc(x,y,pr[i]*0.75,0,6.2832); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(running)return; running=true; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden) stop(); else start();
+  });
+  var rt=0;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt); rt=setTimeout(function(){
+      size(); if(reduce)drawOne();
+    },140);
+  });
+
+  size();
+  if(reduce){ drawOne(); return; }
+  start();
+})();
+</script>
+</body>
+</html>

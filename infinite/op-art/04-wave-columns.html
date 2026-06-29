@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Vertical black-and-white stripes undulate into a woven fabric ripple with detuned moire interference and a central bulge.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wave Columns</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
+  #op04-stage{position:fixed;inset:0;background:#0a0a0a}
+  #op04-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="op04-stage" role="img" aria-label="Op art: vertical black-and-white stripes undulating into a woven fabric ripple, with subtle moire interference.">
+    <canvas id="op04-c"></canvas>
+  </div>
+  <div class="cap">Wave Columns</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("op04-stage");
+  var cv=document.getElementById("op04-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // sizing (cached; recomputed only on resize)
+  var W=0,H=0,DPR=1;
+  // column geometry, cached on resize
+  var COLS=46;            // number of vertical stripe columns (<=110)
+  var colW=0;             // logical width per column
+  var cx=0,cy=0;          // center
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,Math.round(W*DPR));
+    cv.height=Math.max(1,Math.round(H*DPR));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    // scale column count to width so density reads from 180 to 640px
+    COLS = Math.max(28, Math.min(60, Math.round(W/12)));
+    colW = W/COLS;
+    cx=W/2; cy=H/2;
+    if(reduce) drawOneFrame();
+  }
+  window.addEventListener("resize",resize);
+
+  // The piece: each vertical column is drawn as a stack of short horizontal
+  // segments whose horizontal offset follows a traveling sine wave. Pairing
+  // a slow primary wave with a slightly detuned secondary wave produces a
+  // moire ripple that reads as woven fabric. Fill alternates B/W per column.
+  var TWO=Math.PI*2;
+  var ROWS=64; // vertical samples per column (sane, fixed)
+
+  function paint(t){
+    ctx.fillStyle="#0a0a0a";
+    ctx.fillRect(0,0,W,H);
+
+    var rowH=H/ROWS;
+    var ampBase=colW*1.65;            // sway amplitude in px
+    var k1=0.16, k2=0.205;            // vertical wave numbers (detuned -> moire)
+    var sp1=t*0.00042, sp2=t*0.00031; // slow phase speeds (seizure-safe)
+    var depth=Math.min(W,H)*0.5;      // radial falloff -> illusory bulge
+
+    for(var i=0;i<COLS;i++){
+      var x0=i*colW;
+      // per-column phase fans the wave across the width
+      var ph=i*0.30;
+      // white on even columns, near-black on odd -> high-contrast stripes
+      var white=(i&1)===0;
+      ctx.beginPath();
+      // build the left edge top->bottom, then right edge bottom->top
+      for(var r=0;r<=ROWS;r++){
+        var y=r*rowH;
+        // radial weight: columns bulge toward center -> depth illusion
+        var dx=(x0-cx)/cx;
+        var dy=(y-cy)/cy;
+        var rad=1-Math.min(1,(dx*dx+dy*dy)*0.55);
+        var amp=ampBase*(0.35+0.65*rad);
+        var w1=Math.sin(r*k1+ph+sp1);
+        var w2=Math.sin(r*k2-ph*0.7+sp2);
+        var off=amp*(0.62*w1+0.42*w2);
+        // column squeezes/expands subtly with the wave -> woven look
+        var sq=colW*0.5*(0.78+0.22*w1);
+        var xc=x0+colW*0.5+off;
+        if(r===0) ctx.moveTo(xc-sq,y);
+        else ctx.lineTo(xc-sq,y);
+      }
+      for(var r2=ROWS;r2>=0;r2--){
+        var y2=r2*rowH;
+        var dx2=(x0-cx)/cx;
+        var dy2=(y2-cy)/cy;
+        var rad2=1-Math.min(1,(dx2*dx2+dy2*dy2)*0.55);
+        var amp2=ampBase*(0.35+0.65*rad2);
+        var w1b=Math.sin(r2*k1+ph+sp1);
+        var w2b=Math.sin(r2*k2-ph*0.7+sp2);
+        var off2=amp2*(0.62*w1b+0.42*w2b);
+        var sq2=colW*0.5*(0.78+0.22*w1b);
+        var xc2=x0+colW*0.5+off2;
+        ctx.lineTo(xc2+sq2,y2);
+      }
+      ctx.closePath();
+      if(white){
+        // brightness shaded by sway -> shimmer without per-frame filters
+        var sh=Math.sin(i*0.30+sp1*1.0);
+        var g=Math.round(210+sh*45); if(g>255)g=255; if(g<150)g=150;
+        ctx.fillStyle="rgb("+g+","+g+","+g+")";
+      } else {
+        ctx.fillStyle="#0c0c0c";
+      }
+      ctx.fill();
+    }
+
+    // single static accent: a thin centerline seam that anchors the ripple
+    ctx.fillStyle="rgba(255,255,255,0.06)";
+    ctx.fillRect(0,cy-1,W,2);
+  }
+
+  function drawOneFrame(){ paint(2600); }
+
+  // one rAF loop, paused on hidden
+  var running=false, rafId=0, t0=0;
+  function frame(ts){
+    if(!running) return;
+    if(!t0) t0=ts;
+    paint(ts-t0);
+    rafId=requestAnimationFrame(frame);
+  }
+  function start(){ if(running)return; running=true; t0=0; rafId=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(rafId)cancelAnimationFrame(rafId); rafId=0; }
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+
+  resize();
+  if(reduce){ drawOneFrame(); }
+  else { start(); }
+})();
+</script>
+</body>
+</html>

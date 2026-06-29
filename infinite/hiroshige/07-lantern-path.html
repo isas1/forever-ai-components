@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Lantern Path — Utagawa Hiroshige. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lantern Path</title>
+<style>
+  html,body{margin:0;height:100%;background:#16202b;overflow:hidden}
+  #hir07-stage{position:fixed;inset:0;width:100%;height:100%;overflow:hidden}
+  .hir07-row{position:absolute;left:0;right:0;bottom:0;height:0}
+  .hir07-lantern{position:absolute;transform:translateX(-50%)}
+  .hir07-globe{
+    width:var(--lw);height:calc(var(--lw)*1.28);border-radius:46% 46% 42% 42%/52% 52% 48% 48%;
+    background:#2c3a48;border:1.5px solid #16202b;position:relative;
+    transition:background .9s ease, box-shadow .9s ease;
+  }
+  .hir07-globe::before{content:"";position:absolute;left:18%;right:18%;top:0;bottom:0;background:repeating-linear-gradient(0deg,rgba(22,32,43,.20) 0 2px,transparent 2px 6px);border-radius:inherit;pointer-events:none}
+  .hir07-globe.lit{
+    background:radial-gradient(circle at 50% 42%, #ffd98a, #e8943a 70%, #b85e26);
+    box-shadow:0 0 22px 5px rgba(255,196,110,.55);
+  }
+  .hir07-post{position:absolute;left:50%;transform:translateX(-50%);top:100%;width:2px;background:#16202b}
+  .hir07-cap{position:absolute;left:50%;top:-7px;transform:translateX(-50%);width:calc(var(--lw)*0.7);height:6px;background:#16202b;border-radius:3px 3px 0 0}
+  .hir07-tag{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f2f0e8;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:200}
+</style>
+</head>
+<body>
+<div id="hir07-stage" role="img" aria-label="A row of paper chochin lanterns lights in sequence down a receding road as the sky deepens to night, then dims again for dawn.">
+  <div class="hir07-scene" id="hir07-scene" style="position:absolute;inset:0;overflow:hidden;">
+    <div class="hir07-row" id="hir07-row"></div>
+  </div>
+</div>
+<div class="hir07-tag">Lantern Path</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const scene=document.getElementById('hir07-scene');
+  const row=document.getElementById('hir07-row');
+  if(!scene||!row) return;
+  function mix(a,b,k){
+    const pa=[parseInt(a.slice(1,3),16),parseInt(a.slice(3,5),16),parseInt(a.slice(5,7),16)];
+    const pb=[parseInt(b.slice(1,3),16),parseInt(b.slice(3,5),16),parseInt(b.slice(5,7),16)];
+    return 'rgb('+pa.map((v,i)=>Math.round(v+(pb[i]-v)*k)).join(',')+')';
+  }
+  const PAL={ink:'#16202b',indigo:'#1f3a5f',indigoDeep:'#142a47',sienna:'#9a5b3b'};
+  const sky=document.createElement('div');
+  sky.style.cssText='position:absolute;inset:0;transition:background 1.2s linear;';
+  scene.insertBefore(sky,scene.firstChild);
+  const road=document.createElement('div');
+  road.style.cssText='position:absolute;left:0;right:0;bottom:0;height:42%;'+
+    'background:linear-gradient('+mix(PAL.indigo,PAL.ink,0.4)+','+mix(PAL.ink,PAL.sienna,0.18)+');'+
+    'clip-path:polygon(42% 0,58% 0,86% 100%,14% 100%);opacity:.9;';
+  scene.insertBefore(road,row);
+  const N=7, lanterns=[];
+  for(let i=0;i<N;i++){
+    const t=i/(N-1);
+    const lan=document.createElement('div');
+    lan.className='hir07-lantern';
+    const w=34 - t*22;
+    lan.style.setProperty('--lw', w+'px');
+    const side=i%2?1:-1;
+    const spread=(1-t)*30;
+    lan.style.left=(50 + side*spread)+'%';
+    lan.style.bottom=(8 + t*52)+'%';
+    lan.style.zIndex=String(100-i);
+    const post=document.createElement('div');post.className='hir07-post';
+    post.style.height=(18 - t*12)+'px';post.style.bottom='-'+(18 - t*12)+'px';post.style.top='auto';
+    const cap=document.createElement('div');cap.className='hir07-cap';
+    const globe=document.createElement('div');globe.className='hir07-globe';
+    globe.appendChild(cap);
+    lan.appendChild(globe);lan.appendChild(post);
+    row.appendChild(lan);
+    lanterns.push(globe);
+  }
+  function setSky(night){
+    const top = mix('#bcd0e0', PAL.ink, night);
+    const mid = mix('#e6dcc8', PAL.indigoDeep, night);
+    sky.style.background='linear-gradient('+top+' 0%,'+mid+' 100%)';
+  }
+  if(REDUCED){
+    setSky(0.7);
+    lanterns.forEach(g=>g.classList.add('lit'));
+    return;
+  }
+  let phase=0, last=performance.now();
+  const PERIOD=16;
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    phase=(phase+dt/PERIOD)%1;
+    const night=0.5-0.5*Math.cos(phase*Math.PI*2);
+    setSky(night);
+    lanterns.forEach((g,i)=>{
+      const thresh=0.18 + (i/lanterns.length)*0.55;
+      g.classList.toggle('lit', night > thresh);
+    });
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden) stop(); else start(); });
+  start();
+})();
+</script>
+</body>
+</html>

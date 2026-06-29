@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Self-Assembling Composition — Piet Mondrian. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Self-Assembling Composition</title>
+<style>
+  html,body{margin:0;height:100%;background:#f7f4ec;overflow:hidden}
+  #mon03-root{position:fixed;inset:0;width:100%;height:100%;overflow:hidden}
+  .mon03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#15110d;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:10}
+</style>
+</head>
+<body>
+<div id="mon03-root" role="img" aria-label="An empty canvas that draws its own Mondrian grid line by line, fills random cells with primary colours, then dissolves and recomposes itself anew.">
+</div>
+<div class="mon03-cap">Self-Assembling Composition</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const root=document.getElementById('mon03-root'); if(!root) return;
+  const C={white:'#f7f4ec',black:'#15110d',red:'#d6191e',blue:'#1d3bd1',yellow:'#f6c700',grey:'#b9b6ab'};
+  const PRIMARIES=[C.red,C.blue,C.yellow];
+  const rand=(a,b)=>a+Math.random()*(b-a), choice=a=>a[(Math.random()*a.length)|0];
+
+  function rect(x,y,w,h){const d=document.createElement('div');
+    Object.assign(d.style,{position:'absolute',left:x+'%',top:y+'%',width:w+'%',height:h+'%'});return d;}
+  function subdivide(x,y,w,h,depth,leaves){
+    const minSz=16;
+    if(depth<=0||(w<minSz&&h<minSz)||Math.random()<.18){leaves.push({x,y,w,h});return;}
+    const splitV=(w>h)?(Math.random()<.78):(Math.random()<.3),r=rand(.32,.68);
+    if(splitV){subdivide(x,y,w*r,h,depth-1,leaves);subdivide(x+w*r,y,w*(1-r),h,depth-1,leaves);}
+    else{subdivide(x,y,w,h*r,depth-1,leaves);subdivide(x,y+h*r,w,h*(1-r),depth-1,leaves);}
+  }
+  function compose(){
+    root.innerHTML='';
+    const leaves=[];
+    subdivide(0,0,100,100,4,leaves);
+    const ground=rect(0,0,100,100);ground.style.background=C.white;root.appendChild(ground);
+    const sorted=leaves.slice().sort((a,b)=>(b.w*b.h)-(a.w*a.h));
+    const colorCount=3+(Math.random()*3|0),chosen=new Set();
+    chosen.add(sorted[0]);
+    while(chosen.size<colorCount&&chosen.size<leaves.length)chosen.add(choice(sorted.slice(0,Math.min(8,sorted.length))));
+    leaves.forEach((L,i)=>{
+      const cell=rect(L.x,L.y,L.w,L.h),colored=chosen.has(L);
+      cell.style.background=colored?choice(PRIMARIES):(Math.random()<.12?C.grey:C.white);
+      cell.style.transform='scale(.4)';cell.style.opacity='0';
+      cell.style.transition=REDUCED?'none':`transform .6s cubic-bezier(.7,0,.2,1) ${i*45}ms, opacity .5s ${i*45}ms`;
+      root.appendChild(cell);
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{cell.style.transform='scale(1)';cell.style.opacity='1';}));
+    });
+    const lines=[];
+    leaves.forEach(L=>{lines.push({type:'h',x:L.x,y:L.y,len:L.w});lines.push({type:'v',x:L.x,y:L.y,len:L.h});});
+    lines.forEach((ln,i)=>{
+      const d=document.createElement('div'),TH=7;
+      Object.assign(d.style,{position:'absolute',background:C.black,transformOrigin:'top left'});
+      if(ln.type==='h')Object.assign(d.style,{left:ln.x+'%',top:'calc('+ln.y+'% - '+(TH/2)+'px)',width:ln.len+'%',height:TH+'px',transform:'scaleX(0)'});
+      else Object.assign(d.style,{left:'calc('+ln.x+'% - '+(TH/2)+'px)',top:ln.y+'%',width:TH+'px',height:ln.len+'%',transform:'scaleY(0)'});
+      d.style.transition=REDUCED?'none':`transform .5s cubic-bezier(.7,0,.2,1) ${300+i*18}ms`;
+      root.appendChild(d);
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{d.style.transform='scale(1)';}));
+    });
+    const frame=document.createElement('div');
+    Object.assign(frame.style,{position:'absolute',inset:'0',border:'9px solid '+C.black,boxSizing:'border-box',pointerEvents:'none'});
+    root.appendChild(frame);
+  }
+
+  let timer=null,running=false;
+  function tick(){if(!running)return;compose();timer=setTimeout(tick,4200);}
+  function start(){if(running)return;running=true;timer=setTimeout(tick,4200);}
+  function stop(){running=false;if(timer)clearTimeout(timer);timer=null;}
+
+  compose();
+  if(!REDUCED){
+    start();
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else start();});
+  }
+})();
+</script>
+</body>
+</html>

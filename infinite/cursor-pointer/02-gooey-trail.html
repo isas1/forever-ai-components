@@ -1,0 +1,113 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A chain of pink blobs follows the pointer and merges into liquid metaball goo via an SVG gooey filter, with a bright cursor head.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Gooey Trail</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0a0a0f;display:grid;place-items:center}
+.ccp02-stage{position:relative;width:100%;height:100%;cursor:none}
+#ccp02-c{position:absolute;inset:0;width:100%;height:100%;filter:url(#ccp02-goo)}
+.ccp02-svg{position:absolute;width:0;height:0}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#ff5ca8;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+@media (prefers-reduced-motion:reduce){#ccp02-c{filter:url(#ccp02-goo)}}
+</style></head><body>
+<div class="ccp02-stage" id="ccp02-stage" role="img" aria-label="Gooey liquid trail following the pointer">
+  <canvas id="ccp02-c"></canvas>
+</div>
+<svg class="ccp02-svg" aria-hidden="true"><defs>
+  <filter id="ccp02-goo"><feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
+    <feColorMatrix in="b" mode="matrix"
+      values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" result="g"/>
+    <feBlend in="SourceGraphic" in2="g"/></filter>
+</defs></svg>
+<div class="cap">Gooey Trail</div>
+<script>(function(){
+var stage=document.getElementById('ccp02-stage'),cv=document.getElementById('ccp02-c'),
+    ctx=cv.getContext('2d'),reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
+function size(){W=stage.clientWidth;H=stage.clientHeight;cv.width=W*DPR;cv.height=H*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);}
+size();window.addEventListener('resize',size);
+
+// pointer state: virtual demo path + real-pointer handoff
+var N=22,blobs=[],tx=0,ty=0,t=0,
+    real=false,lastMove=-1e9,rx=0,ry=0;   // rx/ry = smoothed real pointer
+for(var i=0;i<N;i++)blobs.push({x:0,y:0});
+
+function demoPoint(time){
+  // eased Lissajous figure, centred, scaled to the smaller axis
+  var cx=W*0.5,cy=H*0.5,ax=W*0.30,ay=H*0.30,
+      a=time*0.00042;
+  // ease the parameter through a soft sine so motion lingers at the turns
+  var u=a, ux=u*2.0, uy=u*3.0;
+  return [cx+Math.sin(ux)*ax+Math.sin(u*0.7)*ax*0.18,
+          cy+Math.sin(uy+0.6)*ay*0.78];
+}
+
+stage.addEventListener('pointermove',function(e){
+  var r=stage.getBoundingClientRect();
+  rx=e.clientX-r.left;ry=e.clientY-r.top;real=true;lastMove=performance.now();
+});
+stage.addEventListener('pointerleave',function(){real=false;});
+
+function radius(i){
+  // head is largest, tail tapers; min keeps tail visible at 180px
+  var k=1-i/N,base=Math.min(W,H);
+  return Math.max(2.5,base*0.011+base*0.052*k*k);
+}
+
+var running=true,raf=0;
+function frame(now){
+  if(!running)return;
+  t=now;
+  // decide target: real pointer if recent, else ease back to demo
+  var idle=now-lastMove,dp=demoPoint(now);
+  var dx,dy;
+  if(real&&idle<2600){dx=rx;dy=ry;}
+  else{
+    // blend from wherever we are toward demo as idle grows past 2.6s
+    var b=real?Math.min(1,(idle-2600)/1400):1;
+    dx=rx+(dp[0]-rx)*b;dy=ry+(dp[1]-ry)*b;
+    if(!real){dx=dp[0];dy=dp[1];}
+  }
+  // spring the head toward target, then chain follow-through down the tail
+  tx+=(dx-tx)*0.16;ty+=(dy-ty)*0.16;
+  blobs[0].x+=(tx-blobs[0].x)*0.35;blobs[0].y+=(ty-blobs[0].y)*0.35;
+  for(var i=1;i<N;i++){
+    var lead=blobs[i-1],b=blobs[i],f=0.34-i*0.006;
+    b.x+=(lead.x-b.x)*f;b.y+=(lead.y-b.y)*f;
+  }
+  draw();
+  raf=requestAnimationFrame(frame);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#ff5ca8';
+  for(var i=N-1;i>=0;i--){
+    var b=blobs[i],r=radius(i);
+    ctx.beginPath();ctx.arc(b.x,b.y,r,0,6.2832);ctx.fill();
+  }
+  // bright core dot on the head reads as a cursor inside the goo
+  var h=blobs[0];
+  ctx.fillStyle='#ffd6ec';
+  ctx.beginPath();ctx.arc(h.x,h.y,Math.max(2,radius(0)*0.34),0,6.2832);ctx.fill();
+}
+
+function start(){
+  // seed positions at the demo start so first frame isn't a jump
+  var dp=demoPoint(performance.now());tx=dp[0];ty=dp[1];rx=dp[0];ry=dp[1];
+  for(var i=0;i<N;i++){blobs[i].x=dp[0];blobs[i].y=dp[1];}
+}
+start();
+
+if(reduce){draw();return;}
+
+function vis(){
+  if(document.hidden){running=false;cancelAnimationFrame(raf);}
+  else if(!running){running=true;raf=requestAnimationFrame(frame);}
+}
+document.addEventListener('visibilitychange',vis);
+raf=requestAnimationFrame(frame);
+})();</script>
+</body></html>

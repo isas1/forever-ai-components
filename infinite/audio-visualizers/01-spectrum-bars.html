@@ -1,0 +1,136 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Mirrored blue-cyan frequency bars with gravity peak-hold caps react to synth or live mic input on dark backdrop.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Spectrum Bars</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#07080d;display:grid;place-items:center}
+#aav01-c{display:block;width:100%;height:100%}
+.aav01-live{position:fixed;right:8px;top:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.32);
+  border-radius:999px;padding:4px 9px;letter-spacing:.06em;cursor:pointer;user-select:none;
+  -webkit-tap-highlight-color:transparent;transition:background .25s,border-color .25s,opacity .25s}
+.aav01-live:hover{background:rgba(34,211,238,.18);border-color:rgba(34,211,238,.6)}
+.aav01-live[data-on="1"]{color:#07080d;background:#22d3ee;border-color:#22d3ee}
+.aav01-live[data-on="err"]{color:#f87171;border-color:rgba(248,113,113,.5);background:rgba(248,113,113,.08)}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<canvas id="aav01-c"></canvas>
+<button class="aav01-live" id="aav01-live" aria-label="Switch to live microphone input">&#9834; live</button>
+<div class="cap">Spectrum Bars</div>
+<script>(function(){
+var cv=document.getElementById('aav01-c'),g=cv.getContext('2d'),btn=document.getElementById('aav01-live');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,dpr=1,N=56,raf=0,running=false,t=0;
+var live=false,analyser=null,freq=null,actx=null;
+var mag=new Float32Array(N),peak=new Float32Array(N),pvel=new Float32Array(N);
+// synth: per-bin oscillators with slow LFO envelopes + smoothed noise
+var ph=new Float32Array(N),sp=new Float32Array(N),lf=new Float32Array(N),lp=new Float32Array(N),nz=new Float32Array(N);
+for(var i=0;i<N;i++){ph[i]=Math.random()*6.28;sp[i]=.6+Math.random()*2.2;lf[i]=Math.random()*6.28;lp[i]=.15+Math.random()*.5;}
+
+function size(){
+  dpr=Math.min(2,window.devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
+  g.setTransform(dpr,0,0,dpr,0,0);
+}
+
+function synth(dt){
+  // low bins louder than highs (pink-ish tilt), bass throb via global LFO
+  var bass=.5+.5*Math.sin(t*1.4)*Math.sin(t*.37);
+  for(var i=0;i<N;i++){
+    ph[i]+=sp[i]*dt;lf[i]+=lp[i]*dt;
+    var tilt=Math.pow(1-i/N,1.35);              // spectral tilt
+    var env=.5+.5*Math.sin(lf[i]);              // slow per-bin envelope
+    var tone=.5+.5*Math.sin(ph[i]);
+    nz[i]+=(Math.random()-.5-nz[i])*.08;        // smoothed noise
+    var v=tilt*(.35+.65*env)*(.4+.6*tone)+nz[i]*.12+bass*tilt*.45;
+    v=Math.max(0,Math.min(1,v));
+    mag[i]+=(v-mag[i])*.35;                      // attack/decay smoothing
+  }
+}
+
+function pull(){
+  analyser.getByteFrequencyData(freq);
+  var L=freq.length;
+  for(var i=0;i<N;i++){
+    // log-ish bucket mapping so bass gets more bins
+    var lo=Math.floor(Math.pow(i/N,1.7)*L*.7),hi=Math.floor(Math.pow((i+1)/N,1.7)*L*.7);
+    if(hi<=lo)hi=lo+1;var s=0;for(var j=lo;j<hi&&j<L;j++)s+=freq[j];
+    var v=(s/(hi-lo))/255;v=Math.pow(v,.85);
+    mag[i]+=(v-mag[i])*.5;
+  }
+}
+
+function draw(dt){
+  if(live)pull();else synth(dt);
+  g.clearRect(0,0,W,H);
+  var pad=Math.max(6,W*.04),gw=W-pad*2;
+  var gap=Math.max(1,gw/N*.22),bw=(gw-gap*(N-1))/N;
+  var mid=H/2,maxH=H*.46;
+  for(var i=0;i<N;i++){
+    var x=pad+i*(bw+gap);
+    var m=mag[i];
+    // peak-hold cap with gravity falloff
+    if(m>=peak[i]){peak[i]=m;pvel[i]=0;}
+    else{pvel[i]+=2.4*dt;peak[i]-=pvel[i]*dt;if(peak[i]<m)peak[i]=m;}
+    var bh=m*maxH;
+    // vertical gradient per bar, mirrored top+bottom
+    var grad=g.createLinearGradient(0,mid-bh,0,mid+bh);
+    grad.addColorStop(0,'#2563eb');grad.addColorStop(.5,'#22d3ee');grad.addColorStop(1,'#2563eb');
+    g.fillStyle=grad;
+    g.fillRect(x,mid-bh,bw,bh);          // top
+    g.fillRect(x,mid,bw,bh);             // bottom (mirror)
+    // peak caps
+    var py=peak[i]*maxH,ch=Math.max(1.5,H*.006);
+    g.fillStyle='#bdf3ff';
+    g.fillRect(x,mid-py-ch,bw,ch);
+    g.fillRect(x,mid+py,bw,ch);
+  }
+  // centre seam
+  g.fillStyle='rgba(34,211,238,.18)';
+  g.fillRect(pad,mid-.5,gw,1);
+}
+
+function loop(ts){
+  if(!running)return;
+  var dt=t?Math.min(.05,(ts/1000)-t):0.016;t=ts/1000;
+  draw(dt);
+  raf=requestAnimationFrame(loop);
+}
+
+function start(){if(running)return;running=true;t=0;raf=requestAnimationFrame(loop);}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+function vis(){
+  if(reduce)return;
+  if(document.hidden)stop();else start();
+}
+
+btn.addEventListener('click',function(){
+  if(live){ // toggle back to synth
+    live=false;btn.dataset.on='';btn.innerHTML='♪ live';
+    if(actx&&actx.state!=='closed')actx.suspend();
+    return;
+  }
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state==='suspended')actx.resume();
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      var src=actx.createMediaStreamSource(stream);
+      analyser=actx.createAnalyser();
+      analyser.fftSize=512;analyser.smoothingTimeConstant=.7;
+      freq=new Uint8Array(analyser.frequencyBinCount);
+      src.connect(analyser);            // never connect to destination (feedback)
+      live=true;btn.dataset.on='1';btn.innerHTML='♪ live';
+      if(reduce){start();draw(.016);stop();}
+    }).catch(function(){btn.dataset.on='err';btn.innerHTML='no mic';});
+  }catch(e){btn.dataset.on='err';btn.innerHTML='no ctx';}
+});
+
+window.addEventListener('resize',function(){size();if(reduce)draw(.016);});
+document.addEventListener('visibilitychange',vis);
+size();
+if(reduce){draw(.016);}else{start();}
+})();</script>
+</body></html>

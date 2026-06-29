@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Four Seasons Arc — Alphonse Mucha. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Four Seasons Arc</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4ecd8;overflow:hidden}
+  #muc05-stage{position:fixed;inset:0;width:100%;height:100%}
+  #muc05-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .muc05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#5b4632;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="muc05-stage" role="img" aria-label="A Mucha seasonal halo that cross-fades on its own through the year: a turning disc of petals shifts colourway and motif from spring sage to summer rose, autumn gold and winter teal, then begins again.">
+  <canvas id="muc05-cv"></canvas>
+</div>
+<div class="muc05-cap">The Four Seasons Arc</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={cream2:'#ece1c6',sage:'#8a9a5b',sageDeep:'#6c7a44',peach:'#e7b98f',gold:'#c4a14e',goldDeep:'#a07f33',rose:'#c98c8c',teal:'#2c5d63',tealDeep:'#1d4248',cream:'#f4ecd8'};
+  const cv=document.getElementById('muc05-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function petal(ctx,len,wid){
+    ctx.beginPath();ctx.moveTo(0,0);
+    ctx.bezierCurveTo(wid,-len*0.4,wid,-len*0.8,0,-len);
+    ctx.bezierCurveTo(-wid,-len*0.8,-wid,-len*0.4,0,0);
+    ctx.closePath();
+  }
+  function withA(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+  let S=fitCanvas(cv);
+  const SEASONS=[
+    {name:'Spring',a:PAL.sage,b:PAL.peach,accent:PAL.rose,petals:5,ring:PAL.sageDeep},
+    {name:'Summer',a:PAL.rose,b:PAL.gold,accent:PAL.peach,petals:6,ring:PAL.rose},
+    {name:'Autumn',a:PAL.gold,b:PAL.goldDeep,accent:PAL.sage,petals:7,ring:PAL.goldDeep},
+    {name:'Winter',a:PAL.teal,b:PAL.tealDeep,accent:PAL.cream2,petals:8,ring:PAL.teal}
+  ];
+  let cur=0, prev=0, mix=1, hold=0;
+  let tHalo=0,last=performance.now();
+  function drawHalo(ctx,cx,cy,R,s,alpha){
+    ctx.save();ctx.globalAlpha=alpha;
+    ctx.strokeStyle=s.ring;ctx.lineWidth=3;
+    ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle=withA(s.b,0.8);ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(cx,cy,R*0.86,0,Math.PI*2);ctx.stroke();
+    const N=18;
+    for(let i=0;i<N;i++){
+      const ang=(i/N)*Math.PI*2+tHalo*0.2;
+      ctx.save();ctx.translate(cx+Math.cos(ang)*R*0.92,cy+Math.sin(ang)*R*0.92);
+      ctx.rotate(ang+Math.PI/2);
+      ctx.fillStyle=i%2?s.a:s.b;
+      petal(ctx,R*0.16,R*0.05);ctx.fill();ctx.restore();
+    }
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(tHalo*0.3);
+    for(let p=0;p<s.petals;p++){
+      ctx.save();ctx.rotate((p/s.petals)*Math.PI*2);
+      ctx.fillStyle=s.a;ctx.strokeStyle=withA(s.accent,0.9);ctx.lineWidth=1;
+      petal(ctx,R*0.5,R*0.2);ctx.fill();ctx.stroke();ctx.restore();
+    }
+    ctx.fillStyle=s.accent;ctx.beginPath();ctx.arc(0,0,R*0.14,0,7);ctx.fill();
+    ctx.fillStyle=PAL.gold;ctx.beginPath();ctx.arc(0,0,R*0.07,0,7);ctx.fill();
+    ctx.restore();ctx.restore();
+  }
+  function advance(){ prev=cur; cur=(cur+1)%SEASONS.length; mix=0; }
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    if(!REDUCED) tHalo+=dt;
+    if(mix<1){ mix=Math.min(1,mix+dt*1.6); }
+    else if(!REDUCED){ hold+=dt; if(hold>2.8){ hold=0; advance(); } }
+    const ctx=S.ctx,W=S.w,H=S.h,cx=W/2,cy=H/2,R=Math.min(W,H)*0.34;
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#f4ecd8';ctx.fillRect(0,0,W,H);
+    const cs=SEASONS[cur];
+    ctx.fillStyle=withA(cs.a,0.06);ctx.fillRect(0,0,W,H);
+    if(mix<1) drawHalo(ctx,cx,cy,R,SEASONS[prev],1-mix);
+    drawHalo(ctx,cx,cy,R,SEASONS[cur],mix);
+    ctx.fillStyle=withA(cs.ring,0.85);ctx.font='600 15px Marcellus,Georgia,serif';
+    ctx.textAlign='center';
+    ctx.fillText(cs.name.toUpperCase(),cx,H-18);
+    ctx.textAlign='start';
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#f4ecd8';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED) draw(performance.now());},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

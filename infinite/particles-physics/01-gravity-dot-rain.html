@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Multicolored dots fall under gravity with motion trails, bounce off the floor, and scatter away from the cursor on a dark navy canvas.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gravity Dot Rain</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0b0f1c}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#6ee7ff;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Gravity Dot Rain</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,drops=[],reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const pal=['#6ee7ff','#a78bfa','#f472b6','#34d399','#fbbf24'];
+function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',size);size();
+function mk(){return{px:Math.random()*W,py:-10-Math.random()*H,vy:0,
+  r:1.6+Math.random()*2.6,c:pal[(Math.random()*pal.length)|0],b:0,by:0};}
+const N=Math.min(90,Math.round(W*H/5200));
+for(let i=0;i<N;i++)drops.push(mk());
+let pointer={x:-999,y:-999};
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();pointer.x=e.clientX-r.left;pointer.y=e.clientY-r.top;});
+cv.addEventListener('pointerleave',()=>{pointer.x=-999;pointer.y=-999;});
+const g=0.16;
+function step(){
+  x.clearRect(0,0,W,H);
+  for(const d of drops){
+    d.vy+=g; d.py+=d.vy;
+    const dx=d.px-pointer.x, dy=d.py-pointer.y, dd=dx*dx+dy*dy;
+    if(dd<5000){const f=40/Math.max(8,Math.sqrt(dd));d.px+=dx*f*0.02;}
+    if(d.py>H-d.r){d.py=H-d.r;d.vy*=-0.62;if(Math.abs(d.vy)<1.2){Object.assign(d,mk());continue;}}
+    // trail
+    x.strokeStyle=d.c;x.globalAlpha=.25;x.lineWidth=d.r*0.9;
+    x.beginPath();x.moveTo(d.px,d.py);x.lineTo(d.px,d.py-Math.min(18,d.vy*3));x.stroke();
+    x.globalAlpha=1;x.fillStyle=d.c;
+    x.beginPath();x.arc(d.px,d.py,d.r,0,7);x.fill();
+  }
+}
+let raf;function loop(){step();raf=requestAnimationFrame(loop);}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+function stop(){cancelAnimationFrame(raf);raf=0;}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+play();
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A glowing cyan ring rippling with an audio waveform, a bright tracer riding the loudest crest and a pulsing center, synth or live mic.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Circular Wave</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#07080d;display:grid;place-items:center}
+#aav08-c{display:block;width:100%;height:100%}
+.aav08-stage{position:fixed;inset:0}
+.aav08-live{position:fixed;right:8px;top:8px;z-index:2;font:600 10px/1 ui-monospace,Menlo,monospace;
+  letter-spacing:.08em;text-transform:uppercase;color:#22d3ee;background:rgba(34,211,238,.08);
+  border:1px solid rgba(34,211,238,.32);border-radius:999px;padding:5px 9px;cursor:pointer;
+  opacity:.55;transition:opacity .25s,background .25s}
+.aav08-live:hover{opacity:1;background:rgba(34,211,238,.16)}
+.aav08-live[data-on="1"]{opacity:1;background:#22d3ee;color:#07080d;border-color:#22d3ee}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<div class="aav08-stage"><canvas id="aav08-c" role="img" aria-label="A glowing ring rippling with an audio waveform"></canvas></div>
+<button class="aav08-live" id="aav08-live" aria-label="Switch to live microphone input">&#9834; live</button>
+<div class="cap">Circular Wave</div>
+<script>(function(){
+var cv=document.getElementById('aav08-c'),g=cv.getContext('2d'),btn=document.getElementById('aav08-live');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,DPR=1,raf=0,running=false,t=0;
+var N=120;                                   // ring sample count
+var wave=new Float32Array(N);                // current smoothed time-domain [-1..1]
+var ACCENT='#22d3ee';
+
+// --- live audio (off by default) ---
+var ac=null,analyser=null,td=null,live=false;
+function goLive(){
+  if(live)return;
+  try{
+    ac=new (window.AudioContext||window.webkitAudioContext)();
+    analyser=ac.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=.6;
+    td=new Uint8Array(analyser.fftSize);
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      var src=ac.createMediaStreamSource(stream);
+      src.connect(analyser);                 // never to destination — no feedback
+      live=true;btn.setAttribute('data-on','1');
+    })['catch'](function(){if(ac){ac.close();ac=null;}});
+  }catch(e){}
+}
+btn.addEventListener('click',goLive);
+
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
+  g.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize);
+
+// synthesized signal: 3 sines + slow LFO envelopes + smoothed noise, sampled around the ring
+function synth(i,phase){
+  var a=i/N*Math.PI*2;
+  var env=.55+.45*Math.sin(t*.0007);                // breathing master envelope
+  var s = Math.sin(a*3 + t*.004)         *0.5
+        + Math.sin(a*7 - t*.0026)        *0.28*(.6+.4*Math.sin(t*.0011))
+        + Math.sin(a*13 + t*.006)        *0.16
+        + Math.sin(a*1 + t*.0015)        *0.34;
+  s += (Math.sin(i*12.9898+phase)*43758.5)%1*0.12;   // cheap pseudo-noise grain
+  return s*env;
+}
+
+function sampleLive(){
+  analyser.getByteTimeDomainData(td);
+  for(var i=0;i<N;i++){
+    var idx=(i/N*td.length)|0;
+    wave[i]=(td[idx]-128)/128;                        // -1..1
+  }
+}
+
+function draw(){
+  t+=16;
+  var phase=t*.0003;
+  if(live&&analyser){sampleLive();}
+  else{for(var i=0;i<N;i++){wave[i]+= (synth(i,phase)-wave[i])*0.35;}}
+
+  g.clearRect(0,0,W,H);
+  var cx=W/2,cy=H/2;
+  var base=Math.min(W,H)*0.30;
+  var amp =Math.min(W,H)*0.16;
+  var rot=t*.00018;
+
+  // soft inner halo (static-blur free: cheap radial-ish via low-alpha fills handled by glow on stroke)
+  var pts=N,j,a,r,x,y;
+
+  // build the closed ripple path
+  g.beginPath();
+  for(j=0;j<=pts;j++){
+    var k=j%pts;
+    a=k/pts*Math.PI*2+rot;
+    r=base+wave[k]*amp;
+    x=cx+Math.cos(a)*r;y=cy+Math.sin(a)*r;
+    if(j===0)g.moveTo(x,y);else g.lineTo(x,y);
+  }
+  g.closePath();
+
+  // faint fill to give the ring body
+  g.fillStyle='rgba(34,211,238,0.05)';g.fill();
+
+  // glow pass (thick, translucent) then crisp core
+  g.lineJoin='round';
+  g.shadowColor=ACCENT;g.shadowBlur=Math.min(W,H)*0.05;
+  g.strokeStyle='rgba(34,211,238,0.85)';g.lineWidth=Math.max(1.5,Math.min(W,H)*0.012);
+  g.stroke();
+  g.shadowBlur=0;
+  g.strokeStyle='#bff7ff';g.lineWidth=Math.max(1,Math.min(W,H)*0.004);
+  g.stroke();
+
+  // moving energy node — a bright tracer riding the loudest crest
+  var maxv=-2,maxi=0;
+  for(j=0;j<pts;j++){if(wave[j]>maxv){maxv=wave[j];maxi=j;}}
+  a=maxi/pts*Math.PI*2+rot;r=base+wave[maxi]*amp;
+  x=cx+Math.cos(a)*r;y=cy+Math.sin(a)*r;
+  g.shadowColor=ACCENT;g.shadowBlur=Math.min(W,H)*0.06;
+  g.fillStyle='#eafdff';g.beginPath();g.arc(x,y,Math.max(2,Math.min(W,H)*0.012),0,7);g.fill();
+  g.shadowBlur=0;
+
+  // center pulse dot
+  var pulse=0;for(j=0;j<pts;j++)pulse+=Math.abs(wave[j]);pulse/=pts;
+  g.fillStyle='rgba(34,211,238,'+(0.12+pulse*0.5).toFixed(3)+')';
+  g.beginPath();g.arc(cx,cy,base*0.18*(0.7+pulse),0,7);g.fill();
+}
+
+function loop(){if(!running)return;draw();raf=requestAnimationFrame(loop);}
+function start(){if(running)return;running=true;raf=requestAnimationFrame(loop);}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+function vis(){if(document.hidden)stop();else if(!reduce)start();}
+document.addEventListener('visibilitychange',vis);
+
+resize();
+if(reduce){for(var i=0;i<N;i++)wave[i]=synth(i,0);draw();}
+else start();
+})();</script>
+</body></html>

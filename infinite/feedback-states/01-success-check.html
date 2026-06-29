@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Mint-green circular ring sweeps closed and a checkmark draws in with a springy pop and expanding halo on dark.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Success Check</title>
+<style>
+  html,body{margin:0;height:100%}
+  body{background:#0b0d12;overflow:hidden}
+  #fb01-stage{position:fixed;inset:0;display:grid;place-items:center;
+    font:500 13px/1 ui-monospace,Menlo,monospace;outline:none}
+  #fb01-stage:focus-visible{box-shadow:inset 0 0 0 2px rgba(52,211,153,.55)}
+  #fb01-svg{width:min(62vmin,440px);height:min(62vmin,440px);display:block}
+  .fb01-ring{fill:none;stroke:#34d399;stroke-width:6;stroke-linecap:round;
+    transform-origin:120px 120px}
+  .fb01-halo{fill:none;stroke:#34d399;stroke-width:2;opacity:0;transform-origin:120px 120px}
+  .fb01-tick{fill:none;stroke:#eafff5;stroke-width:11;stroke-linecap:round;stroke-linejoin:round}
+  .fb01-core{fill:#0e1a16}
+  #fb01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  #fb01-hint{position:fixed;right:9px;bottom:7px;font:600 9px/1 ui-monospace,Menlo,monospace;
+    color:#34d399;opacity:.34;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fb01-stage" role="button" tabindex="0" aria-label="Success check. Activate to replay the confirmation animation.">
+  <svg id="fb01-svg" viewBox="0 0 240 240" aria-hidden="true">
+    <circle class="fb01-halo" id="fb01-halo" cx="120" cy="120" r="62"></circle>
+    <circle class="fb01-core" cx="120" cy="120" r="60"></circle>
+    <circle class="fb01-ring" id="fb01-ring" cx="120" cy="120" r="60"
+      stroke-dasharray="377" stroke-dashoffset="377"></circle>
+    <path class="fb01-tick" id="fb01-tick" d="M92 122 L112 143 L152 99"
+      stroke-dasharray="92" stroke-dashoffset="92"></path>
+  </svg>
+</div>
+<div id="fb01-cap">Success Check</div>
+<div id="fb01-hint" aria-hidden="true">tap / space</div>
+<div id="fb01-live" role="status" aria-live="polite" style="position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var stage = document.getElementById("fb01-stage");
+  var svg   = document.getElementById("fb01-svg");
+  var ring  = document.getElementById("fb01-ring");
+  var tick  = document.getElementById("fb01-tick");
+  var halo  = document.getElementById("fb01-halo");
+  var live  = document.getElementById("fb01-live");
+
+  var RING_LEN = 377, TICK_LEN = 92;
+
+  function set(el, off){ el.style.strokeDashoffset = off; }
+
+  // Spring: rests at 1, decaying overshoot for the confirmation pop.
+  function spring(t){
+    if(t>=1) return 1;
+    return 1 + Math.pow(2,-7*t) * Math.sin((t*7 - 0.18) * (Math.PI*2)) * 0.42;
+  }
+  function easeOut(t){ return 1 - Math.pow(1-t, 3); }
+
+  // ---- static reduced-motion frame ----
+  function drawOneFrame(){
+    set(ring, 0);
+    set(tick, 0);
+    svg.style.transform = "scale(1)";
+    halo.style.opacity = 0;
+    live.textContent = "Success";
+  }
+  if(reduce){ drawOneFrame(); return; }
+
+  // ---- timeline (ms) ----
+  // 0–520 ring sweeps + spring pop ; 360–760 tick draws ; 620–1180 halo ring expands+fades
+  var DUR = 1180;
+  var IDLE_AFTER = 4200;   // hand back to self-demo this long after user input
+  var AUTO_GAP   = 2600;   // pause between autonomous replays
+
+  var running = true, rafId = 0;
+  var playStart = -1;      // timestamp anim began, -1 = idle
+  var nextAuto  = 0;       // when to auto-trigger next
+  var userMode  = false;   // true while user is "driving"
+  var lastInput = 0;
+
+  function trigger(now, fromUser){
+    playStart = now;
+    if(fromUser){ userMode = true; lastInput = now; }
+  }
+
+  function frame(now){
+    if(!running) return;
+
+    // autonomous self-demo scheduling
+    if(playStart < 0){
+      if(userMode && now - lastInput > IDLE_AFTER) userMode = false;
+      if(now >= nextAuto && !userMode){ trigger(now, false); }
+    }
+
+    if(playStart >= 0){
+      var t = (now - playStart) / DUR;
+      if(t > 1) t = 1;
+      var ms = t * DUR;
+
+      // ring sweep 0..520
+      var r = ms < 520 ? easeOut(ms/520) : 1;
+      set(ring, RING_LEN * (1 - r));
+
+      // spring pop on whole mark, peaks early then settles
+      var sp = spring(Math.min(1, ms/620));
+      svg.style.transform = "scale(" + sp.toFixed(4) + ")";
+
+      // tick draw 360..760
+      var k = ms < 360 ? 0 : ms > 760 ? 1 : easeOut((ms-360)/400);
+      set(tick, TICK_LEN * (1 - k));
+
+      // halo expand + fade 620..1180 (opacity + transform only)
+      if(ms > 620){
+        var h = (ms-620)/(DUR-620);
+        halo.style.opacity = (0.5 * (1 - h)).toFixed(3);
+        halo.style.transform = "scale(" + (1 + h*0.9).toFixed(3) + ")";
+      } else {
+        halo.style.opacity = 0;
+      }
+
+      if(ms >= 360 && live.textContent !== "Success") live.textContent = "Success";
+
+      if(t >= 1){
+        playStart = -1;
+        nextAuto = now + AUTO_GAP;
+        halo.style.opacity = 0;
+      }
+    }
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function start(){ if(!running){ running = true; rafId = requestAnimationFrame(frame); } }
+  function stop(){ running = false; cancelAnimationFrame(rafId); }
+
+  // reset visuals before a fresh user-driven play so the pop reads
+  function userPlay(){
+    var now = performance.now();
+    set(ring, RING_LEN); set(tick, TICK_LEN); halo.style.opacity = 0;
+    live.textContent = "";
+    trigger(now, true);
+  }
+
+  stage.addEventListener("pointerdown", function(){ userPlay(); });
+  stage.addEventListener("keydown", function(e){
+    if(e.key === " " || e.key === "Enter"){ e.preventDefault(); userPlay(); }
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden){ stop(); }
+    else { nextAuto = performance.now() + 400; start(); }
+  });
+
+  // init idle visuals, kick first autonomous play shortly after load
+  set(ring, RING_LEN); set(tick, TICK_LEN); halo.style.opacity = 0;
+  nextAuto = performance.now() + 600;
+  rafId = requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

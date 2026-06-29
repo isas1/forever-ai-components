@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Great Wave off Kanagawa — Katsushika Hokusai. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Great Wave off Kanagawa</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d2347;overflow:hidden}
+  #hok01-stage{position:fixed;inset:0;width:100%;height:100%}
+  #hok01-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .hok01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fbf8f0;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="hok01-stage" role="img" aria-label="Hokusai's Great Wave: a procedural cresting swell of Prussian blue with clawing white foam fingers reaching over a small distant Fuji.">
+  <canvas id="hok01-cv"></canvas>
+</div>
+<div class="hok01-cap">The Great Wave off Kanagawa</div>
+<script>
+(function(){
+  "use strict";
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cv=document.getElementById('hok01-cv'); if(!cv) return;
+  var ctx=cv.getContext('2d');
+  var W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2), t=0, lean=0.5;
+
+  function size(){
+    var r=cv.getBoundingClientRect(); W=Math.max(2,r.width); H=Math.max(2,r.height);
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  size();
+
+  function waveProfile(baseY, amp, phase){
+    var pts=[], n=48;
+    for(var i=0;i<=n;i++){
+      var u=i/n, x=u*W;
+      var crest=Math.pow(Math.max(0,1-u*1.15),1.6);
+      var y=baseY - amp*crest - Math.sin(u*9+phase)*amp*0.10*(1-u) - Math.sin(u*22+phase*2)*amp*0.04;
+      y -= (lean-0.5)*amp*0.5*crest;
+      pts.push({x:x,y:y,c:crest});
+    }
+    return pts;
+  }
+  function fillWave(pts, fill, stroke){
+    ctx.beginPath(); ctx.moveTo(0,H); ctx.lineTo(pts[0].x,pts[0].y);
+    for(var i=1;i<pts.length;i++){ var a=pts[i-1],b=pts[i]; ctx.quadraticCurveTo(a.x,a.y,(a.x+b.x)/2,(a.y+b.y)/2); }
+    ctx.lineTo(W,H); ctx.closePath(); ctx.fillStyle=fill; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(pts[0].x,pts[0].y);
+    for(var j=1;j<pts.length;j++){ var q0=pts[j-1],q1=pts[j]; ctx.quadraticCurveTo(q0.x,q0.y,(q0.x+q1.x)/2,(q0.y+q1.y)/2); }
+    ctx.lineWidth=2.4; ctx.strokeStyle=stroke; ctx.stroke();
+  }
+  function foamFingers(x,y,len,ang,depth,wob){
+    if(depth<=0||len<3) return;
+    var x2=x+Math.cos(ang)*len, y2=y+Math.sin(ang)*len;
+    ctx.beginPath(); ctx.moveTo(x,y);
+    ctx.quadraticCurveTo(x+Math.cos(ang+wob)*len*0.5, y+Math.sin(ang+wob)*len*0.5, x2,y2);
+    ctx.lineWidth=Math.max(1,depth*0.7); ctx.strokeStyle="rgba(251,248,240,0.95)"; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x2,y2,Math.max(1.3,depth*0.9),0,6.3); ctx.fillStyle="rgba(251,248,240,0.95)"; ctx.fill();
+    foamFingers(x2,y2,len*0.72,ang-0.5+wob,depth-1,wob*0.9);
+    if(depth>2) foamFingers(x2,y2,len*0.6,ang+0.35,depth-1,-wob*0.8);
+  }
+  function draw(){
+    t+=0.016;
+    lean=0.5+Math.sin(t*0.5)*0.32;
+    ctx.clearRect(0,0,W,H);
+    var sky=ctx.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0,"#0d2347"); sky.addColorStop(0.55,"#1b3a6b"); sky.addColorStop(1,"#2e5c9a");
+    ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+    var fjx=W*0.46, fjy=H*0.52, fw=W*0.10;
+    ctx.beginPath(); ctx.moveTo(fjx-fw,fjy); ctx.lineTo(fjx,fjy-fw*0.7); ctx.lineTo(fjx+fw,fjy); ctx.closePath();
+    ctx.fillStyle="#10294f"; ctx.fill(); ctx.lineWidth=1.5; ctx.strokeStyle="#0a1c38"; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(fjx-fw*0.28,fjy-fw*0.28); ctx.lineTo(fjx,fjy-fw*0.7); ctx.lineTo(fjx+fw*0.28,fjy-fw*0.28); ctx.closePath();
+    ctx.fillStyle="rgba(251,248,240,0.85)"; ctx.fill();
+    fillWave(waveProfile(H*0.72,H*0.30,t*0.7),"#2e5c9a","#143257");
+    fillWave(waveProfile(H*0.85,H*0.46,t*0.9+1.5),"#1b3a6b","#0d2347");
+    var crest=waveProfile(H*0.95,H*0.62,t*1.1+3.0);
+    fillWave(crest,"#234e85","#0a1c38");
+    ctx.beginPath(); ctx.moveTo(crest[0].x,crest[0].y);
+    for(var i=1;i<crest.length;i++){ var a=crest[i-1],b=crest[i]; ctx.quadraticCurveTo(a.x,a.y,(a.x+b.x)/2,(a.y+b.y)/2); }
+    ctx.lineWidth=8; ctx.lineCap="round"; ctx.strokeStyle="rgba(251,248,240,0.9)"; ctx.stroke();
+    for(var k=0;k<crest.length;k++){
+      var p=crest[k];
+      if(p.c>0.55 && k%3===0){
+        var ang=-Math.PI/2-0.7+Math.sin(t*1.6+k)*0.35+(lean-0.5)*0.8;
+        foamFingers(p.x,p.y,12+p.c*22,ang,4,0.35*Math.sin(t+k));
+      }
+    }
+  }
+
+  var raf=0, running=false;
+  function loop(){ if(!running) return; draw(); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  var _rt;
+  window.addEventListener('resize', function(){ clearTimeout(_rt); _rt=setTimeout(function(){ size(); if(REDUCED) draw(); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(); } else start();
+})();
+</script>
+</body>
+</html>

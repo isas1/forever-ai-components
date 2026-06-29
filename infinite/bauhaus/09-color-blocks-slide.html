@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Primary red, blue and yellow blocks slide and recompose a 4x4 modular grid against off-white paper with black circle and triangle accents.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Color Blocks Slide</title>
+<style>
+  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  #bh09-stage{position:fixed;inset:0;background:#101012}
+  #bh09-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="bh09-stage" role="img" aria-label="Bauhaus composition: primary red, blue, and yellow blocks sliding and recomposing the frame against black, with a black circle and triangle accent.">
+  <canvas id="bh09-c"></canvas>
+</div>
+<div class="cap">Color Blocks Slide</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("bh09-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // Bauhaus primaries + ink on warm off-white module ground.
+  var RED="#e63329",BLU="#1f4ea1",YEL="#f4c20d",INK="#15151a",PAP="#ece6da";
+
+  // Block model: each occupies a fractional cell in a 4x4 modular grid.
+  // It "slides" between two grid anchors on its own phase — recomposing the frame.
+  // Fields: color, w,h (cell units), and two anchor positions a/b (cell coords),
+  // plus a phase offset and a per-block speed factor.
+  var B=[
+    {c:RED, w:2,h:2, ax:0,ay:0, bx:2,by:0, p:0.00, s:1.0},
+    {c:BLU, w:1,h:3, ax:3,ay:1, bx:0,by:1, p:0.28, s:0.85},
+    {c:YEL, w:2,h:1, ax:1,ay:3, bx:2,by:2, p:0.55, s:1.15},
+    {c:INK, w:1,h:1, ax:2,ay:2, bx:1,by:0, p:0.70, s:0.95},
+    {c:RED, w:1,h:1, ax:0,ay:3, bx:3,by:3, p:0.40, s:1.05},
+    {c:YEL, w:1,h:1, ax:3,ay:0, bx:0,by:2, p:0.13, s:0.9}
+  ];
+
+  var W=0,H=0,DPR=1,CELL=0,OX=0,OY=0,GRID=4;
+  function size(){
+    var r=cv.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,r.width|0);H=Math.max(1,r.height|0);
+    cv.width=W*DPR;cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    var m=Math.min(W,H);
+    CELL=(m*0.84)/GRID;           // module size, with margin
+    OX=(W-CELL*GRID)/2;
+    OY=(H-CELL*GRID)/2;
+  }
+
+  // Cubic ease that holds at the anchors (snap-then-glide rhythm).
+  function ease(t){ t=t-Math.floor(t); var k=t<0.5?2*t:2*(1-t); k=k*k*(3-2*k); return k; }
+
+  function blk(x,y,w,h){ ctx.fillRect(OX+x*CELL, OY+y*CELL, w*CELL, h*CELL); }
+
+  function drawFrame(time){
+    ctx.fillStyle="#101012";ctx.fillRect(0,0,W,H);
+    // off-white module ground (the "paper") with a static soft inset shadow baked once
+    ctx.fillStyle=PAP;
+    blk(0,0,GRID,GRID);
+
+    // thin ink registration lines on the grid (static rhythm)
+    ctx.strokeStyle="rgba(21,21,26,0.14)";ctx.lineWidth=1;
+    for(var i=1;i<GRID;i++){
+      ctx.beginPath();ctx.moveTo(OX+i*CELL,OY);ctx.lineTo(OX+i*CELL,OY+CELL*GRID);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(OX,OY+i*CELL);ctx.lineTo(OX+CELL*GRID,OY+i*CELL);ctx.stroke();
+    }
+
+    for(var n=0;n<B.length;n++){
+      var b=B[n];
+      var t=ease(time*b.s+b.p);
+      var x=b.ax+(b.bx-b.ax)*t;
+      var y=b.ay+(b.by-b.ay)*t;
+      ctx.fillStyle=b.c;
+      blk(x,y,b.w,b.h);
+    }
+
+    // accent overlay marks: a black circle riding one diagonal, a yellow-outline triangle.
+    var tc=ease(time*0.6+0.2);
+    var cx=OX+(0.6+ (GRID-1.2)*tc)*CELL, cy=OY+(GRID-0.6-(GRID-1.2)*tc)*CELL;
+    var rad=CELL*0.42;
+    ctx.fillStyle=INK;
+    ctx.beginPath();ctx.arc(cx,cy,rad,0,Math.PI*2);ctx.fill();
+    // small red dot inside circle — Kandinsky tension
+    ctx.fillStyle=RED;
+    ctx.beginPath();ctx.arc(cx,cy,rad*0.32,0,Math.PI*2);ctx.fill();
+
+    // pure triangle, static anchor, top-right module
+    var tx=OX+CELL*GRID-CELL*1.4, ty=OY+CELL*0.25;
+    ctx.fillStyle=BLU;
+    ctx.beginPath();
+    ctx.moveTo(tx, ty+CELL*1.1);
+    ctx.lineTo(tx+CELL*1.1, ty+CELL*1.1);
+    ctx.lineTo(tx+CELL*0.55, ty);
+    ctx.closePath();ctx.fill();
+
+    // outer ink keyline framing the whole module field
+    ctx.strokeStyle=INK;ctx.lineWidth=Math.max(2,CELL*0.05);
+    ctx.strokeRect(OX,OY,CELL*GRID,CELL*GRID);
+  }
+
+  var running=false,raf=0,start=0;
+  function loop(ts){
+    if(!running)return;
+    if(!start)start=ts;
+    var time=(ts-start)/4200; // full recompose cycle ~4.2s
+    drawFrame(time);
+    raf=requestAnimationFrame(loop);
+  }
+  function play(){ if(running)return; running=true; start=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size();
+    if(reduce){ drawFrame(0.5); return; } // settled mid-slide static frame
+    play();
+  }
+
+  var rt=0;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ size(); if(reduce)drawFrame(0.5); },120);
+  });
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden)stop(); else play();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

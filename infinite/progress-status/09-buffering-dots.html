@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Video stream buffering bar where playback chases a buffered-ahead band, with sweeping sheen, 8 segment dots, percent and ETA readout.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Buffering</title>
+<style>
+  :root{
+    --pg09-bg:#0b0d12; --pg09-ac:#7c5cff; --pg09-ac2:#a591ff;
+    --pg09-track:#1a1d28; --pg09-buf:#2c2752; --pg09-ink:#e7e8f0; --pg09-dim:#6b6f86;
+  }
+  html,body{margin:0;height:100%}
+  body{background:var(--pg09-bg);overflow:hidden;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;color:var(--pg09-ink)}
+  .pg09-stage{position:fixed;inset:0;display:grid;place-items:center;container-type:size}
+  .pg09-card{width:74cqmin;display:flex;flex-direction:column;gap:6.5cqmin}
+  /* header row: label + percent */
+  .pg09-head{display:flex;align-items:baseline;justify-content:space-between}
+  .pg09-lab{font-size:3.4cqmin;letter-spacing:.22em;text-transform:uppercase;color:var(--pg09-dim)}
+  .pg09-pct{font-size:9cqmin;font-weight:600;line-height:.9;letter-spacing:-.02em;
+    color:var(--pg09-ink);font-variant-numeric:tabular-nums}
+  .pg09-pct b{color:var(--pg09-ac2);font-weight:600}
+  .pg09-pct s{font-size:3.6cqmin;color:var(--pg09-dim);text-decoration:none;margin-left:.4cqmin;font-weight:600}
+  /* bar */
+  .pg09-bar{position:relative;height:5cqmin;border-radius:.8cqmin;background:var(--pg09-track);
+    overflow:hidden;box-shadow:0 0 0 1px #ffffff0a inset, 0 0 22px -8px var(--pg09-ac)}
+  .pg09-buf,.pg09-fill{position:absolute;inset:0;transform-origin:left center;border-radius:inherit;will-change:transform}
+  .pg09-buf{background:var(--pg09-buf);transform:scaleX(0)}
+  .pg09-fill{background:linear-gradient(90deg,var(--pg09-ac),var(--pg09-ac2));transform:scaleX(0)}
+  /* moving sheen — compositor transform only, sits over fill, clipped by bar overflow */
+  .pg09-sheen{position:absolute;top:0;bottom:0;left:0;width:40%;
+    background:linear-gradient(90deg,#fff0,#ffffff38,#fff0);
+    transform:translateX(-120%);will-change:transform;mix-blend-mode:screen}
+  /* ticks: static grid overlay (Swiss measure) */
+  .pg09-ticks{position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(90deg,#ffffff14 0 1px,transparent 1px 10%)}
+  /* footer: stage segments + ETA */
+  .pg09-foot{display:flex;align-items:center;justify-content:space-between;font-size:3cqmin;letter-spacing:.06em}
+  .pg09-seg{display:flex;gap:1.4cqmin}
+  .pg09-dot{width:2.2cqmin;height:2.2cqmin;border-radius:50%;background:var(--pg09-track);
+    box-shadow:0 0 0 1px #ffffff10 inset;transition:none}
+  .pg09-dot.on{background:var(--pg09-ac)}
+  .pg09-dot.cur{background:var(--pg09-ac2);box-shadow:0 0 10px -2px var(--pg09-ac)}
+  .pg09-eta{color:var(--pg09-dim);font-variant-numeric:tabular-nums}
+  .pg09-eta i{color:var(--pg09-ink);font-style:normal}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    .pg09-sheen{display:none}
+  }
+</style>
+</head>
+<body>
+  <div class="pg09-stage">
+    <div class="pg09-card" id="pg09-card"
+         role="progressbar" aria-label="Buffering" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="pg09-head">
+        <span class="pg09-lab">Stream</span>
+        <span class="pg09-pct"><b id="pg09-num">0</b><s>%</s></span>
+      </div>
+      <div class="pg09-bar">
+        <div class="pg09-buf" id="pg09-buf"></div>
+        <div class="pg09-fill" id="pg09-fill"></div>
+        <div class="pg09-sheen" id="pg09-sheen"></div>
+        <div class="pg09-ticks"></div>
+      </div>
+      <div class="pg09-foot">
+        <div class="pg09-seg" id="pg09-seg"></div>
+        <span class="pg09-eta">eta <i id="pg09-eta">--</i></span>
+      </div>
+    </div>
+  </div>
+  <div class="cap">Buffering</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var fill=document.getElementById('pg09-fill'),
+      buf=document.getElementById('pg09-buf'),
+      sheen=document.getElementById('pg09-sheen'),
+      num=document.getElementById('pg09-num'),
+      eta=document.getElementById('pg09-eta'),
+      card=document.getElementById('pg09-card'),
+      seg=document.getElementById('pg09-seg');
+
+  var NSEG=8, dots=[];
+  for(var i=0;i<NSEG;i++){var d=document.createElement('div');d.className='pg09-dot';seg.appendChild(d);dots.push(d);}
+
+  var TOTAL=12;                 // notional clip length, seconds, for ETA
+  var prog=0, bufd=0, lastSeg=-1, lastDot=-1, lastPct=-1;
+
+  function paint(p, b){
+    // p = playable progress 0..1, b = buffered ahead 0..1
+    fill.style.transform='scaleX('+p.toFixed(4)+')';
+    buf.style.transform='scaleX('+b.toFixed(4)+')';
+    var pct=Math.round(p*100);
+    if(pct!==lastPct){
+      num.textContent=pct; lastPct=pct;
+      card.setAttribute('aria-valuenow', pct);
+    }
+    var rem=Math.max(0,(1-p)*TOTAL);
+    var s=Math.ceil(rem);
+    eta.textContent = s>0 ? ('0:'+(s<10?'0':'')+s) : 'done';
+    var cur=Math.min(NSEG-1, Math.floor(p*NSEG));
+    if(cur!==lastDot){
+      for(var i=0;i<NSEG;i++){
+        var on=i<cur, isc=i===cur;
+        dots[i].className='pg09-dot'+(on?' on':'')+(isc&&p<1?' cur':'');
+      }
+      lastDot=cur;
+    }
+  }
+
+  if(reduce){ paint(0.62, 0.78); sheen.style.transform='translateX(80%)'; return; }
+
+  var running=true, raf=0, t0=0;
+  function loop(now){
+    if(!t0) t0=now;
+    var t=(now-t0)/1000;
+    // determinate, honest: buffer fills ahead of playback in eased steps,
+    // playback chases the buffer. Loops every ~7s.
+    var cyc=7, ph=(t%cyc)/cyc;
+    bufd = Math.min(1, 0.12 + 1.15*ph);            // buffered ahead
+    var target = Math.min(bufd, ph*1.06);          // playable can't exceed buffered
+    // ease the playable toward target so motion feels weighted, not linear
+    prog += (target - prog)*0.12;
+    if(ph<0.02){ prog=Math.max(0, target*0.4); }    // reset at loop start
+    paint(Math.max(0,Math.min(1,prog)), bufd);
+    // sheen sweeps across at a steady, non-strobing cadence
+    var sw=((t*0.55)%1);
+    sheen.style.transform='translateX('+(sw*300-120).toFixed(2)+'%)';
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){ if(!running){running=true;t0=0;raf=requestAnimationFrame(loop);} }
+  function stop(){ running=false; cancelAnimationFrame(raf); }
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) stop(); else start();
+  });
+  raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

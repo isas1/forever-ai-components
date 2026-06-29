@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="De Jong strange attractor rendering smoky pink density clouds that drift and reshape on a deep purple field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Strange Attractor</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#11001f;}
+  #dejong-c{display:block;width:100%;height:100%;}
+  .dejong-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#ff5d8f;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="dejong-c"></canvas>
+<div class="dejong-cap">Strange Attractor</div>
+<script>
+(function(){
+  const cv=document.getElementById('dejong-c'),ctx=cv.getContext('2d',{alpha:false});
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,img,buf,scale,ox,oy;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=Math.max(1,cv.clientWidth);H=Math.max(1,cv.clientHeight);
+    cv.width=W*DPR|0;cv.height=H*DPR|0;
+    img=ctx.createImageData(cv.width,cv.height);
+    buf=new Float32Array(cv.width*cv.height);
+    scale=Math.min(cv.width,cv.height)*0.24;
+    ox=cv.width/2;oy=cv.height/2;
+  }
+  addEventListener('resize',size);size();
+  // accent #ff5d8f -> rgb(255,93,143). highlight toward warm white.
+  let t=0,nudge=0,px=0.1,py=0.1;
+  cv.addEventListener('pointermove',()=>{nudge=1;});
+  cv.addEventListener('click',()=>{nudge=1.6;t+=37;});
+  const ITER=reduce?420000:90000; // per frame (reduce builds one dense static frame)
+  function clock(c,s,p){return c+Math.sin(t*s+p)*0.85;}
+  function render(){
+    if(!reduce)t+=0.0032;
+    const cw=cv.width,ch=cv.height;
+    // De Jong coefficients drifting on sine clocks
+    const a=clock(-2.0,0.31,0.0),b=clock(-2.0,0.27,1.7),
+          c=clock(-1.2,0.23,3.4),d=clock(2.0,0.19,5.1);
+    // fade density (smoke persistence) — reduce starts clean.
+    // (non-reduce fade is folded into the render pass below, one pass not two)
+    if(reduce)buf.fill(0);
+    let x=px,y=py;
+    for(let i=0;i<ITER;i++){
+      const nx=Math.sin(a*y)-Math.cos(b*x);
+      const ny=Math.sin(c*x)-Math.cos(d*y);
+      x=nx;y=ny;
+      if(i<24)continue;
+      const sx=(x*scale+ox)|0,sy=(y*scale+oy)|0;
+      if(sx>=0&&sx<cw&&sy>=0&&sy<ch)buf[sy*cw+sx]+=1;
+    }
+    px=x;py=y;
+    nudge*=0.9;
+    const data=img.data;
+    for(let p=0,j=0;p<buf.length;p++,j+=4){
+      let v=buf[p];
+      if(v>0){
+        const dn=Math.log(1+v)*0.42; // tone-map density
+        const k=dn>1?1:dn;
+        // base bg 17,0,31 -> accent 255,93,143 -> hot 255,225,238
+        const hot=k>0.6?(k-0.6)/0.4:0;
+        const r=17+(255-17)*k;
+        const g=0+(93)*k+(225-93)*hot;
+        const bl=31+(143-31)*k+(238-143)*hot;
+        data[j]=r;data[j+1]=g;data[j+2]=bl;data[j+3]=255;
+        if(!reduce)buf[p]=v*0.90; // smoke fade, folded into this single pass
+      }else{data[j]=17;data[j+1]=0;data[j+2]=31;data[j+3]=255;}
+    }
+    ctx.putImageData(img,0,0);
+    raf=reduce?0:requestAnimationFrame(render);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(render);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){render();}else start();
+})();
+</script>
+</body>
+</html>

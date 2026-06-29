@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A dark lensing galaxy bends background starlight into tangential arcs that converge into a glowing magenta Einstein ring as alignment drifts">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gravitational Lens Ring</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d0814;}
+  #glr-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
+       letter-spacing:.14em;color:#ff9ed2;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="glr-c"></canvas>
+<div class="cap">Gravitational Lens Ring</div>
+<script>
+(function(){
+  const cv=document.getElementById('glr-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,R;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;R=Math.min(W,H)*0.28;   // Einstein radius
+  }
+  addEventListener('resize',size);size();
+
+  // Bent starfield: stars whose light passes near the lens get deflected tangentially.
+  const stars=[];
+  for(let i=0;i<150;i++)stars.push({a:Math.random()*6.283,d:0.3+Math.random()*4,
+    b:0.3+Math.random()*0.7,tw:Math.random()*6.283});
+  // Background galaxy = cluster of source points (offset from optical axis = beta).
+  const src=[];
+  for(let i=0;i<70;i++){const ang=Math.random()*6.283,rad=Math.pow(Math.random(),0.6)*0.9;
+    src.push({ox:Math.cos(ang)*rad,oy:Math.sin(ang)*rad*0.62,
+      h:Math.random(),sz:0.5+Math.random()*1.1});}
+
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+    nudge=((e.clientX-r.left)/W-0.5)*1.6;});
+
+  function lensColor(h,a){ // galaxy starlight tint, magenta->warm core
+    const c=h<.5?[255,180,222]:h<.8?[255,205,170]:[210,180,255];
+    return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';
+  }
+
+  function draw(){
+    // alignment beta oscillates toward 0 (perfect ring) and back out
+    const drift=reduce?0.18:0.62+0.6*Math.cos(t*0.011);
+    const beta=Math.max(0,drift)+nudge*0.15; // source offset along x
+    nudge*=0.95;
+
+    ctx.fillStyle='#0d0814';ctx.fillRect(0,0,W,H);
+
+    // ---- bent starfield ----
+    ctx.save();ctx.translate(cx,cy);
+    for(const s of stars){
+      const px=Math.cos(s.a)*s.d*R, py=Math.sin(s.a)*s.d*R;
+      const dist=Math.hypot(px,py)||1;
+      const def=(R*R)/dist*0.6;            // deflection ~ Einstein^2/dist
+      const tang=Math.atan2(py,px)+def/dist*0.5; // smear tangentially
+      const rr=dist+def*0.15;
+      const x=Math.cos(tang)*rr, y=Math.sin(tang)*rr;
+      const tw=0.45+0.55*Math.sin(t*0.05+s.tw);
+      ctx.globalAlpha=s.b*tw*0.9;
+      ctx.fillStyle='#cfe0ff';
+      ctx.beginPath();ctx.arc(x,y,s.b*1.3,0,6.283);ctx.fill();
+      // streak the deflected light into a short arc
+      ctx.globalAlpha=s.b*tw*0.25;ctx.lineWidth=s.b*1.1;ctx.strokeStyle='#aebbe6';
+      ctx.beginPath();ctx.arc(0,0,rr,tang-def/dist*0.4,tang);ctx.stroke();
+    }
+    ctx.restore();
+
+    // ---- lensed galaxy images: each source point -> two tangentially stretched arcs ----
+    ctx.save();ctx.translate(cx,cy);
+    ctx.globalCompositeOperation='lighter';
+    for(const p of src){
+      // source position (beta along +x, plus small intrinsic offset)
+      const sx=beta+p.ox*0.5, sy=p.oy*0.5;
+      const sb=Math.hypot(sx,sy);
+      const phi=Math.atan2(sy,sx);
+      // point-lens: theta = (beta +/- sqrt(beta^2+4))/2  (Einstein units)
+      const root=Math.sqrt(sb*sb+4);
+      const thP=(sb+root)/2, thM=(sb-root)/2; // outer(+) inner(-) image radii
+      for(const th of [thP,thM]){
+        const ar=Math.abs(th)*R;
+        // tangential magnification grows as source nears axis -> arc spreads
+        const spread=Math.min(1.5, 0.10/(Math.abs(sb)+0.05));
+        const seg=0.08+spread;
+        const a0=phi+(th<0?Math.PI:0);
+        const steps=6;
+        ctx.lineWidth=(0.8+p.sz*1.4)* (1+spread*0.6);
+        for(let k=0;k<steps;k++){
+          const f0=a0-seg/2+seg*(k/steps), f1=a0-seg/2+seg*((k+1)/steps);
+          const fade=1-Math.abs(k/steps-0.5)*1.4;
+          ctx.globalAlpha=(0.10+0.22*fade)*p.h*0.9+0.05;
+          ctx.strokeStyle=lensColor(p.h,1);
+          ctx.beginPath();ctx.arc(0,0,ar,f0,f1);ctx.stroke();
+        }
+      }
+    }
+    ctx.globalCompositeOperation='source-over';
+    ctx.restore();
+
+    // ---- Einstein ring glow when alignment near perfect ----
+    const align=Math.max(0,1-beta*1.4);
+    if(align>0.01){
+      const g=ctx.createRadialGradient(cx,cy,R*0.7,cx,cy,R*1.25);
+      g.addColorStop(0,'rgba(255,158,210,0)');
+      g.addColorStop(0.5,'rgba(255,158,210,'+(0.22*align)+')');
+      g.addColorStop(0.62,'rgba(255,210,240,'+(0.30*align)+')');
+      g.addColorStop(0.75,'rgba(255,158,210,'+(0.18*align)+')');
+      g.addColorStop(1,'rgba(255,158,210,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*1.25,0,6.283);ctx.fill();
+    }
+
+    // ---- foreground dark mass: lens galaxy, occludes center ----
+    const dm=ctx.createRadialGradient(cx,cy,1,cx,cy,R*0.85);
+    dm.addColorStop(0,'#0d0814');dm.addColorStop(0.55,'#0d0814');
+    dm.addColorStop(0.78,'rgba(13,8,20,0.96)');
+    dm.addColorStop(1,'rgba(13,8,20,0)');
+    ctx.fillStyle=dm;ctx.beginPath();ctx.arc(cx,cy,R*0.85,0,6.283);ctx.fill();
+    // faint core of the lensing galaxy
+    const core=ctx.createRadialGradient(cx,cy,1,cx,cy,R*0.4);
+    core.addColorStop(0,'rgba(120,90,150,0.30)');
+    core.addColorStop(1,'rgba(13,8,20,0)');
+    ctx.fillStyle=core;ctx.beginPath();ctx.arc(cx,cy,R*0.4,0,6.283);ctx.fill();
+  }
+
+  let raf=0;
+  function frame(){t+=1;draw();raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce)draw();else start();
+})();
+</script>
+</body>
+</html>

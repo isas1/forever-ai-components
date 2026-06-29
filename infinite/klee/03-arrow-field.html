@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Arrow Field — Paul Klee. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arrow Field</title>
+<style>
+  html,body{margin:0;height:100%;background:#23201b;overflow:hidden}
+  #kle03-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kle03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kle03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe7d6;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kle03-stage" role="img" aria-label="A Paul Klee arrow field: a meadow of small coloured arrows on a dim ground, pointing and pulsing as they drift together in a slow flow-field current of direction.">
+  <canvas id="kle03-cv"></canvas>
+</div>
+<div class="kle03-cap">Arrow Field</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('kle03-cv'); if(!cv) return;
+  const HUES=['#c96f4a','#3a8a8c','#d9a441','#46566b','#7a4b6b'];
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), arrows=[];
+  function build(){
+    arrows=[];
+    const gap=46;
+    const cols=Math.max(2,Math.floor(S.w/gap));
+    const rows=Math.max(2,Math.floor(S.h/gap));
+    const ox=(S.w-(cols-1)*gap)/2, oy=(S.h-(rows-1)*gap)/2;
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      arrows.push({x:ox+c*gap, y:oy+r*gap, c:HUES[(r+c)%HUES.length], ph:(c*0.5+r*0.7)});
+    }
+  }
+  function arrow(ctx,x,y,ang,len,col,a){
+    ctx.save();ctx.translate(x,y);ctx.rotate(ang);
+    ctx.globalAlpha=a;
+    ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=2.4;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(-len*0.5,0);ctx.lineTo(len*0.5,0);ctx.stroke();
+    const hl=len*0.34;
+    ctx.beginPath();
+    ctx.moveTo(len*0.5,0);
+    ctx.lineTo(len*0.5-hl,-hl*0.62);
+    ctx.lineTo(len*0.5-hl, hl*0.62);
+    ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+  let t=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    S.ctx.clearRect(0,0,S.w,S.h);
+    const cx=S.w/2, cy=S.h/2;
+    for(const ar of arrows){
+      const fx=(ar.x-cx)/S.w, fy=(ar.y-cy)/S.h;
+      const ang=Math.sin(t*0.5 + ar.x*0.012 + ar.y*0.01)*0.9
+                + Math.atan2(fy,fx)*0.4 + t*0.25;
+      const pulse=REDUCED?0.7:0.6+0.4*Math.sin(t*2 + ar.ph);
+      const len=14+pulse*12;
+      arrow(S.ctx, ar.x, ar.y, ang, len, ar.c, 0.45+0.55*pulse);
+    }
+    S.ctx.globalAlpha=1;
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  build();
+  S.ctx.fillStyle='#23201b';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); build(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

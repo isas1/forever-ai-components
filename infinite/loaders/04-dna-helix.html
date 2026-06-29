@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Two columns of glowing dots swing past each other and shift color to trace a rotating DNA double-helix spinner.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DNA Helix</title>
+<style>
+:root{
+  --bg-900:#08090d;
+  --accent-iris:#7c5cff; --accent-cyan:#22d3ee; --accent-magenta:#ff5ca8;
+  /* swing amplitude scales with the viewport so the helix reads well on
+     phone, tablet and desktop without any JS measurement */
+  --amp:clamp(20px,7vmin,42px);
+  --node:clamp(9px,2.4vmin,15px);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{
+  background:var(--bg-900);
+  background-image:
+    radial-gradient(60vw 40vw at 15% -10%,rgba(124,92,255,.16),transparent 60%),
+    radial-gradient(50vw 40vw at 90% 0%,rgba(34,211,238,.16),transparent 55%);
+  display:grid;place-items:center;
+  font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  color:#e8ecf6;
+}
+.c04-wrap{display:flex;flex-direction:column;align-items:center;gap:clamp(20px,5vmin,40px);
+  padding:24px;text-align:center}
+.c04-dna{position:relative;width:calc(var(--amp)*2 + var(--node));height:min(40vmin,220px)}
+.c04-dna__node{position:absolute;left:50%;width:var(--node);height:var(--node);
+  margin-left:calc(var(--node)/-2);border-radius:50%;
+  /* Glow lives on a static box-shadow whose colour rides currentColor; the
+     keyframes only touch transform/color/z-index so blur radius never repaints. */
+  color:var(--accent-iris);background:currentColor;box-shadow:0 0 11px currentColor;
+  animation:c04-dna-swing 1.8s cubic-bezier(.65,0,.35,1) infinite}
+.c04-dna__node--b{animation-name:c04-dna-swing-b}
+@keyframes c04-dna-swing{
+  0%,100%{transform:translateX(calc(var(--amp)*-1)) scale(.6);color:var(--accent-iris);z-index:1}
+  50%{transform:translateX(var(--amp)) scale(1.1);color:var(--accent-cyan);z-index:3}}
+@keyframes c04-dna-swing-b{
+  0%,100%{transform:translateX(var(--amp)) scale(1.1);color:var(--accent-magenta);z-index:3}
+  50%{transform:translateX(calc(var(--amp)*-1)) scale(.6);color:var(--accent-iris);z-index:1}}
+
+/* cycling status line — fades between quirky messages as the wait grows */
+.c04-msg{min-height:1.4em;font-size:clamp(13px,3.6vmin,17px);font-weight:500;letter-spacing:.01em;
+  color:#aeb6cc;max-width:min(86vw,420px);line-height:1.4;
+  opacity:1;transition:opacity .4s ease}
+.c04-msg.is-out{opacity:0}
+
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+  .c04-msg{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="c04-wrap">
+  <div class="c04-dna" id="c04-dna" role="img" aria-label="DNA double helix loader"></div>
+  <div class="c04-msg" id="c04-msg" role="status" aria-live="polite">Warming up the double helix…</div>
+</div>
+<div class="cap">DNA Helix</div>
+<script>
+(function(){
+  var root=document.getElementById('c04-dna');
+  if(!root) return;
+  var COUNT=10, h=root.clientHeight||150,
+      node=parseFloat(getComputedStyle(root).getPropertyValue('--node'))||12;
+  for(var i=0;i<COUNT;i++){
+    var t=i/(COUNT-1);
+    var top=(t*(h-node))+'px';
+    var delay=(-i*(1.8/COUNT)).toFixed(3)+'s';
+    var a=document.createElement('span');
+    a.className='c04-dna__node c04-dna__node--a';
+    a.style.top=top; a.style.animationDelay=delay;
+    var b=document.createElement('span');
+    b.className='c04-dna__node c04-dna__node--b';
+    b.style.top=top; b.style.animationDelay=delay;
+    root.appendChild(a); root.appendChild(b);
+  }
+  function vis(){var s=document.hidden?'paused':'running';
+    root.querySelectorAll('.c04-dna__node').forEach(function(n){n.style.animationPlayState=s;});}
+  document.addEventListener('visibilitychange',vis);vis();
+
+  // quirky status line: early ones are upbeat, later ones acknowledge the wait.
+  // As a standalone demo there's nothing to "finish", so it loops the tail.
+  var MSGS=[
+    'Warming up the double helix…',
+    'Sequencing the base pairs…',
+    'Untangling the strands…',
+    'Bribing the GPU with extra electrons…',
+    'Teaching the nucleotides to dance…',
+    'Almost folded into shape…',
+    'Wow, lots of genetic material today…',
+    'Still splicing. Science takes a sec.',
+    'Have you tried turning your DNA off and on again?',
+    'Okay, this one is a long strand…'
+  ];
+  var msgEl=document.getElementById('c04-msg'), mi=0;
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function tick(){
+    mi=(mi+1)%MSGS.length;
+    if(reduce){ msgEl.textContent=MSGS[mi]; return; }
+    msgEl.classList.add('is-out');
+    setTimeout(function(){ msgEl.textContent=MSGS[mi]; msgEl.classList.remove('is-out'); },400);
+  }
+  var timer=setInterval(tick,2600);
+  document.addEventListener('visibilitychange',function(){
+    clearInterval(timer);
+    if(!document.hidden){ timer=setInterval(tick,2600); }
+  });
+})();
+</script>
+</body>
+</html>

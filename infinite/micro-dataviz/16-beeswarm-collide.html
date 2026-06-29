@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Coral dots drop onto a value axis and collide-relax into a bimodal beeswarm silhouette, new points falling in continuously.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beeswarm Collide</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1c1018;}
+  #bsw-c{display:block;width:100%;height:100%;}
+  .bsw-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#ff6f7d;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="bsw-c"></canvas>
+<div class="bsw-cap">Beeswarm Collide</div>
+<script>
+(function(){
+  const cv=document.getElementById('bsw-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG='#1c1018',AC='#ff6f7d';
+  let W,H,DPR,axisY,padX,scale,R;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    axisY=H*0.62;padX=W*0.1;
+    R=Math.max(2.2,Math.min(W,H)/110);     // dot radius scales w/ tile
+    scale=W-padX*2;
+  }
+  addEventListener('resize',()=>{size();layoutAll();});
+  // value generator: bimodal distribution (two humps) -> distinctive silhouette
+  function sampleVal(){
+    const g=()=>{let s=0;for(let i=0;i<4;i++)s+=Math.random();return s/4;};
+    return Math.random()<0.55 ? 0.34+(g()-0.5)*0.34 : 0.72+(g()-0.5)*0.30;
+  }
+  const MAX=120,dots=[];
+  function spawn(){
+    const v=Math.min(0.98,Math.max(0.02,sampleVal()));
+    dots.push({v,x:padX+v*scale,tx:padX+v*scale,y:-R*4,ty:axisY,vy:0,age:0});
+    if(dots.length>MAX)dots.shift();
+  }
+  // collision relax: push apart along value axis (x), settle on baseline rows above axis
+  // `iters` defaults high for one-shot settling (init/resize); the per-frame loop
+  // passes 1 since the swarm is already near-settled — avoids O(n^2)*3 every frame.
+  function relax(iters){
+    iters=iters||1;
+    for(let it=0;it<iters;it++){
+      for(let i=0;i<dots.length;i++){
+        const a=dots[i];
+        for(let j=i+1;j<dots.length;j++){
+          const b=dots[j];
+          let dx=b.tx-a.tx,dy=b.ty-a.ty;
+          const d2=dx*dx+dy*dy,md=R*2.05;
+          if(d2<md*md&&d2>0.0001){
+            const d=Math.sqrt(d2),ov=(md-d)/d*0.5;
+            dx*=ov;dy*=ov;
+            a.tx-=dx;a.ty-=dy;b.tx+=dx;b.ty+=dy;
+          }
+        }
+      }
+      for(const a of dots){                       // anchor: x toward value, y to baseline
+        a.tx+=(padX+a.v*scale-a.tx)*0.10;
+        a.tx=Math.max(padX*0.5,Math.min(W-padX*0.5,a.tx));
+        if(a.ty>axisY)a.ty=axisY;                 // stack upward from axis
+      }
+    }
+  }
+  function layoutAll(){for(const d of dots){d.x=d.tx;d.y=d.ty;}relax(3);}
+  // seed a resting swarm
+  for(let i=0;i<MAX;i++){const v=Math.min(0.98,Math.max(0.02,sampleVal()));dots.push({v,x:0,tx:0,ty:axisY,y:axisY,vy:0,age:30});}
+  size();for(const d of dots){d.tx=padX+d.v*scale;}layoutAll();
+
+  let t=0,acc=0,hue=0;
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();const mv=(e.clientX-r.left-padX)/scale;dots.push({v:Math.min(0.98,Math.max(0.02,mv)),x:e.clientX-r.left,tx:e.clientX-r.left,y:-R*4,ty:axisY,vy:0,age:0});if(dots.length>MAX)dots.shift();});
+
+  function draw(){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    // value axis + ticks
+    ctx.strokeStyle='rgba(255,111,125,0.28)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(padX*0.6,axisY+R+3);ctx.lineTo(W-padX*0.6,axisY+R+3);ctx.stroke();
+    ctx.fillStyle='rgba(255,111,125,0.5)';
+    for(let k=0;k<=4;k++){const x=padX+k/4*scale;ctx.fillRect(x-0.5,axisY+R+3,1,5);}
+    relax();
+    for(const d of dots){
+      if(d.age<30){d.vy+=0.6;d.y+=d.vy;if(d.y>d.ty){d.y=d.ty;d.vy*=-0.28;}d.x+=(d.tx-d.x)*0.2;}
+      else{d.x+=(d.tx-d.x)*0.22;d.y+=(d.ty-d.y)*0.22;}
+      d.age++;
+      const fresh=Math.max(0,1-d.age/26);
+      const h=d.v*40;                              // subtle value->hue tilt around accent
+      ctx.beginPath();ctx.arc(d.x,d.y,R+fresh*R*0.6,0,6.2832);
+      ctx.fillStyle=fresh>0.02?`hsl(${352+h},100%,${72-d.v*8}%)`:`hsla(${352+h},85%,${66-d.v*10}%,0.92)`;
+      ctx.fill();
+      if(fresh>0.05){ctx.strokeStyle=`rgba(255,200,205,${fresh*0.7})`;ctx.lineWidth=1;ctx.stroke();}
+    }
+    if(!reduce){
+      acc+=0.016;
+      if(acc>=1){acc=0;spawn();}
+      t++;
+    }
+    raf=reduce?0:requestAnimationFrame(draw);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(draw);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){for(let i=0;i<6;i++)relax();for(const d of dots){d.x=d.tx;d.y=d.ty;d.age=40;}draw();}
+  else start();
+})();
+</script>
+</body>
+</html>

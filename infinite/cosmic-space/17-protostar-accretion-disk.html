@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Dust grains spiral inward along two arms feeding a glowing protostar with warm-to-cool color, edge-on disk and bipolar jets shooting up and">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protostar Accretion Disk</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0e0805;}
+  #psad-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
+       letter-spacing:.16em;color:#ffd27f;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="psad-c"></canvas>
+<div class="cap">Protostar Accretion Disk</div>
+<script>
+(function(){
+  const cv=document.getElementById('psad-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const TILT=0.34; // disk flatten factor
+  let W,H,DPR,cx,cy,S;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;S=Math.min(W,H)/420;
+  }
+  addEventListener('resize',size);size();
+
+  // dust grains feeding inward along spiral arms
+  const N=160,P=[],ARMS=2;
+  function spawn(p,fresh){
+    const arm=(Math.random()*ARMS|0);
+    p.r=fresh?70+Math.random()*120:150+Math.random()*40;
+    p.a=arm*(Math.PI*2/ARMS)+Math.random()*1.1-0.55;
+    p.w=0.16+Math.random()*0.5; p.s=0.85+Math.random()*0.6;
+  }
+  for(let i=0;i<N;i++){const p={};spawn(p,true);P.push(p);}
+
+  let t=0,boost=0;
+  function nudge(){boost=Math.min(boost+0.6,1.6);}
+  cv.addEventListener('pointermove',nudge);
+  cv.addEventListener('click',nudge);
+
+  // colour by radius: warm core -> cool edge
+  function col(r,heat){
+    if(r<26) return '#fff6e0';
+    if(r<55) return '#ffd27f';
+    if(r<90) return '#ff9a4d';
+    if(r<120)return '#c97a86';
+    return '#5d7fb8';
+  }
+
+  function jet(dir,pulse){
+    // bipolar jet: dir = -1 up, +1 down (screen y)
+    const len=(150+pulse*40)*S, base=8*S;
+    const tip=cy+dir*len;
+    const g=ctx.createLinearGradient(cx,cy,cx,tip);
+    g.addColorStop(0,'rgba(255,246,224,'+(0.8+pulse*0.2)+')');
+    g.addColorStop(0.25,'rgba(255,210,127,0.5)');
+    g.addColorStop(0.7,'rgba(120,150,210,0.18)');
+    g.addColorStop(1,'rgba(93,127,184,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.moveTo(cx-base,cy);
+    ctx.quadraticCurveTo(cx-base*0.4,cy+dir*len*0.5,cx-base*2.4,tip);
+    ctx.lineTo(cx+base*2.4,tip);
+    ctx.quadraticCurveTo(cx+base*0.4,cy+dir*len*0.5,cx+base,cy);
+    ctx.closePath();ctx.fill();
+  }
+
+  function frame(){
+    t+=reduce?0:1; boost*=0.95;
+    ctx.fillStyle='rgba(14,8,5,0.30)';ctx.fillRect(0,0,W,H);
+    const pulse=0.5+0.5*Math.sin(t*0.04)+boost*0.3;
+
+    ctx.globalCompositeOperation='lighter';
+    // back jet first (behind disk)
+    jet(-1,pulse);
+
+    // accretion disk, viewed near edge-on
+    ctx.save();ctx.translate(cx,cy);ctx.scale(1,TILT);
+    const spin=t*0.012;
+    for(let i=0;i<N;i++){
+      const p=P[i];
+      const v=(0.5+boost)*p.s*(70/Math.max(p.r,28));
+      if(!reduce){ p.a+=v*0.018; p.r-=0.14*(0.7+p.s)*(1+boost*0.4); }
+      if(p.r<24){spawn(p,false);}
+      // logarithmic spiral wind-up
+      const sa=p.a+spin+Math.log(p.r)*0.9;
+      const x=Math.cos(sa)*p.r*S, y=Math.sin(sa)*p.r*S;
+      const heat=1-(p.r-24)/160;
+      ctx.fillStyle=col(p.r,heat);
+      ctx.globalAlpha=(0.25+heat*0.6)*p.w*2.2;
+      const rad=(0.7+heat*2.0)*S;
+      ctx.beginPath();ctx.arc(x,y,rad,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();ctx.globalAlpha=1;
+
+    // front jet
+    jet(1,pulse);
+
+    // glowing core
+    const cg=ctx.createRadialGradient(cx,cy,0,cx,cy,46*S*(1+pulse*0.12));
+    cg.addColorStop(0,'rgba(255,255,250,'+(0.95)+')');
+    cg.addColorStop(0.22,'rgba(255,238,200,0.9)');
+    cg.addColorStop(0.5,'rgba(255,180,90,0.45)');
+    cg.addColorStop(1,'rgba(255,140,60,0)');
+    ctx.fillStyle=cg;ctx.beginPath();ctx.arc(cx,cy,46*S*(1+pulse*0.12),0,Math.PI*2);ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#fff8ec';
+    ctx.beginPath();ctx.arc(cx,cy,(3.2+pulse*0.9)*S,0,Math.PI*2);ctx.fill();
+
+    raf=reduce?0:requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ctx.fillStyle='#0e0805';ctx.fillRect(0,0,W,H);frame();}else start();
+})();
+</script>
+</body>
+</html>

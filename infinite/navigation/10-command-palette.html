@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A Cmd+K command palette that opens over a blurred overlay, auto-types search queries, filters command rows, and highlights selections.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Command Palette</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-700:#12141d;
+    --bg-surface:#1c2030;
+    --text-0:#f4f6fb;
+    --text-1:#c7ccdb;
+    --text-2:#8a91a8;
+    --text-3:#565d73;
+    --accent-iris-dim:rgba(124,92,255,0.16);
+    --accent-cyan:#22d3ee;
+    --border-soft:rgba(255,255,255,0.07);
+    --border-mid:rgba(255,255,255,0.12);
+    --border-glow:rgba(124,92,255,0.45);
+    --glow-iris:0 0 0 1px var(--border-glow),0 8px 40px -8px rgba(124,92,255,0.45);
+    --shadow-lift:0 18px 50px -24px rgba(0,0,0,0.9);
+    --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
+    --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
+    --dur-fast:160ms;--dur-base:280ms;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{
+    background:#0d0f16;
+    background-image:radial-gradient(60vw 40vw at 15% -10%,rgba(124,92,255,0.16),transparent 60%);
+    font-family:"Inter",system-ui,sans-serif;
+    display:grid;place-items:center;padding:16px;
+  }
+  .c10-cmd{position:relative;width:100%;max-width:300px}
+  .c10-cmd__trigger{
+    width:100%;display:flex;align-items:center;gap:10px;padding:12px 14px;
+    background:var(--bg-surface);border:1px solid var(--border-soft);border-radius:14px;
+    color:var(--text-2);font-family:"Inter",system-ui,sans-serif;font-size:14px;cursor:pointer;
+    transition:border-color var(--dur-base);
+  }
+  .c10-cmd__trigger:hover{border-color:var(--border-mid)}
+  .c10-cmd__trigger kbd{
+    margin-left:auto;font-family:"Inter",system-ui,sans-serif;font-size:11px;
+    padding:2px 7px;border-radius:5px;background:rgba(255,255,255,0.05);
+    border:1px solid var(--border-soft);color:var(--text-3);
+  }
+  .c10-cmd__overlay{
+    position:fixed;inset:0;background:rgba(8,9,13,0.62);
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+    display:flex;align-items:flex-start;justify-content:center;padding-top:14%;
+    opacity:0;pointer-events:none;
+    transition:opacity var(--dur-base) var(--ease-out-soft);z-index:5;
+  }
+  .c10-cmd--open .c10-cmd__overlay{opacity:1;pointer-events:auto}
+  .c10-cmd__panel{
+    width:86%;max-width:300px;background:var(--bg-700);
+    border:1px solid var(--border-glow);border-radius:14px;
+    box-shadow:var(--glow-iris),var(--shadow-lift);overflow:hidden;
+    transform:translateY(-10px) scale(0.96);opacity:0;
+    transition:transform var(--dur-base) var(--ease-spring),opacity var(--dur-base) var(--ease-out-soft);
+  }
+  .c10-cmd--open .c10-cmd__panel{transform:translateY(0) scale(1);opacity:1}
+  .c10-cmd__input{
+    width:100%;border:0;border-bottom:1px solid var(--border-soft);background:none;
+    padding:12px 14px;color:var(--text-0);font-family:"Inter",system-ui,sans-serif;
+    font-size:14px;outline:none;
+  }
+  .c10-cmd__input::placeholder{color:var(--text-3)}
+  .c10-cmd__list{list-style:none;margin:0;padding:6px;max-height:150px;overflow-y:auto}
+  .c10-cmd__row{
+    display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;
+    font-size:13px;color:var(--text-1);cursor:pointer;transition:background var(--dur-fast);
+  }
+  .c10-cmd__row .c10-cmd__ico{color:var(--accent-cyan);font-size:14px;width:16px;text-align:center}
+  .c10-cmd__row--sel,.c10-cmd__row:hover{background:var(--accent-iris-dim);color:var(--text-0)}
+  .c10-cmd__empty{padding:14px;font-size:12px;color:var(--text-3);text-align:center}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;z-index:9}
+  @media (prefers-reduced-motion:reduce){.c10-cmd__overlay,.c10-cmd__panel{transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+<div class="c10-cmd" id="c10-cmd">
+  <button class="c10-cmd__trigger" id="c10-trigger">
+    <span>&#9906;</span> Search commands <kbd>&#8984;K</kbd>
+  </button>
+  <div class="c10-cmd__overlay" id="c10-overlay">
+    <div class="c10-cmd__panel">
+      <input class="c10-cmd__input" id="c10-input" type="text" placeholder="Type a command...">
+      <ul class="c10-cmd__list" id="c10-list"></ul>
+    </div>
+  </div>
+</div>
+<div class="cap">Command Palette</div>
+<script>
+(function(){
+  var root=document.getElementById('c10-cmd');
+  if(!root)return;
+  var trigger=document.getElementById('c10-trigger');
+  var overlay=document.getElementById('c10-overlay');
+  var input=document.getElementById('c10-input');
+  var list=document.getElementById('c10-list');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var commands=[
+    {i:'⊕',t:'New Project'},
+    {i:'✎',t:'Rename Workspace'},
+    {i:'☆',t:'Add to Favorites'},
+    {i:'↻',t:'Sync Library'},
+    {i:'⚙',t:'Open Settings'},
+    {i:'↗',t:'Share Link'},
+    {i:'✕',t:'Archive Album'}
+  ];
+  var sel=0,filtered=commands.slice();
+  function render(){
+    list.innerHTML='';
+    if(!filtered.length){
+      var e=document.createElement('div');
+      e.className='c10-cmd__empty';e.textContent='No commands found';
+      list.appendChild(e);return;
+    }
+    filtered.forEach(function(c,idx){
+      var li=document.createElement('li');
+      li.className='c10-cmd__row'+(idx===sel?' c10-cmd__row--sel':'');
+      li.innerHTML='<span class="c10-cmd__ico">'+c.i+'</span>'+c.t;
+      li.addEventListener('click',function(){close();});
+      li.addEventListener('mouseenter',function(){
+        sel=idx;
+        Array.prototype.forEach.call(list.children,function(x,j){
+          x.classList.toggle('c10-cmd__row--sel',j===sel);
+        });
+      });
+      list.appendChild(li);
+    });
+  }
+  function filter(){
+    var q=input.value.trim().toLowerCase();
+    filtered=commands.filter(function(c){return c.t.toLowerCase().indexOf(q)!==-1;});
+    sel=0;render();
+  }
+  function open(){
+    root.classList.add('c10-cmd--open');
+    input.value='';filtered=commands.slice();sel=0;render();
+    setTimeout(function(){try{input.focus();}catch(_){}},60);
+  }
+  function close(){root.classList.remove('c10-cmd--open');}
+  trigger.addEventListener('click',open);
+  overlay.addEventListener('click',function(e){if(e.target===overlay)close();});
+  input.addEventListener('input',filter);
+  input.addEventListener('keydown',function(e){
+    if(e.key==='Escape'){close();return;}
+    if(!filtered.length)return;
+    if(e.key==='ArrowDown'){e.preventDefault();sel=(sel+1)%filtered.length;render();}
+    else if(e.key==='ArrowUp'){e.preventDefault();sel=(sel-1+filtered.length)%filtered.length;render();}
+    else if(e.key==='Enter'){e.preventDefault();close();}
+  });
+
+  /* autonomous idle: open, type-search a query live, hover rows, then close */
+  var queries=['set','sync','share','arch','fav',''];
+  var qi=0,timers=[];
+  function clearTimers(){timers.forEach(clearTimeout);timers=[];}
+  function setQuery(text){
+    input.value='';
+    var step=0;
+    (function typeChar(){
+      if(step<=text.length){
+        input.value=text.slice(0,step);filter();step++;
+        timers.push(setTimeout(typeChar,110));
+      }else{
+        /* glide selection down a couple rows for life */
+        timers.push(setTimeout(function(){
+          if(filtered.length>1){sel=Math.min(1,filtered.length-1);render();}
+        },420));
+      }
+    })();
+  }
+  function cycle(){
+    if(reduce)return;
+    open();
+    timers.push(setTimeout(function(){setQuery(queries[qi%queries.length]);},520));
+    timers.push(setTimeout(function(){close();},3200));
+    timers.push(setTimeout(function(){qi++;cycle();},4300));
+  }
+  function stop(){clearTimers();close();}
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():(reduce||cycle());});
+  if(!reduce)setTimeout(cycle,700);
+})();
+</script>
+</body>
+</html>

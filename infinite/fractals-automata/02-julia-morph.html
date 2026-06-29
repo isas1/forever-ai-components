@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A Julia set whose complex constant traces a slow loop, morphing dendritic violet filaments between connected and dust forms on black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Julia Morph</title>
+<style>
+  :root{--fr02-bg:#06070b;--fr02-accent:#9b8cff}
+  html,body{margin:0;height:100%;background:var(--fr02-bg)}
+  .fr02-stage{position:fixed;inset:0;overflow:hidden;background:var(--fr02-bg)}
+  #fr02-c{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:auto}
+  /* STATIC glow + vignette — painted once, never animated */
+  .fr02-glow{position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(96% 96% at 50% 50%,rgba(155,140,255,.14),transparent 60%),
+      radial-gradient(140% 130% at 50% 50%,transparent 50%,rgba(6,7,11,.82) 100%);
+    mix-blend-mode:screen}
+  .fr02-frame{position:absolute;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 0 1px rgba(155,140,255,.10)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div class="fr02-stage" role="img" aria-label="A Julia set fractal slowly morphing as its complex constant traces a closed loop, dendritic violet filaments breathing on near-black, shaded in indigo, violet and gold.">
+    <canvas id="fr02-c"></canvas>
+    <div class="fr02-glow"></div>
+    <div class="fr02-frame"></div>
+    <div class="cap">Julia Morph</div>
+  </div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('fr02-c');
+  var ctx = cv.getContext('2d', {alpha:false});
+  var stage = cv.parentNode;
+
+  // View: a fixed window on the dynamical plane; topology changes via c, not zoom.
+  var VIEW = 3.05;           // complex height of the framed window
+  var MAXIT = 150;           // iteration cap (sane for full-frame Julia)
+  var ESC = 64.0;            // escape radius squared
+
+  var W=0,H=0,SW=0,SH=0,buf=null,img=null,pix=null;
+  var LUT_R=new Uint8Array(1024),LUT_G=new Uint8Array(1024),LUT_B=new Uint8Array(1024);
+
+  // Palette LUT: deep indigo -> violet -> lilac -> gold rim (movement palette around #9b8cff).
+  (function(){
+    function lerp(a,b,t){return a+(b-a)*t;}
+    var stops=[[10,9,24],[44,33,104],[110,92,230],[155,140,255],[206,190,255],[255,212,138],[150,96,40]];
+    for(var i=0;i<1024;i++){
+      var t=i/1023, f=t*(stops.length-1), k=f|0, fr=f-k;
+      if(k>=stops.length-1){k=stops.length-2;fr=1;}
+      var a=stops[k],b=stops[k+1];
+      LUT_R[i]=lerp(a[0],b[0],fr)|0;
+      LUT_G[i]=lerp(a[1],b[1],fr)|0;
+      LUT_B[i]=lerp(a[2],b[2],fr)|0;
+    }
+  })();
+
+  // Render at a capped internal resolution, then let CSS upscale the canvas.
+  // Keeps the per-frame Julia evaluation affordable on any screen size.
+  function resize(){
+    var dpr=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,(stage.clientWidth*dpr)|0);
+    H=Math.max(1,(stage.clientHeight*dpr)|0);
+    var cap=420; // internal long-edge cap -> bounded pixel work per frame
+    var s=Math.min(1,cap/Math.max(W,H));
+    SW=Math.max(1,(W*s)|0); SH=Math.max(1,(H*s)|0);
+    cv.width=SW; cv.height=SH;
+    img=ctx.createImageData(SW,SH);
+    buf=new ArrayBuffer(img.data.length);
+    pix=new Uint32Array(buf);
+  }
+
+  var LOG2=Math.log(2), out=new Uint8ClampedArray(0);
+  // Render one frame for constant (ccx,ccy). Allocation-free in steady state.
+  function render(ccx,ccy){
+    var aspect=SW/SH;
+    var halfH=VIEW*0.5, halfW=halfH*aspect;
+    var x0=-halfW, y0=-halfH;
+    var dx=(2*halfW)/SW, dy=(2*halfH)/SH;
+    var maxit=MAXIT, esc=ESC;
+    var p=0, zy0=y0;
+    for(var py=0; py<SH; py++){
+      var zx0=x0;
+      for(var px=0; px<SW; px++){
+        var zr=zx0, zi=zy0, zr2=zr*zr, zi2=zi*zi, it=0;
+        // orbit trap: nearest approach to origin -> interior structure / glow seams
+        var trap=1e9;
+        while(zr2+zi2<=esc && it<maxit){
+          zi=2.0*zr*zi+ccy;
+          zr=zr2-zi2+ccx;
+          zr2=zr*zr; zi2=zi*zi;
+          var d=zr2+zi2; if(d<trap)trap=d;
+          it++;
+        }
+        var col;
+        if(it>=maxit){
+          // bounded set: shade by orbit-trap distance for filamentary interior detail
+          var g=Math.sqrt(trap); if(g>1)g=1;
+          var ii=(g*340)|0; if(ii>1023)ii=1023;
+          // dim the interior toward bg so exterior filaments read as the figure
+          col=0xff000000|((LUT_B[ii]*0.5)|0)<<16|((LUT_G[ii]*0.5)|0)<<8|((LUT_R[ii]*0.5)|0);
+        }else{
+          var nu=it+1-Math.log(Math.log(zr2+zi2)*0.5)/LOG2;
+          var idx=((nu*30.0)%1024+1024)%1024|0;
+          col=0xff000000|(LUT_B[idx]<<16)|(LUT_G[idx]<<8)|LUT_R[idx];
+        }
+        pix[p++]=col;
+        zx0+=dx;
+      }
+      zy0+=dy;
+    }
+    if(out.length!==img.data.length) out=new Uint8ClampedArray(buf);
+    img.data.set(out);
+    ctx.putImageData(img,0,0);
+  }
+
+  // c traces a slow closed loop just outside the main cardioid cusp, where the
+  // Julia topology shifts dramatically between connected and dendritic forms.
+  function constantAt(t){
+    // gentle two-frequency Lissajous loop centered near the cusp region
+    var a=t, b=t*0.5;
+    var cx=-0.512+0.36*Math.cos(a)+0.045*Math.cos(b*3.0);
+    var cy= 0.560*Math.sin(a)+0.045*Math.sin(b*3.0);
+    return [cx,cy];
+  }
+
+  var running=true, raf=0, t0=0;
+  function frame(ts){
+    if(!t0)t0=ts;
+    var t=(ts-t0)*0.00009;           // slow morph: full loop ~70s
+    var c=constantAt(t);
+    render(c[0],c[1]);
+    if(running)raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(!raf){t0=0;raf=requestAnimationFrame(frame);} }
+  function stop(){ if(raf){cancelAnimationFrame(raf);raf=0;} }
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){running=false;stop();}
+    else if(!reduce){running=true;start();}
+  });
+
+  window.addEventListener('resize',function(){
+    resize();
+    if(reduce){var c=constantAt(2.35);render(c[0],c[1]);}
+  },{passive:true});
+
+  resize();
+  if(reduce){ var c=constantAt(2.35); render(c[0],c[1]); return; } // one static dendritic frame
+  start();
+})();
+</script>
+</body>
+</html>

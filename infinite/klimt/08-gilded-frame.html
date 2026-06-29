@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Gilded Frame — Gustav Klimt. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Gilded Frame</title>
+<style>
+  html,body{margin:0;height:100%;background:#070502;overflow:hidden}
+  #kli08-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kli08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kli08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#e6cf86;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kli08-stage" role="img" aria-label="Nested ornamented gold frames with corner coils and dotted edges breathe in and out around a single pulsing core of light with a spiral at its center.">
+  <canvas id="kli08-cv"></canvas>
+</div>
+<div class="kli08-cap">The Gilded Frame</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('kli08-cv'); if(!cv) return;
+  const GOLD='#c8a951', GOLD2='#9a7d28', GOLD_HI='#e6cf86', BLACK='#0d0b07';
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  let t=0,last=performance.now();
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h, cx=W/2, cy=H/2;
+    ctx.clearRect(0,0,W,H);
+    const bg=ctx.createRadialGradient(cx,cy,8,cx,cy,Math.max(W,H)*0.6);
+    bg.addColorStop(0,'rgba(154,125,40,.16)');bg.addColorStop(1,'rgba(7,5,2,0)');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    const breath=REDUCED?0.5:(Math.sin(t*0.8)*0.5+0.5);
+    const layers=4;
+    for(let i=0;i<layers;i++){
+      const inset=14 + i*16 + breath*10;
+      const x=inset, y=inset, w=W-inset*2, h=H-inset*2;
+      if(w<20||h<20) continue;
+      ctx.strokeStyle = i%2? GOLD2 : GOLD;
+      ctx.globalAlpha=0.4+0.5*(1-i/layers);
+      ctx.lineWidth = i%2?1:2;
+      ctx.strokeRect(x,y,w,h);
+      const corners=[[x,y,1,1],[x+w,y,-1,1],[x,y+h,1,-1],[x+w,y+h,-1,-1]];
+      for(const [ccx,ccy,sx,sy] of corners){
+        ctx.save();ctx.translate(ccx,ccy);ctx.scale(sx,sy);
+        ctx.beginPath();let r=2,an=Math.PI;
+        for(let k=0;k<14;k++){an+=0.5;r*=1.12;ctx.lineTo(Math.cos(an)*r,Math.sin(an)*r);}
+        ctx.strokeStyle=GOLD_HI;ctx.lineWidth=1;ctx.stroke();ctx.restore();
+      }
+      if(i===1){
+        const dots=Math.max(6,Math.floor(w/26));
+        for(let d=0;d<=dots;d++){
+          const px=x+(w*d/dots);
+          ctx.fillStyle=GOLD_HI;
+          ctx.globalAlpha=0.5+0.5*Math.sin(t*2+d*0.6);
+          ctx.beginPath();ctx.arc(px,y,2.2,0,7);ctx.fill();
+          ctx.beginPath();ctx.arc(px,y+h,2.2,0,7);ctx.fill();
+        }
+      }
+    }
+    ctx.globalAlpha=1;
+    const pr=18+10*breath;
+    const cg=ctx.createRadialGradient(cx,cy,1,cx,cy,pr*2.4);
+    cg.addColorStop(0,'rgba(230,207,134,.9)');cg.addColorStop(0.4,'rgba(200,169,81,.45)');cg.addColorStop(1,'rgba(200,169,81,0)');
+    ctx.fillStyle=cg;ctx.beginPath();ctx.arc(cx,cy,pr*2.4,0,7);ctx.fill();
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(t*0.4);
+    ctx.beginPath();let r=1.5,an=0;
+    for(let k=0;k<46;k++){an+=0.42;r*=1.07;ctx.lineTo(Math.cos(an)*r,Math.sin(an)*r);}
+    ctx.strokeStyle=BLACK;ctx.globalAlpha=0.5;ctx.lineWidth=1.4;ctx.stroke();ctx.restore();
+    ctx.fillStyle=BLACK;ctx.globalAlpha=0.85;
+    ctx.beginPath();ctx.arc(cx,cy,5+2*breath,0,7);ctx.fill();
+    ctx.globalAlpha=1;
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#070502';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

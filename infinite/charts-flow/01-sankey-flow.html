@@ -1,0 +1,156 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Animated Sankey diagram on dark teal canvas: ribbons grow stage-by-stage between origins, hubs and outcome bands, pulsing softly to show flo">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sankey Flow</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0d12;overflow:hidden}
+  #ch01-wrap{position:fixed;inset:0;display:block}
+  #ch01-c{position:absolute;inset:0;width:100%;height:100%;
+    /* static glow, never repaints */
+    box-shadow:inset 0 0 140px rgba(90,209,160,.10)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="ch01-wrap" role="img" aria-label="Animated alluvial Sankey diagram: synthetic traffic splits across three stages into four outcome bands, with ribbons easing and pulsing to show flow volume.">
+  <canvas id="ch01-c"></canvas>
+</div>
+<div class="cap">Sankey Flow</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv=document.getElementById('ch01-c'), ctx=cv.getContext('2d');
+  // Constructivist / data-viz palette around the teal accent
+  var COL=['#5ad1a0','#3aa6c9','#d8b24a','#d8623a','#8a7ad8'];
+  var BG='#0a0d12';
+
+  // ---- synthetic three-stage flow graph (origins -> hubs -> outcomes) ----
+  // value matrix A[origin][hub] and B[hub][outcome]
+  var A=[[7,3,1],[2,6,3],[1,2,8]];                 // 3 origins x 3 hubs
+  var B=[[6,3,1,1],[2,5,2,2],[1,2,4,5]];           // 3 hubs x 4 outcomes
+  function rowSum(r){var s=0,i;for(i=0;i<r.length;i++)s+=r[i];return s;}
+  function colSum(m,c){var s=0,i;for(i=0;i<m.length;i++)s+=m[i][c];return s;}
+  var oV=A.map(rowSum);
+  var hV=[0,1,2].map(function(h){return colSum(A,h);});
+  var cV=[0,1,2,3].map(function(o){return colSum(B,o);});
+  var TOT=oV.reduce(function(a,b){return a+b;},0);
+
+  var W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
+  // geometry caches (recomputed on resize)
+  var colX=[0,0,0,0], nodes=null, ribs=null;
+
+  function nodeColumn(vals,xnorm,gapFrac,colorMode){
+    var n=vals.length, pad=H*0.10, gap=H*gapFrac;
+    var avail=H-pad*2-gap*(n-1);
+    var sum=vals.reduce(function(a,b){return a+b;},0);
+    var y=pad, out=[];
+    for(var i=0;i<n;i++){
+      var h=avail*vals[i]/sum;
+      out.push({x:W*xnorm,y0:y,y1:y+h,cy:y+h/2,col:colorMode(i),
+                fillO:y,fillH:0,fillI:y,fillIH:0}); // running fill cursors
+      y+=h+gap;
+    }
+    return out;
+  }
+
+  function layout(){
+    colX=[W*0.13,W*0.50,W*0.87];
+    var O=nodeColumn(oV,0.13,0.045,function(i){return COL[i];});
+    var Hn=nodeColumn(hV,0.50,0.05,function(){return '#5ad1a0';});
+    var C=nodeColumn(cV,0.87,0.04,function(i){return COL[(i+1)%COL.length];});
+    nodes={O:O,H:Hn,C:C};
+    // build ribbons: stage1 (O->H) then stage2 (H->C)
+    var list=[],i,j;
+    // reset hub fill cursors for outgoing on right edge separately
+    for(i=0;i<O.length;i++)for(j=0;j<Hn.length;j++){
+      if(A[i][j]<=0)continue;
+      var sh=(O[i].y1-O[i].y0)*A[i][j]/oV[i];
+      var dh=(Hn[j].y1-Hn[j].y0)*A[i][j]/hV[j];
+      list.push(rib(O[i].x,O[i].fillO,sh, Hn[j].x,Hn[j].fillI,dh, O[i].col, A[i][j], 0, i*7+j));
+      O[i].fillO+=sh; Hn[j].fillI+=dh;
+    }
+    for(i=0;i<Hn.length;i++)for(j=0;j<C.length;j++){
+      if(B[i][j]<=0)continue;
+      var sh2=(Hn[i].y1-Hn[i].y0)*B[i][j]/hV[i];
+      var dh2=(C[j].y1-C[j].y0)*B[i][j]/cV[j];
+      list.push(rib(Hn[i].x,Hn[i].fillO,sh2, C[j].x,C[j].fillI,dh2, C[j].col, B[i][j], 1, i*5+j+30));
+      Hn[i].fillO+=sh2; C[j].fillI+=dh2;
+    }
+    ribs=list;
+  }
+  function rib(x0,y0,h0,x1,y1,h1,col,val,stage,seed){
+    return {x0:x0,ya0:y0,yb0:y0+h0, x1:x1,ya1:y1,yb1:y1+h1,
+            col:col,val:val,stage:stage,ph:(seed*0.618)%1};
+  }
+
+  function resize(){
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    layout();
+  }
+
+  function ease(t){return t<0?0:t>1?1:t*t*(3-2*t);}
+  function hex2rgba(h,a){
+    var n=parseInt(h.slice(1),16);
+    return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
+  }
+
+  function ribbon(r,grow,t){
+    // grow 0..1 draws the right edge progressively; t for pulse
+    var x0=r.x0, x1=r.x0+(r.x1-r.x0)*grow;
+    var ya1=r.ya0+(r.ya1-r.ya0)*grow, yb1=r.yb0+(r.yb1-r.yb0)*grow;
+    var mx=(x0+x1)/2;
+    ctx.beginPath();
+    ctx.moveTo(x0,r.ya0);
+    ctx.bezierCurveTo(mx,r.ya0,mx,ya1,x1,ya1);
+    ctx.lineTo(x1,yb1);
+    ctx.bezierCurveTo(mx,yb1,mx,r.yb0,x0,r.yb0);
+    ctx.closePath();
+    var pulse=0.16+0.12*Math.sin(t*1.6+r.ph*6.283);
+    ctx.fillStyle=hex2rgba(r.col, reduce?0.30:pulse+0.14);
+    ctx.fill();
+  }
+
+  function nodeBar(nd){
+    ctx.fillStyle=nd.col;
+    ctx.globalAlpha=0.92;
+    ctx.fillRect(nd.x-3,nd.y0, 6, nd.y1-nd.y0);
+    ctx.globalAlpha=1;
+  }
+
+  function draw(time){
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    var t=time*0.001;
+    // staged reveal: stage0 grows first, stage1 follows
+    var g0=reduce?1:ease((t%9)/3.6);
+    var g1=reduce?1:ease(((t%9)-2.6)/3.6);
+    var i,r;
+    for(i=0;i<ribs.length;i++){
+      r=ribs[i];
+      ribbon(r, r.stage===0?g0:g1, t);
+    }
+    // node bars on top
+    for(i=0;i<nodes.O.length;i++)nodeBar(nodes.O[i]);
+    for(i=0;i<nodes.H.length;i++)nodeBar(nodes.H[i]);
+    for(i=0;i<nodes.C.length;i++)nodeBar(nodes.C[i]);
+  }
+
+  var raf=0, running=false;
+  function loop(ts){ if(!running)return; draw(ts); raf=requestAnimationFrame(loop); }
+  function start(){ if(running||reduce)return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  window.addEventListener('resize',function(){ resize(); if(reduce)draw(2600); });
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden)stop(); else start();
+  });
+
+  resize();
+  if(reduce){ draw(2600); return; }
+  start();
+})();
+</script>
+</body></html>

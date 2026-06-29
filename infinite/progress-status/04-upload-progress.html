@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A circular upload dial with a file glyph fills a purple ring to 100%, then swaps to a green success checkmark on completion.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Upload Progress</title>
+<style>
+  :root{
+    --bg:#0b0d12; --accent:#7c5cff; --accent2:#a78bff;
+    --track:#1b1f2b; --ink:#eef0f7; --mute:#6f768c; --ok:#3ddc97;
+  }
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--ink); overflow:hidden;
+    font:500 14px/1.3 ui-sans-serif,Inter,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  #pg04-stage{position:absolute; inset:0; display:grid; place-items:center; padding:clamp(16px,7vmin,52px)}
+  #pg04-card{
+    width:min(74vmin,440px); display:flex; flex-direction:column; align-items:center;
+    gap:clamp(14px,3.6vmin,26px);
+  }
+  /* dial: fixed square, holds the ring + center glyph */
+  #pg04-dial{position:relative; width:min(46vmin,228px); aspect-ratio:1}
+  /* static track ring + static accent glow live on a non-animating layer */
+  #pg04-base{
+    position:absolute; inset:0; border-radius:50%;
+    border:clamp(7px,2.4vmin,12px) solid var(--track);
+    box-shadow:0 0 46px -6px rgba(124,92,255,.42);
+  }
+  /* compositor-only pie: two halves clipped to semicircles, rotated to sweep the arc.
+     no width/dashoffset repaint — pure rotate transforms. */
+  #pg04-ring{position:absolute; inset:0; border-radius:50%; overflow:hidden}
+  /* each mask occupies the LEFT half of the dial and holds a solid disc whose
+     own RIGHT half is the colored wedge; rotating the mask sweeps it clockwise
+     from 12 o'clock. rL covers 0-180deg, rR covers 180-360deg. */
+  .pg04-half{position:absolute; inset:0; border-radius:50%; clip-path:inset(0 50% 0 0); transform-origin:center}
+  .pg04-half i{
+    position:absolute; inset:0; border-radius:50%;
+    clip-path:inset(0 0 0 50%); background:var(--accent);
+  }
+  #pg04-rL{transform:rotate(0deg)}
+  #pg04-rR{transform:rotate(0deg); opacity:0}
+  #pg04-rR i{background:var(--accent2)}
+  /* center disc punches the ring hole, leaving a stroke-width band */
+  #pg04-hole{
+    position:absolute; inset:clamp(7px,2.4vmin,12px); border-radius:50%; background:var(--bg);
+    z-index:2;
+  }
+  /* leading dot rides the arc head */
+  #pg04-head{
+    position:absolute; left:50%; top:0; width:clamp(7px,2.4vmin,12px); height:clamp(7px,2.4vmin,12px);
+    margin-left:calc(clamp(7px,2.4vmin,12px) / -2); border-radius:50%;
+    background:var(--accent2); box-shadow:0 0 12px 1px rgba(167,139,255,.8); z-index:3;
+    transform-origin:center calc(min(46vmin,228px) / 2); transform:rotate(0deg);
+  }
+  /* center: file glyph + numeric readout, swap to tick on done */
+  #pg04-core{position:absolute; inset:18%; display:grid; place-items:center; z-index:4}
+  #pg04-glyph{
+    position:absolute; display:flex; flex-direction:column; align-items:center; gap:.32em;
+    transition:opacity .28s ease, transform .34s cubic-bezier(.3,1.4,.4,1);
+  }
+  #pg04-file{width:clamp(22px,8vmin,38px); height:auto; display:block}
+  #pg04-pct{
+    font:600 clamp(20px,8.6vmin,42px)/1 ui-monospace,Menlo,monospace;
+    letter-spacing:-.02em; font-variant-numeric:tabular-nums; color:var(--ink);
+  }
+  #pg04-pct span{font-size:.4em; color:var(--accent2); margin-left:.05em}
+  /* success tick: hidden until done, revealed via scale+opacity (compositor) */
+  #pg04-tick{
+    position:absolute; width:46%; height:auto;
+    opacity:0; transform:scale(.4); transform-origin:center;
+    transition:opacity .26s ease, transform .42s cubic-bezier(.2,1.5,.35,1);
+  }
+  #pg04-tick path{
+    stroke:var(--ok); stroke-width:7; fill:none; stroke-linecap:round; stroke-linejoin:round;
+    stroke-dasharray:48; stroke-dashoffset:48;
+    transition:stroke-dashoffset .42s cubic-bezier(.5,0,.2,1) .12s;
+  }
+  #pg04-dial.done #pg04-glyph{opacity:0; transform:scale(.7)}
+  #pg04-dial.done #pg04-tick{opacity:1; transform:scale(1)}
+  #pg04-dial.done #pg04-tick path{stroke-dashoffset:0}
+  #pg04-dial.done #pg04-base{box-shadow:0 0 46px -6px rgba(61,220,151,.5)}
+  #pg04-dial.done #pg04-head{opacity:0; transition:opacity .2s ease}
+  #pg04-dial.done .pg04-half i{background:var(--ok); transition:background .3s ease}
+  /* meta row: filename + status */
+  #pg04-meta{width:100%; display:flex; flex-direction:column; gap:7px; align-items:center}
+  #pg04-name{
+    font:600 clamp(10px,2.6vmin,13px)/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.04em; color:var(--ink);
+  }
+  #pg04-status{
+    display:flex; align-items:center; gap:8px;
+    font:600 clamp(8px,2vmin,10px)/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.18em; text-transform:uppercase; color:var(--mute);
+  }
+  #pg04-dot{width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px 1px rgba(124,92,255,.7)}
+  #pg04-status.done{color:var(--ok)}
+  #pg04-status.done #pg04-dot{background:var(--ok); box-shadow:0 0 8px 1px rgba(61,220,151,.7)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  }
+</style>
+</head>
+<body>
+  <div id="pg04-stage">
+    <div id="pg04-card">
+      <div id="pg04-dial" role="progressbar" aria-label="Upload progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="pg04-base"></div>
+        <div id="pg04-ring" aria-hidden="true">
+          <div class="pg04-half" id="pg04-rL"><i></i></div>
+          <div class="pg04-half" id="pg04-rR"><i></i></div>
+        </div>
+        <div id="pg04-hole" aria-hidden="true"></div>
+        <div id="pg04-head" aria-hidden="true"></div>
+        <div id="pg04-core" aria-hidden="true">
+          <div id="pg04-glyph">
+            <svg id="pg04-file" viewBox="0 0 24 30" fill="none">
+              <path d="M3 2h11l7 7v19a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="#a78bff" stroke-width="1.6"/>
+              <path d="M14 2v7h7" stroke="#a78bff" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M6.5 15h11M6.5 19h11M6.5 23h7" stroke="#7c5cff" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+            <div id="pg04-pct"><b>0</b><span>%</span></div>
+          </div>
+          <svg id="pg04-tick" viewBox="0 0 32 32"><path d="M7 17l6 6 12-13"/></svg>
+        </div>
+      </div>
+      <div id="pg04-meta">
+        <div id="pg04-name">archive-2026.zip</div>
+        <div id="pg04-status"><span id="pg04-dot"></span><span id="pg04-stxt">Uploading</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">Upload Progress</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var dial = document.getElementById('pg04-dial');
+  var rL   = document.getElementById('pg04-rL');
+  var rR   = document.getElementById('pg04-rR');
+  var head = document.getElementById('pg04-head');
+  var pctB = document.querySelector('#pg04-pct b');
+  var status = document.getElementById('pg04-status');
+  var stxt = document.getElementById('pg04-stxt');
+
+  // ring math: p=0..1 -> arc sweep 0..360deg, started at 12 o'clock.
+  // left half covers first 180deg via its own rotation; right half unhides past 50%.
+  function paintRing(p){
+    var deg = p*360;
+    if(p<=0.5){
+      rL.style.transform = 'rotate(' + (deg) + 'deg)';
+      rR.style.opacity = '0';
+      rR.style.transform = 'rotate(0deg)';
+    } else {
+      rL.style.transform = 'rotate(180deg)';
+      rR.style.opacity = '1';
+      rR.style.transform = 'rotate(' + (deg-180) + 'deg)';
+    }
+    head.style.transform = 'rotate(' + deg + 'deg)';
+  }
+
+  var lastPct = -1, doneOn = false;
+  function setReadout(p){
+    var v = Math.round(p*100);
+    if(v === lastPct) return;
+    lastPct = v;
+    pctB.textContent = v;
+    dial.setAttribute('aria-valuenow', v);
+    var done = v >= 100;
+    if(done !== doneOn){
+      doneOn = done;
+      dial.classList.toggle('done', done);
+      status.classList.toggle('done', done);
+      stxt.textContent = done ? 'Complete' : 'Uploading';
+    }
+  }
+
+  // easeInOutCubic — honest acceleration through the transfer
+  function ease(t){ return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+
+  if(reduce){ paintRing(0.74); setReadout(0.74); return; }
+
+  // phases: fill the ring, hold complete (tick shown), fade-reset to empty
+  var FILL=2800, HOLD=1500, RESET=650, CYCLE=FILL+HOLD+RESET;
+  var raf=0, t0=0, running=true;
+
+  function frame(now){
+    if(!running) return;
+    if(!t0) t0 = now;
+    var t = (now - t0) % CYCLE, p;
+    if(t < FILL){ p = ease(t/FILL); }
+    else if(t < FILL+HOLD){ p = 1; }
+    else { p = 1 - ease((t-FILL-HOLD)/RESET); }
+    paintRing(p);
+    setReadout(p);
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+    else if(!running){ running=true; t0=0; raf=requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

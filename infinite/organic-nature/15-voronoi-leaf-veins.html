@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Space-colonization leaf veins grow branch-by-branch inside a lime-green leaf silhouette, fade and regrow, with sparking growth tips.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Voronoi Leaf Veins</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0f1408;}
+  #vlv-c{display:block;width:100%;height:100%;}
+  .vlv-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#9bd14a;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="vlv-c"></canvas>
+<div class="vlv-cap">Voronoi Leaf Veins</div>
+<script>
+(function(){
+  const cv=document.getElementById('vlv-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,S,cx,cy;
+  // leaf silhouette: half-width as function of param u in [0,1] (tip=0, base=1)
+  function half(u){ return Math.sin(Math.pow(u,0.62)*Math.PI)*0.5; }
+  function inLeaf(x,y){ // x,y in leaf-local units (0..1 along, -0.5..0.5 across)
+    if(x<0||x>1) return false;
+    return Math.abs(y)<=half(x)+1e-3;
+  }
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H)*0.86; cx=W/2-S*0.5; cy=H/2;
+  }
+  addEventListener('resize',()=>{size();reseed();});
+
+  // map leaf-local (along x:0..1 tip->base, across y) to screen, leaf laid tip-left base-right
+  const ang=-0.18, ca=Math.cos(ang), sa=Math.sin(ang);
+  function px(x,y){ const lx=(x-0.5)*S, ly=y*S; return [cx+S*0.5+lx*ca-ly*sa, cy+lx*sa+ly*ca]; }
+
+  let nodes,sources,boost=0,phase=0,tip;
+  const DG=0.020, KILL=0.030, MAXN=2600;
+  function reseed(){
+    sources=[]; const NS=reduce?260:340;
+    for(let i=0;i<NS*3 && sources.length<NS;i++){
+      const x=Math.random(), y=(Math.random()-0.5)*1.02;
+      if(inLeaf(x,y)) sources.push({x,y,dead:false});
+    }
+    // seed: petiole at base, midrib root
+    nodes=[{x:0.985,y:0,px:0,py:0,par:-1,w:3.4,gen:0,grow:1}];
+    tip={x:0.985,y:0};
+    phase=0;
+  }
+  size();reseed();
+
+  cv.addEventListener('pointermove',e=>{
+    boost=Math.min(boost+0.5,3);
+    // drop a few fresh hormone sources near pointer to bend growth
+    const r=cv.getBoundingClientRect();
+    const sx=(e.clientX-r.left-(cx+S*0.5)), sy=(e.clientY-r.top-cy);
+    const lx=( sx*ca+sy*sa)/S+0.5, ly=(-sx*sa+sy*ca)/S;
+    if(inLeaf(lx,ly)) for(let k=0;k<3;k++){
+      const x=lx+(Math.random()-0.5)*0.05,y=ly+(Math.random()-0.5)*0.05;
+      if(inLeaf(x,y)) sources.push({x,y,dead:false});
+    }
+  });
+
+  function grow(steps){
+    for(let s=0;s<steps;s++){
+      let alive=sources.filter(q=>!q.dead);
+      if(alive.length===0){ phase=Math.min(phase+1,200); return; }
+      // each source pulls nearest node
+      const pull=new Map();
+      for(const q of alive){
+        let best=-1,bd=1e9;
+        for(let i=0;i<nodes.length;i++){
+          const dx=nodes[i].x-q.x,dy=nodes[i].y-q.y,d=dx*dx+dy*dy;
+          if(d<bd){bd=d;best=i;}
+        }
+        if(best<0) continue;
+        if(bd<KILL*KILL){ q.dead=true; continue; }
+        let p=pull.get(best); if(!p){p={x:0,y:0,n:0};pull.set(best,p);}
+        const inv=1/Math.sqrt(bd); p.x+=(q.x-nodes[best].x)*inv; p.y+=(q.y-nodes[best].y)*inv; p.n++;
+      }
+      let added=false;
+      for(const [i,p] of pull){
+        if(nodes.length>=MAXN) break;
+        const len=Math.hypot(p.x,p.y); if(len<1e-6) continue;
+        let nx=nodes[i].x+(p.x/len)*DG, ny=nodes[i].y+(p.y/len)*DG;
+        if(nx<0) nx=0;
+        // midrib bias: keep main trunk strong & straight-ish
+        const w=Math.max(0.55, nodes[i].w*(nodes[i].gen<1?0.985:0.93));
+        if(!inLeaf(nx,ny)){ ny*=0.6; if(!inLeaf(nx,ny)) continue; }
+        nodes.push({x:nx,y:ny,par:i,w,gen:nodes[i].gen+(p.n>1?0:1),grow:0});
+        added=true;
+      }
+      if(!added){ phase=Math.min(phase+1,200); }
+    }
+  }
+
+  let t=0,raf=0;
+  function frame(){
+    t++;
+    if(!reduce){
+      const ph=phase>0?1:0;
+      if(boost>0){grow(3);boost*=0.9;if(boost<0.05)boost=0;}
+      if(!ph) grow(2);
+      // fade & regrow cycle
+      if(phase>0){ phase+=1.4; if(phase>150){ // fade complete -> regrow
+          reseed();
+        } }
+    }
+    // backdrop with soft vignette
+    ctx.fillStyle='#0f1408';ctx.fillRect(0,0,W,H);
+    const vg=ctx.createRadialGradient(cx+S*0.5,cy,S*0.15,cx+S*0.5,cy,S*0.85);
+    vg.addColorStop(0,'rgba(40,58,18,0.55)');vg.addColorStop(1,'rgba(15,20,8,0)');
+    ctx.fillStyle=vg;ctx.fillRect(0,0,W,H);
+
+    const fade=phase>0?Math.max(0,1-(phase-1)/150):1;
+
+    // leaf blade fill (subtle)
+    ctx.beginPath();
+    const STEP=0.012;
+    for(let u=0;u<=1.0001;u+=STEP){const[ax,ay]=px(u, half(u));ctx.lineTo(ax,ay);}
+    for(let u=1;u>=-0.0001;u-=STEP){const[ax,ay]=px(u,-half(u));ctx.lineTo(ax,ay);}
+    ctx.closePath();
+    ctx.fillStyle='rgba(58,86,26,'+(0.16*fade+0.05)+')';ctx.fill();
+    ctx.lineWidth=1.1;ctx.strokeStyle='rgba(155,209,74,'+(0.30*fade)+')';ctx.stroke();
+
+    // draw veins; animate stroke-in via per-node grow
+    ctx.lineCap='round';ctx.lineJoin='round';
+    for(let i=1;i<nodes.length;i++){
+      const n=nodes[i],p=nodes[n.par];
+      if(!reduce && phase===0){ n.grow+=0.14; if(n.grow>1)n.grow=1; }
+      else n.grow=1;
+      const g=n.grow;
+      const[ax,ay]=px(p.x,p.y);
+      let[bx,by]=px(n.x,n.y);
+      bx=ax+(bx-ax)*g; by=ay+(by-ay)*g;
+      const lw=n.w*0.9*(S/420);
+      // glow for major veins
+      if(n.gen<1){ ctx.lineWidth=lw+2.4; ctx.strokeStyle='rgba(155,209,74,'+(0.10*fade)+')';
+        ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke(); }
+      const bright=n.gen<1?0.92:n.gen<2?0.62:0.40;
+      ctx.lineWidth=Math.max(0.4,lw);
+      ctx.strokeStyle='rgba('+(120+n.gen*6)+',209,74,'+(bright*fade)+')';
+      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.stroke();
+      // growth tips spark
+      if(!reduce&&phase===0&&g<1&&g>0.05){
+        ctx.fillStyle='rgba(214,255,150,'+(0.8*(1-g))+')';
+        ctx.beginPath();ctx.arc(bx,by,Math.max(0.8,lw*0.7),0,6.283);ctx.fill();
+      }
+    }
+    // petiole stub at base
+    const[p0x,p0y]=px(0.985,0),[p1x,p1y]=px(1.06,0);
+    ctx.lineWidth=4*(S/420);ctx.strokeStyle='rgba(155,209,74,'+(0.55*fade)+')';
+    ctx.beginPath();ctx.moveTo(p0x,p0y);ctx.lineTo(p1x,p1y);ctx.stroke();
+
+    if(!reduce) raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ for(let i=0;i<900;i++) grow(1); frame(); } else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Mirrored cyan waveform ribbon scrolls right-to-left with a glowing leading head where new audio enters, on dark.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Waveform River</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#07080d;display:grid;place-items:center}
+#aav06-c{display:block;width:100%;height:100%}
+.aav06-stage{position:fixed;inset:0;background:#07080d}
+.aav06-live{position:fixed;top:9px;right:9px;z-index:2;font:600 10px/1 ui-monospace,Menlo,monospace;
+  letter-spacing:.08em;color:#22d3ee;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.32);
+  border-radius:999px;padding:5px 9px;cursor:pointer;opacity:.62;transition:opacity .2s,background .2s}
+.aav06-live:hover{opacity:1;background:rgba(34,211,238,.16)}
+.aav06-live.on{background:#22d3ee;color:#07080d;opacity:1}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
+</style></head><body>
+<div class="aav06-stage"><canvas id="aav06-c"></canvas></div>
+<button class="aav06-live" id="aav06-live" aria-label="switch to live microphone input">&#9834; live</button>
+<div class="cap">Waveform River</div>
+<script>(function(){
+var cv=document.getElementById('aav06-c'),ctx=cv.getContext('2d'),btn=document.getElementById('aav06-live');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,DPR=1,COLS=160,cw=0,raf=0,running=false,t=0;
+// ring buffer of column amplitudes (top edge, 0..1) + energy (0..1 brightness)
+var amp=new Float32Array(COLS),eng=new Float32Array(COLS),head=0;
+for(var i=0;i<COLS;i++){amp[i]=0.5;eng[i]=0;}
+// --- synth signal: sum of sines + slow LFO envelopes + smoothed noise ---
+var nz=0,nzT=0;
+function synthSample(time){
+  var lfo1=0.5+0.5*Math.sin(time*0.31),lfo2=0.5+0.5*Math.sin(time*0.17+1.3);
+  var s=Math.sin(time*5.2)*0.42*lfo1 + Math.sin(time*8.9+0.6)*0.3*lfo2
+       + Math.sin(time*2.1)*0.22 + Math.sin(time*13.7+2.0)*0.14*lfo1;
+  if(time-nzT>0.045){nz+=(Math.random()*2-1-nz)*0.5;nzT=time;} // smoothed noise, stepped
+  s+=nz*0.18*lfo2;
+  var e=Math.min(1,(Math.abs(s)*0.9+lfo1*0.25)); // perceived energy
+  return [0.5+s*0.5,e];
+}
+// --- live path (created only on click) ---
+var actx=null,analyser=null,td=null,live=false;
+function goLive(){
+  if(live){return;}
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext;actx=new AC();
+    analyser=actx.createAnalyser();analyser.fftSize=1024;analyser.smoothingTimeConstant=0.8;
+    td=new Uint8Array(analyser.fftSize);
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      var src=actx.createMediaStreamSource(stream);src.connect(analyser); // never to destination
+      live=true;btn.classList.add('on');btn.innerHTML='&#9834; live';
+    }).catch(function(){if(actx){actx.close();}actx=null;});
+  }catch(e){actx=null;}
+}
+btn.addEventListener('click',goLive);
+function liveSample(){
+  analyser.getByteTimeDomainData(td);
+  var sum=0,peak=0,n=td.length;
+  for(var i=0;i<n;i++){var v=(td[i]-128)/128;sum+=v*v;if(v>peak)peak=v;}
+  var rms=Math.sqrt(sum/n);
+  return [0.5+peak*0.5,Math.min(1,rms*2.2)];
+}
+function size(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=Math.max(1,W*DPR|0);cv.height=Math.max(1,H*DPR|0);
+  ctx.setTransform(DPR,0,0,DPR,0,0);cw=W/COLS;
+}
+function colAt(k){return (head+k)%COLS;} // k=0 oldest(left) .. COLS-1 newest(right)
+function draw(){
+  ctx.fillStyle='#07080d';ctx.fillRect(0,0,W,H);
+  var mid=H*0.5;
+  // baseline
+  ctx.strokeStyle='rgba(34,211,238,.08)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(0,mid);ctx.lineTo(W,mid);ctx.stroke();
+  // mirrored ribbon: top path L->R, bottom path R->L
+  ctx.beginPath();
+  for(var k=0;k<COLS;k++){
+    var idx=colAt(k),x=k*cw,a=amp[idx],y=mid-(a-0.5)*H*0.86;
+    if(k===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+  }
+  for(var k2=COLS-1;k2>=0;k2--){
+    var i2=colAt(k2),x2=k2*cw,a2=amp[i2],y2=mid+(a2-0.5)*H*0.86;
+    ctx.lineTo(x2,y2);
+  }
+  ctx.closePath();
+  var g=ctx.createLinearGradient(0,0,W,0);
+  g.addColorStop(0,'rgba(34,211,238,.04)');g.addColorStop(.7,'rgba(34,211,238,.16)');
+  g.addColorStop(1,'rgba(34,211,238,.46)');
+  ctx.fillStyle=g;ctx.fill();
+  // bright crest line + energy spark on the freshest columns
+  ctx.lineJoin='round';
+  ctx.beginPath();
+  for(var k3=0;k3<COLS;k3++){
+    var i3=colAt(k3),x3=k3*cw,a3=amp[i3],y3=mid-(a3-0.5)*H*0.86;
+    if(k3===0)ctx.moveTo(x3,y3);else ctx.lineTo(x3,y3);
+  }
+  ctx.strokeStyle='#22d3ee';ctx.lineWidth=1.6;
+  ctx.shadowColor='#22d3ee';ctx.shadowBlur=8;ctx.stroke();
+  ctx.shadowBlur=0;
+  // leading head: glowing dot where new sound enters
+  var hi=colAt(COLS-1),hy=mid-(amp[hi]-0.5)*H*0.86;
+  ctx.fillStyle='#22d3ee';
+  ctx.shadowColor='#22d3ee';ctx.shadowBlur=14+eng[hi]*16;
+  ctx.beginPath();ctx.arc(W-cw*0.5,hy,2.2+eng[hi]*2.6,0,6.2832);ctx.fill();
+  ctx.shadowBlur=0;
+}
+function append(){
+  var s=(live&&analyser)?liveSample():synthSample(t);
+  amp[head]=s[0];eng[head]=s[1];head=(head+1)%COLS; // overwrite oldest -> scroll left
+}
+function loop(){
+  if(!running)return;
+  t+=0.024;
+  append();   // one new column per frame -> right-to-left flow
+  draw();
+  raf=requestAnimationFrame(loop);
+}
+function start(){if(running||reduce)return;running=true;raf=requestAnimationFrame(loop);}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+function vis(){if(document.hidden)stop();else start();}
+window.addEventListener('resize',function(){size();if(reduce)draw();});
+size();
+if(reduce){ // settle to one static, legible frame
+  for(var p=0;p<COLS;p++){var ss=synthSample(p*0.06);amp[p]=ss[0];eng[p]=ss[1];}
+  draw();
+}else{document.addEventListener('visibilitychange',vis);start();}
+})();</script>
+</body></html>

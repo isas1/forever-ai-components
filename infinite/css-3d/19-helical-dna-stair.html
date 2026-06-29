@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A cyan ladder of rungs twists into a rotating DNA double-helix spiral staircase with depth-faded opacity on dark teal.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Helical DNA Stair</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#041e2e;}
+  #hds-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    perspective:760px;perspective-origin:50% 46%;}
+  #hds-helix{position:relative;width:1px;height:1px;
+    transform-style:preserve-3d;
+    transform:rotateX(8deg) rotateY(0deg);
+    will-change:transform;}
+  .hds-rung{position:absolute;left:0;top:0;transform-style:preserve-3d;}
+  /* the two backbone nodes + the connecting bar live inside each rung */
+  .hds-bar{position:absolute;top:50%;left:50%;height:2px;border-radius:2px;
+    transform:translate(-50%,-50%);transform-origin:50% 50%;
+    background:linear-gradient(90deg,#39c0ed,#bdeeff,#39c0ed);}
+  .hds-node{position:absolute;top:50%;border-radius:50%;
+    transform:translateY(-50%);box-shadow:0 0 6px rgba(57,192,237,.5);}
+  .hds-a{left:0;background:radial-gradient(circle at 35% 35%,#dff6ff,#39c0ed 70%);}
+  .hds-b{right:0;background:radial-gradient(circle at 35% 35%,#cdeeff,#1c8fb8 72%);}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+    letter-spacing:.13em;color:#39c0ed;opacity:.36;text-transform:uppercase;
+    pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+  <div id="hds-stage"><div id="hds-helix"></div></div>
+  <div class="cap">Helical DNA Stair</div>
+<script>
+(function(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const helix = document.getElementById('hds-helix');
+  const STEPS = 26;          // rungs in the ladder
+  const STEP_ANGLE = 32;     // degrees of twist per step
+  const STEP_Y = 15;         // vertical rise per step (px, pre-scale)
+  const RADIUS = 72;         // half-width of a rung
+  const rungs = [];
+
+  function scale(){
+    // legible 180 -> 640: shrink the ladder on small frames
+    const s = Math.max(.62, Math.min(1.18, Math.min(innerWidth,innerHeight)/440));
+    helix.dataset.s = s;
+    rebuild(s);
+  }
+
+  function rebuild(s){
+    helix.innerHTML='';
+    rungs.length=0;
+    const baseY = -((STEPS-1)*STEP_Y)/2;
+    for(let i=0;i<STEPS;i++){
+      const r=document.createElement('div');
+      r.className='hds-rung';
+      const len=RADIUS*2*s;
+      const nodeSz=9*s;
+      r.innerHTML=
+        '<div class="hds-bar" style="width:'+len+'px"></div>'+
+        '<div class="hds-node hds-a" style="width:'+nodeSz+'px;height:'+nodeSz+'px;margin-left:'+(-nodeSz/2)+'px"></div>'+
+        '<div class="hds-node hds-b" style="width:'+nodeSz+'px;height:'+nodeSz+'px;margin-right:'+(-nodeSz/2)+'px"></div>';
+      // position the bar/node row so its center sits on the helix axis
+      r.style.width=len+'px';
+      r.style.marginLeft=(-len/2)+'px';
+      const y=(baseY+i*STEP_Y)*s;
+      rungs.push({el:r, y:y, ang:i*STEP_ANGLE});
+      helix.appendChild(r);
+    }
+  }
+
+  // rotateY = step*angle so the ladder twists into a spiral staircase.
+  // depth cue: a rung facing the viewer (cos near 1) is bright; facing away is dim.
+  const DEG=Math.PI/180;
+  function place(spin){
+    for(const k of rungs){
+      const a=k.ang+spin;
+      const depth=Math.cos(a*DEG);                   // -1 (back) .. 1 (front)
+      const front=depth*0.5+0.5;                      // 0 (back) .. 1 (front)
+      // depth cue is now opacity-only (compositor-friendly). The old brightness
+      // (0.30..1.0) darkened toward the near-black bg; folding it into opacity
+      // (0.22..1.0 * 0.30..1.0) yields a visually equivalent back-to-front fade.
+      k.el.style.transform='translateY('+k.y+'px) rotateY('+a+'deg)';
+      k.el.style.opacity=((0.22+0.78*front)*(0.30+0.70*front)).toFixed(3);
+    }
+  }
+
+  let spin=0, raf=0, nudge=0;
+  addEventListener('pointermove',e=>{ nudge += (e.movementX||0)*0.06; });
+  addEventListener('click',()=>{ nudge += 26; });
+
+  function tick(){
+    nudge*=0.92;
+    spin=(spin + (reduce?0:0.42) + nudge)%360;
+    // whole helix also tips gently on X for the front-to-back sweep read
+    helix.style.transform='rotateX('+(8+3*Math.sin(spin*Math.PI/180))+'deg)';
+    place(spin);
+    raf=requestAnimationFrame(tick);
+  }
+
+  function start(){ if(!raf && !reduce) raf=requestAnimationFrame(tick); }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  addEventListener('resize',()=>{ scale(); place(spin); });
+
+  scale();
+  if(reduce){ spin=18; helix.style.transform='rotateX(8deg)'; place(spin); }
+  else start();
+})();
+</script>
+</body>
+</html>

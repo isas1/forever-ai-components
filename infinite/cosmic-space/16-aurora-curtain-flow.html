@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Rippling green and magenta aurora curtains sway and flicker above a dark planetary limb under a faint starfield.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aurora Curtain Flow</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#020a08;}
+  #aur-c{display:block;width:100%;height:100%;}
+  .aur-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.16em;color:#3dffa0;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="aur-c"></canvas>
+<div class="aur-cap">Aurora Curtain Flow</div>
+<script>
+(function(){
+  const cv=document.getElementById('aur-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize',size);size();
+  // curtains: each a band of vertical light, drifting at its own pace
+  const CUR=7,curtains=[];
+  for(let i=0;i<CUR;i++){
+    const mag=i<3; // back curtains magenta-tinted, front green
+    curtains.push({
+      x:0.08+0.84*(i/(CUR-1)),     // base horizontal position 0..1
+      sp:0.10+Math.random()*0.22,  // drift speed
+      ph:Math.random()*Math.PI*2,  // wave phase
+      amp:0.04+Math.random()*0.07, // horizontal sway amplitude
+      w:0.05+Math.random()*0.06,   // curtain width fraction
+      top:0.04+Math.random()*0.10, // where the light begins falling
+      mag:mag,
+      seed:Math.random()*1000
+    });
+  }
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',e=>{nudge=(e.offsetX/W-0.5)*1.6;});
+  cv.addEventListener('click',()=>{nudge=2.2;});
+
+  function star(x,y,r,a){ctx.globalAlpha=a;ctx.fillStyle='#cfeede';ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();}
+  // fixed starfield
+  const stars=[];for(let i=0;i<70;i++)stars.push({x:Math.random(),y:Math.random()*0.62,r:Math.random()*0.9+0.2,a:Math.random()*0.5+0.15});
+
+  function drawCurtain(c,time){
+    const limbY=H*0.86;                    // planetary horizon
+    const baseX=c.x*W + Math.sin(time*c.sp+c.ph)*c.amp*W + nudge*W*0.06*(c.mag?0.5:1);
+    const segs=26, topY=H*c.top, botY=limbY;
+    const colA=c.mag?[255,70,200]:[61,255,160];
+    const colB=c.mag?[150,40,230]:[120,255,210];
+    // ripple the curtain into folds along its width
+    for(let s=0;s<segs;s++){
+      const v0=s/segs, v1=(s+1)/segs;
+      const fold=Math.sin(time*0.9*c.sp+c.seed+v0*7.5)*0.5; // -0.5..0.5 fold sway
+      const xw=c.w*W;
+      const x0=baseX+fold*xw, x1=baseX+Math.sin(time*0.9*c.sp+c.seed+v1*7.5)*0.5*xw;
+      const y0=topY+(botY-topY)*v0, y1=topY+(botY-topY)*v1;
+      // vertical brightness: bright mid, fading to bottom (rays cascade down)
+      const lum=Math.pow(1-Math.abs(v0-0.32),1.4);
+      const flick=0.6+0.4*Math.sin(time*2.1+c.seed*1.3+v0*4.0);
+      const a=(c.mag?0.16:0.26)*lum*flick;
+      const col=v0<0.5?colA:colB;
+      const grd=ctx.createLinearGradient(x0-xw*0.6,0,x0+xw*0.6,0);
+      grd.addColorStop(0,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
+      grd.addColorStop(0.5,'rgba('+col[0]+','+col[1]+','+col[2]+','+a.toFixed(3)+')');
+      grd.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
+      ctx.fillStyle=grd;
+      ctx.beginPath();
+      ctx.moveTo(x0-xw*0.6,y0);ctx.lineTo(x0+xw*0.6,y0);
+      ctx.lineTo(x1+xw*0.6,y1);ctx.lineTo(x1-xw*0.6,y1);
+      ctx.closePath();ctx.fill();
+    }
+  }
+
+  function scene(time){
+    ctx.fillStyle='#020a08';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    for(const s of stars)star(s.x*W,s.y*H,s.r,s.a*0.7);
+    ctx.globalAlpha=1;
+    for(const c of curtains)drawCurtain(c,time);
+    // base glow band hugging the limb
+    const g=ctx.createLinearGradient(0,H*0.62,0,H*0.86);
+    g.addColorStop(0,'rgba(61,255,160,0)');g.addColorStop(1,'rgba(61,255,160,0.10)');
+    ctx.fillStyle=g;ctx.fillRect(0,H*0.62,W,H*0.24);
+    ctx.globalCompositeOperation='source-over';
+    // dark planetary limb
+    const limbY=H*0.86, r=W*1.5;
+    ctx.save();ctx.beginPath();ctx.arc(W/2,limbY+r,r,0,Math.PI*2);ctx.clip();
+    const lg=ctx.createLinearGradient(0,limbY-6,0,H);
+    lg.addColorStop(0,'rgba(20,60,48,0.9)');lg.addColorStop(0.12,'#01100c');lg.addColorStop(1,'#000');
+    ctx.fillStyle=lg;ctx.fillRect(0,limbY-8,W,H-limbY+8);
+    ctx.restore();
+    // limb rim light
+    ctx.strokeStyle='rgba(61,255,160,0.30)';ctx.lineWidth=Math.max(1,W*0.0025);
+    ctx.beginPath();ctx.arc(W/2,limbY+r,r,Math.PI*1.5-0.4,Math.PI*1.5+0.4);ctx.stroke();
+  }
+
+  let raf=0;
+  function frame(){
+    t+=0.016;nudge*=0.95;
+    scene(t);
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){scene(2.3);}else start();
+})();
+</script>
+</body>
+</html>

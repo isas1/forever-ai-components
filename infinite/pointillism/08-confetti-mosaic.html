@@ -1,0 +1,183 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Confetti dots fly in from the edges and settle into three horizontal color bands, then gently shimmer in place.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Confetti Mosaic</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  #po08-stage{position:fixed;inset:0;background:#0d0f14}
+  #po08-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="po08-stage" role="img" aria-label="Pointillist field of confetti dots settling into three horizontal color bands like a flag">
+  <canvas id="po08-c"></canvas>
+</div>
+<div class="cap">Confetti Mosaic</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('po08-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,DPR=1;
+
+  // Divisionist palette: warm amber band, deep cyan band, plum band.
+  // Each "band" mixes its base hue with complementary flecks (optical mixing).
+  var BANDS = [
+    {base:[240,168,48],  flk:[120,86,168]},   // amber over violet fleck
+    {base:[40,150,170],  flk:[235,120,70]},   // teal over coral fleck
+    {base:[150,70,140],  flk:[120,180,120]}   // plum over green fleck
+  ];
+
+  var N = 104;                  // dot count cap
+  // typed arrays — allocation-free per frame
+  var px=new Float32Array(N), py=new Float32Array(N);   // current
+  var sx=new Float32Array(N), sy=new Float32Array(N);   // scatter origin
+  var tx=new Float32Array(N), ty=new Float32Array(N);   // settled target
+  var rad=new Float32Array(N), spin=new Float32Array(N), spd=new Float32Array(N);
+  var col=new Array(N);   // precomputed 'rgb(r,g,b)' strings — no per-frame allocation
+
+  function rnd(a,b){return a+Math.random()*(b-a);}
+
+  function layout(){
+    // arrange targets as a jittered grid spanning the frame in 3 bands
+    var cols=13, rows=8, i=0;
+    var mx=W*0.10, my=H*0.12, gw=(W-mx*2)/(cols-1), gh=(H-my*2)/(rows-1);
+    for(var ry=0; ry<rows; ry++){
+      for(var cx2=0; cx2<cols; cx2++){
+        if(i>=N) break;
+        var band = ry<3?0 : ry<5?1 : 2;
+        var b=BANDS[band];
+        // optical mixing: ~28% of dots use the complementary fleck color
+        var useF = Math.random()<0.28;
+        var c = useF? b.flk : b.base;
+        // slight per-dot value jitter so the field shimmers like Signac
+        var j = rnd(-26,26);
+        col[i]='rgb('+clamp(c[0]+j)+','+clamp(c[1]+j)+','+clamp(c[2]+j)+')';
+        var gx = mx+cx2*gw + rnd(-gw*0.22,gw*0.22);
+        var gy = my+ry*gh  + rnd(-gh*0.22,gh*0.22);
+        tx[i]=gx; ty[i]=gy;
+        // scatter start: thrown in from edges
+        var ang=Math.random()*6.2832, dist=Math.max(W,H)*rnd(0.55,1.05);
+        sx[i]=W/2+Math.cos(ang)*dist; sy[i]=H/2+Math.sin(ang)*dist;
+        px[i]=sx[i]; py[i]=sy[i];
+        rad[i]=Math.min(W,H)*rnd(0.012,0.022);
+        spin[i]=Math.random()*6.2832; spd[i]=rnd(-0.06,0.06);
+        i++;
+      }
+    }
+  }
+  function clamp(v){return v<0?0:v>255?255:v|0;}
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    layout();
+  }
+
+  function paintBg(){
+    ctx.fillStyle='#0d0f14';
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function drawDot(i,s){
+    // ease scatter->settle by interpolating between scatter and target
+    var x=sx[i]+(tx[i]-sx[i])*s;
+    var y=sy[i]+(ty[i]-sy[i])*s;
+    // residual confetti drift while settling
+    var drift=(1-s);
+    x+=Math.cos(spin[i])*drift*W*0.04;
+    y+=Math.sin(spin[i]*1.3)*drift*H*0.04;
+    px[i]=x; py[i]=y;
+    var r=rad[i]*(0.55+s*0.45);
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,6.2832);
+    ctx.fillStyle=col[i];
+    ctx.globalAlpha=0.55+s*0.45;
+    ctx.fill();
+  }
+
+  // ONE rAF loop, two phases: 0 = intro build, 1 = settled shimmer.
+  var t0=0, phase=0, sh=0, raf=0, looping=false;
+
+  function tick(now){
+    raf=0;
+    if(phase===0){
+      if(!t0) t0=now;
+      var p=(now-t0)/2600;            // settle duration
+      if(p>1)p=1;
+      var e=1-Math.pow(1-p,3);        // ease-out cubic
+      paintBg();
+      for(var i=0;i<N;i++){
+        // staggered arrival by index for a cascading mosaic build
+        var s=(e*1.35)-(i/N)*0.35;
+        s=s<0?0:s>1?1:s;
+        s=s*s*(3-2*s);                // smootherstep on per-dot s
+        drawDot(i,s);
+        spin[i]+=spd[i];
+      }
+      ctx.globalAlpha=1;
+      if(p>=1) phase=1;               // hand off to gentle shimmer
+    } else {
+      sh+=0.012;
+      paintBg();
+      for(var k=0;k<N;k++){
+        ctx.beginPath();
+        ctx.arc(px[k],py[k],rad[k],0,6.2832);
+        ctx.fillStyle=col[k];
+        ctx.globalAlpha=0.78+0.22*Math.sin(sh+k*0.6);
+        ctx.fill();
+      }
+      ctx.globalAlpha=1;
+    }
+    raf=requestAnimationFrame(tick);
+  }
+
+  function run(){
+    if(looping) return;              // guarantees a single rAF chain
+    looping=true;
+    raf=requestAnimationFrame(tick);
+  }
+  function stop(){
+    looping=false;
+    if(raf){ cancelAnimationFrame(raf); raf=0; }
+  }
+
+  function drawStatic(){
+    paintBg();
+    for(var i=0;i<N;i++){
+      px[i]=tx[i]; py[i]=ty[i];
+      ctx.beginPath();
+      ctx.arc(tx[i],ty[i],rad[i],0,6.2832);
+      ctx.fillStyle=col[i];
+      ctx.globalAlpha=0.95;
+      ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function start(){
+    size();
+    stop();
+    if(reduce){ drawStatic(); return; }   // settle to ONE static frame, no loop
+    t0=0; phase=0; run();
+  }
+
+  var ro;
+  window.addEventListener('resize',function(){
+    if(ro)clearTimeout(ro);
+    ro=setTimeout(start,140);
+  });
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ stop(); }
+    else if(!reduce){ run(); }        // resume current phase; never stacks loops
+  });
+
+  start();
+})();
+</script>
+</body></html>

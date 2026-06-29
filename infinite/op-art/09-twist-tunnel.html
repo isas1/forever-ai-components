@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric black-and-white squares rotate and shrink into a deep central vanishing point with shimmering moire depth bands.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twist Tunnel</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
+  #op09-stage{position:fixed;inset:0;background:#0a0a0a;display:block}
+  #op09-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static radial vignette + center glow — never repaints */
+  #op09-stage::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%,
+      rgba(255,255,255,.10) 0%,
+      rgba(255,255,255,0) 22%,
+      rgba(10,10,10,0) 60%,
+      rgba(10,10,10,.72) 100%);
+  }
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="op09-stage" role="img" aria-label="Twist Tunnel: concentric black-and-white squares rotating and shrinking into a deep central vanishing point, in an Op Art idiom.">
+  <canvas id="op09-c"></canvas>
+</div>
+<div class="cap">Twist Tunnel</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("op09-stage");
+  var cv=document.getElementById("op09-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // --- sizing (cached; recomputed only on resize) ---
+  var W=0,H=0,DPR=1,cx=0,cy=0,unit=0;
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    var w=stage.clientWidth||window.innerWidth;
+    var h=stage.clientHeight||window.innerHeight;
+    W=Math.max(1,Math.round(w*DPR));
+    H=Math.max(1,Math.round(h*DPR));
+    cv.width=W;cv.height=H;
+    cx=W/2;cy=H/2;
+    unit=Math.max(W,H)*0.56; // outermost ring reach
+    if(reduce||!running){drawFrame(reducePhase);}
+  }
+
+  // --- tunnel parameters ---
+  var RINGS=26;            // concentric squares (<=110)
+  var SCALE=0.86;          // geometric shrink per ring inward
+  var BASE_TWIST=0.20;     // radians of twist accumulated per ring
+  var reducePhase=0;       // fixed phase for static frame
+
+  // pre-allocated unit square corners (reused every ring, every frame)
+  var sqx=new Float64Array(4), sqy=new Float64Array(4);
+
+  function drawRing(s, ang, lw, light){
+    // s: half-size in px, ang: rotation, lw: line width, light: 0..1
+    var co=Math.cos(ang), si=Math.sin(ang);
+    // corners of square at +/- s
+    sqx[0]=-s; sqy[0]=-s;
+    sqx[1]= s; sqy[1]=-s;
+    sqx[2]= s; sqy[2]= s;
+    sqx[3]=-s; sqy[3]= s;
+    ctx.beginPath();
+    for(var i=0;i<4;i++){
+      var rx=sqx[i]*co - sqy[i]*si + cx;
+      var ry=sqx[i]*si + sqy[i]*co + cy;
+      if(i===0)ctx.moveTo(rx,ry);else ctx.lineTo(rx,ry);
+    }
+    ctx.closePath();
+    ctx.lineWidth=lw;
+    // alternate value for moire/depth banding, fade with depth
+    var v=Math.round(255*light);
+    ctx.strokeStyle="rgb("+v+","+v+","+v+")";
+    ctx.stroke();
+  }
+
+  function drawFrame(t){
+    ctx.fillStyle="#0a0a0a";
+    ctx.fillRect(0,0,W,H);
+    // breathing depth: rings drift inward, cycling so the tunnel feels endless
+    var drift=(t*0.06)% 1; // 0..1 fractional ring offset
+    var twistGlobal=Math.sin(t*0.18)*0.35; // slow oscillating overall twist
+    for(var i=RINGS-1;i>=0;i--){
+      var d=i+drift;                       // continuous depth index
+      var s=unit*Math.pow(SCALE,d);        // shrink inward
+      if(s<1.2) continue;
+      var ang=d*BASE_TWIST + twistGlobal*(d*0.12); // cumulative + global twist
+      // depth shading: outer faint, mid bright, very inner dim toward void
+      var depthN=d/RINGS;
+      var light=0.18+0.82*Math.max(0,Math.min(1, Math.sin(depthN*Math.PI*0.92)+0.15));
+      // alternating value bands create moire shimmer
+      var band=((i&1)===0)?1:0.55;
+      light*=band;
+      var lw=Math.max(1*DPR,(2.4-depthN*1.6)*DPR);
+      drawRing(s,ang,lw,light);
+    }
+  }
+
+  // --- single rAF loop, allocation-free ---
+  var running=false, raf=0, start=0;
+  function loop(now){
+    if(!running)return;
+    if(!start)start=now;
+    var t=(now-start)/1000;
+    drawFrame(t);
+    raf=requestAnimationFrame(loop);
+  }
+  function play(){
+    if(running||reduce)return;
+    running=true;start=0;
+    raf=requestAnimationFrame(loop);
+  }
+  function stop(){
+    running=false;
+    if(raf)cancelAnimationFrame(raf);
+    raf=0;
+  }
+
+  window.addEventListener("resize",resize,{passive:true});
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden)stop();
+    else if(!reduce)play();
+  });
+
+  resize();
+  if(reduce){
+    drawFrame(reducePhase); // one calm static frame, no loop
+  }else{
+    play();
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Four orbiting point sources emit ripples whose summed field is drawn as glowing blue marching-squares contour lines on near-black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wave Interference</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0e27;}
+  #wvi-c{display:block;width:100%;height:100%;}
+  .wvi-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.16em;color:#7ab8ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="wvi-c"></canvas>
+<div class="wvi-cap">Wave Interference</div>
+<script>
+(function(){
+  const cv=document.getElementById('wvi-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,GW,GH,field,cell;
+  // grid sampling of the interference field (low-res, marching-squares contoured)
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    const m=Math.min(W,H);
+    cell=Math.max(7,m/64);              // sample spacing in CSS px
+    GW=Math.ceil(W/cell)+1;GH=Math.ceil(H/cell)+1;
+    field=new Float32Array(GW*GH);
+  }
+  addEventListener('resize',size);size();
+
+  // four orbiting point sources
+  const SRC=[
+    {ox:.32,oy:.40,or:.16,oa:0,os:.23,k:.052},
+    {ox:.68,oy:.36,or:.20,oa:2.1,os:-.17,k:.046},
+    {ox:.42,oy:.70,or:.18,oa:4.0,os:.20,k:.058},
+    {ox:.66,oy:.66,or:.14,oa:1.0,os:-.26,k:.050}
+  ];
+  const LV=[-2.4,-1.6,-.8,0,.8,1.6,2.4]; // contour levels of summed field
+  let t=0,nudge=0,sx=0,sy=0;
+  cv.addEventListener('pointermove',e=>{nudge=1;sx=e.offsetX;sy=e.offsetY;});
+
+  function sample(){
+    const m=Math.min(W,H);
+    const sc=[];
+    for(const s of SRC){
+      const a=s.oa+t*s.os;
+      sc.push({x:(s.ox+Math.cos(a)*s.or)*W,y:(s.oy+Math.sin(a)*s.or)*H,k:s.k*m/Math.max(W,H)*1.0});
+    }
+    // optional pointer source
+    const pn=nudge>0.02;
+    for(let j=0;j<GH;j++){
+      const py=j*cell;
+      for(let i=0;i<GW;i++){
+        const px=i*cell;let v=0;
+        for(const s of sc){
+          const dx=px-s.x,dy=py-s.y,d=Math.sqrt(dx*dx+dy*dy);
+          v+=Math.sin(d*s.k - t*2.0)/(1+d*0.010);
+        }
+        if(pn){const dx=px-sx,dy=py-sy,d=Math.sqrt(dx*dx+dy*dy);
+          v+=nudge*1.6*Math.sin(d*0.07 - t*2.4)/(1+d*0.012);}
+        field[j*GW+i]=v;
+      }
+    }
+  }
+
+  function lerp(a,b,la,lb,L){const t=(L-la)/(b-la===0?1:(lb-la));return a+(b-a)*t;}
+  function contour(L,col,wd){
+    ctx.strokeStyle=col;ctx.lineWidth=wd;ctx.beginPath();
+    for(let j=0;j<GH-1;j++){
+      for(let i=0;i<GW-1;i++){
+        const x0=i*cell,y0=j*cell,x1=x0+cell,y1=y0+cell;
+        const a=field[j*GW+i],b=field[j*GW+i+1],c=field[(j+1)*GW+i+1],d=field[(j+1)*GW+i];
+        let ci=0;if(a>L)ci|=8;if(b>L)ci|=4;if(c>L)ci|=2;if(d>L)ci|=1;
+        if(ci===0||ci===15)continue;
+        const tp=()=>[lerp(x0,x1,a,b,L),y0],rt=()=>[x1,lerp(y0,y1,b,c,L)],
+              bt=()=>[lerp(x0,x1,d,c,L),y1],lf=()=>[x0,lerp(y0,y1,a,d,L)];
+        let p,q;
+        switch(ci){
+          case 1:case 14:p=lf();q=bt();break;
+          case 2:case 13:p=bt();q=rt();break;
+          case 3:case 12:p=lf();q=rt();break;
+          case 4:case 11:p=tp();q=rt();break;
+          case 6:case 9:p=tp();q=bt();break;
+          case 7:case 8:p=lf();q=tp();break;
+          case 5:p=lf();q=tp();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);p=bt();q=rt();break;
+          case 10:p=tp();q=rt();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);p=lf();q=bt();break;
+        }
+        ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);
+      }
+    }
+    ctx.stroke();
+  }
+
+  function draw(){
+    sample();
+    ctx.fillStyle='#0a0e27';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    // filled crest glow via dense level set
+    for(let n=0;n<LV.length;n++){
+      const L=LV[n];
+      const dist=Math.abs(L);                       // distance from nodal value 0
+      const crest=L>=0;
+      // accent for constructive crests, cool steel for troughs; nodal line (L=0) brightest
+      const a=L===0?.55:0.10+0.26*(1-dist/2.6);
+      const col=crest
+        ? 'rgba(122,184,255,'+a.toFixed(3)+')'
+        : 'rgba(74,108,168,'+a.toFixed(3)+')';
+      contour(L,col, L===0?1.5:1.0);
+    }
+    // bright sub-levels near nodal lines for the braided sweep
+    contour(0.0,'rgba(180,214,255,0.5)',1.4);
+    contour(-0.2,'rgba(122,184,255,0.16)',0.8);
+    contour(0.2,'rgba(122,184,255,0.16)',0.8);
+    ctx.globalCompositeOperation='source-over';
+    // source markers
+    const m=Math.min(W,H);
+    for(const s of SRC){
+      const ang=s.oa+t*s.os,x=(s.ox+Math.cos(ang)*s.or)*W,y=(s.oy+Math.sin(ang)*s.or)*H;
+      const g=ctx.createRadialGradient(x,y,0,x,y,m*0.05);
+      g.addColorStop(0,'rgba(200,224,255,0.9)');g.addColorStop(.4,'rgba(122,184,255,0.35)');
+      g.addColorStop(1,'rgba(122,184,255,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,m*0.05,0,7);ctx.fill();
+      ctx.fillStyle='#dcebff';ctx.beginPath();ctx.arc(x,y,Math.max(1.4,m*0.006),0,7);ctx.fill();
+    }
+  }
+
+  let raf=0;
+  function frame(){t+=0.012;nudge*=0.95;draw();raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=1.2;draw();}else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Dotted Gourd — Infinitude. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Dotted Gourd</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0608;overflow:hidden}
+  #dot03-stage{position:fixed;inset:0;width:100%;height:100%}
+  #dot03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .dot03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#ffd9b0;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="dot03-stage" role="img" aria-label="A ribbed orange gourd crawling with graduated black dots, swaying slowly in a wind that is not there.">
+  <canvas id="dot03-cv"></canvas>
+</div>
+<div class="dot03-cap">The Dotted Gourd</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('dot03-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), last=performance.now(), t=0;
+  const dots=[];
+  for(let i=0;i<110;i++) dots.push({u:Math.random(), v:Math.random()});
+  function bodyWidth(ty){ return Math.pow(Math.sin(ty*Math.PI),0.7); }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx;
+    ctx.fillStyle='#0a0608'; ctx.fillRect(0,0,S.w,S.h);
+    const cx=S.w/2;
+    const sway=REDUCED?0:Math.sin(t*0.9)*0.06;
+    const bodyH=Math.min(S.h*0.62,S.w*0.62), bodyW=bodyH*1.02;
+    const topY=S.h*0.30, ribs=7;
+    ctx.save();
+    ctx.translate(cx, topY+bodyH/2); ctx.rotate(sway); ctx.translate(-cx,-(topY+bodyH/2));
+    for(let sl=0;sl<=40;sl++){
+      const ty=sl/40, hw=bodyWidth(ty)*bodyW/2, yy=topY+ty*bodyH;
+      ctx.beginPath(); ctx.fillStyle='#ff7a18';
+      ctx.ellipse(cx,yy,hw,bodyH/40,0,0,Math.PI*2); ctx.fill();
+    }
+    ctx.strokeStyle='rgba(120,40,4,0.5)'; ctx.lineWidth=2;
+    for(let rb=0;rb<=ribs;rb++){
+      const off=(rb/ribs-0.5)*2;
+      ctx.beginPath();
+      for(let p=0;p<=40;p++){
+        const ty2=p/40, hw2=bodyWidth(ty2)*bodyW/2;
+        const xx=cx+off*hw2, yy2=topY+ty2*bodyH;
+        if(p===0) ctx.moveTo(xx,yy2); else ctx.lineTo(xx,yy2);
+      }
+      ctx.stroke();
+    }
+    ctx.fillStyle='#160a06';
+    for(let i=0;i<dots.length;i++){
+      const d=dots[i], ty3=d.v, hw3=bodyWidth(ty3)*bodyW/2;
+      if(hw3<1) continue;
+      const px=cx+(d.u*2-1)*hw3*0.96, py=topY+ty3*bodyH;
+      const frontness=1-Math.abs(d.u-0.5)*2;
+      const rr=(1.6+frontness*5.2)*(0.4+bodyWidth(ty3)*0.8);
+      ctx.globalAlpha=0.55+frontness*0.4;
+      ctx.beginPath(); ctx.arc(px,py,rr,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    ctx.fillStyle='#4d6b18'; ctx.fillRect(cx-9, topY-22, 18, 30);
+    ctx.restore();
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#0a0608'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ for(let i=0;i<3;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

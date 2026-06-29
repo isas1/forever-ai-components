@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Red, blue and yellow rectangles wipe and rise in sequence to fill cells of a black De Stijl grid on warm white.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Block Fill</title>
+<style>
+  :root{
+    --ds03-bg:#0e0e10; --ds03-line:#0a0a0c; --ds03-paper:#ece9e1;
+    --ds03-red:#c8202a; --ds03-blu:#1b5fc4; --ds03-yel:#f2c014;
+  }
+  html,body{margin:0;height:100%;background:var(--ds03-bg)}
+  #ds03-stage{
+    position:fixed;inset:0;display:grid;place-items:center;
+    background:var(--ds03-bg);overflow:hidden;
+  }
+  /* the canvas of the composition keeps De Stijl's tense square format */
+  #ds03-comp{
+    position:relative;width:86vmin;height:86vmin;max-width:640px;max-height:640px;
+    background:var(--ds03-paper);
+    /* static, never-repainting depth — a single drop shadow, not animated */
+    box-shadow:0 0 0 1px #000, 0 24px 60px -20px #000;
+  }
+  /* black grid bars: pure horizontal / vertical, asymmetric placement */
+  .ds03-bar{position:absolute;background:var(--ds03-line)}
+  .ds03-v{top:0;bottom:0}.ds03-h{left:0;right:0}
+  /* the cells; each holds a color layer that fills via transform */
+  .ds03-cell{position:absolute;overflow:hidden;background:var(--ds03-paper)}
+  .ds03-fill{
+    position:absolute;inset:0;transform-origin:var(--o,bottom);
+    transform:scaleY(0);will-change:transform;
+    animation:ds03-rise var(--d,5200ms) cubic-bezier(.7,0,.2,1) infinite;
+    animation-delay:var(--dl,0ms);
+  }
+  .ds03-fx{transform:scaleX(0);animation-name:ds03-wipe}
+  @keyframes ds03-rise{
+    0%{transform:scaleY(0)} 14%{transform:scaleY(1)}
+    64%{transform:scaleY(1)} 78%,100%{transform:scaleY(0)}
+  }
+  @keyframes ds03-wipe{
+    0%{transform:scaleX(0)} 14%{transform:scaleX(1)}
+    64%{transform:scaleX(1)} 78%,100%{transform:scaleX(0)}
+  }
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    .ds03-fill{transform:scaleY(1)!important}
+    .ds03-fx{transform:scaleX(1)!important}
+  }
+</style>
+</head>
+<body>
+<div id="ds03-stage">
+  <div id="ds03-comp" role="img" aria-label="De Stijl Neoplastic composition: rectangles in primary red, blue and yellow filling in sequence within a black grid on warm white.">
+    <!-- color fills injected; grid bars drawn on top -->
+  </div>
+</div>
+<div class="cap">Block Fill</div>
+<script>
+(function(){
+  "use strict";
+  var comp=document.getElementById("ds03-comp");
+  // Composition in normalized 0..1 coords — asymmetric dynamic equilibrium.
+  // Vertical grid lines at x=.34 and x=.66 ; horizontals at y=.40 and y=.72.
+  var BW=2.6; // bar weight in %
+  // cells: x,y,w,h (%), color, fill direction, delay(ms)
+  var C=[
+    [0,    0,   34,  40, "blu", "y", 0],
+    [34,   0,   32,  40, null, null, 0],
+    [66,   0,   34,  72, "yel", "x", 1500],
+    [0,    40,  34,  32, null, null, 0],
+    [34,   40,  32,  60, "red", "y", 700],
+    [0,    72,  66,  28, "yel", "x-r", 2200],
+    [66,   72,  34,  28, "blu", "y", 3000]
+  ];
+  var col={red:"var(--ds03-red)",blu:"var(--ds03-blu)",yel:"var(--ds03-yel)"};
+  var origin={ "y":"bottom", "y-t":"top", "x":"left", "x-r":"right" };
+  var html="";
+  for(var i=0;i<C.length;i++){
+    var c=C[i];
+    html+='<div class="ds03-cell" style="left:'+c[0]+'%;top:'+c[1]+'%;width:'+c[2]+'%;height:'+c[3]+'%">';
+    if(c[4]){
+      var dir=c[5], isX=dir.charAt(0)==="x";
+      var cls="ds03-fill"+(isX?" ds03-fx":"");
+      var o=origin[dir]||"bottom";
+      html+='<span class="'+cls+'" style="background:'+col[c[4]]+';--o:'+o+';--dl:'+c[6]+'ms"></span>';
+    }
+    html+='</div>';
+  }
+  // grid bars last, so they sit above the fills as true Neoplastic lines
+  function vbar(x){return '<div class="ds03-bar ds03-v" style="left:calc('+x+'% - '+(BW/2)+'%);width:'+BW+'%"></div>';}
+  function hbar(y){return '<div class="ds03-bar ds03-h" style="top:calc('+y+'% - '+(BW/2)+'%);height:'+BW+'%"></div>';}
+  html+=vbar(34)+vbar(66)+hbar(40)+hbar(72);
+  // outer frame bars
+  html+='<div class="ds03-bar ds03-v" style="left:0;width:'+(BW/1.6)+'%"></div>';
+  html+='<div class="ds03-bar ds03-v" style="right:0;width:'+(BW/1.6)+'%"></div>';
+  html+='<div class="ds03-bar ds03-h" style="top:0;height:'+(BW/1.6)+'%"></div>';
+  html+='<div class="ds03-bar ds03-h" style="bottom:0;height:'+(BW/1.6)+'%"></div>';
+  comp.innerHTML=html;
+
+  // pause/resume on tab visibility — CSS-only animations
+  function setState(s){
+    var f=comp.getElementsByClassName("ds03-fill");
+    for(var i=0;i<f.length;i++) f[i].style.animationPlayState=s;
+  }
+  document.addEventListener("visibilitychange",function(){
+    setState(document.hidden?"paused":"running");
+  });
+})();
+</script>
+</body>
+</html>

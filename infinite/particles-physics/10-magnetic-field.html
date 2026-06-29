@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A grid of short rods aligns to a roaming dipole field like iron filings, tinted red/blue by nearest pole, pointer-reactive.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Iron Filings Field</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0c0c0e}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fb923c;opacity:.55;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Iron Filings Field</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,fil=[],t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+let poles=[];
+function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);init();}
+function init(){fil=[];const step=Math.max(13,Math.min(W,H)/15);
+  for(let yy=step/2;yy<H;yy+=step)for(let xx=step/2;xx<W;xx+=step)
+    fil.push({x:xx,y:yy,a:0,len:step*0.42});
+}
+addEventListener('resize',size);size();
+let pointer={x:-999,y:-999,on:false};
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+  pointer.x=e.clientX-r.left;pointer.y=e.clientY-r.top;pointer.on=true;});
+cv.addEventListener('pointerleave',()=>pointer.on=false);
+function field(px,py){
+  let fx=0,fy=0;
+  for(const p of poles){const dx=px-p.x,dy=py-p.y,d2=dx*dx+dy*dy+200,d=Math.sqrt(d2);
+    const s=p.q/d2;fx+=dx/d*s*60;fy+=dy/d*s*60;}
+  if(pointer.on){const dx=px-pointer.x,dy=py-pointer.y,d2=dx*dx+dy*dy+200,d=Math.sqrt(d2);
+    const s=80/d2;fx+=dx/d*s*60;fy+=dy/d*s*60;}
+  return Math.atan2(fy,fx);
+}
+function step(){
+  x.fillStyle='rgba(12,12,14,0.35)';x.fillRect(0,0,W,H);t+=0.012;
+  poles=[{x:W/2+Math.cos(t)*W*0.28,y:H/2+Math.sin(t*1.3)*H*0.28,q:1},
+         {x:W/2+Math.cos(t+Math.PI)*W*0.28,y:H/2+Math.sin(t*1.3+Math.PI)*H*0.28,q:-1}];
+  for(const f of fil){
+    const a=field(f.x,f.y);
+    let da=a-f.a;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
+    f.a+=da*0.2;
+    const c=Math.cos(f.a),s=Math.sin(f.a),L=f.len;
+    const dx=f.x-poles[0].x,dy=f.y-poles[0].y,dn=Math.hypot(dx,dy);
+    const hue=dn<Math.hypot(f.x-poles[1].x,f.y-poles[1].y)?15:205;
+    x.strokeStyle='hsl('+hue+',85%,60%)';x.lineWidth=2;x.lineCap='round';
+    x.beginPath();x.moveTo(f.x-c*L,f.y-s*L);x.lineTo(f.x+c*L,f.y+s*L);x.stroke();
+  }
+  for(const p of poles){x.fillStyle=p.q>0?'#f87171':'#60a5fa';
+    x.beginPath();x.arc(p.x,p.y,4,0,7);x.fill();}
+}
+let raf;function loop(){step();raf=requestAnimationFrame(loop);}
+function play(){if(!raf&&!document.hidden){if(reduce){step();step();return;}loop();}}
+function stop(){cancelAnimationFrame(raf);raf=0;}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+play();
+</script>
+</body>
+</html>

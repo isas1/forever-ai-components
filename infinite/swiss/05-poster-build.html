@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Swiss poster assembles itself: red and ink panels slide and print into grid place while POSTER BUILD rises line by line under a red rule.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Poster Build</title>
+<style>
+  :root{
+    --sw05-bg:#0f0f10;
+    --sw05-ink:#f2f0ea;
+    --sw05-red:#e8482b;
+    --sw05-grey:#26262a;
+    --sw05-dim:#74747c;
+  }
+  html,body{margin:0;height:100%;background:var(--sw05-bg);overflow:hidden}
+  .sw05-stage{
+    position:fixed;inset:0;
+    display:grid;
+    grid-template-columns:repeat(12,1fr);
+    grid-template-rows:repeat(16,1fr);
+    column-gap:1%;row-gap:0;
+    padding:6%;
+    box-sizing:border-box;
+    background:var(--sw05-bg);
+    font-family:"Helvetica Neue",Helvetica,Arial,"Inter",system-ui,sans-serif;
+  }
+  /* faint modular registration grid — the poster's skeleton, static */
+  .sw05-reg{border-right:1px solid var(--sw05-grey);opacity:.5}
+
+  /* every assembling part shares one timeline; each clips itself in via transform */
+  .sw05-part{position:relative;overflow:hidden;will-change:transform,opacity}
+  /* the colored "ink" lives in an inner layer so the band can wipe over it */
+  .sw05-ink-l{position:absolute;inset:0;will-change:transform;transform-origin:left center}
+  .sw05-fill .sw05-ink-l{background:var(--sw05-ink)}
+  .sw05-red  .sw05-ink-l{background:var(--sw05-red)}
+
+  /* slide-in panels (translate only) */
+  .sw05-slab{will-change:transform,opacity;transform-origin:center}
+
+  /* typographic plate — sits in the grid, words drop in line by line */
+  .sw05-type{align-self:end;color:var(--sw05-ink);user-select:none;overflow:hidden}
+  .sw05-line{display:block;overflow:hidden;line-height:.82}
+  .sw05-line span{
+    display:block;font-weight:800;letter-spacing:-.035em;
+    font-size:clamp(22px,8.4vmin,80px);
+    transform:translateY(105%);
+    animation:sw05-rise 8.4s cubic-bezier(.16,1,.3,1) infinite both;
+  }
+  .sw05-line em{color:var(--sw05-red);font-style:normal}
+
+  .sw05-num{color:var(--sw05-dim);font:700 clamp(9px,1.9vmin,15px)/1 ui-monospace,Menlo,monospace;
+            align-self:start;letter-spacing:.05em}
+  .sw05-tag{color:var(--sw05-dim);font-size:clamp(7px,1.55vmin,12px);font-weight:600;
+            letter-spacing:.32em;text-transform:uppercase;align-self:start;text-align:right;
+            opacity:0;animation:sw05-fade 8.4s ease-out infinite both}
+
+  /* one bold horizontal rule wipes across — the printer's bar */
+  .sw05-rule{background:var(--sw05-red);transform-origin:left center;transform:scaleX(0);
+             animation:sw05-wipe 8.4s cubic-bezier(.7,0,.2,1) infinite both}
+
+  /* ink layer wipes left->right to "print" each block */
+  @keyframes sw05-print{0%{transform:scaleX(0)}13%{transform:scaleX(1)}
+    66%{transform:scaleX(1)}80%{transform:scaleX(0)}100%{transform:scaleX(0)}}
+  /* panels slide in from registration edge */
+  @keyframes sw05-slide{0%{transform:translate3d(var(--dx,0),var(--dy,0),0);opacity:0}
+    15%{transform:translate3d(0,0,0);opacity:1}66%{transform:translate3d(0,0,0);opacity:1}
+    82%{transform:translate3d(var(--dx,0),var(--dy,0),0);opacity:0}
+    100%{transform:translate3d(var(--dx,0),var(--dy,0),0);opacity:0}}
+  @keyframes sw05-rise{0%{transform:translateY(105%)}18%{transform:translateY(0)}
+    66%{transform:translateY(0)}84%{transform:translateY(105%)}100%{transform:translateY(105%)}}
+  @keyframes sw05-wipe{0%{transform:scaleX(0)}16%{transform:scaleX(1)}
+    66%{transform:scaleX(1)}82%{transform:scaleX(0)}100%{transform:scaleX(0)}}
+  @keyframes sw05-fade{0%{opacity:0}24%{opacity:1}66%{opacity:1}82%{opacity:0}100%{opacity:0}}
+
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important;animation-delay:0ms!important}
+    .sw05-ink-l{transform:scaleX(1)!important}
+    .sw05-slab{transform:none!important;opacity:1!important}
+    .sw05-line span{transform:translateY(0)!important}
+    .sw05-rule{transform:scaleX(1)!important}
+    .sw05-tag{opacity:1!important}
+  }
+</style>
+</head>
+<body>
+  <div class="sw05-stage" id="sw05-stage" role="img"
+       aria-label="A Swiss typographic poster assembling from modular grid blocks: red and ink panels slide and print into place while the title Poster Build rises line by line beneath a red rule.">
+  </div>
+  <div class="cap">Poster Build</div>
+
+  <script>
+  (function(){
+    "use strict";
+    var stage=document.getElementById("sw05-stage");
+    if(!stage)return;
+
+    // 12 x 16 grid. Rhythm: each part enters one STEP after the last.
+    var STEP=0.5;
+    function d(slot){return (slot*STEP).toFixed(2)+"s";}
+
+    // PRINTED blocks: ink wipes in. [col,row,cSpan,rSpan,kind,slot]
+    var prints=[
+      [1, 1, 5, 4, "red",  0],
+      [9, 1, 4, 2, "fill", 2],
+      [1, 9, 3, 3, "fill", 4]
+    ];
+    // SLID panels: translate from an edge. [col,row,cSpan,rSpan,kind,slot,dx,dy]
+    var slabs=[
+      [6, 1, 3, 4, "fill", 1, "0","-130%"],
+      [9, 4, 4, 4, "red",  3, "130%","0"],
+      [4, 9, 5, 2, "red",  5, "-130%","0"]
+    ];
+
+    var html="";
+    var i,b;
+
+    // registration columns (every 3rd) — faint skeleton
+    for(i=3;i<12;i+=3){
+      html+='<div class="sw05-reg" style="grid-column:'+i+' / span 1;grid-row:1 / span 16"></div>';
+    }
+
+    for(i=0;i<prints.length;i++){
+      b=prints[i];
+      html+='<div class="sw05-part sw05-'+b[4]+'" style="grid-column:'+b[0]+' / span '+b[2]+
+            ';grid-row:'+b[1]+' / span '+b[3]+'">'+
+            '<span class="sw05-ink-l" style="animation:sw05-print 8.4s cubic-bezier(.7,0,.2,1) infinite both;animation-delay:'+d(b[5])+'"></span></div>';
+    }
+    for(i=0;i<slabs.length;i++){
+      b=slabs[i];
+      html+='<div class="sw05-slab sw05-'+b[4]+'" style="grid-column:'+b[0]+' / span '+b[2]+
+            ';grid-row:'+b[1]+' / span '+b[3]+';--dx:'+b[6]+';--dy:'+b[7]+
+            ';animation:sw05-slide 8.4s cubic-bezier(.16,1,.3,1) infinite both;animation-delay:'+d(b[5])+
+            ';background:'+(b[4]==="red"?"var(--sw05-red)":"var(--sw05-ink)")+'"></div>';
+    }
+
+    // meta + red rule + typographic plate (bottom band)
+    html+='<div class="sw05-num" style="grid-column:1 / span 3;grid-row:1 / span 1">05 / 12</div>';
+    html+='<div class="sw05-tag" style="grid-column:9 / span 4;grid-row:9 / span 1;animation-delay:'+d(5)+'">Druck · Raster · Aufbau</div>';
+    html+='<div class="sw05-rule" style="grid-column:1 / span 11;grid-row:12 / span 1;height:4px;align-self:center;animation-delay:'+d(4)+'"></div>';
+    // each line rises with its own delay → typographic cadence
+    html+='<div class="sw05-type" style="grid-column:1 / span 11;grid-row:13 / span 4">'+
+          '<span class="sw05-line"><span style="animation-delay:'+d(5)+'">POSTER</span></span>'+
+          '<span class="sw05-line"><span style="animation-delay:'+d(6)+'"><em>BUILD</em></span></span></div>';
+
+    stage.innerHTML=html;
+
+    // Reduced-motion: CSS already settles to the finished poster. No JS loop here.
+    var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+    if(reduce)return;
+
+    // Pause/resume all CSS animations on tab visibility (no rAF in this tile).
+    function setState(s){
+      var els=stage.querySelectorAll(".sw05-ink-l,.sw05-slab,.sw05-line span,.sw05-rule,.sw05-tag");
+      for(var j=0;j<els.length;j++){ els[j].style.animationPlayState=s; }
+    }
+    document.addEventListener("visibilitychange",function(){
+      setState(document.hidden ? "paused" : "running");
+    });
+  })();
+  </script>
+</body>
+</html>

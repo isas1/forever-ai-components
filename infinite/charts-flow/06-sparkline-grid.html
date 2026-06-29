@@ -1,0 +1,152 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Three-by-three grid of small-multiple sparklines scrolling leftward as fresh data arrives, each with a teal leading dot and diamond min/max">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sparkline Grid</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0d12;overflow:hidden}
+  #ch06-wrap{position:fixed;inset:0;display:block}
+  #ch06-c{position:absolute;inset:0;width:100%;height:100%;
+    /* static inner glow — never repaints */
+    box-shadow:inset 0 0 130px rgba(90,209,160,.09)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="ch06-wrap" role="img" aria-label="A grid of small multiples: nine synthetic sparkline charts arranged in a three by three matrix. Each line scrolls leftward as fresh data arrives, while a teal dot tracks the latest value and small diamond markers flag the running minimum and maximum of each series.">
+  <canvas id="ch06-c"></canvas>
+</div>
+<div class="cap">Sparkline Grid</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv=document.getElementById('ch06-c'), ctx=cv.getContext('2d');
+
+  // Constructivist data-viz palette around the teal accent
+  var BG='#0a0d12', ACC='#5ad1a0';
+  var MAXC='#d8623a';   // warm — running max marker
+  var MINC='#3aa6c9';   // cool — running min marker
+  var GRID='rgba(140,170,200,.10)';
+
+  var COLS=3, ROWS=3, N=COLS*ROWS;   // 9 small multiples (well under cap)
+  var LEN=46;                        // samples held per series
+
+  // ---- synthetic series: each cell a phase-shifted noisy oscillator ----
+  // typed arrays, ring buffers — allocation-free after setup
+  var buf=new Float32Array(N*LEN);   // values in 0..1
+  var head=0;                        // shared write index (ring)
+  var ph=new Float32Array(N), fr=new Float32Array(N), tr=new Float32Array(N);
+  var seed=20260626>>>0;
+  function rnd(){ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }
+  for(var i=0;i<N;i++){ ph[i]=rnd()*6.283; fr[i]=0.8+rnd()*1.7; tr[i]=(rnd()-.5)*0.25; }
+  var t=0;
+  function sample(s){ // next synthetic value for series s, 0..1
+    var v=0.5
+      + 0.26*Math.sin(t*fr[s]+ph[s])
+      + 0.12*Math.sin(t*fr[s]*2.3+ph[s]*1.7)
+      + tr[s]*Math.sin(t*0.18+s);
+    v+=(rnd()-.5)*0.07;
+    return v<0.04?0.04:v>0.96?0.96:v;
+  }
+  // prime the buffers so first frame is already legible
+  for(var k=0;k<LEN;k++){ t+=0.30; for(i=0;i<N;i++) buf[i*LEN+head]=sample(i); head=(head+1)%LEN; }
+
+  var W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
+  var pad,gap,cw,chh,ox,oy; // geometry caches (resize only)
+  function layout(){
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    var m=Math.min(W,H);
+    pad=m*0.085; gap=m*0.045;
+    var inW=W-pad*2, inH=H-pad*2;
+    cw=(inW-gap*(COLS-1))/COLS;
+    chh=(inH-gap*(ROWS-1))/ROWS;
+    ox=pad; oy=pad;
+  }
+
+  // draw one cell sparkline given its grid coords
+  function cell(s,gx,gy){
+    var x0=ox+gx*(cw+gap), y0=oy+gy*(chh+gap);
+    var ipad=Math.min(cw,chh)*0.16;
+    var px=x0+ipad, py=y0+ipad, pw=cw-ipad*2, phh=chh-ipad*2;
+
+    // frame
+    ctx.strokeStyle=GRID; ctx.lineWidth=1;
+    ctx.strokeRect(x0+.5,y0+.5,cw-1,chh-1);
+    // baseline (mid)
+    ctx.beginPath(); ctx.moveTo(px,py+phh*0.5); ctx.lineTo(px+pw,py+phh*0.5);
+    ctx.strokeStyle='rgba(140,170,200,.07)'; ctx.stroke();
+
+    var base=s*LEN, dx=pw/(LEN-1);
+    // find running min/max + their positions in one pass
+    var mn=2,mx=-1,mni=0,mxi=0,vv;
+    for(var j=0;j<LEN;j++){ vv=buf[base+(head+j)%LEN];
+      if(vv<mn){mn=vv;mni=j;} if(vv>mx){mx=vv;mxi=j;} }
+
+    // sparkline path (oldest->newest left->right)
+    ctx.beginPath();
+    for(j=0;j<LEN;j++){
+      vv=buf[base+(head+j)%LEN];
+      var X=px+dx*j, Y=py+phh-vv*phh;
+      if(j===0)ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
+    }
+    ctx.strokeStyle=ACC; ctx.lineWidth=1.6;
+    ctx.lineJoin='round'; ctx.lineCap='round';
+    ctx.stroke();
+
+    // min/max diamonds
+    function diamond(idx,val,col){
+      var X=px+dx*idx, Y=py+phh-val*phh, r=Math.max(2.4,Math.min(cw,chh)*0.045);
+      ctx.beginPath();
+      ctx.moveTo(X,Y-r);ctx.lineTo(X+r,Y);ctx.lineTo(X,Y+r);ctx.lineTo(X-r,Y);
+      ctx.closePath(); ctx.fillStyle=col; ctx.fill();
+    }
+    diamond(mxi,mx,MAXC);
+    diamond(mni,mn,MINC);
+
+    // leading dot (latest value, rightmost)
+    var lv=buf[base+(head+LEN-1)%LEN];
+    var LX=px+pw, LY=py+phh-lv*phh;
+    ctx.beginPath(); ctx.arc(LX,LY,Math.max(2,Math.min(cw,chh)*0.05),0,6.283);
+    ctx.fillStyle=ACC; ctx.fill();
+    // static halo ring (one stroke, no per-frame shadow)
+    ctx.beginPath(); ctx.arc(LX,LY,Math.max(4,Math.min(cw,chh)*0.10),0,6.283);
+    ctx.strokeStyle='rgba(90,209,160,.28)'; ctx.lineWidth=1; ctx.stroke();
+  }
+
+  function draw(){
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    for(var s=0;s<N;s++) cell(s,s%COLS,(s/COLS)|0);
+  }
+
+  // ---- advance: push one fresh sample into every series' ring ----
+  function step(){
+    t+=0.30;
+    for(var s=0;s<N;s++) buf[s*LEN+head]=sample(s);
+    head=(head+1)%LEN;
+  }
+
+  var running=false, raf=0, last=0, STEP=140; // ms between data ticks
+  function frame(ts){
+    if(!running)return;
+    if(!last)last=ts;
+    if(ts-last>=STEP){ last=ts-((ts-last)%STEP); step(); draw(); }
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){ if(running)return; running=true; last=0; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function onResize(){ layout(); draw(); }
+  addEventListener('resize',onResize);
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) stop(); else if(!reduce) start();
+  });
+
+  layout();
+  if(reduce){ draw(); return; }  // settle on one static legible frame
+  draw(); start();
+})();
+</script>
+</body></html>

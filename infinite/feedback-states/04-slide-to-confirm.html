@@ -1,0 +1,179 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A pill slider with a draggable thumb fills green to 'Confirmed', or shakes red on an early release."><meta name="viewport" content="width=device-width,initial-scale=1"><title>Slide to Confirm</title>
+<style>
+:root{--bg:#0b0d12;--ok:#34d399;--err:#fb7185;--ink:#e7ecf2;--mut:#5a6472;--trk:#141925}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);overflow:hidden;font-family:ui-sans-serif,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif}
+#fb04-stage{position:fixed;inset:0;display:grid;place-items:center;padding:6%}
+#fb04-wrap{width:100%;max-width:520px}
+#fb04-label{font:700 clamp(11px,3.2vw,15px)/1 ui-sans-serif,system-ui;letter-spacing:.16em;text-transform:uppercase;color:var(--mut);margin:0 0 clamp(10px,2.6vw,16px) 4px;transition:color .3s}
+#fb04-track{position:relative;height:clamp(52px,15vw,66px);border-radius:999px;background:var(--trk);border:1px solid #1c2330;overflow:hidden;outline:none;touch-action:none}
+#fb04-track:focus-visible{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ok)}
+#fb04-fill{position:absolute;inset:0;border-radius:999px;background:linear-gradient(90deg,#0e2a22,var(--ok));transform-origin:left center;transform:scaleX(0);will-change:transform}
+#fb04-hint{position:absolute;inset:0;display:grid;place-items:center;font:700 clamp(11px,3.4vw,15px)/1 ui-sans-serif,system-ui;letter-spacing:.2em;text-transform:uppercase;color:var(--mut);pointer-events:none;will-change:transform,opacity}
+#fb04-hint span{display:inline-block}
+#fb04-done{position:absolute;inset:0;display:grid;place-items:center;gap:10px;grid-auto-flow:column;font:700 clamp(11px,3.4vw,15px)/1 ui-sans-serif,system-ui;letter-spacing:.16em;text-transform:uppercase;color:#04130d;opacity:0;pointer-events:none;will-change:opacity}
+#fb04-thumb{position:absolute;top:50%;left:0;width:clamp(46px,13.5vw,58px);height:clamp(46px,13.5vw,58px);margin:calc(clamp(46px,13.5vw,58px)/-2) 0 0;border-radius:50%;background:var(--ok);box-shadow:0 6px 20px rgba(52,211,153,.32),inset 0 1px 0 rgba(255,255,255,.4);display:grid;place-items:center;cursor:grab;will-change:transform;left:3px}
+#fb04-track.fb04-grab #fb04-thumb{cursor:grabbing}
+#fb04-thumb svg{width:42%;height:42%;display:block}
+#fb04-thumb .fb04-ar{stroke:#04130d;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;fill:none}
+#fb04-track.fb04-err{animation:fb04shake .42s cubic-bezier(.36,.07,.19,.97)}
+#fb04-track.fb04-err #fb04-thumb{background:var(--err);box-shadow:0 6px 20px rgba(251,113,133,.32),inset 0 1px 0 rgba(255,255,255,.4)}
+#fb04-track.fb04-err #fb04-fill{background:linear-gradient(90deg,#2a1015,var(--err))}
+@keyframes fb04shake{10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(2px)}30%,50%,70%{transform:translateX(-4px)}40%,60%{transform:translateX(4px)}}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="fb04-stage">
+ <div id="fb04-wrap">
+  <p id="fb04-label">Authorize transfer</p>
+  <div id="fb04-track" role="slider" tabindex="0" aria-label="Slide to confirm" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+   <div id="fb04-fill"></div>
+   <div id="fb04-hint"><span>Slide to confirm</span></div>
+   <div id="fb04-done" aria-hidden="true">
+     <svg viewBox="0 0 24 24" width="18" height="18"><path class="fb04-ar" style="stroke:#04130d" d="M4 12l5 5L20 6"/></svg><span>Confirmed</span>
+   </div>
+   <div id="fb04-thumb" aria-hidden="true">
+     <svg viewBox="0 0 24 24"><path class="fb04-ar" d="M8 5l7 7-7 7"/></svg>
+   </div>
+  </div>
+  <p role="status" aria-live="polite" style="position:absolute;left:-9999px" id="fb04-sr">Ready</p>
+ </div>
+</div>
+<div class="cap">Slide to Confirm</div>
+<script>
+(function(){
+ "use strict";
+ var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+ var track=document.getElementById('fb04-track'),
+     thumb=document.getElementById('fb04-thumb'),
+     fill=document.getElementById('fb04-fill'),
+     hint=document.getElementById('fb04-hint'),
+     hintSpan=hint.firstElementChild,
+     done=document.getElementById('fb04-done'),
+     label=document.getElementById('fb04-label'),
+     sr=document.getElementById('fb04-sr');
+ // cached geometry, recomputed on resize only
+ var W=0,TH=0,maxX=0,pad=3;
+ function measure(){W=track.clientWidth;TH=thumb.offsetWidth;maxX=W-TH-pad*2;}
+ measure();addEventListener('resize',measure);
+
+ var p=0,           // committed progress 0..1
+     v=0,           // velocity for spring
+     target=0,      // spring target when not dragging
+     dragging=false,grabbed=false,startX=0,startP=0,
+     state='idle',  // idle | confirmed | error
+     confirmAt=0,resetAt=0,
+     demo=true,demoT=0,demoDir=1,demoHold=0,idleUntil=0,demoPhase=0;
+ var k=0.16, damp=0.74; // spring constants
+
+ function render(){
+   var x=p*maxX;
+   thumb.style.transform='translateX('+x+'px)';
+   fill.style.transform='scaleX('+(Math.min(1,(x+TH+pad)/W))+')';
+   var o=Math.max(0,1-p*2.4);
+   hintSpan.style.opacity=o;
+   hintSpan.style.transform='translateX('+(p*14)+'px)';
+   track.setAttribute('aria-valuenow',Math.round(p*100));
+ }
+ function setState(s){
+   if(s===state)return;state=s;
+   if(s==='confirmed'){track.classList.remove('fb04-err');done.style.opacity='1';label.style.color='var(--ok)';label.textContent='Transfer authorized';sr.textContent='Confirmed. Transfer authorized.';}
+   else if(s==='error'){track.classList.add('fb04-err');label.style.color='var(--err)';label.textContent='Released too early';sr.textContent='Cancelled. Slide all the way to confirm.';}
+   else{track.classList.remove('fb04-err');done.style.opacity='0';label.style.color='';label.textContent='Authorize transfer';sr.textContent='Ready';}
+ }
+
+ function commit(){setState('confirmed');p=1;v=0;target=1;demo=false;confirmAt=now()+1300;}
+ function release(){ // released by user/demo before threshold
+   if(p>0.18){setState('error');} else setState('idle');
+   target=0;
+ }
+ function now(){return performance.now();}
+
+ // ---- input ----
+ function takeControl(){demo=false;idleUntil=now()+3600;}
+ function clientToP(cx){
+   var r=track.getBoundingClientRect(); // only on pointer events, never in rAF
+   return Math.max(0,Math.min(1,(cx-r.left-TH/2-pad)/maxX));
+ }
+ function down(e){
+   if(state==='confirmed')return;
+   var cx=e.touches?e.touches[0].clientX:e.clientX;
+   takeControl();dragging=true;grabbed=true;track.classList.add('fb04-grab');
+   setState('idle');startX=cx;startP=p;
+   try{track.setPointerCapture&&track.setPointerCapture(e.pointerId)}catch(_){}
+ }
+ function move(e){
+   if(!dragging)return;
+   var cx=e.touches?e.touches[0].clientX:e.clientX;
+   p=clientToP(cx);v=0;
+   if(p>=0.985){endDrag(true);}
+   if(e.cancelable)e.preventDefault();
+ }
+ function endDrag(forceCommit){
+   if(!dragging&&!forceCommit)return;
+   dragging=false;grabbed=false;track.classList.remove('fb04-grab');
+   if(forceCommit||p>=0.96){commit();}
+   else release();
+ }
+ track.addEventListener('pointerdown',down);
+ addEventListener('pointermove',move,{passive:false});
+ addEventListener('pointerup',function(){endDrag(false);});
+ // keyboard
+ track.addEventListener('keydown',function(e){
+   if(state==='confirmed'&&e.key!=='Escape')return;
+   takeControl();
+   if(e.key==='ArrowRight'){p=Math.min(1,p+0.12);v=0;e.preventDefault();if(p>=0.96)commit();}
+   else if(e.key==='ArrowLeft'){p=Math.max(0,p-0.12);target=0;v=0;e.preventDefault();}
+   else if(e.key==='Enter'||e.key===' '){p=1;v=0;commit();e.preventDefault();}
+   else if(e.key==='Escape'){p=0;v=0;target=0;setState('idle');}
+ });
+
+ // ---- self demo: synthesize a slide, occasionally an early release ----
+ function demoStep(t){
+   demoT+=t;
+   if(state==='confirmed')return;
+   if(demoPhase===0){ // drive toward target
+     var goal=demoDir>0?(demoHold===2?0.55:1.0):0; // demoHold 2 => an "early release" run
+     p+=(goal-p)*0.045;
+     if(demoDir>0&&demoHold!==2&&p>0.965){commit();demoPhase=0;}
+     else if(demoDir>0&&demoHold===2&&Math.abs(p-0.55)<0.02){release();demoDir=-1;demoPhase=1;demoT=0;}
+     else if(demoDir<0&&p<0.02){p=0;demoDir=1;demoPhase=2;demoT=0;demoHold=(demoHold+1)%3;setState('idle');}
+   } else if(demoPhase===1){ if(demoT>900){demoPhase=0;} } // let error settle
+   else if(demoPhase===2){ if(demoT>1400){demoPhase=0;} } // idle pause before next pull
+ }
+
+ var raf=0,running=true,last=0;
+ function loop(ts){
+   if(!running)return;
+   if(!last)last=ts;var dt=ts-last;last=ts;if(dt>60)dt=60;
+   // resume demo after idle
+   if(!demo&&!dragging&&now()>idleUntil&&state!=='confirmed'){demo=true;demoPhase=2;demoT=0;demoDir=1;}
+   if(state==='confirmed'&&now()>confirmAt){ // auto-reset confirmed -> idle, hand back to demo
+     p=0;v=0;target=0;setState('idle');demo=true;demoPhase=2;demoT=0;
+   }
+   if(demo){demoStep(dt);}
+   else if(!dragging){ // spring back to target (release behaviour)
+     var f=(target-p)*k;v=(v+f)*damp;p+=v;
+     if(Math.abs(target-p)<0.001&&Math.abs(v)<0.001){p=target;}
+   }
+   if(p<0)p=0;if(p>1)p=1;
+   render();
+   raf=requestAnimationFrame(loop);
+ }
+ function startLoop(){if(!running){running=true;last=0;raf=requestAnimationFrame(loop);}}
+ function stopLoop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+ if(reduce){ // one static, legible, on-brand frame: a partially-filled track at rest
+   p=0.34;demo=false;render();
+   return;
+ }
+ document.addEventListener('visibilitychange',function(){
+   if(document.hidden)stopLoop();else startLoop();
+ });
+ raf=requestAnimationFrame(loop);
+})();
+</script>
+</body></html>

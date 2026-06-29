@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A 5x5 Swiss grid of tabular numerals counting in a staggered diagonal beat, with a red accent sweeping each anti-diagonal.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Number Grid</title>
+<style>
+  :root{
+    --sw08-bg:#0f0f10;
+    --sw08-ink:#f4f1ea;
+    --sw08-acc:#e8482b;
+    --sw08-mut:#5a5a5e;
+  }
+  html,body{margin:0;height:100%;background:var(--sw08-bg)}
+  #sw08-stage{
+    position:fixed;inset:0;overflow:hidden;
+    background:var(--sw08-bg);
+    font-family:"Helvetica Neue",Helvetica,Arial,"Liberation Sans",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* fixed margin frame -> Swiss field */
+  #sw08-field{
+    position:absolute;
+    top:8.5%;left:8.5%;right:8.5%;bottom:8.5%;
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    grid-template-rows:repeat(5,1fr);
+    column-gap:2.4%;row-gap:2.4%;
+  }
+  .sw08-cell{
+    position:relative;
+    display:flex;align-items:flex-end;justify-content:flex-start;
+    overflow:hidden;
+  }
+  /* thin baseline rule under each numeral — typographic rhythm */
+  .sw08-cell::after{
+    content:"";position:absolute;left:0;bottom:0;width:100%;height:1px;
+    background:var(--sw08-mut);transform:scaleX(.0);transform-origin:left center;
+    opacity:.5;
+  }
+  .sw08-n{
+    display:block;
+    font-weight:700;
+    font-size:min(7.2vw,7.2vh);
+    line-height:.82;
+    letter-spacing:-.04em;
+    color:var(--sw08-ink);
+    font-variant-numeric:tabular-nums;
+    will-change:transform,opacity;
+    transform:translateZ(0);
+  }
+  .sw08-n.sw08-hot{color:var(--sw08-acc)}
+  /* tiny index label top-left of each cell */
+  .sw08-ix{
+    position:absolute;top:0;left:0;
+    font-size:min(1.5vw,1.5vh);
+    font-weight:600;letter-spacing:.12em;
+    color:var(--sw08-mut);
+  }
+  /* header band: title + a moving accent tick */
+  #sw08-bar{
+    position:absolute;top:3.2%;left:8.5%;right:8.5%;
+    display:flex;align-items:baseline;justify-content:space-between;
+    color:var(--sw08-mut);
+    font-size:min(1.7vw,1.7vh);font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;
+  }
+  #sw08-bar b{color:var(--sw08-ink);font-weight:700;letter-spacing:.02em}
+  #sw08-tick{color:var(--sw08-acc);font-variant-numeric:tabular-nums}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="sw08-stage" role="img" aria-label="A five by five Swiss grid of numerals counting in modular rhythm, one accented in red.">
+  <div id="sw08-bar"><span>Modular&nbsp;&nbsp;Count</span><b>Number Grid</b><span id="sw08-tick">00</span></div>
+  <div id="sw08-field" aria-hidden="true"></div>
+</div>
+<div class="cap">Number Grid</div>
+<script>
+(function(){
+  var COLS=5, ROWS=5, N=COLS*ROWS;
+  var field=document.getElementById('sw08-field');
+  var tick=document.getElementById('sw08-tick');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // build cells
+  var nums=new Array(N), rules=new Array(N), vals=new Array(N), phase=new Array(N);
+  for(var i=0;i<N;i++){
+    var cell=document.createElement('div'); cell.className='sw08-cell';
+    var ix=document.createElement('span'); ix.className='sw08-ix';
+    ix.textContent=(i<9?'0':'')+(i+1);
+    var n=document.createElement('span'); n.className='sw08-n'; n.textContent='0';
+    cell.appendChild(ix); cell.appendChild(n); field.appendChild(cell);
+    nums[i]=n; rules[i]=cell;
+    // each cell counts at its own modular cadence (diagonal wave of periods)
+    var r=(i/COLS)|0, c=i%COLS;
+    phase[i]=(r+c); // step offset along the diagonal
+    vals[i]=0;
+  }
+
+  // settle to one static, on-brand frame for reduced motion
+  function drawStatic(){
+    for(var i=0;i<N;i++){
+      var v=(phase[i]*2+3)%10;
+      vals[i]=v;
+      nums[i].textContent=String(v);
+      // accent the center anti-diagonal in the static frame (on-brand, asymmetric)
+      nums[i].classList.toggle('sw08-hot', (((i/COLS)|0)+(i%COLS))===4);
+    }
+    // reveal baselines statically
+    var s=document.createElement('style');
+    s.textContent='#sw08-field .sw08-cell::after{transform:scaleX(1)}';
+    document.head.appendChild(s);
+    tick.textContent='07';
+  }
+
+  if(reduce){ drawStatic(); return; }
+
+  // animation: every STEP ms, advance counters; numerals snap + nudge up.
+  var STEP=520;            // modular beat
+  var DIAG=ROWS+COLS-1;    // number of anti-diagonals
+  var last=0, running=true, rafId=0, beat=0, toggle=false;
+
+  // precompute each cell's anti-diagonal index once (no per-frame layout/math churn)
+  var diag=new Array(N);
+  for(var k=0;k<N;k++){ diag[k]=((k/COLS)|0)+(k%COLS); }
+
+  // CSS: the snap pop + the baseline rule reveal. Two pop classes alternate so the
+  // animation restarts without a forced reflow (no offsetWidth read).
+  var styleEl=document.createElement('style');
+  styleEl.textContent=
+    '@keyframes sw08-pop{0%{transform:translateY(14%) scale(.92);opacity:0}'+
+    '40%{opacity:1}100%{transform:translateY(0) scale(1);opacity:1}}'+
+    '.sw08-n.sw08-a{animation:sw08-pop '+(STEP*0.7)+'ms cubic-bezier(.2,.85,.25,1) both}'+
+    '.sw08-n.sw08-b{animation:sw08-pop '+(STEP*0.7)+'ms cubic-bezier(.2,.85,.25,1) both}'+
+    '#sw08-field .sw08-cell::after{transition:transform '+(STEP*0.9)+'ms cubic-bezier(.3,.9,.3,1)}'+
+    '#sw08-field .sw08-cell.sw08-lit::after{transform:scaleX(1)}';
+  document.head.appendChild(styleEl);
+
+  function step(){
+    var hotDiag=beat%DIAG;       // the accent sweeps along one anti-diagonal per beat
+    var addCls=toggle?'sw08-a':'sw08-b';
+    var rmCls =toggle?'sw08-b':'sw08-a';
+    toggle=!toggle;
+    for(var i=0;i<N;i++){
+      var s=nums[i];
+      // staggered counting: a cell advances when the beat reaches its diagonal phase
+      if(((beat-phase[i])%2)===0 || beat<phase[i]){
+        vals[i]=(vals[i]+1)%10;
+        s.textContent=vals[i];
+        // restart the pop by swapping between two identical-but-distinct classes
+        s.classList.remove(rmCls);
+        s.classList.add(addCls);
+        rules[i].classList.add('sw08-lit');
+      }
+      // accent: cells on the active anti-diagonal go red
+      if(diag[i]===hotDiag){ if(!s.classList.contains('sw08-hot')) s.classList.add('sw08-hot'); }
+      else if(s.classList.contains('sw08-hot')){ s.classList.remove('sw08-hot'); }
+    }
+    tick.textContent=(beat%100<10?'0':'')+(beat%100);
+    beat++;
+  }
+
+  function loop(t){
+    if(!running) return;
+    if(t-last>=STEP){ last=t; step(); }
+    rafId=requestAnimationFrame(loop);
+  }
+
+  function start(){ if(!running){running=true; last=0; rafId=requestAnimationFrame(loop);} }
+  function stop(){ running=false; if(rafId) cancelAnimationFrame(rafId); rafId=0; }
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) stop(); else start();
+  });
+
+  // kick off
+  running=true;
+  rafId=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

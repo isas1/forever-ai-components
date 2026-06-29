@@ -1,0 +1,121 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A glowing pink dot springs to the pointer while a laggy outer ring squashes along its travel, joined by a fading tendril.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Magnetic Dot</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0a0a0f;display:grid;place-items:center}
+#ccp01-c{display:block;width:100vw;height:100vh;cursor:none}
+.cap{position:fixed;left:9px;bottom:8px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#ff5ca8;opacity:.42;letter-spacing:.1em;text-transform:uppercase;user-select:none;pointer-events:none}
+</style></head><body>
+<canvas id="ccp01-c" role="img" aria-label="A follower dot and ring springing toward a moving pointer"></canvas>
+<div class="cap">Magnetic Dot</div>
+<script>(function(){
+var cv=document.getElementById('ccp01-c'),ctx=cv.getContext('2d');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,DPR=1,running=true,raf=0,t0=0;
+var ACC='#ff5ca8';
+
+// target (the "pointer"), dot (fast follower), ring (laggy follower)
+var tx=0,ty=0, dx=0,dy=0, rx=0,ry=0;       // positions
+var rvx=0,rvy=0;                            // ring velocity (for squash)
+var real=false, lastMove=-1e9;              // real-pointer takeover state
+
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+window.addEventListener('resize',resize);resize();
+tx=dx=rx=W/2;ty=dy=ry=H/2;
+
+// Lissajous self-demo path, eased & breathing, scaled to the frame
+function demo(t){
+  var cx=W/2,cy=H/2, ax=W*0.30, ay=H*0.26;
+  return {x:cx+Math.sin(t*0.41)*ax+Math.sin(t*0.93)*ax*0.18,
+          y:cy+Math.sin(t*0.67+1.1)*ay+Math.cos(t*0.31)*ay*0.22};
+}
+
+function onMove(e){
+  var r=cv.getBoundingClientRect();
+  tx=e.clientX-r.left;ty=e.clientY-r.top;
+  real=true;lastMove=performance.now();
+}
+cv.addEventListener('pointermove',onMove);
+cv.addEventListener('pointerleave',function(){real=false;});
+
+function frame(now){
+  if(!t0)t0=now;var t=(now-t0)/1000;
+  // hand back to self-demo after 2.4s of stillness
+  if(real && now-lastMove>2400)real=false;
+  if(!real){var p=demo(t);tx=p.x;ty=p.y;}
+
+  // springs: dot is tight & snappy, ring lags behind the dot
+  dx+=(tx-dx)*0.22; dy+=(ty-dy)*0.22;
+  var ox=rx,oy=ry;
+  rx+=(dx-rx)*0.10; ry+=(dy-ry)*0.10;
+  rvx=rx-ox; rvy=ry-oy;
+
+  draw();
+  if(running)raf=requestAnimationFrame(frame);
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+
+  // velocity -> directional squash for the ring
+  var sp=Math.sqrt(rvx*rvx+rvy*rvy);
+  var ang=Math.atan2(rvy,rvx);
+  var stretch=Math.min(sp*0.045,0.7);
+  var base=Math.min(W,H)*0.085+10;
+
+  // connecting tendril (dot -> ring), fades with distance
+  var ddx=dx-rx,ddy=dy-ry,dist=Math.sqrt(ddx*ddx+ddy*ddy);
+  if(dist>1){
+    ctx.strokeStyle='rgba(255,92,168,'+Math.min(dist/220,0.45)+')';
+    ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(rx,ry);ctx.lineTo(dx,dy);ctx.stroke();
+  }
+
+  // outer ring — squashed ellipse aligned to travel
+  ctx.save();
+  ctx.translate(rx,ry);ctx.rotate(ang);
+  ctx.scale(1+stretch,1-stretch*0.55);
+  ctx.lineWidth=1.6;
+  ctx.strokeStyle='rgba(255,92,168,0.85)';
+  ctx.shadowColor=ACC;ctx.shadowBlur=14;
+  ctx.beginPath();ctx.arc(0,0,base,0,6.2832);ctx.stroke();
+  ctx.restore();
+
+  // faint trailing halo on the ring
+  ctx.save();
+  ctx.translate(rx,ry);
+  ctx.fillStyle='rgba(255,92,168,0.05)';
+  ctx.beginPath();ctx.arc(0,0,base*0.96,0,6.2832);ctx.fill();
+  ctx.restore();
+
+  // core dot — solid, glowing, with a tiny velocity smear
+  ctx.save();
+  ctx.shadowColor=ACC;ctx.shadowBlur=18;
+  ctx.fillStyle=ACC;
+  var dr=Math.min(W,H)*0.018+3.5;
+  ctx.beginPath();ctx.arc(dx,dy,dr,0,6.2832);ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='rgba(255,255,255,0.9)';
+  ctx.beginPath();ctx.arc(dx-dr*0.25,dy-dr*0.25,dr*0.35,0,6.2832);ctx.fill();
+  ctx.restore();
+}
+
+if(reduce){
+  // settle to a single legible static frame: dot at center, ring concentric
+  tx=dx=rx=W/2;ty=dy=ry=H/2;rvx=rvy=0;draw();return;
+}
+
+function vis(){
+  if(document.hidden){running=false;cancelAnimationFrame(raf);}
+  else if(!running){running=true;t0=0;raf=requestAnimationFrame(frame);}
+}
+document.addEventListener('visibilitychange',vis);
+raf=requestAnimationFrame(frame);
+})();</script>
+</body></html>

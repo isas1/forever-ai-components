@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Four glowing planets orbit a radiant sun on tilted elliptical rings with depth sorting, drifting subtly toward the pointer.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orbiting Planet System</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#070a18;}
+  #c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.08em;color:#cfd6ff;opacity:.32;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Orbiting Planet System</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,scale;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;scale=Math.min(W,H)/420;
+  }
+  addEventListener('resize',size);size();
+  const planets=[
+    {r:60,s:1.0,sz:3.2,c:'#9ad0ff'},
+    {r:95,s:0.62,sz:5,c:'#ffd9a0'},
+    {r:140,s:0.4,sz:4,c:'#ff9b76'},
+    {r:185,s:0.27,sz:6.5,c:'#b8a0ff'}
+  ];
+  planets.forEach(p=>p.a=Math.random()*Math.PI*2);
+  let mx=0,my=0,t=0;
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+    mx=(e.clientX-r.left-cx)/cx;my=(e.clientY-r.top-cy)/cy;});
+  cv.addEventListener('pointerleave',()=>{mx=0;my=0;});
+  let raf=0;
+  function frame(){
+    t+=reduce?0:0.012;
+    ctx.clearRect(0,0,W,H);
+    const tilt=0.45,ox=mx*14,oy=my*14;
+    ctx.save();ctx.translate(cx+ox,cy+oy);
+    // orbit rings
+    planets.forEach(p=>{
+      ctx.strokeStyle='rgba(150,170,255,0.13)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.ellipse(0,0,p.r*scale,p.r*scale*tilt,0,0,Math.PI*2);ctx.stroke();
+    });
+    // sun glow
+    const sg=ctx.createRadialGradient(0,0,0,0,0,26*scale);
+    sg.addColorStop(0,'#fff6d8');sg.addColorStop(.4,'#ffd36b');sg.addColorStop(1,'rgba(255,180,60,0)');
+    ctx.fillStyle=sg;ctx.beginPath();ctx.arc(0,0,26*scale,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#ffe9a8';ctx.beginPath();ctx.arc(0,0,8*scale,0,Math.PI*2);ctx.fill();
+    // planets sorted by depth
+    const drawn=planets.map(p=>{
+      const a=p.a+t*p.s;
+      return {x:Math.cos(a)*p.r*scale,y:Math.sin(a)*p.r*scale*tilt,z:Math.sin(a),p};
+    }).sort((u,v)=>u.z-v.z);
+    drawn.forEach(d=>{
+      const sc=0.7+0.3*((d.z+1)/2),sz=d.p.sz*scale*sc;
+      ctx.fillStyle=d.p.c;ctx.shadowColor=d.p.c;ctx.shadowBlur=8;
+      ctx.beginPath();ctx.arc(d.x,d.y,sz,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+    });
+    ctx.restore();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){frame();}else start();
+})();
+</script>
+</body>
+</html>

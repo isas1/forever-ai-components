@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Circle-packing bubble chart where mint, teal, amber and coral circles settle together under gentle gravity, the largest values pulling towar">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bubble Pack</title>
+<style>
+  :root{--bg:#0a0d12;--accent:#5ad1a0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--bg);overflow:hidden}
+  #ch07-stage{position:fixed;inset:0;display:block}
+  #ch07-c{position:absolute;inset:0;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ch07-stage" role="img" aria-label="A circle-packing bubble chart: clusters of differently sized circles in mint, teal, amber and coral settle together under a gentle attractive force, the largest values pulling toward the center.">
+  <canvas id="ch07-c"></canvas>
+</div>
+<div class="cap">Bubble Pack</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('ch07-stage');
+  var cv = document.getElementById('ch07-c');
+  var ctx = cv.getContext('2d');
+
+  // Bauhaus / constructivist data palette around the brand mint.
+  var PAL = ['#5ad1a0','#2f9e7e','#e8b552','#e0654a','#7d8fb3','#d9d2c4'];
+
+  var W=0,H=0,DPR=1,CX=0,CY=0,scale=1;
+  var N=64;                       // <=110 cap
+  // typed-array particle store — allocation-free loop
+  var px=new Float32Array(N), py=new Float32Array(N),
+      vx=new Float32Array(N), vy=new Float32Array(N),
+      pr=new Float32Array(N), pv=new Float32Array(N),
+      tr=new Float32Array(N),                       // target radius (px)
+      grp=new Int8Array(N), seed=new Float32Array(N);
+
+  // synthetic data: 4 groups, log-ish value spread (the insight = size hierarchy)
+  (function makeData(){
+    var s=20210626>>>0;
+    function rnd(){ s^=s<<13; s^=s>>>17; s^=s<<5; return ((s>>>0)/4294967296); }
+    for(var i=0;i<N;i++){
+      var g=i%4; grp[i]=g;
+      var base=[1,0.62,0.74,0.46][g];
+      var v=base*(0.12+Math.pow(rnd(),2.4)*0.95);   // skewed -> few big, many small
+      pv[i]=v; seed[i]=rnd()*6.283;
+    }
+  })();
+
+  function layout(){
+    var r=stage.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=r.width; H=r.height;
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    CX=W/2; CY=H/2;
+    var m=Math.min(W,H);
+    scale = m * 0.052;             // value -> radius scale, frame-relative
+    for(var i=0;i<N;i++) tr[i]=Math.max(3, pv[i]*scale);
+  }
+
+  function place(){
+    // ring start positions, sorted-ish so big ones begin nearer centre
+    var m=Math.min(W,H);
+    for(var i=0;i<N;i++){
+      var a=i*2.39996323;          // golden angle
+      var rad=(0.18+0.40*Math.sqrt((i+0.5)/N))*m;
+      px[i]=CX+Math.cos(a)*rad; py[i]=CY+Math.sin(a)*rad;
+      pr[i]=tr[i]; vx[i]=0; vy[i]=0;
+    }
+  }
+
+  function step(dt){
+    var i,j,k=0.0016*dt;
+    // gravity toward centre, weighted by value (large pull harder -> centre)
+    for(i=0;i<N;i++){
+      var w=0.4+pv[i]*0.8;
+      vx[i]+=(CX-px[i])*k*w;
+      vy[i]+=(CY-py[i])*k*w;
+    }
+    // pairwise collision resolution (O(N^2), N=64 -> 2016 pairs, fine)
+    for(i=0;i<N;i++){
+      for(j=i+1;j<N;j++){
+        var dx=px[j]-px[i], dy=py[j]-py[i];
+        var d2=dx*dx+dy*dy;
+        var rr=pr[i]+pr[j];
+        if(d2<rr*rr && d2>0.0001){
+          var d=Math.sqrt(d2);
+          var ov=(rr-d)*0.5;
+          var nx=dx/d, ny=dy/d;
+          px[i]-=nx*ov; py[i]-=ny*ov;
+          px[j]+=nx*ov; py[j]+=ny*ov;
+        }
+      }
+    }
+    // integrate + damping
+    for(i=0;i<N;i++){
+      px[i]+=vx[i]; py[i]+=vy[i];
+      vx[i]*=0.86; vy[i]*=0.86;
+    }
+  }
+
+  // static radial vignette — built once, never repainted per frame
+  var vg=null;
+  function buildVignette(){
+    vg=ctx.createRadialGradient(CX,CY,0,CX,CY,Math.max(W,H)*0.62);
+    vg.addColorStop(0,'rgba(90,209,160,0.05)');
+    vg.addColorStop(1,'rgba(10,13,18,0)');
+  }
+
+  function draw(t){
+    ctx.fillStyle='#0a0d12'; ctx.fillRect(0,0,W,H);
+    if(vg){ ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
+    // structural Bauhaus crosshair (static, thin)
+    ctx.strokeStyle='rgba(217,210,196,0.07)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(CX,0); ctx.lineTo(CX,H); ctx.moveTo(0,CY); ctx.lineTo(W,CY); ctx.stroke();
+
+    for(var i=0;i<N;i++){
+      var r=pr[i];
+      if(r<1) continue;
+      var col=PAL[grp[i]];
+      // gentle breathing scale via transform-equivalent radius (still cheap fill, no blur)
+      var br = reduce? r : r*(1+0.018*Math.sin(t*0.0012+seed[i]));
+      ctx.beginPath(); ctx.arc(px[i],py[i],br,0,6.28318);
+      ctx.globalAlpha=0.16; ctx.fillStyle=col; ctx.fill();
+      ctx.globalAlpha=0.85; ctx.lineWidth=Math.max(1,r*0.10); ctx.strokeStyle=col; ctx.stroke();
+      // inner dot encodes the value core
+      if(r>9){
+        ctx.globalAlpha=0.9; ctx.beginPath();
+        ctx.arc(px[i],py[i],Math.max(1.5,r*0.16),0,6.28318);
+        ctx.fillStyle=col; ctx.fill();
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+
+  var raf=0, running=false, last=0, settle=0;
+  function frame(ts){
+    if(!running) return;
+    if(!last) last=ts;
+    var dt=Math.min(40,ts-last); last=ts;
+    // run physics a while, then keep micro-settling cheaply
+    var iters = settle<240 ? 2 : 1;
+    for(var s=0;s<iters;s++) step(dt/iters);
+    settle++;
+    draw(ts);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(running)return; running=true; last=0; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){ layout(); buildVignette(); place(); }
+  init();
+
+  if(reduce){
+    // settle to one static, legible frame and stop
+    for(var s=0;s<400;s++) step(16);
+    draw(0);
+  } else {
+    start();
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt); rt=setTimeout(function(){
+      layout(); buildVignette();
+      // rescale existing positions toward new centre, keep relative spread
+      for(var i=0;i<N;i++){ pr[i]=tr[i]; }
+      if(reduce){ for(var s=0;s<200;s++) step(16); draw(0); }
+    },120);
+  });
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+})();
+</script>
+</body>
+</html>

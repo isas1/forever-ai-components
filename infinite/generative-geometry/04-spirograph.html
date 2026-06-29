@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="A glowing hypotrochoid spirograph curve traced progressively against a dark navy field, recycling into new shapes.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spirograph</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#07111a}
+  #c{display:block;width:100%;height:100%}
+  #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
+       color:#ffd479;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">spirograph</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  let W,H,DPR,R,r,d,prog,cyc,hue,boost=0;
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);reset();}
+  function gcd(a,b){return b?gcd(b,a%b):a}
+  function reset(){
+    const s=Math.min(W,H)*0.42;
+    R=s;r=s*(0.18+Math.random()*0.28);d=s*(0.4+Math.random()*0.5);
+    cyc=Math.PI*2*Math.round(r)/gcd(Math.round(R),Math.round(r));
+    prog=0;hue=Math.random()*360;
+    ctx.fillStyle='#07111a';ctx.fillRect(0,0,W,H);
+  }
+  function pt(th){
+    const k=(R-r);
+    return [k*Math.cos(th)+d*Math.cos(k/r*th), k*Math.sin(th)-d*Math.sin(k/r*th)];
+  }
+  let raf;
+  function loop(t){
+    if(!reduce){
+      ctx.fillStyle='rgba(7,17,26,0.035)';ctx.fillRect(0,0,W,H);
+      ctx.save();ctx.translate(W/2,H/2);
+      const span=0.10+boost;boost*=0.9;
+      ctx.lineWidth=1.4;
+      ctx.beginPath();
+      let started=false;
+      for(let a=prog;a<=prog+span;a+=0.01){
+        const[x,y]=pt(a);if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
+      }
+      ctx.strokeStyle='hsl('+((hue+prog*30)%360)+',85%,62%)';
+      ctx.stroke();ctx.restore();
+      prog+=span;
+      if(prog>cyc+0.2)reset();
+    }
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+  addEventListener('resize',resize);
+  cv.addEventListener('pointerdown',()=>{boost=0.5;});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
+  resize();
+  if(reduce){ctx.save();ctx.translate(W/2,H/2);ctx.beginPath();
+    for(let a=0;a<=cyc;a+=0.01){const[x,y]=pt(a);a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    ctx.strokeStyle='hsl('+hue+',85%,62%)';ctx.lineWidth=1.2;ctx.stroke();ctx.restore();
+  }else start();
+})();
+</script>
+</body>
+</html>

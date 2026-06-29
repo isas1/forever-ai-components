@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Gray-Scott reaction-diffusion simulation morphing between coral, spots and maze patterns in teal-to-bone on near-black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reaction Diffusion</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#08120f;}
+  #rd-c{display:block;width:100%;height:100%;image-rendering:pixelated;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#39d98a;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="rd-c"></canvas>
+<div class="cap">Reaction Diffusion</div>
+<script>
+(function(){
+  const cv=document.getElementById('rd-c'),ctx=cv.getContext('2d',{alpha:false});
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Gray-Scott on a fixed sim grid, scaled to fill the frame.
+  const GW=128,GH=128,N=GW*GH;
+  let a=new Float32Array(N),b=new Float32Array(N),a2=new Float32Array(N),b2=new Float32Array(N);
+  let img,buf32;
+  function reset(){
+    for(let i=0;i<N;i++){a[i]=1;b[i]=0;}
+    // central seed — a small square of chemical B that the reaction grows out from
+    const cx=GW/2|0,cy=GH/2|0,r=6;
+    for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+      const i=((cy+dy+GH)%GH)*GW+((cx+dx+GW)%GW);
+      a[i]=0.5;b[i]=0.25+Math.random()*0.25;
+    }
+  }
+  reset();
+  let W,H,DPR;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=GW;cv.height=GH;            // draw at sim resolution, CSS upscales
+    img=ctx.createImageData(GW,GH);buf32=new Uint32Array(img.data.buffer);
+  }
+  addEventListener('resize',size);size();
+  const DA=0.18,DB=0.09;
+  // colour ramp: deep bg -> teal -> accent -> bone, precomputed
+  const ramp=new Uint32Array(256);
+  function mix(c1,c2,t){return [c1[0]+(c2[0]-c1[0])*t,c1[1]+(c2[1]-c1[1])*t,c1[2]+(c2[2]-c1[2])*t];}
+  (function buildRamp(){
+    const stops=[[0,[8,18,15]],[0.30,[10,40,33]],[0.55,[24,110,86]],[0.78,[57,217,138]],[1,[214,255,236]]];
+    for(let i=0;i<256;i++){
+      const t=i/255;let s=0;while(s<stops.length-1&&t>stops[s+1][0])s++;
+      const lo=stops[s],hi=stops[Math.min(s+1,stops.length-1)];
+      const lt=hi[0]>lo[0]?(t-lo[0])/(hi[0]-lo[0]):0;
+      const c=mix(lo[1],hi[1],lt);
+      ramp[i]=(255<<24)|((c[2]|0)<<16)|((c[1]|0)<<8)|(c[0]|0);
+    }
+  })();
+  let t=0,nudge=0;
+  // feed/kill drift through the parameter space: coral -> spots -> maze
+  function params(){
+    // ease through reliable pattern-forming territory:
+    // coral (f~.058,k~.062) <-> mitosis/spots (f~.030,k~.0625) <-> maze (f~.029,k~.057)
+    const ph=0.55+t*0.00020;
+    const f=0.0360+0.0095*Math.sin(ph)+0.0020*Math.sin(ph*2.7);
+    const k=0.0565+0.0040*Math.cos(ph*0.75)-0.0015*Math.sin(ph*1.6);
+    return [f,k];
+  }
+  function step(){
+    const [f,k]=params();
+    for(let y=0;y<GH;y++){
+      const yu=((y-1+GH)%GH)*GW,yd=((y+1)%GH)*GW,yc=y*GW;
+      for(let x=0;x<GW;x++){
+        const xl=(x-1+GW)%GW,xr=(x+1)%GW,i=yc+x;
+        const av=a[i],bv=b[i];
+        const la=0.2*(a[yc+xl]+a[yc+xr]+a[yu+x]+a[yd+x])
+                +0.05*(a[yu+xl]+a[yu+xr]+a[yd+xl]+a[yd+xr])-av;
+        const lb=0.2*(b[yc+xl]+b[yc+xr]+b[yu+x]+b[yd+x])
+                +0.05*(b[yu+xl]+b[yu+xr]+b[yd+xl]+b[yd+xr])-bv;
+        const abb=av*bv*bv;
+        let na=av+DA*la-abb+f*(1-av);
+        let nb=bv+DB*lb+abb-(k+f)*bv;
+        a2[i]=na<0?0:na>1?1:na;b2[i]=nb<0?0:nb>1?1:nb;
+      }
+    }
+    const ta=a;a=a2;a2=ta;const tb=b;b=b2;b2=tb;t++;
+  }
+  function draw(){
+    for(let i=0;i<N;i++){
+      let v=(a[i]-b[i]);v=(v+0.4)*0.78;       // map to 0..1-ish
+      let idx=255-(v*255)|0;if(idx<0)idx=0;else if(idx>255)idx=255;
+      buf32[i]=ramp[idx];
+    }
+    ctx.putImageData(img,0,0);
+  }
+  // pointer seeds a fresh splash of chemical B
+  cv.addEventListener('pointermove',function(e){
+    const r=cv.getBoundingClientRect();
+    const gx=((e.clientX-r.left)/r.width*GW)|0,gy=((e.clientY-r.top)/r.height*GH)|0;
+    for(let dy=-2;dy<=2;dy++)for(let dx=-2;dx<=2;dx++){
+      const i=((gy+dy+GH)%GH)*GW+((gx+dx+GW)%GW);b[i]=1;
+    }
+    nudge=4;
+  });
+  let raf=0;
+  function frame(){
+    const iter=5+(nudge>0?3:0);if(nudge>0)nudge--;
+    for(let s=0;s<iter;s++)step();
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){for(let s=0;s<3200;s++)step();draw();}else start();
+})();
+</script>
+</body>
+</html>

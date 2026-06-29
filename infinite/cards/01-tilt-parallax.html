@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Dark card that tilts in 3D toward the cursor while badge, orb and text layers float at varying Z-depths with a tracking shine.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Tilt Parallax</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-800:#0d0f16; --bg-surface:#1c2030;
+    --text-0:#f4f6fb; --text-2:#8a91a8;
+    --accent-iris:#7c5cff; --accent-cyan:#22d3ee; --accent-magenta:#ff5ca8;
+    --grad-iris-cyan:linear-gradient(120deg,var(--accent-iris),var(--accent-cyan));
+    --border-mid:rgba(255,255,255,0.12); --r-md:14px; --r-pill:999px;
+    --glow-cyan:0 0 32px -6px rgba(34,211,238,0.5);
+    --shadow-lift:0 18px 50px -24px rgba(0,0,0,0.9);
+    --font-display:"Space Grotesk",system-ui,sans-serif;
+    --font-body:"Inter",system-ui,sans-serif;
+    --ease-out-soft:cubic-bezier(0.22,1,0.36,1); --ease-linear:linear; --dur-base:280ms;
+  }
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;}
+  body{background:radial-gradient(80% 70% at 50% 30%,#12141d,#08090d);
+    font-family:var(--font-body);}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    perspective:1100px;}
+  .c01-tilt{position:relative;width:46vmin;height:59vmin;max-width:230px;max-height:296px;
+    border-radius:var(--r-md);transform-style:preserve-3d;
+    transform:rotateX(var(--c01-rx,0deg)) rotateY(var(--c01-ry,0deg));
+    transition:transform var(--dur-base) var(--ease-out-soft);cursor:pointer;}
+  .c01-tilt.c01-tilt--live{transition:transform 90ms var(--ease-linear);}
+  .c01-tilt__plate{position:absolute;inset:0;border-radius:var(--r-md);
+    background:radial-gradient(120% 120% at 30% 20%,rgba(124,92,255,0.35),transparent 55%),
+      linear-gradient(160deg,var(--bg-surface),var(--bg-800));
+    border:1px solid var(--border-mid);box-shadow:var(--shadow-lift);overflow:hidden;}
+  .c01-tilt__shine{position:absolute;inset:0;
+    background:radial-gradient(circle at var(--c01-mx,50%) var(--c01-my,50%),
+      rgba(255,255,255,0.28),transparent 45%);
+    opacity:var(--c01-shine,0);transition:opacity var(--dur-base) var(--ease-out-soft);
+    mix-blend-mode:screen;}
+  .c01-tilt__layer{position:absolute;transform-style:preserve-3d;}
+  .c01-tilt__badge{top:18px;left:18px;width:38px;height:38px;border-radius:11px;
+    background:var(--grad-iris-cyan);box-shadow:var(--glow-cyan);transform:translateZ(60px);}
+  .c01-tilt__orb{top:60px;right:24px;width:56px;height:56px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,var(--accent-magenta),rgba(255,92,168,0.1));
+    box-shadow:0 0 24px -2px rgba(255,92,168,0.6);transform:translateZ(95px);}
+  .c01-tilt__bar{left:22px;right:22px;bottom:64px;height:8px;border-radius:var(--r-pill);
+    background:rgba(255,255,255,0.14);transform:translateZ(40px);}
+  .c01-tilt__title{left:22px;bottom:28px;font-family:var(--font-display);font-size:15px;
+    font-weight:600;color:var(--text-0);letter-spacing:-0.01em;transform:translateZ(55px);}
+  .c01-tilt__sub{left:22px;bottom:14px;font-size:11px;color:var(--text-2);
+    transform:translateZ(45px);}
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--accent-iris);opacity:.4;
+    font-family:var(--font-body);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
+  @media (prefers-reduced-motion:reduce){.c01-tilt{transition-duration:.001ms;}}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="c01-tilt" tabindex="0" aria-label="3D tilt parallax card">
+    <div class="c01-tilt__plate"><div class="c01-tilt__shine"></div></div>
+    <div class="c01-tilt__layer c01-tilt__badge"></div>
+    <div class="c01-tilt__layer c01-tilt__orb"></div>
+    <div class="c01-tilt__layer c01-tilt__bar"></div>
+    <div class="c01-tilt__layer c01-tilt__title">Parallax</div>
+    <div class="c01-tilt__layer c01-tilt__sub">Layered along Z</div>
+  </div>
+</div>
+<div class="cap">3D Tilt Parallax</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var card=document.querySelector(".c01-tilt");
+  var max=14, hovering=false, raf=0, t=0;
+  function apply(px,py){
+    card.style.setProperty("--c01-ry",((px-0.5)*max*2).toFixed(2)+"deg");
+    card.style.setProperty("--c01-rx",((0.5-py)*max*2).toFixed(2)+"deg");
+    card.style.setProperty("--c01-mx",(px*100).toFixed(1)+"%");
+    card.style.setProperty("--c01-my",(py*100).toFixed(1)+"%");
+  }
+  card.addEventListener("pointermove",function(e){
+    hovering=true;
+    var r=card.getBoundingClientRect();
+    card.classList.add("c01-tilt--live");
+    card.style.setProperty("--c01-shine","1");
+    apply((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height);
+  });
+  card.addEventListener("pointerleave",function(){
+    hovering=false;card.classList.remove("c01-tilt--live");
+    card.style.setProperty("--c01-shine","0");
+  });
+  function loop(){
+    t+=0.012;
+    if(!hovering){
+      var px=0.5+Math.sin(t)*0.32, py=0.5+Math.cos(t*0.8)*0.28;
+      apply(px,py);
+    }
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){if(!raf&&!reduce)loop();}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
+  if(!reduce)start();
+})();
+</script>
+</body>
+</html>

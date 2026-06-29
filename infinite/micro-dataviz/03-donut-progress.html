@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A violet-to-cyan gradient donut ring eases its fill to random percentages with a leading dot and centered LOAD percent readout.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Donut Ring Progress</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#161226;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  canvas{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
+    color:#b48cff;opacity:.4;text-transform:uppercase}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">donut fill</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let W,H,DPR; const A='#b48cff',B='#5ad1ff';
+  let cur=0,tgt=0.72,hold=0;
+  function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  let last=0;
+  function draw(t){
+    if(document.hidden){last=t;return raf()}
+    last=t;
+    if(reduce)cur=tgt; else{cur+=(tgt-cur)*0.06;
+      if(Math.abs(tgt-cur)<0.01){hold+=1;if(hold>90){hold=0;tgt=0.2+Math.random()*0.78;}}}
+    ctx.clearRect(0,0,W,H);
+    const cx=W/2,cy=H/2, R=Math.min(W,H)*0.32, lw=R*0.34;
+    // track
+    ctx.lineWidth=lw;ctx.lineCap='round';
+    ctx.strokeStyle='#ffffff14';
+    ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.stroke();
+    // progress arc
+    const start=-Math.PI/2, end=start+Math.PI*2*Math.max(0.001,cur);
+    const g=ctx.createLinearGradient(cx-R,cy-R,cx+R,cy+R);
+    g.addColorStop(0,A);g.addColorStop(1,B);
+    ctx.strokeStyle=g;ctx.shadowColor=A;ctx.shadowBlur=12;
+    ctx.beginPath();ctx.arc(cx,cy,R,start,end);ctx.stroke();ctx.shadowBlur=0;
+    // leading dot
+    ctx.fillStyle='#fff';
+    ctx.beginPath();ctx.arc(cx+Math.cos(end)*R,cy+Math.sin(end)*R,lw*0.22,0,7);ctx.fill();
+    // pct text
+    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font='700 '+(R*0.5)+'px ui-monospace,monospace';
+    ctx.fillText(Math.round(cur*100)+'%',cx,cy-R*0.04);
+    ctx.fillStyle=A;ctx.font='600 '+(R*0.16)+'px ui-monospace,monospace';
+    ctx.fillText('LOAD',cx,cy+R*0.34);
+    raf();
+  }
+  function raf(){requestAnimationFrame(draw)}
+  addEventListener('resize',resize);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
+  cv.addEventListener('pointerdown',()=>{tgt=0.2+Math.random()*0.78});
+  resize();raf();
+})();
+</script>
+</body>
+</html>

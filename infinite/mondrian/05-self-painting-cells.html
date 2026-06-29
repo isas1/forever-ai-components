@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Self-Painting Cells — Piet Mondrian. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Self-Painting Cells</title>
+<style>
+  html,body{margin:0;height:100%;background:#f7f4ec;overflow:hidden}
+  #mon05-root{position:fixed;inset:0;width:100%;height:100%;overflow:hidden}
+  .mon05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#15110d;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:10}
+</style>
+</head>
+<body>
+<div id="mon05-root" role="img" aria-label="A fixed asymmetric Mondrian grid whose cells paint themselves in turn, cycling through red, blue and yellow before clearing back toward white, an unattended painter at work.">
+</div>
+<div class="mon05-cap">Self-Painting Cells</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const root=document.getElementById('mon05-root'); if(!root) return;
+  const C={white:'#f7f4ec',black:'#15110d',red:'#d6191e',blue:'#1d3bd1',yellow:'#f6c700'};
+  const CYCLE=[C.white,C.red,C.blue,C.yellow];
+  const V=[0,.2,.5,.74,1],Hh=[0,.34,.62,1];
+  let cells=[];
+  function rectBg(){const d=document.createElement('div');
+    Object.assign(d.style,{position:'absolute',inset:0,background:C.white});root.appendChild(d);return d;}
+  function drawLines(){
+    const TH=7;
+    V.slice(1,-1).forEach(x=>{const d=document.createElement('div');
+      Object.assign(d.style,{position:'absolute',top:0,bottom:0,left:'calc('+x*100+'% - '+TH/2+'px)',width:TH+'px',background:C.black,pointerEvents:'none'});root.appendChild(d);});
+    Hh.slice(1,-1).forEach(y=>{const d=document.createElement('div');
+      Object.assign(d.style,{position:'absolute',left:0,right:0,top:'calc('+y*100+'% - '+TH/2+'px)',height:TH+'px',background:C.black,pointerEvents:'none'});root.appendChild(d);});
+    const f=document.createElement('div');
+    Object.assign(f.style,{position:'absolute',inset:0,border:'9px solid '+C.black,boxSizing:'border-box',pointerEvents:'none'});root.appendChild(f);
+  }
+  function build(){
+    root.innerHTML='';cells=[];rectBg();
+    for(let i=0;i<V.length-1;i++)for(let j=0;j<Hh.length-1;j++){
+      const x=V[i],y=Hh[j],w=V[i+1]-V[i],h=Hh[j+1]-Hh[j];
+      const c=document.createElement('div');
+      Object.assign(c.style,{position:'absolute',left:x*100+'%',top:y*100+'%',width:w*100+'%',height:h*100+'%',
+        background:C.white,transition:REDUCED?'none':'background .55s cubic-bezier(.7,0,.2,1)'});
+      c.dataset.ci=0;root.appendChild(c);cells.push(c);
+    }
+    drawLines();
+  }
+
+  // autonomous painter: each beat, advance a random cell's colour through the cycle
+  function beat(){
+    // bias toward a balanced composition: usually paint, occasionally clear one
+    const n=1+(Math.random()*2|0);
+    for(let k=0;k<n;k++){
+      const c=cells[(Math.random()*cells.length)|0];
+      let ci=+c.dataset.ci;
+      ci=Math.random()<.78?(ci+1)%CYCLE.length:0;
+      c.dataset.ci=ci;c.style.background=CYCLE[ci];
+    }
+  }
+  // rAF driver with a time accumulator paces the painter at ~650ms beats
+  let raf=0,running=false,last=performance.now(),acc=0;
+  function loop(){
+    if(!running)return;
+    const now=performance.now();acc+=now-last;last=now;
+    if(acc>=650){acc=0;beat();}
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){if(running)return;running=true;last=performance.now();raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  build();
+  if(REDUCED){
+    // paint a single balanced static composition
+    const idx=cells.map((_,i)=>i).sort(()=>Math.random()-.5);
+    idx.slice(0,Math.ceil(cells.length*0.5)).forEach((ci,k)=>{const n=(k%3)+1;cells[ci].dataset.ci=n;cells[ci].style.background=CYCLE[n];});
+  }else{
+    start();
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else start();});
+  }
+})();
+</script>
+</body>
+</html>

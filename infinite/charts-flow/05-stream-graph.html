@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Streamgraph of six stacked translucent teal-to-amber bands flowing and breathing around a central baseline, crossed by a sweeping readout li">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Streamgraph</title>
+<style>
+  :root{--ch05-bg:#0a0d12;--ch05-accent:#5ad1a0}
+  html,body{margin:0;height:100%;background:var(--ch05-bg)}
+  #ch05-stage{position:fixed;inset:0;overflow:hidden;background:
+    radial-gradient(120% 90% at 50% 38%,#10151c 0%,var(--ch05-bg) 70%)}
+  #ch05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="ch05-stage" role="img"
+       aria-label="A streamgraph: six stacked translucent bands of synthetic data flowing and breathing left to right around a central baseline, with a sweeping readout line.">
+    <canvas id="ch05-c"></canvas>
+  </div>
+  <div class="cap">Streamgraph</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('ch05-stage'),
+      cv=document.getElementById('ch05-c'),
+      ctx=cv.getContext('2d'),
+      reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // palette around accent — cool teal/cyan modernist ramp
+  var COL=['#2f6f8f','#3f9d8c','#5ad1a0','#8fe0c4','#c7b56b','#d98c5f'];
+  var N=COL.length, M=46;            // bands, columns (<=110 elements)
+  var SEED=[2.1,4.7,0.6,3.3,5.5,1.4];// phase per band
+  var FRQ=[1.0,1.7,1.3,2.1,1.5,1.9]; // breathing rate per band
+
+  var W=0,H=0,DPR=1,t0=0;
+  // preallocated buffers — no per-frame allocation
+  var stackTop=new Float32Array(M), stackBot=new Float32Array(M), val=new Float32Array(N*M);
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  // synthetic value: layered sines -> smooth flowing thickness, always >0
+  function thickness(b,x,time){
+    var f=FRQ[b], p=SEED[b];
+    var a=Math.sin(x*2.4+p+time*f)*0.5
+         +Math.sin(x*5.1-p*1.3+time*f*0.6)*0.28
+         +Math.sin(x*1.1+time*0.4+b)*0.22;
+    return 0.18+0.62*(a*0.5+0.6); // keep positive
+  }
+
+  function frame(time){
+    var tt=(time-t0)/1000;
+    ctx.clearRect(0,0,W,H);
+
+    var padX=W*0.02, padY=H*0.12, gw=W-padX*2, gh=H-padY*2;
+    var cx=padX, cy=padY+gh*0.5;
+    var step=gw/(M-1);
+
+    // 1) compute thickness for every band/column once
+    var totMax=0,i,b,x,xn;
+    for(i=0;i<M;i++){
+      xn=i/(M-1); var tot=0;
+      for(b=0;b<N;b++){ var v=thickness(b,xn*3.1,tt); val[b*M+i]=v; tot+=v; }
+      if(tot>totMax) totMax=tot;
+    }
+    // scale so the tallest column fills ~78% of grid height
+    var scale=(gh*0.78)/totMax;
+
+    // 2) wiggle-style centering: offset baseline by half total, themed-smooth
+    for(i=0;i<M;i++){
+      var tot=0; for(b=0;b<N;b++) tot+=val[b*M+i];
+      stackBot[i]=cy - tot*scale*0.5 + Math.sin(i/(M-1)*2.0+tt*0.5)*gh*0.045;
+    }
+
+    // 3) draw each band as a filled flowing area (bottom->top stack)
+    for(i=0;i<M;i++) stackTop[i]=stackBot[i];
+    for(b=0;b<N;b++){
+      ctx.beginPath();
+      // top edge L->R
+      for(i=0;i<M;i++){
+        x=cx+i*step;
+        var y=stackTop[i];
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      // bottom edge R->L (top + thickness)
+      for(i=M-1;i>=0;i--){
+        x=cx+i*step;
+        var yb=stackTop[i]+val[b*M+i]*scale;
+        ctx.lineTo(x,yb);
+        stackTop[i]=yb; // advance stack for next band
+      }
+      ctx.closePath();
+      ctx.globalAlpha=0.92;
+      ctx.fillStyle=COL[b];
+      ctx.fill();
+      // thin separating stroke for crisp modernist edges
+      ctx.globalAlpha=0.5;
+      ctx.lineWidth=1;
+      ctx.strokeStyle='rgba(10,13,18,0.85)';
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+
+    // 4) sweeping readout line (the animation as insight)
+    if(!reduce){
+      var sweep=(tt*0.13)%1.0;
+      var sx=cx+sweep*(gw);
+      var idx=Math.min(M-1,Math.max(0,Math.round(sweep*(M-1))));
+      ctx.globalAlpha=0.85;
+      ctx.lineWidth=1.4;
+      ctx.strokeStyle='rgba(199,231,222,0.6)';
+      ctx.beginPath(); ctx.moveTo(sx,padY*0.6); ctx.lineTo(sx,H-padY*0.6); ctx.stroke();
+      // tick dots where the line crosses each band boundary
+      var topY=stackBot[idx];
+      for(b=0;b<N;b++){
+        topY+=val[b*M+idx]*scale;
+        ctx.globalAlpha=0.9; ctx.fillStyle=COL[b];
+        ctx.beginPath(); ctx.arc(sx,topY,2.0,0,6.283); ctx.fill();
+      }
+      ctx.globalAlpha=1;
+    }
+
+    // 5) baseline ghost axis
+    ctx.globalAlpha=0.18; ctx.lineWidth=1; ctx.strokeStyle='#c7e7de';
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+gw,cy); ctx.stroke();
+    ctx.globalAlpha=1;
+
+    if(running) raf=requestAnimationFrame(frame);
+  }
+
+  var raf=0, running=false;
+  function start(){ if(running)return; running=true; t0=performance.now(); raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size();
+    if(reduce){ t0=performance.now()-2300; frame(performance.now()); return; }
+    start();
+  }
+
+  var rt;
+  window.addEventListener('resize',function(){ clearTimeout(rt); rt=setTimeout(function(){
+    size(); if(reduce){ frame(performance.now()); }
+  },120); });
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

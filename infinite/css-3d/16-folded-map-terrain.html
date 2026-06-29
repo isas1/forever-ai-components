@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A green low-poly paper terrain of rolling sine hills tilts in isometric view with face-normal lighting and crisp accent fold seams.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Folded Map Terrain</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0f2417;}
+  #fmt-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#7bd389;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="fmt-c"></canvas>
+<div class="cap">Folded Map Terrain</div>
+<script>
+(function(){
+  const cv=document.getElementById('fmt-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,scale;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;scale=Math.min(W,H)/440;
+  }
+  addEventListener('resize',size);size();
+
+  // grid of vertices; quads tilt via per-vertex height -> face normal lighting
+  const G=12;                          // grid resolution
+  const sun={x:-0.5,y:-0.62,z:0.6};    // light direction (normalized below)
+  (function(){const m=Math.hypot(sun.x,sun.y,sun.z);sun.x/=m;sun.y/=m;sun.z/=m;})();
+
+  // isometric-ish projection: tilt board back, fold height into screen Y
+  function project(gx,gy,h){
+    const cell=72*scale;
+    const ox=(gx-(G-1)/2)*cell;
+    const oy=(gy-(G-1)/2)*cell;
+    const px=ox + oy*0.50;             // shear for depth
+    const py=oy*0.46 - h*52*scale;     // foreshorten + lift by height
+    return [cx+px, cy+py*0.92+18*scale];
+  }
+  function height(gx,gy,t){
+    // two offset sine sheets -> rolling paper hills
+    const a=Math.sin(gx*0.85+t*0.9)*Math.cos(gy*0.7-t*0.6);
+    const b=Math.sin((gx+gy)*0.55 - t*1.1)*0.6;
+    return (a*0.6+b)*0.62;
+  }
+
+  let t=0,boost=0,px2=0;
+  cv.addEventListener('pointermove',e=>{boost=1;px2=(e.offsetX/W-0.5)*2;});
+  cv.addEventListener('click',()=>{boost=1.6;});
+
+  function frame(){
+    t+=reduce?0:0.012;
+    boost*=0.95;
+    ctx.fillStyle='#0f2417';ctx.fillRect(0,0,W,H);
+
+    const tt=t+px2*0.18*boost;
+    // build vertex grid + heights
+    const hs=[],pj=[];
+    for(let y=0;y<G;y++){hs[y]=[];pj[y]=[];
+      for(let x=0;x<G;x++){
+        const h=height(x,y,tt)*(1+boost*0.35);
+        hs[y][x]=h; pj[y][x]=project(x,y,h);
+      }}
+    // draw quads back-to-front; lit by face normal vs sun
+    const cell=72*scale, span=52*scale;
+    for(let y=0;y<G-1;y++){
+      for(let x=0;x<G-1;x++){
+        const p0=pj[y][x],p1=pj[y][x+1],p2=pj[y+1][x+1],p3=pj[y+1][x];
+        // approximate face normal from height gradient (world space)
+        const dzx=(hs[y][x+1]-hs[y][x])*span;
+        const dzy=(hs[y+1][x]-hs[y][x])*span;
+        let nx=-dzx, ny=-dzy, nz=cell, nl=Math.hypot(nx,ny,nz);
+        nx/=nl;ny/=nl;nz/=nl;
+        let lum=nx*sun.x+ny*sun.y+nz*sun.z;
+        lum=Math.max(0,lum);
+        const ah=(hs[y][x]+0.4)/1.6;            // altitude tint 0..1
+        const shade=0.18+lum*0.95;
+        // green valley -> accent ridge palette
+        const r=Math.round((30+ah*120)*shade);
+        const g=Math.round((70+ah*130)*shade*1.05);
+        const b=Math.round((45+ah*70)*shade);
+        ctx.beginPath();
+        ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);
+        ctx.lineTo(p2[0],p2[1]);ctx.lineTo(p3[0],p3[1]);ctx.closePath();
+        ctx.fillStyle='rgb('+r+','+g+','+b+')';ctx.fill();
+        // crisp fold seams in accent on bright faces
+        ctx.strokeStyle='rgba(123,211,137,'+(0.05+lum*0.22).toFixed(3)+')';
+        ctx.lineWidth=1;ctx.stroke();
+      }
+    }
+    if(!reduce) raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){frame();}else start();
+})();
+</script>
+</body>
+</html>

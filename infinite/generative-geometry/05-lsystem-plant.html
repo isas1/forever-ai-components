@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="An L-system fractal plant grows branch by branch in green hues, swaying gently with leaf dots at the tips.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>L-System Plant</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a140d}
+  #c{display:block;width:100%;height:100%}
+  #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
+       color:#9bffb0;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">L-system plant</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  let W,H,DPR,seq,baseAngle,grow,hue,sway=0;
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);regen();}
+  function regen(){
+    const rules={'X':'F+[[X]-X]-F[-FX]+X','F':'FF'};
+    let s='X';for(let i=0;i<4;i++){let o='';for(const ch of s)o+=rules[ch]||ch;s=o;}
+    seq=s;baseAngle=20+Math.random()*12;grow=0;hue=90+Math.random()*60;
+  }
+  function draw(t){
+    ctx.fillStyle='#0a140d';ctx.fillRect(0,0,W,H);
+    const s=Math.min(W,H);
+    let len=s*0.018;
+    const stack=[];
+    let x=W/2,y=H*0.96,ang=-Math.PI/2;
+    ctx.lineCap='round';
+    const wob=Math.sin(t*0.0011)*0.06+sway;sway*=0.94;
+    const total=seq.length;const drawN=Math.floor(total*grow);
+    let i=0;
+    for(const ch of seq){
+      if(i>drawN)break;i++;
+      if(ch==='F'){
+        const nx=x+Math.cos(ang)*len,ny=y+Math.sin(ang)*len;
+        const depth=stack.length;
+        ctx.strokeStyle='hsl('+(hue+depth*8)+','+(60+depth*4)+'%,'+(35+depth*7)+'%)';
+        ctx.lineWidth=Math.max(0.8,3-depth*0.4);
+        ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(nx,ny);ctx.stroke();
+        x=nx;y=ny;
+      } else if(ch==='+'){ang+=(baseAngle*Math.PI/180)+wob;}
+      else if(ch==='-'){ang-=(baseAngle*Math.PI/180)+wob;}
+      else if(ch==='['){stack.push([x,y,ang]);}
+      else if(ch===']'){const p=stack.pop();x=p[0];y=p[1];ang=p[2];
+        ctx.fillStyle='hsl('+(hue+40)+',80%,65%)';ctx.beginPath();ctx.arc(x,y,1.6,0,7);ctx.fill();}
+    }
+  }
+  let raf;
+  function loop(t){if(!reduce){if(grow<1)grow+=0.006;draw(t);if(grow>=1&&Math.sin(t*0.0003)<-0.98)regen();}raf=requestAnimationFrame(loop);}
+  function start(){cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+  addEventListener('resize',resize);
+  cv.addEventListener('pointerdown',()=>{sway=0.18;if(grow>=1)regen();});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
+  resize();if(reduce){grow=1;draw(0);}else start();
+})();
+</script>
+</body>
+</html>

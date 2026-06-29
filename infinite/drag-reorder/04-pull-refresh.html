@@ -1,0 +1,214 @@
+<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="description" content="A canvas list pulls down with elastic rubber-band overscroll, revealing diagonal bars and releasing into a spinning geometric sync indicator">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pull to Refresh</title>
+<style>
+  :root{--bg:#0c0e13;--ink:#e8eaef;--cy:#22d3ee;--red:#ec3a4b;--dim:#3a4150}
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+  #dr04-stage{position:fixed;inset:0;display:grid;place-items:center;touch-action:none}
+  #dr04-c{width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  #dr04-stage:focus-visible{outline:2px solid var(--cy);outline-offset:-3px}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+<div id="dr04-stage" tabindex="0" role="img" aria-label="Pull to refresh: a list pulled down with elastic overscroll, releasing into a spinning geometric indicator">
+  <canvas id="dr04-c"></canvas>
+</div>
+<div class="cap">Pull to Refresh</div>
+<script>
+(function(){
+  var stage=document.getElementById('dr04-stage'),cv=document.getElementById('dr04-c'),g=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var W=0,H=0,dpr=1,running=true,raf=0;
+  var BG='#0c0e13',INK='#e8eaef',CY='#22d3ee',RED='#ec3a4b',DIM='#222834';
+  var N=5, rowLab=['ALPHA','BETA','GAMMA','DELTA','EPS']; // <=110 elements
+  function size(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth;H=stage.clientHeight;
+    cv.width=W*dpr|0;cv.height=H*dpr|0;
+    g.setTransform(dpr,0,0,dpr,0,0);
+  }
+  size();
+  // state ------------------------------------------------------------
+  var pull=0;        // current elastic pull distance (px)
+  var vel=0;         // spring velocity
+  var target=0;      // user/demo target pull
+  var dragging=false;
+  var refreshing=false, refreshT=0; // spinner phase
+  var spin=0;
+  var lastInput=-1e9, t=0;
+  var THRESH=58;     // release threshold
+  var MAXP=92;
+  // demo scripting ---------------------------------------------------
+  var demoPhase=0, demoT=0;
+  function demoIdle(){ return (t-lastInput)>3.0; }
+  function step(dt){
+    t+=dt;
+    // self-demo drives target when idle
+    if(demoIdle() && !dragging){
+      demoT+=dt;
+      if(demoPhase===0){ // pull down slowly
+        target+=dt*70; if(target>=MAXP){target=MAXP;demoPhase=1;demoT=0;}
+      } else if(demoPhase===1){ // hold briefly
+        if(demoT>0.45){ release(); demoPhase=2; }
+      } else if(demoPhase===2){ // wait out refresh
+        if(!refreshing){ demoPhase=3; demoT=0; }
+      } else { // rest then loop
+        if(demoT>1.6){ demoPhase=0; demoT=0; }
+      }
+    }
+    // spring toward target while held; otherwise toward 0
+    var goal = dragging||(demoIdle()&&demoPhase<2) ? target : (refreshing?THRESH*0.62:0);
+    var k=180, c=22; // stiff spring, well damped
+    var a=(goal-pull)*k - vel*c;
+    vel+=a*dt; pull+=vel*dt;
+    if(pull<0){pull=0;vel*=-0.3;}
+    // refresh spinner
+    if(refreshing){
+      spin+=dt*7.2;
+      refreshT+=dt;
+      if(refreshT>1.5){ refreshing=false; target=0; }
+    }
+  }
+  function release(){
+    if(pull>=THRESH && !refreshing){
+      refreshing=true; refreshT=0; spin=0;
+    }
+    target=0; dragging=false;
+  }
+  // drawing ----------------------------------------------------------
+  function draw(){
+    g.fillStyle=BG; g.fillRect(0,0,W,H);
+    var cx=W/2;
+    var listTop=H*0.30, rowH=Math.min(34, H*0.11), gap=rowH*0.32;
+    var listW=Math.min(W*0.72, 300);
+    var lx=cx-listW/2;
+    var prog=Math.min(1,pull/THRESH);
+    // --- header zone (revealed by pull): constructivist diagonal bars
+    g.save();
+    g.beginPath();g.rect(0,0,W,listTop+pull*0.18);g.clip();
+    g.strokeStyle=DIM;g.lineWidth=1;
+    for(var i=-2;i<8;i++){
+      var px=lx-40+i*26 + (pull*0.5);
+      g.beginPath();g.moveTo(px,0);g.lineTo(px+60,listTop+40);g.stroke();
+    }
+    g.restore();
+    // --- spinner / pull indicator (geometric: rotating square + chord)
+    var iy=listTop - 30 + Math.min(pull,MAXP)*0.55;
+    var R=11+prog*4;
+    g.save();
+    g.translate(cx,iy);
+    if(refreshing){ g.rotate(spin); }
+    else { g.rotate(prog*1.9); }
+    // outer ring arc (open square corners)
+    g.strokeStyle = (refreshing||prog>=1)?CY:INK;
+    g.lineWidth=2.4;
+    var arc = refreshing?1.55:(0.2+prog*1.35);
+    g.beginPath();g.arc(0,0,R, -Math.PI/2, -Math.PI/2+arc);g.stroke();
+    // inner red tick — Constructivist red wedge
+    g.fillStyle=RED;
+    g.beginPath();g.moveTo(0,-R+4);g.lineTo(3.5,-2);g.lineTo(-3.5,-2);g.closePath();g.fill();
+    g.restore();
+    // "RELEASE" tag when over threshold (no per-frame layout reads)
+    g.font='700 9px ui-monospace,Menlo,monospace';
+    g.textAlign='center';g.textBaseline='middle';
+    if(!refreshing){
+      g.fillStyle = prog>=1?CY:DIM;
+      g.fillText(prog>=1?'RELEASE':'PULL', cx, iy+R+11);
+    } else {
+      g.fillStyle=CY; g.fillText('SYNC', cx, iy+R+11);
+    }
+    // --- list rows (FLIP: they translate down by pull, springy)
+    for(var r=0;r<N;r++){
+      var ry=listTop + pull + r*(rowH+gap);
+      // stagger: lower rows lag slightly for elastic feel
+      var lag=(pull)*(r*0.05);
+      ry+=lag;
+      if(ry>H+rowH) continue;
+      var w=listW;
+      g.save();
+      g.translate(lx,ry);
+      // row plate
+      g.fillStyle = r===0?'#11141c':'#0f121a';
+      g.strokeStyle=DIM;g.lineWidth=1;
+      rrect(g,0,0,w,rowH,3);g.fill();g.stroke();
+      // left accent block — alternating red/cyan (El Lissitzky color blocking)
+      g.fillStyle = (r%2)?CY:RED;
+      g.fillRect(0,0,5,rowH);
+      // index number, rotated slightly for typographic dynamism
+      g.save();
+      g.translate(16,rowH/2);
+      g.fillStyle=INK;
+      g.font='700 13px ui-monospace,Menlo,monospace';
+      g.textAlign='left';g.textBaseline='middle';
+      g.fillText((r+1).toString().padStart(2,'0'), 0,0);
+      g.restore();
+      // label bars (abstract content — no real text rows beyond label)
+      g.fillStyle=DIM;
+      g.fillRect(44, rowH*0.32, w*0.40, 3);
+      g.fillRect(44, rowH*0.58, w*0.26, 3);
+      g.fillStyle=INK;
+      g.font='600 8px ui-monospace,Menlo,monospace';
+      g.textAlign='right';g.textBaseline='middle';
+      g.fillText(rowLab[r], w-12, rowH/2);
+      g.restore();
+    }
+    // bottom vignette bar
+    g.fillStyle=BG;g.fillRect(0,H-2,W,2);
+  }
+  function rrect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+  // loop -------------------------------------------------------------
+  var prev=0;
+  function frame(ts){
+    if(!running)return;
+    var dt=prev?Math.min(0.05,(ts-prev)/1000):0.016; prev=ts;
+    step(dt); draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){ if(!running){running=true;prev=0;raf=requestAnimationFrame(frame);} }
+  // input ------------------------------------------------------------
+  var startY=0, basePull=0;
+  function pdown(e){
+    dragging=true; lastInput=t; demoPhase=0; demoT=0;
+    startY=e.clientY; basePull=pull;
+    stage.setPointerCapture&&stage.setPointerCapture(e.pointerId);
+  }
+  function pmove(e){
+    if(!dragging)return; lastInput=t;
+    var d=e.clientY-startY;
+    if(d<0)d*=0.3; // resist upward
+    // diminishing-returns rubber band past MAXP
+    var raw=basePull+d;
+    if(raw>MAXP) raw=MAXP+(raw-MAXP)*0.35;
+    target=Math.max(0,Math.min(MAXP+30,raw));
+    pull=target; // direct follow while dragging
+  }
+  function pup(e){ if(dragging){lastInput=t; release();} }
+  stage.addEventListener('pointerdown',pdown);
+  stage.addEventListener('pointermove',pmove);
+  window.addEventListener('pointerup',pup);
+  // keyboard: arrows pull, Enter/Space releases
+  stage.addEventListener('keydown',function(e){
+    lastInput=t; demoPhase=0; demoT=0;
+    if(e.key==='ArrowDown'){ target=Math.min(MAXP,target+18); pull=target; dragging=true; e.preventDefault(); }
+    else if(e.key==='ArrowUp'){ target=Math.max(0,target-18); pull=target; dragging=true; e.preventDefault(); }
+    else if(e.key===' '||e.key==='Enter'){ release(); e.preventDefault(); }
+  });
+  stage.addEventListener('keyup',function(e){
+    if(e.key==='ArrowDown'||e.key==='ArrowUp'){ dragging=false; }
+  });
+  // lifecycle --------------------------------------------------------
+  window.addEventListener('resize',size);
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){running=false;cancelAnimationFrame(raf);}
+    else{start();}
+  });
+  if(reduce){ // one static, on-brand frame
+    pull=THRESH; vel=0; draw(); return;
+  }
+  raf=requestAnimationFrame(frame);
+})();
+</script>
+</html>

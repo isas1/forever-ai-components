@@ -1,0 +1,136 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Cream analog VU meter face with a spring-eased needle, red peak zone and a peak-hold pip, fed by synth or live mic.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>VU Meter</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#07080d;display:grid;place-items:center}
+#aav04-stage{position:relative;width:100%;height:100%}
+#aav04-c{display:block;width:100%;height:100%}
+.aav04-live{position:absolute;right:9px;top:8px;z-index:2;font:600 10px/1 ui-monospace,Menlo,monospace;
+  letter-spacing:.06em;color:#22d3ee;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.32);
+  border-radius:999px;padding:5px 9px;cursor:pointer;opacity:.7;transition:opacity .2s,background .2s}
+.aav04-live:hover{opacity:1;background:rgba(34,211,238,.16)}
+.aav04-live[data-on="1"]{background:#22d3ee;color:#07080d;opacity:1}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<div id="aav04-stage">
+  <canvas id="aav04-c" role="img" aria-label="Analog VU meter with eased needle"></canvas>
+  <button class="aav04-live" id="aav04-live" aria-label="Switch to live microphone input">&#9834; live</button>
+</div>
+<div class="cap">VU Meter</div>
+<script>(function(){
+var cv=document.getElementById('aav04-c'),g=cv.getContext('2d'),stage=document.getElementById('aav04-stage'),
+btn=document.getElementById('aav04-live'),reduce=matchMedia('(prefers-reduced-motion:reduce)').matches,
+W=0,H=0,DPR=1,raf=0,running=true,t0=performance.now();
+var ACC='#22d3ee',RED='#ff4d4d',FACE='#f4ede0',INK='#1a1d27';
+function size(){var r=stage.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);
+  W=r.width;H=r.height;cv.width=W*DPR|0;cv.height=H*DPR|0;g.setTransform(DPR,0,0,DPR,0,0);}
+size();addEventListener('resize',size);
+
+// ---- signal sources ----
+var live=null; // {an,buf,td}
+function synth(t){ // 0..1 loudness from layered sines + LFO env + smoothed noise
+  var s=t*0.001;
+  var env=0.5+0.5*Math.sin(s*0.55)*Math.sin(s*0.21+1.3);
+  var beat=Math.pow(0.5+0.5*Math.sin(s*3.1),6); // periodic transient swells
+  var body=0.5+0.5*Math.sin(s*1.7)+0.3*Math.sin(s*4.3+2);
+  var n=(Math.sin(s*53.7)*0.5+Math.sin(s*97.3)*0.5); // pseudo noise
+  noise+= (n-noise)*0.15;
+  var v=0.12+0.62*Math.max(0,env)*(0.45+0.55*Math.abs(body)*0.5)+0.32*beat+0.06*noise;
+  return Math.max(0,Math.min(1,v));
+}
+var noise=0;
+function liveLevel(){ // rms of time-domain
+  live.an.getByteTimeDomainData(live.td);var sum=0,d;
+  for(var i=0;i<live.td.length;i++){d=(live.td[i]-128)/128;sum+=d*d;}
+  return Math.min(1,Math.sqrt(sum/live.td.length)*3.2);
+}
+
+// ---- needle ballistics: critically-ish damped spring ----
+var ang=0,vel=0,target=0,peakHold=0,peakV=0;
+function step(dt){
+  var lvl = live?liveLevel():synth(performance.now());
+  target = -0.62 + lvl*1.24; // radians, sweep ~ -0.62..0.62
+  var k=120, c=14; // stiffness / damping -> eased, slightly overshooting ballistics
+  var acc=k*(target-ang)-c*vel; vel+=acc*dt; ang+=vel*dt;
+  // peak-hold pip: jumps instantly, decays slowly
+  if(ang>peakHold){peakHold=ang;peakV=0;} else {peakV+=0.9*dt;peakHold-=peakV*dt;}
+  if(peakHold<-0.62)peakHold=-0.62;
+}
+
+function arcPt(cx,cy,r,a){return [cx+Math.sin(a)*r, cy-Math.cos(a)*r];}
+function draw(){
+  g.clearRect(0,0,W,H);
+  var pad=W*0.07, fw=W-pad*2, fh=H-pad*2;
+  // pivot near bottom-center; radius scaled to fit
+  var cx=W/2, r=Math.min(fw*0.46, fh*0.92), cy=H*0.5+r*0.42;
+  // face panel
+  g.fillStyle=FACE; round(pad,pad,fw,fh,Math.min(18,fw*0.06)); g.fill();
+  g.strokeStyle='rgba(0,0,0,.18)';g.lineWidth=1;round(pad+1,pad+1,fw-2,fh-2,Math.min(17,fw*0.06));g.stroke();
+  // scale arc + ticks
+  var a0=-0.7,a1=0.7,redA=0.30;
+  g.lineWidth=Math.max(2,r*0.018);
+  // main scale (ink) up to red zone
+  arc(cx,cy,r,a0,redA,INK);
+  // red peak zone
+  arc(cx,cy,r,redA,a1,RED);
+  // ticks + labels
+  var ticks=[-0.7,-0.45,-0.2,0,0.18,0.3,0.5,0.7];
+  var labels={'-0.7':'-20','-0.2':'-7','0':'-3','0.3':'0','0.7':'+3'};
+  g.lineWidth=Math.max(1,r*0.01);g.textAlign='center';g.textBaseline='middle';
+  g.font='600 '+Math.max(8,r*0.062)+'px ui-monospace,Menlo,monospace';
+  for(var i=0;i<ticks.length;i++){var a=ticks[i],big=labels[a+'']!==undefined;
+    var p1=arcPt(cx,cy,r-2,a),p2=arcPt(cx,cy,r-(big?r*0.11:r*0.06),a);
+    g.strokeStyle=a>=redA?RED:INK;g.beginPath();g.moveTo(p1[0],p1[1]);g.lineTo(p2[0],p2[1]);g.stroke();
+    if(big){var lp=arcPt(cx,cy,r-r*0.20,a);g.fillStyle=a>=redA?RED:INK;g.fillText(labels[a+''],lp[0],lp[1]);}
+  }
+  // 'VU' wordmark
+  g.fillStyle='rgba(26,29,39,.55)';g.font='700 '+Math.max(11,r*0.13)+'px ui-monospace,Menlo,monospace';
+  g.fillText('VU',cx,cy-r*0.30);
+  // peak-hold pip on arc
+  var pp=arcPt(cx,cy,r-2,peakHold);
+  g.fillStyle=peakHold>=redA?RED:ACC;g.beginPath();g.arc(pp[0],pp[1],Math.max(2.5,r*0.025),0,7);g.fill();
+  // needle
+  var nlen=r-r*0.05, tip=arcPt(cx,cy,nlen,ang), tail=arcPt(cx,cy,-r*0.10,ang);
+  g.lineCap='round';
+  g.strokeStyle=ang>=redA?RED:INK;g.lineWidth=Math.max(2,r*0.02);
+  g.beginPath();g.moveTo(tail[0],tail[1]);g.lineTo(tip[0],tip[1]);g.stroke();
+  // accent counterweight glow at hub
+  g.fillStyle=INK;g.beginPath();g.arc(cx,cy,Math.max(5,r*0.05),0,7);g.fill();
+  g.fillStyle=ACC;g.beginPath();g.arc(cx,cy,Math.max(2.5,r*0.024),0,7);g.fill();
+}
+function arc(cx,cy,r,a,b,col){g.strokeStyle=col;g.beginPath();
+  g.arc(cx,cy,r,-Math.PI/2+a,-Math.PI/2+b);g.stroke();}
+function round(x,y,w,h,rad){g.beginPath();g.moveTo(x+rad,y);
+  g.arcTo(x+w,y,x+w,y+h,rad);g.arcTo(x+w,y+h,x,y+h,rad);
+  g.arcTo(x,y+h,x,y,rad);g.arcTo(x,y,x+w,y,rad);g.closePath();}
+
+var last=t0;
+function loop(now){if(!running)return;var dt=Math.min(0.05,(now-last)/1000);last=now;
+  step(dt);draw();raf=requestAnimationFrame(loop);}
+
+if(reduce){ // settle to one legible frame: mid-scale, no loop
+  target=0;ang=0;peakHold=0.22;draw();
+}else{ raf=requestAnimationFrame(loop); }
+
+function vis(){if(reduce)return;
+  if(document.hidden){running=false;cancelAnimationFrame(raf);}
+  else if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}
+document.addEventListener('visibilitychange',vis);
+
+btn.addEventListener('click',function(){
+  if(live){return;}
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext,ctx=new AC();
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      var src=ctx.createMediaStreamSource(stream),an=ctx.createAnalyser();
+      an.fftSize=1024;an.smoothingTimeConstant=0.7;
+      src.connect(an); // NEVER connect to destination (feedback)
+      live={an:an,td:new Uint8Array(an.fftSize)};
+      btn.setAttribute('data-on','1');btn.textContent='● live';
+    }).catch(function(){btn.textContent='mic ✗';setTimeout(function(){btn.innerHTML='&#9834; live';},1500);});
+  }catch(e){}
+});
+})();</script>
+</body></html>

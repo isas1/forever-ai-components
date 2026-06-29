@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A tilted Neoplastic grid of red, blue and yellow cells divided by black bars rotates from a steep angle and settles to a resting 15-degree t">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Counter Composition</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0e10;overflow:hidden}
+  #ds06-stage{position:fixed;inset:0;display:grid;place-items:center}
+  #ds06-c{width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ds06-stage" role="img" aria-label="De Stijl counter-composition: a tilted neoplastic grid of red, blue and yellow rectangles, divided by black bars, rotating into dynamic equilibrium on a dark field.">
+  <canvas id="ds06-c"></canvas>
+</div>
+<div class="cap">Counter Composition</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("ds06-c"),cx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var DPR=Math.min(2,window.devicePixelRatio||1);
+  var W=0,H=0,S=0,running=true,raf=0,start=0;
+
+  // Neoplastic palette around the brief's accent.
+  var RED="#c4321b",BLU="#1b5fc4",YEL="#e7c629",WHT="#eceae3",BLK="#0e0e10";
+
+  // Original composition in a unit square [0..1]. Diagonal bars + cells.
+  // Each cell: x,y,w,h (unit), fill.
+  var CELLS=[
+    [0.00,0.00,0.30,0.42,WHT],
+    [0.30,0.00,0.40,0.22,YEL],
+    [0.70,0.00,0.30,0.42,RED],
+    [0.00,0.42,0.30,0.34,BLU],
+    [0.30,0.22,0.24,0.54,WHT],
+    [0.54,0.22,0.46,0.20,WHT],
+    [0.54,0.42,0.46,0.34,WHT],
+    [0.00,0.76,0.46,0.24,RED],
+    [0.46,0.76,0.24,0.24,WHT],
+    [0.70,0.42,0.30,0.58,BLU],
+    [0.46,0.76,0.54,0.0,WHT]
+  ];
+  // Black structural bars (van Doesburg counter-construction): unit coords.
+  var BARS=[
+    [0.30,0,0.30,1],[0.70,0,0.70,1],
+    [0,0.42,1,0.42],[0,0.76,1,0.76],
+    [0.54,0.22,1,0.22],[0.46,0.42,1,0.42]
+  ];
+  var LW=0.022; // bar width in unit terms
+
+  function size(){
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.max(1,Math.round(W*DPR));
+    cv.height=Math.max(1,Math.round(H*DPR));
+    cx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H)*0.62; // grid square size
+  }
+
+  function ease(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+  // Draw the composition rotated by `ang` (radians) with reveal `p` (0..1).
+  function draw(ang,p){
+    cx.fillStyle=BLK;cx.fillRect(0,0,W,H);
+    cx.save();
+    cx.translate(W/2,H/2);
+    cx.rotate(ang);
+    cx.translate(-S/2,-S/2);
+
+    // clip to the tilted square so cells stay crisp.
+    cx.beginPath();cx.rect(0,0,S,S);cx.clip();
+
+    // colored cells, scaled by reveal for a settling feel.
+    var i,c;
+    for(i=0;i<CELLS.length;i++){
+      c=CELLS[i];
+      if(c[4]===WHT) cx.fillStyle="#15151a"; else cx.fillStyle=c[4];
+      var cw=c[2]*S, chh=c[3]*S;
+      if(chh<=0) continue;
+      cx.fillStyle=(c[4]===WHT)?"#16161c":c[4];
+      cx.fillRect(c[0]*S, c[1]*S, cw, chh*(0.15+0.85*p));
+    }
+
+    // black bars on top — the grid that holds equilibrium.
+    cx.fillStyle=BLK;
+    var bw=LW*S;
+    for(i=0;i<BARS.length;i++){
+      var b=BARS[i];
+      var x1=b[0]*S,y1=b[1]*S,x2=b[2]*S,y2=b[3]*S;
+      if(x1===x2){ // vertical
+        var hh=(y2-y1)*p;
+        cx.fillRect(x1-bw/2, y1, bw, hh);
+      } else { // horizontal
+        var ww=(x2-x1)*p;
+        cx.fillRect(x1, y1-bw/2, ww, bw);
+      }
+    }
+    // crisp outer frame
+    cx.strokeStyle=BLK;cx.lineWidth=bw;cx.strokeRect(0,0,S,S);
+    cx.restore();
+  }
+
+  function frame(ts){
+    if(!running) return;
+    if(!start) start=ts;
+    var t=(ts-start)/1000;
+    // settle from a steep van Doesburg tilt toward the resting 15deg, breathing.
+    var cycle=(t%8)/8;            // 8s loop
+    var rev=Math.min(1,t/1.4);    // initial reveal once
+    var settle=ease(Math.min(1,cycle*1.8));
+    // rest angle 15deg; entry from 38deg; subtle ongoing drift.
+    var rest=15*Math.PI/180;
+    var entry=38*Math.PI/180;
+    var ang=entry+(rest-entry)*settle;
+    ang+=Math.sin(t*0.6)*0.012; // tiny living drift, never strobing
+    draw(ang, rev);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  function go(){if(running&&!raf){start=0;raf=requestAnimationFrame(frame);}}
+
+  function init(){
+    size();
+    if(reduce){ draw(15*Math.PI/180,1); return; }
+    go();
+  }
+
+  var rt;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);rt=setTimeout(function(){
+      size();
+      if(reduce){draw(15*Math.PI/180,1);}
+    },120);
+  });
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden){stop();}
+    else{running=true;go();}
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

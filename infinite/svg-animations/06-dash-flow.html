@@ -1,0 +1,148 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A routed circuit board of orthogonal traces with violet light pulses flowing left-to-right like current and junction pads sparking.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Dash Flow</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0b0d12;display:grid;place-items:center}
+.ssa06-stage{position:relative;width:100%;height:100%}
+#ssa06-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+/* base traces: faint circuit substrate */
+.ssa06-trace{fill:none;stroke:#1b2336;stroke-width:1.4;stroke-linecap:round}
+/* nodes: junction pads */
+.ssa06-node{fill:#0b0d12;stroke:#2a3654;stroke-width:1.4}
+/* pulse lines: animated current */
+.ssa06-pulse{fill:none;stroke:#7c5cff;stroke-width:2;stroke-linecap:round;
+  filter:url(#ssa06-glow)}
+/* live junction dots flare as current passes */
+.ssa06-spark{fill:#b9a9ff}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#7c5cff;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<div class="ssa06-stage">
+<svg id="ssa06-c" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet"
+  role="img" aria-label="Network of paths with light pulses flowing along the lines like current">
+  <defs>
+    <filter id="ssa06-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.4" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g id="ssa06-base"></g>
+  <g id="ssa06-flow"></g>
+  <g id="ssa06-nodes"></g>
+  <g id="ssa06-sparks"></g>
+</svg>
+</div>
+<div class="cap">Dash Flow</div>
+<script>(function(){
+  var svg=document.getElementById('ssa06-c');
+  var gBase=document.getElementById('ssa06-base');
+  var gFlow=document.getElementById('ssa06-flow');
+  var gNodes=document.getElementById('ssa06-nodes');
+  var gSparks=document.getElementById('ssa06-sparks');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var SVGNS='http://www.w3.org/2000/svg';
+
+  // ---- Build a structured circuit on a loose grid (orthogonal traces) ----
+  // Pick a handful of column rails and connect them with right-angle jogs,
+  // so it reads as a routed board, not random spaghetti.
+  function R(a,b){return a+Math.random()*(b-a);}
+  var cols=[60,130,200,270,340], rows=[60,130,200,270,340];
+  var nodes=[]; // {x,y}
+  for(var ci=0;ci<cols.length;ci++)for(var ri=0;ri<rows.length;ri++){
+    if(Math.random()<0.42) nodes.push({x:cols[ci]+R(-10,10),y:rows[ri]+R(-10,10),ci:ci,ri:ri});
+  }
+  // ensure spine presence: guarantee at least one node per outer column
+  // (kept implicit by density; small set is fine)
+
+  // Build orthogonal paths: connect a node to another node in an adjacent
+  // column with an L / Z elbow. Cap path count.
+  var paths=[], used={};
+  function key(a,b){return a.x.toFixed(0)+','+a.y.toFixed(0)+'>'+b.x.toFixed(0)+','+b.y.toFixed(0);}
+  for(var i=0;i<nodes.length;i++){
+    var a=nodes[i], best=null,bd=1e9;
+    for(var j=0;j<nodes.length;j++){
+      if(i===j)continue; var b=nodes[j];
+      if(b.ci<=a.ci)continue;            // route left->right for flow direction
+      var d=Math.abs(b.ci-a.ci)+Math.abs(b.ri-a.ri)*0.6;
+      if(d<bd){bd=d;best=b;}
+    }
+    if(best&&!used[key(a,best)]&&paths.length<60){
+      used[key(a,best)]=1;
+      var mx=(a.x+best.x)/2;
+      // Z-elbow: horizontal to mid, vertical, horizontal in
+      var dd='M'+a.x+' '+a.y+' L'+mx+' '+a.y+' L'+mx+' '+best.y+' L'+best.x+' '+best.y;
+      paths.push({d:dd});
+    }
+  }
+
+  // ---- Paint base traces + flow overlays ----
+  var flows=[];
+  paths.forEach(function(p){
+    var base=document.createElementNS(SVGNS,'path');
+    base.setAttribute('class','ssa06-trace'); base.setAttribute('d',p.d);
+    gBase.appendChild(base);
+    var pl=document.createElementNS(SVGNS,'path');
+    pl.setAttribute('class','ssa06-pulse'); pl.setAttribute('d',p.d);
+    var len=pl.getTotalLength();
+    // dash: a short bright segment + long gap = a travelling pulse
+    var seg=Math.max(14,len*0.22);
+    pl.style.strokeDasharray=seg+' '+(len);
+    pl.style.strokeDashoffset=len;
+    gFlow.appendChild(pl);
+    flows.push({el:pl,len:len,seg:seg,
+      speed:R(38,72),                       // px/sec
+      phase:R(0,len+seg)});                 // staggered start
+  });
+
+  // ---- Node pads + their sparks ----
+  var sparks=[];
+  nodes.forEach(function(n){
+    var c=document.createElementNS(SVGNS,'circle');
+    c.setAttribute('class','ssa06-node'); c.setAttribute('cx',n.x);
+    c.setAttribute('cy',n.y); c.setAttribute('r',3.2); gNodes.appendChild(c);
+    var s=document.createElementNS(SVGNS,'circle');
+    s.setAttribute('class','ssa06-spark'); s.setAttribute('cx',n.x);
+    s.setAttribute('cy',n.y); s.setAttribute('r',2.2); s.style.opacity=0;
+    gSparks.appendChild(s);
+    sparks.push({el:s,t:R(0,4),period:R(2.2,4.5)});
+  });
+
+  // ---- Reduced motion: one composed static frame ----
+  if(reduce){
+    flows.forEach(function(f){f.el.style.strokeDashoffset=f.len*0.5;});
+    sparks.forEach(function(s){s.el.style.opacity=0.5;});
+    return;
+  }
+
+  // ---- rAF loop: advance dashoffset (current) + pulse node sparks ----
+  var running=true,raf=0,last=0;
+  function frame(now){
+    if(!running)return;
+    var dt=last?(now-last)/1000:0; last=now;
+    if(dt>0.1)dt=0.1;                       // clamp after tab return
+    for(var i=0;i<flows.length;i++){
+      var f=flows[i];
+      f.phase+=f.speed*dt;
+      var tot=f.len+f.seg;
+      if(f.phase>tot)f.phase-=tot;
+      // offset from len (entering) down toward -seg (exiting)
+      f.el.style.strokeDashoffset=f.len-f.phase;
+    }
+    for(var k=0;k<sparks.length;k++){
+      var s=sparks[k]; s.t+=dt; if(s.t>s.period)s.t-=s.period;
+      var ph=s.t/s.period;                  // 0..1
+      // sharp attack, soft decay flicker
+      var o=ph<0.18?(ph/0.18):Math.max(0,1-(ph-0.18)/0.55);
+      s.el.style.opacity=o*0.85;
+      s.el.setAttribute('r',2.2+o*2.6);
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!running){running=true;last=0;raf=requestAnimationFrame(frame);}}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  function vis(){if(document.hidden)stop();else start();}
+  document.addEventListener('visibilitychange',vis);
+  raf=requestAnimationFrame(frame);
+})();</script>
+</body></html>

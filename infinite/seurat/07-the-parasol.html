@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Parasol — Georges Seurat. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Parasol</title>
+<style>
+  html,body{margin:0;height:100%;background:#f1ecdf;overflow:hidden}
+  #seu07-stage{position:fixed;inset:0;width:100%;height:100%}
+  #seu07-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .seu07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2620;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="seu07-stage" role="img" aria-label="A dotted parasol silhouette turns slowly against warm cream, its dome and ribs built entirely of coloured points in pure division of colour.">
+  <canvas id="seu07-cv"></canvas>
+</div>
+<div class="seu07-cap">The Parasol</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('seu07-cv'); if(!cv) return;
+  const RGB={green:[111,155,78],sky:[143,184,214],orange:[224,138,46],violet:[107,91,149],cream:[241,236,223],ink:[42,38,32]};
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function rgba(t,a){return 'rgba('+t[0]+','+t[1]+','+t[2]+','+a+')';}
+  function dot(ctx,x,y,r,col,a){ctx.globalAlpha=a;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.globalAlpha=1;}
+  let S=fitCanvas(cv);
+  const model=[];
+  function buildModel(){
+    model.length=0;
+    const RIBS=8,R=1.0;
+    for(let ring=0.12;ring<=R;ring+=0.085){
+      const n=Math.max(6,Math.round(Math.PI*ring*22));
+      for(let i=0;i<=n;i++){
+        const ang=Math.PI+(i/n)*Math.PI;
+        const x=Math.cos(ang)*ring;
+        const y=Math.sin(ang)*ring*0.62;
+        const wedge=Math.floor(((ang-Math.PI)/Math.PI)*RIBS);
+        model.push({x,y,seg:wedge,kind:'dome'});
+      }
+    }
+    for(let k=0;k<=RIBS;k++){
+      const ang=Math.PI+(k/RIBS)*Math.PI;
+      for(let rr=0.05;rr<=R;rr+=0.075){model.push({x:Math.cos(ang)*rr,y:Math.sin(ang)*rr*0.62,seg:k,kind:'rib'});}
+    }
+    for(let yy=0;yy<=0.85;yy+=0.06){model.push({x:0,y:yy,seg:-1,kind:'stick'});}
+  }
+  buildModel();
+  const segCols=[RGB.orange,RGB.cream,RGB.violet,RGB.green,RGB.orange,RGB.sky,RGB.violet,RGB.cream];
+  function draw(t){
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle='#f1ecdf';ctx.fillRect(0,0,W,H);
+    const cx=W*0.5,cy=H*0.46,scale=Math.min(W,H)*0.42;
+    const spin=REDUCED?0.25:(t*0.35);
+    const sx=Math.cos(spin)*0.95;
+    const facingSign=Math.sign(Math.cos(spin))||1;
+    for(let i=0;i<24;i++){
+      const a=i/24*Math.PI*2;
+      dot(ctx,cx+Math.cos(a)*scale*0.5*sx,cy+scale*0.60+Math.sin(a)*scale*0.05,1.6,rgba(RGB.violet,1),0.4);
+    }
+    for(const p of model){
+      let col,r;
+      if(p.kind==='stick'){col=RGB.ink;r=1.6;}
+      else if(p.kind==='rib'){col=RGB.ink;r=1.2;}
+      else{col=segCols[((p.seg)%segCols.length+segCols.length)%segCols.length];r=1.9;}
+      const x=cx+p.x*scale*sx;
+      const y=cy+p.y*scale;
+      const facing=(p.x*facingSign>=0)?1:0.45;
+      dot(ctx,x,y,r,rgba(col,1),0.5+0.5*facing);
+    }
+  }
+  let raf=0,running=false,t0=performance.now();
+  function loop(){if(!running)return;draw((performance.now()-t0)/1000);raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED)draw(0);},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else{t0=performance.now();start();}});
+  if(REDUCED)draw(0);else start();
+})();
+</script>
+</body>
+</html>

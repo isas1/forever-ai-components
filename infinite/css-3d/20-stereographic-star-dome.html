@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A tilted planetarium dome of 150 twinkling billboard stars wheels slowly about its polar axis over a faint horizon ring on near-black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stereographic Star Dome</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#05060f;}
+  #sd-stage{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    perspective:clamp(380px,90vmin,820px);perspective-origin:50% 38%;
+  }
+  /* the dome — a sphere we tilt forward and wheel about its polar axis */
+  #sd-dome{
+    position:relative;
+    width:clamp(180px,72vmin,620px);height:clamp(180px,72vmin,620px);
+    transform-style:preserve-3d;
+    transform:rotateX(58deg) rotateZ(0deg);
+    will-change:transform;
+  }
+  /* horizon ring sits in the dome's equatorial plane */
+  #sd-horizon{
+    position:absolute;inset:0;border-radius:50%;
+    border:1px solid rgba(205,217,255,.16);
+    box-shadow:0 0 30px rgba(205,217,255,.05) inset;
+    transform-style:preserve-3d;
+  }
+  #sd-horizon::after{
+    content:"";position:absolute;inset:14%;border-radius:50%;
+    border:1px solid rgba(205,217,255,.07);
+  }
+  /* each star: positioned at dome centre, pushed out in 3D, then a billboard child */
+  .sd-anchor{position:absolute;left:50%;top:50%;width:0;height:0;transform-style:preserve-3d;}
+  .sd-bill{
+    position:absolute;left:0;top:0;border-radius:50%;
+    background:radial-gradient(circle at 50% 50%,#fff 0%,#cdd9ff 38%,rgba(205,217,255,0) 72%);
+    transform:translate(-50%,-50%);
+    /* no will-change: 150 promoted layers per iframe exhausts the GPU.
+       The dome (one promoted layer) drives the motion; bills ride along. */
+  }
+  .sd-cap{
+    position:fixed;left:9px;bottom:8px;
+    font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+    letter-spacing:.16em;color:#cdd9ff;opacity:.34;text-transform:uppercase;
+    pointer-events:none;user-select:none;
+  }
+</style>
+</head>
+<body>
+  <div id="sd-stage">
+    <div id="sd-dome"><div id="sd-horizon"></div></div>
+  </div>
+  <div class="sd-cap">Stereographic Star Dome</div>
+<script>
+(function(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const dome = document.getElementById('sd-dome');
+  // sphere radius in px ~ half the dome box (it scales via clamp, so use a unit & let transforms be in px relative to box)
+  function radius(){ return dome.clientWidth/2; }
+
+  // place N stars on the upper hemisphere via spherical->cartesian trig.
+  // theta = polar (0=zenith), phi = azimuth. We keep theta in [0, ~80deg] so stars dome overhead.
+  const N = 150, stars = [];
+  for(let i=0;i<N;i++){
+    // even-ish distribution: bias toward horizon for depth, sqrt for area-uniform
+    const u = Math.random();
+    const theta = Math.acos(1 - u*0.94);        // 0..~80deg from zenith
+    const phi = Math.random()*Math.PI*2;
+    const mag = Math.pow(Math.random(),2.2);     // most stars dim, few bright
+    const anchor = document.createElement('div');
+    anchor.className = 'sd-anchor';
+    const bill = document.createElement('div');
+    bill.className = 'sd-bill';
+    const sz = (1.4 + mag*4.2);
+    bill.style.width = sz+'px'; bill.style.height = sz+'px';
+    bill.style.opacity = (0.35 + mag*0.65).toFixed(2);
+    anchor.appendChild(bill);
+    dome.appendChild(anchor);
+    stars.push({theta,phi,bill,anchor,mag,
+      tw:Math.random()*Math.PI*2, tws:0.6+Math.random()*1.4});
+  }
+
+  let R = radius();
+  function layout(){
+    R = radius();
+    for(const s of stars){
+      // spherical -> cartesian (z up toward zenith). dome box is the equatorial disk.
+      const sx = R*Math.sin(s.theta)*Math.cos(s.phi);
+      const sy = R*Math.sin(s.theta)*Math.sin(s.phi);
+      const sz = R*Math.cos(s.theta);
+      s.x=sx; s.y=sy; s.z=sz;
+      // push anchor out along the sphere surface in dome-local 3D space
+      s.anchor.style.transform = 'translate3d('+sx+'px,'+sy+'px,'+sz+'px)';
+    }
+  }
+  layout();
+  addEventListener('resize', layout);
+
+  // animation: wheel the dome about its polar (Z) axis. counter-rotate each
+  // billboard so it always squarely faces the viewer (cancel domeX then domeZ).
+  let spin = 0, vel = 0.12, t = 0;
+  const TILT = 58 * Math.PI/180;
+  function setDome(){
+    dome.style.transform = 'rotateX(58deg) rotateZ('+spin+'deg)';
+  }
+  function billboard(){
+    // viewer looks down -Z(screen). Dome is rotated X(58) then Z(spin).
+    // To face viewer, billboard must undo: rotateZ(-spin) rotateX(-58) in local space.
+    const inv = 'rotateZ('+(-spin)+'deg) rotateX(-58deg)';
+    for(const s of stars){
+      // twinkle scales the billboard slightly + flickers opacity
+      const tw = 0.78 + 0.22*Math.sin(s.tw);
+      s.bill.style.transform = 'translate(-50%,-50%) '+inv+' scale('+tw.toFixed(3)+')';
+    }
+  }
+
+  function frame(){
+    t += 0.016;
+    spin = (spin + vel) % 360;
+    vel += (0.12 - vel)*0.02;        // ease back to base drift after a nudge
+    for(const s of stars){ s.tw += 0.016*s.tws; }
+    setDome();
+    billboard();
+    raf = requestAnimationFrame(frame);
+  }
+
+  // pointer nudges the planetarium spin
+  addEventListener('pointermove', e=>{
+    const cx = innerWidth/2;
+    vel += ((e.clientX-cx)/innerWidth) * 0.6;
+    vel = Math.max(-1.6, Math.min(1.6, vel));
+  });
+  addEventListener('click', ()=>{ vel += 1.0; });
+
+  let raf = 0;
+  function start(){ if(!raf && !reduce) raf = requestAnimationFrame(frame); }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange', ()=>document.hidden?stop():start());
+
+  if(reduce){ setDome(); billboard(); }   // one static resting frame, no loop
+  else start();
+})();
+</script>
+</body>
+</html>

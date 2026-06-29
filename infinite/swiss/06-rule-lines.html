@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Horizontal rule bars slide in from alternating edges and pulse in rhythm with a red accent line and asymmetric vertical axis under RULE LINE">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rule Lines</title>
+<style>
+  :root{
+    --sw06-bg:#0f0f10;
+    --sw06-ink:#f2f1ec;
+    --sw06-dim:#6c6c70;
+    --sw06-red:#e8482b;
+  }
+  html,body{margin:0;height:100%}
+  body{background:var(--sw06-bg);overflow:hidden}
+  #sw06-stage{
+    position:fixed;inset:0;
+    background:var(--sw06-bg);
+    font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",system-ui,sans-serif;
+    color:var(--sw06-ink);
+    overflow:hidden;
+  }
+  /* fixed-grid frame margins */
+  #sw06-field{position:absolute;left:9%;right:9%;top:9%;bottom:9%}
+
+  /* the rules: full-width bars that slide in from alternating edges */
+  .sw06-rule{
+    position:absolute;left:0;width:100%;
+    transform-origin:left center;
+    will-change:transform,opacity;
+  }
+  .sw06-bar{height:100%;width:100%;background:var(--sw06-ink);transform-origin:left center}
+
+  /* per-rule slide-in then a slow rhythmic re-sweep */
+  @keyframes sw06-slide{
+    0%   {transform:scaleX(0)}
+    14%  {transform:scaleX(1)}
+    100% {transform:scaleX(1)}
+  }
+  @keyframes sw06-pulse{
+    0%,38%,100%{transform:scaleX(1)}
+    50%        {transform:scaleX(.62)}
+    62%        {transform:scaleX(1)}
+  }
+
+  /* numeric ticks ride the rhythm */
+  .sw06-num{
+    position:absolute;
+    font:700 11px/1 "Helvetica Neue",Helvetica,Arial,sans-serif;
+    letter-spacing:.14em;color:var(--sw06-dim);
+    transform:translateX(0);will-change:transform,opacity;opacity:0;
+    animation:sw06-fade 1s ease forwards;
+  }
+  @keyframes sw06-fade{to{opacity:1}}
+
+  /* the typographic anchor block, lower-left, asymmetric */
+  #sw06-mast{
+    position:absolute;left:0;bottom:0;
+    transform:translateY(8px);opacity:0;
+    animation:sw06-rise 1s cubic-bezier(.2,.7,.2,1) .7s forwards;
+  }
+  @keyframes sw06-rise{to{transform:translateY(0);opacity:1}}
+  #sw06-mast .l1{font:800 clamp(20px,7.2vmin,52px)/.92 "Helvetica Neue",Helvetica,Arial,sans-serif;letter-spacing:-.02em}
+  #sw06-mast .l1 b{color:var(--sw06-red)}
+  #sw06-mast .l2{margin-top:.5em;font:600 clamp(8px,2vmin,12px)/1 "Helvetica Neue",Helvetica,Arial,sans-serif;letter-spacing:.32em;color:var(--sw06-dim);text-transform:uppercase}
+
+  /* index marker, upper-right */
+  #sw06-idx{position:absolute;right:0;top:0;font:700 clamp(10px,2.4vmin,14px)/1 "Helvetica Neue",Helvetica,Arial,sans-serif;letter-spacing:.18em;color:var(--sw06-dim)}
+  #sw06-idx b{color:var(--sw06-red)}
+
+  /* vertical hairline — the asymmetry axis */
+  #sw06-axis{position:absolute;top:0;bottom:0;left:62%;width:1px;background:var(--sw06-dim);opacity:.32;transform:scaleY(0);transform-origin:top;animation:sw06-axis .9s cubic-bezier(.2,.7,.2,1) .35s forwards}
+  @keyframes sw06-axis{to{transform:scaleY(1)}}
+
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    .sw06-rule{transform:scaleX(1)!important}
+    .sw06-bar,.sw06-num,#sw06-mast,#sw06-idx,#sw06-axis{opacity:1!important;transform:none!important}
+    #sw06-mast{transform:translateY(0)!important}
+  }
+</style>
+</head>
+<body>
+  <div id="sw06-stage" role="img" aria-label="Swiss typographic composition: horizontal rule lines sliding to partition the frame in rhythm, with a red accent and an asymmetric grid.">
+    <div id="sw06-field" aria-hidden="true">
+      <div id="sw06-axis"></div>
+      <div id="sw06-idx">SET <b>06</b></div>
+      <div id="sw06-mast">
+        <div class="l1">Rule<br><b>Lines</b></div>
+        <div class="l2">Horizontal · Rhythm · Grid</div>
+      </div>
+    </div>
+  </div>
+  <div class="cap">Rule Lines</div>
+
+<script>
+(function(){
+  "use strict";
+  var field=document.getElementById("sw06-field");
+  if(!field)return;
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // rhythmic positions (fractions of field height) — asymmetric Swiss tiers
+  var tiers=[0.06,0.18,0.27,0.41,0.58,0.71];
+  // bar thicknesses in px — typographic weight variation
+  var weights=[10,2,2,4,2,2];
+  // which side each slides from: 0 left-origin, 1 right-origin (mirror)
+  var sides=[0,1,0,0,1,0];
+  // red accent on one rule only — restraint
+  var redIdx=3;
+
+  var i,len=tiers.length;
+  for(i=0;i<len;i++){
+    var r=document.createElement("div");
+    r.className="sw06-rule";
+    r.style.top=(tiers[i]*100)+"%";
+    r.style.height=weights[i]+"px";
+    if(sides[i]){r.style.transformOrigin="right center";}
+
+    var bar=document.createElement("div");
+    bar.className="sw06-bar";
+    if(i===redIdx)bar.style.background="var(--sw06-red)";
+    if(sides[i])bar.style.transformOrigin="right center";
+    r.appendChild(bar);
+
+    // numeric tick to the right of each rule baseline
+    var num=document.createElement("div");
+    num.className="sw06-num";
+    num.style.top=(tiers[i]*100)+"%";
+    num.style.right="0";
+    num.style.transform="translateY(4px)";
+    num.style.animationDelay=(0.5+i*0.12)+"s";
+    num.textContent=("0"+(i+1)).slice(-2);
+    if(i===redIdx)num.style.color="var(--sw06-red)";
+
+    field.appendChild(r);
+    field.appendChild(num);
+
+    if(!reduce){
+      // staggered entrance, then a perpetual slow pulse offset per tier
+      var inDelay=(0.15+i*0.13);
+      var pulseDur=(6+(i%3)*1.4);
+      var pulseDelay=(1.4+i*0.55);
+      // bar carries the entrance scaleX; rule wrapper carries the pulse
+      bar.style.transform="scaleX(0)";
+      bar.style.animation="sw06-slide .9s cubic-bezier(.16,.84,.3,1) "+inDelay.toFixed(2)+"s forwards";
+      r.style.animation="sw06-pulse "+pulseDur.toFixed(1)+"s ease-in-out "+pulseDelay.toFixed(2)+"s infinite";
+    }else{
+      bar.style.transform="scaleX(1)";
+    }
+  }
+
+  if(reduce)return;
+
+  // pause/resume rhythm on tab visibility — single source, no rAF needed
+  function setState(s){
+    var nodes=field.querySelectorAll(".sw06-rule,.sw06-bar,.sw06-num");
+    for(var k=0;k<nodes.length;k++)nodes[k].style.animationPlayState=s;
+    var m=document.getElementById("sw06-mast"),a=document.getElementById("sw06-axis");
+    if(m)m.style.animationPlayState=s;
+    if(a)a.style.animationPlayState=s;
+  }
+  document.addEventListener("visibilitychange",function(){
+    setState(document.hidden?"paused":"running");
+  });
+})();
+</script>
+</body>
+</html>

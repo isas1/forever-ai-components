@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="L-system fern frond on near-black, fiddlehead tips uncurl and respire in a glowing green breathing loop, pointer accelerates growth.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L-System Fern</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#071510;}
+  #fern-cv{display:block;width:100%;height:100%;}
+  .fern-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#5fcf80;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="fern-cv"></canvas>
+<div class="fern-cap">L-System Fern</div>
+<script>
+(function(){
+  const cv=document.getElementById('fern-cv'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,scale;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    scale=Math.min(W,H)/520;
+  }
+  addEventListener('resize',size);size();
+
+  // L-system fern grammar, depth-limited, expanded once into a turtle path tree.
+  // We pre-build segments with a "birth" depth so the frond grows depth-by-depth,
+  // and each segment carries a curl factor that unrolls from a fiddlehead spiral.
+  const AX=0.018; // base angle unit (radians) — multiplied per segment
+  const segs=[];
+  function grow(x,y,ang,len,depth,maxDepth,order){
+    if(depth>maxDepth||len<2)return;
+    // pinna stem segment
+    const nx=x+Math.cos(ang)*len, ny=y+Math.sin(ang)*len;
+    segs.push({x0:x,y0:y,x1:nx,y1:ny,d:depth,w:Math.max(.4,(maxDepth-depth)*0.55+order*0.4),order:order});
+    // continue main rachis
+    grow(nx,ny,ang-0.03,len*0.86,depth+1,maxDepth,order);
+    // side pinnae alternate left/right, each is itself a smaller fern (self-similar)
+    if(depth%2===0 && order<2){
+      const sl=len*1.35*(1-depth/maxDepth*0.5);
+      grow(nx,ny,ang-0.85, sl, depth+1, Math.min(maxDepth,depth+7), order+1);
+      grow(nx,ny,ang+0.85, sl, depth+1, Math.min(maxDepth,depth+7), order+1);
+    }
+  }
+  const MAXD=46;
+  grow(0,0,-Math.PI/2,9,0,MAXD,0);
+  segs.sort((a,b)=>a.d-b.d);
+  const maxBirth=segs[segs.length-1].d;
+
+  // respiration cycle: grow out (uncurl) then breathe back in
+  let phase=0;
+  let pointerBoost=0;
+  cv.addEventListener('pointermove',()=>{pointerBoost=1;});
+  cv.addEventListener('click',()=>{pointerBoost=1.6;});
+
+  function tone(t){
+    // deep stem green -> bright accent at the curling tips
+    const r=Math.round(40+ (95-40)*t);
+    const g=Math.round(110+ (207-110)*t);
+    const b=Math.round(70+ (128-70)*t);
+    return 'rgb('+r+','+g+','+b+')';
+  }
+
+  function render(growth){
+    ctx.fillStyle='rgba(7,21,16,'+(reduce?1:0.30)+')';ctx.fillRect(0,0,W,H);
+    ctx.save();
+    // anchor near bottom-center, fern rises upward
+    ctx.translate(W*0.5, H*0.94);
+    ctx.scale(scale,scale);
+    ctx.lineCap='round';ctx.lineJoin='round';
+
+    const reach = growth*maxBirth; // how many depth-layers have emerged
+    for(let i=0;i<segs.length;i++){
+      const s=segs[i];
+      if(s.d>reach) break;
+      // local emergence: 0 at birth -> 1 fully uncurled over a few layers
+      let e=(reach - s.d);
+      e=e<0?0:e>6?1:e/6;
+      // fiddlehead curl: newest segments spiral tightly, relax as they uncurl.
+      // we rotate each point around its start by a curl angle that fades with e.
+      const curl=(1-e)*(1-e)* (s.d*AX*3.2) * (s.order?1.6:1);
+      const ca=Math.cos(curl), sa=Math.sin(curl);
+      let dx=s.x1-s.x0, dy=s.y1-s.y0;
+      const rx=dx*ca - dy*sa, ry=dx*sa + dy*ca;
+      const x1=s.x0+rx, y1=s.y0+ry;
+
+      const tipness=s.d/maxBirth;            // toward tip -> brighter
+      const lit = tipness*0.55 + (1-e)*0.45; // freshly-uncurling parts glow
+      // soft glow on the active curling front — fake the blur with a wider,
+      // low-alpha additive stroke instead of per-frame canvas shadowBlur (no repaint storm)
+      const glow=1-e;
+      if(glow>0.25){
+        ctx.save();
+        ctx.globalCompositeOperation='lighter';
+        ctx.strokeStyle='rgba(95,207,128,'+(0.18*glow)+')';
+        ctx.lineWidth=s.w*(0.6+0.4*e)+6*glow;
+        ctx.beginPath();ctx.moveTo(s.x0,s.y0);ctx.lineTo(x1,y1);ctx.stroke();
+        ctx.restore();
+      }
+      ctx.strokeStyle=tone(Math.min(1,lit));
+      ctx.globalAlpha=0.35+0.65*e;
+      ctx.lineWidth=s.w*(0.6+0.4*e);
+      ctx.beginPath();ctx.moveTo(s.x0,s.y0);ctx.lineTo(x1,y1);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    ctx.restore();
+  }
+
+  function frame(){
+    if(!reduce){
+      const sp = 0.0042*(1+pointerBoost);
+      phase += sp;
+      pointerBoost*=0.95;
+    }
+    // smooth ease: 0->1 (unfurl) then 1->0 (respire in), looping
+    const tri = (Math.cos(phase)*-0.5+0.5);          // 0..1..0
+    const growth = tri*tri*(3-2*tri);                 // smoothstep
+    render(0.05+growth*0.95);
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ctx.fillStyle='#071510';ctx.fillRect(0,0,W,H);render(1);}else start();
+})();
+</script>
+</body>
+</html>

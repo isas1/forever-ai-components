@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A split escape-time fractal morphing between a Mandelbrot and Julia set across a glowing vertical seam in violet hues.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fractal Split</title>
+<style>
+  html,body{margin:0;height:100%;background:#06070b}
+  #fr09-stage{position:fixed;inset:0;background:#06070b;overflow:hidden}
+  #fr09-c{position:absolute;inset:0;width:100%;height:100%;display:block;
+    image-rendering:pixelated}
+  /* static seam glow — never repaints */
+  #fr09-seam{position:absolute;top:0;bottom:0;left:50%;width:1px;
+    transform:translateX(-.5px);
+    background:linear-gradient(#9b8cff00,#9b8cffcc 18%,#cfc7ffee 50%,#9b8cffcc 82%,#9b8cff00);
+    box-shadow:0 0 14px 2px #9b8cff66;pointer-events:none;opacity:.9}
+  #fr09-vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 120% at 50% 50%,#06070b00 52%,#06070bcc 100%)}
+  .fr09-lab{position:absolute;top:8px;font:600 9px/1 ui-monospace,Menlo,monospace;
+    color:#cfc7ff;opacity:.5;letter-spacing:.14em;pointer-events:none;text-transform:uppercase}
+  #fr09-lz{left:9px}#fr09-lj{right:9px}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fr09-stage" role="img" aria-label="Split escape-time fractal morphing between a Mandelbrot set and a Julia set across a glowing vertical seam">
+  <canvas id="fr09-c"></canvas>
+  <div id="fr09-seam"></div>
+  <div id="fr09-vig"></div>
+  <span class="fr09-lab" id="fr09-lz">Mandelbrot</span>
+  <span class="fr09-lab" id="fr09-lj">Julia</span>
+  <div class="cap">Fractal Split</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('fr09-stage');
+  var cv=document.getElementById('fr09-c');
+  var ctx=cv.getContext('2d',{alpha:false});
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  // capped low-res sim buffer; CSS scales it up (pixelated) — keeps it cheap & crisp
+  var W=200,H=200,N=W*H;
+  cv.width=W;cv.height=H;
+  var img=ctx.createImageData(W,H), data=img.data;
+  // palette: deep indigo -> accent violet -> pale lilac (movement-true, around #9b8cff)
+  var PAL=new Uint8Array(256*3);
+  (function(){
+    var stops=[[6,7,11],[34,22,74],[91,76,200],[155,140,255],[207,199,255],[244,242,255]];
+    for(var i=0;i<256;i++){
+      var t=i/255*(stops.length-1), k=t|0, f=t-k, a=stops[k], b=stops[Math.min(k+1,stops.length-1)];
+      PAL[i*3]=a[0]+(b[0]-a[0])*f|0;
+      PAL[i*3+1]=a[1]+(b[1]-a[1])*f|0;
+      PAL[i*3+2]=a[2]+(b[2]-a[2])*f|0;
+    }
+  })();
+  var MAX=46; // iteration cap
+  // precompute escape-smoothing lookup not needed; keep loop allocation-free
+  var running=true, raf=0, t0=0;
+
+  function render(time){
+    // Julia parameter traces a smooth orbit; morph weight oscillates per column blend
+    var ph=time*0.00022;
+    var cjx=0.355+0.18*Math.cos(ph*1.3)+0.04*Math.sin(ph*2.7);
+    var cjy=0.355+0.18*Math.sin(ph*1.1)+0.04*Math.cos(ph*2.1);
+    // global morph 0..1 between pure-Mandelbrot(left) and pure-Julia(right) influence
+    var morph=0.5+0.5*Math.sin(time*0.00016);
+    var p=0, idx=0;
+    var invW=1/W, invH=1/H;
+    for(var py=0;py<H;py++){
+      var fy=py*invH;            // 0..1
+      var ci0=(fy-0.5)*2.6;      // imaginary axis
+      for(var px=0;px<W;px++,idx+=4){
+        var fx=px*invW;          // 0..1
+        // blend factor: left half -> Mandelbrot, right half -> Julia, with a soft seam morph
+        var zx, zy, cx, cy;
+        // animate the transition: shift the boundary slightly with morph
+        var bnd = 0.5 + (morph-0.5)*0.16;
+        if(fx<bnd){
+          // Mandelbrot: z0=0, c = pixel
+          cx=(fx-0.5)*3.0-0.6; cy=ci0;
+          zx=0; zy=0;
+        } else {
+          // Julia: z0 = pixel, c = orbiting constant
+          zx=(fx-0.5)*3.0; zy=ci0;
+          cx=cjx-0.5; cy=cjy-0.5;
+        }
+        var it=0, zx2=zx*zx, zy2=zy*zy;
+        while(it<MAX && zx2+zy2<4){
+          zy=2*zx*zy+cy;
+          zx=zx2-zy2+cx;
+          zx2=zx*zx; zy2=zy*zy;
+          it++;
+        }
+        var c;
+        if(it>=MAX){ c=0; }
+        else {
+          // smooth coloring
+          var mag=zx2+zy2;
+          var nu=it+1-Math.log(0.5*Math.log(mag>1?mag:1.0001))*1.4427;
+          var v=nu*5.2 + time*0.012; // slow palette drift (compositor-free, just remap)
+          c=(v|0)&255;
+          if(c<8)c=8; // keep interior-edge from going to pure bg
+        }
+        var o=c*3;
+        data[idx]=PAL[o]; data[idx+1]=PAL[o+1]; data[idx+2]=PAL[o+2]; data[idx+3]=255;
+      }
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  function loop(time){
+    if(!running)return;
+    render(time);
+    raf=requestAnimationFrame(loop);
+  }
+
+  if(reduce){
+    render(8200); // one settled, legible, on-brand frame
+    return;
+  }
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; raf=requestAnimationFrame(loop); }
+  });
+  raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

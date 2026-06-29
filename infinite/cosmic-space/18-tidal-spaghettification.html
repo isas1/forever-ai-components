@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A star streams past an unseen gravity well, stretching into a white-hot luminous filament that wraps and flares near perihelion.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tidal Spaghettification</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0510;}
+  #tsg-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.12em;color:#ff6b6b;opacity:.36;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="tsg-c"></canvas>
+<div class="cap">Tidal Spaghettification</div>
+<script>
+(function(){
+  const cv=document.getElementById('tsg-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,S;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W*0.5;cy=H*0.5;S=Math.min(W,H)/400;
+  }
+  addEventListener('resize',size);size();
+  // well sits off to one side; star streams past on a hyperbolic-ish path.
+  // each element has an orbital phase; near-perihelion the stream gets stretched
+  // (elements spread in phase) -> the luminous filament + wrap-around arc.
+  const N=170, body=[];
+  for(let i=0;i<N;i++) body.push({s:i/(N-1)}); // s: 0 far-tail .. 1 leading head
+  let t=0, boost=0;
+  cv.addEventListener('pointermove',()=>{boost=Math.min(boost+0.5,1.4);});
+  cv.addEventListener('click',()=>{boost=1.6;});
+
+  // map orbital phase u -> screen point. well at (gx,gy).
+  function path(u, spread){
+    const gx=cx-90*S, gy=cy+18*S;        // unseen gravity well
+    const a=u*Math.PI*1.55-0.35;          // angle swept along the arc
+    const peri=42*S;                      // closest approach radius
+    // radius dips at perihelion (u~0.5) then climbs: tidal stretch lives here
+    const dip=Math.exp(-Math.pow((u-0.5)/0.16,2));
+    const r=peri + (1-dip)*propR(u) + spread*46*S*dip; // spread blows out near peri
+    const x=gx+Math.cos(a)*r, y=gy+Math.sin(a)*r*0.86;
+    return [x,y,dip];
+  }
+  function propR(u){ return (Math.abs(u-0.5))*330*S; }
+
+  function frame(){
+    t+=reduce?0:0.0042;
+    boost*=0.95;
+    ctx.fillStyle='rgba(10,5,16,0.20)';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    const flow=(reduce?0.5:(t*0.5)%1); // travels along the stream
+    let px,py;
+    for(let i=0;i<N;i++){
+      const b=body[i];
+      // phase: head leads, tail trails; near-side (higher u) advances faster
+      let u=b.s*0.5 + flow*0.5 + 0.001*Math.sin(t*9+i);
+      u=u%1;
+      const dip=Math.exp(-Math.pow((u-0.5)/0.16,2));
+      // differential stretch: near-side stretched ahead -> wider phase spacing
+      const spread=(0.4+boost)*dip*(b.s);
+      const [x,y]=path(u, spread*0.4);
+      const heat=Math.min(1, dip*1.15 + spread*0.5);
+      const sz=(0.7 + heat*2.6 + b.s*0.6)*S;
+      // color ramp: cool plasma tail -> white-hot stretched core -> accent flare
+      let col;
+      if(heat>0.78) col='#fff0e6';
+      else if(heat>0.5) col='#ffb3a0';
+      else if(heat>0.28) col='#ff6b6b';
+      else col='#8a3a6a';
+      ctx.globalAlpha=0.20+heat*0.7;
+      ctx.fillStyle=col;
+      ctx.beginPath();ctx.arc(x,y,sz,0,6.2832);ctx.fill();
+      // connecting filament strand
+      if(i>0){
+        ctx.globalAlpha=0.10+heat*0.30;
+        ctx.strokeStyle=col;ctx.lineWidth=(0.5+heat*1.4)*S;
+        ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(x,y);ctx.stroke();
+      }
+      px=x;py=y;
+    }
+    ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha=1;
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ctx.fillStyle='#0a0510';ctx.fillRect(0,0,W,H);frame();}else start();
+})();
+</script>
+</body>
+</html>

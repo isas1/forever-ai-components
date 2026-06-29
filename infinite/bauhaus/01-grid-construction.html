@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Primary-colored squares, circles, quarter-discs and triangles scatter then snap into a balanced modular 4x4 grid composition and recompose o">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grid Construction</title>
+<style>
+  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  #bh01-stage{position:fixed;inset:0;background:#101012}
+  #bh01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="bh01-stage" role="img" aria-label="Bauhaus grid of primary-colored squares and circles snapping into a balanced modular composition and recomposing">
+  <canvas id="bh01-c"></canvas>
+</div>
+<div class="cap">Grid Construction</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("bh01-c"),ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // Bauhaus palette: primary red/blue/yellow + black, on off-dark.
+  var RED="#e63329",BLU="#2b4ea2",YEL="#edc01f",BLK="#15151a",CRM="#e9e3d2";
+  var COLS=[RED,BLU,YEL,BLK,CRM];
+
+  // Module grammar. shape:0 square,1 circle,2 quarter-disc,3 triangle.
+  // Cells live on a NxN modular grid; each cell holds a tile that animates
+  // from a scattered state to a snapped grid slot, then recomposes.
+  var N=4, CELLS=N*N;            // 16 modules — well under cap
+  var seed=0;
+  function rnd(){ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }
+
+  // Per-module static description + two layout poses (A target / B target).
+  var sh=new Int8Array(CELLS), col=new Int8Array(CELLS), rot=new Float64Array(CELLS);
+  var gx=new Float64Array(CELLS), gy=new Float64Array(CELLS);   // home grid cell (0..N-1)
+  var ax=new Float64Array(CELLS), ay=new Float64Array(CELLS), as=new Float64Array(CELLS);
+  var bx=new Float64Array(CELLS), by=new Float64Array(CELLS), bs=new Float64Array(CELLS);
+
+  function buildComposition(toA){
+    // assign a balanced-ish layout: shuffle home order, vary span/scale
+    seed=(toA?0x9e37:0x517c)>>>0;
+    var i,order=[];
+    for(i=0;i<CELLS;i++) order.push(i);
+    for(i=CELLS-1;i>0;i--){var j=(rnd()*(i+1))|0,t=order[i];order[i]=order[j];order[j]=t;}
+    for(i=0;i<CELLS;i++){
+      var c=order[i];
+      var ix=c%N, iy=(c/N)|0;
+      sh[i]=(rnd()*4)|0;
+      col[i]=(rnd()*COLS.length)|0;
+      rot[i]=((rnd()*4)|0)*Math.PI/2;
+      var px=ix+0.5, py=iy+0.5;
+      var s=0.62+rnd()*0.42;
+      if(toA){ ax[i]=px; ay[i]=py; as[i]=s; }
+      else   { bx[i]=px; by[i]=py; bs[i]=s; }
+      gx[i]=ix; gy[i]=iy;
+    }
+  }
+  buildComposition(true); buildComposition(false);
+
+  // scatter pose used during transitions (off-grid drift)
+  var sx=new Float64Array(CELLS), sy=new Float64Array(CELLS);
+  function reseedScatter(){
+    for(var i=0;i<CELLS;i++){ sx[i]=-0.4+rnd()*(N+0.8); sy[i]=-0.4+rnd()*(N+0.8); }
+  }
+  seed=0x1234; reseedScatter();
+
+  var W=0,H=0,DPR=1,unit=0,ox=0,oy=0,grid=0;
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    var w=cv.clientWidth||window.innerWidth,h=cv.clientHeight||window.innerHeight;
+    W=w;H=h; cv.width=Math.round(w*DPR); cv.height=Math.round(h*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    grid=Math.min(W,H)*0.78;          // composition square
+    unit=grid/N;
+    ox=(W-grid)/2; oy=(H-grid)/2;
+  }
+  size();
+  window.addEventListener("resize",size);
+
+  function lerp(a,b,t){ return a+(b-a)*t; }
+  // ease: anticipate + settle (snap feel), bounded, no overshoot blowup
+  function snapEase(t){ return t<0?0:t>1?1:1-Math.pow(1-t,3); }
+
+  function drawShape(s,cx,cy,r,rotn,fill){
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(rotn);
+    ctx.fillStyle=fill;
+    if(s===0){ ctx.fillRect(-r,-r,2*r,2*r); }
+    else if(s===1){ ctx.beginPath(); ctx.arc(0,0,r,0,6.2831853); ctx.fill(); }
+    else if(s===2){ ctx.beginPath(); ctx.moveTo(-r,-r); ctx.arc(-r,-r,2*r,0,1.5707963); ctx.closePath(); ctx.fill(); }
+    else { ctx.beginPath(); ctx.moveTo(0,-r); ctx.lineTo(r,r); ctx.lineTo(-r,r); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+  }
+
+  // Phase machine: 0 build->A, 1 hold A, 2 dissolve->scatter->B, 3 hold B, loop
+  var t0=0, dur=[2200,1500,2600,1500];
+  function frameAt(now){
+    ctx.fillStyle="#101012";
+    ctx.fillRect(0,0,W,H);
+
+    // faint construction grid lines (static look, drawn each frame cheaply)
+    ctx.strokeStyle="rgba(233,227,210,0.07)";
+    ctx.lineWidth=1;
+    for(var g=0;g<=N;g++){
+      var p=ox+g*unit;
+      ctx.beginPath(); ctx.moveTo(p,oy); ctx.lineTo(p,oy+grid); ctx.stroke();
+      var q=oy+g*unit;
+      ctx.beginPath(); ctx.moveTo(ox,q); ctx.lineTo(ox+grid,q); ctx.stroke();
+    }
+
+    var el=now-t0, phase=0, acc=0;
+    while(phase<3 && el>acc+dur[phase]){ acc+=dur[phase]; phase++; }
+    var lt=(el-acc)/dur[phase];
+    if(lt>1)lt=1;
+
+    var i,cx,cy,cs,rr;
+    for(i=0;i<CELLS;i++){
+      var stagger=(i*0.045);
+      var fx,fy,fsc;
+      if(phase===0){                       // scatter -> A (build)
+        var tt=snapEase((lt-stagger)/(1-0.7));
+        fx=lerp(sx[i],ax[i],tt); fy=lerp(sy[i],ay[i],tt); fsc=lerp(0.2,as[i],tt);
+      }else if(phase===1){                  // hold A
+        fx=ax[i]; fy=ay[i]; fsc=as[i];
+      }else if(phase===2){                  // A -> scatter -> B (recompose)
+        if(lt<0.5){ var t1=snapEase(lt*2); fx=lerp(ax[i],sx[i],t1); fy=lerp(ay[i],sy[i],t1); fsc=lerp(as[i],0.35,t1); }
+        else      { var t2=snapEase((lt-0.5)*2); fx=lerp(sx[i],bx[i],t2); fy=lerp(sy[i],by[i],t2); fsc=lerp(0.35,bs[i],t2); }
+      }else{                                // hold B
+        fx=bx[i]; fy=by[i]; fsc=bs[i];
+      }
+      cx=ox+fx*unit; cy=oy+fy*unit; cs=fsc;
+      rr=unit*0.46*cs;
+      if(rr<0.5) continue;
+      var spin = (phase===2? lt*1.5708 : 0);
+      drawShape(sh[i],cx,cy,rr,rot[i]+spin,COLS[col[i]]);
+    }
+
+    // one anchoring black bar — Bauhaus structural accent (static)
+    ctx.fillStyle=BLK;
+    ctx.fillRect(ox, oy+grid+unit*0.18, grid, Math.max(2,unit*0.08));
+
+    if(phase===3 && lt>=1){
+      // swap A<->B targets so each cycle reads fresh, then restart
+      for(i=0;i<CELLS;i++){
+        var tx=ax[i];ax[i]=bx[i];bx[i]=tx;
+        var ty=ay[i];ay[i]=by[i];by[i]=ty;
+        var ts=as[i];as[i]=bs[i];bs[i]=ts;
+        var tc=sh[i];sh[i]=((sh[i]+1)&3);  // rotate shape grammar
+      }
+      reseedScatter();
+      t0=now;
+    }
+  }
+
+  if(reduce){
+    // settle to one balanced static frame (pose A), no loop
+    size(); t0=-99999; ctx.fillStyle="#101012"; ctx.fillRect(0,0,W,H);
+    // draw pose A directly
+    var prev=performance.now();
+    t0=prev - (dur[0]+10); // land in hold-A
+    frameAt(prev);
+    return;
+  }
+
+  var running=true, raf=0;
+  function loop(now){
+    if(!running) return;
+    frameAt(now);
+    raf=requestAnimationFrame(loop);
+  }
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; t0+=0; raf=requestAnimationFrame(function(n){ loop(n); }); }
+  });
+  t0=performance.now();
+  raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

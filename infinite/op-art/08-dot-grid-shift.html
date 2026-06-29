@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Dense offset black-and-white dot lattice whose sizes swell in phase waves, sending illusory diagonal moire bands traveling across the field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dot Grid Shift</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
+  #op08-stage{position:fixed;inset:0;background:#0a0a0a}
+  #op08-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="op08-stage" role="img" aria-label="A dense black-and-white grid of dots whose rows are gently offset and whose sizes swell and shrink in slow phase waves, producing illusory diagonal bands that travel smoothly across the field.">
+  <canvas id="op08-c"></canvas>
+</div>
+<div class="cap">Dot Grid Shift</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("op08-stage");
+  var c=document.getElementById("op08-c");
+  var ctx=c.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // cached geometry (recomputed on resize only)
+  var W=0,H=0,dpr=1;
+  var cols=0,rows=0,cell=0,rMax=0,ox=0,oy=0;
+  // precomputed per-cell base coords + a static phase term, packed in typed arrays.
+  // cap total cells well under the budget by tuning cell size to frame size.
+  var MAXCELLS=2400; // ~ a 49x49 field max; drawn as arcs, not per-pixel
+  var px=new Float32Array(MAXCELLS);
+  var py=new Float32Array(MAXCELLS);
+  var ph=new Float32Array(MAXCELLS); // static spatial phase -> diagonal banding
+  var nCells=0;
+  var running=false,raf=0,t0=0;
+
+  function build(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=Math.round(stage.clientWidth*dpr);
+    H=Math.round(stage.clientHeight*dpr);
+    c.width=W;c.height=H;
+
+    var minD=Math.min(stage.clientWidth,stage.clientHeight);
+    // cell size in device px; keep dot field legible from 180->640
+    cell=Math.max(11,Math.min(22,minD/16))*dpr;
+    rMax=cell*0.46;
+
+    cols=Math.ceil(W/cell)+2;
+    rows=Math.ceil(H/cell)+2;
+    // clamp to typed-array budget; if too many, coarsen cell
+    while(cols*rows>MAXCELLS){
+      cell*=1.12; rMax=cell*0.46;
+      cols=Math.ceil(W/cell)+2;
+      rows=Math.ceil(H/cell)+2;
+    }
+    // center the field
+    ox=(W-(cols-1)*cell)*0.5;
+    oy=(H-(rows-1)*cell)*0.5;
+
+    // pack coords. Odd rows are shifted half a cell -> the classic offset-row
+    // dot lattice. Static phase mixes x and y so animating it sweeps a diagonal.
+    var i=0,r,col,x,y;
+    var k=0.55; // diagonal slope of the band field
+    for(r=0;r<rows;r++){
+      var rowShift=(r&1)?cell*0.5:0;
+      y=oy+r*cell;
+      for(col=0;col<cols;col++){
+        x=ox+col*cell+rowShift;
+        px[i]=x; py[i]=y;
+        ph[i]=(x+y*k)/cell; // in cell units
+        i++;
+      }
+    }
+    nCells=i;
+  }
+
+  // draw the lattice for a given global phase (radians of travel)
+  function draw(travel){
+    ctx.fillStyle="#0a0a0a";
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="#f2f2f2";
+    var i,rr,s,a;
+    var TWO=6.283185307179586;
+    // single batched path keeps it allocation-free + one fill call
+    ctx.beginPath();
+    for(i=0;i<nCells;i++){
+      // size oscillates by spatial phase minus travel -> bands move smoothly.
+      // 0.5+0.5*sin gives 0..1; map to radius. Slow, no strobe.
+      s=0.5+0.5*Math.sin(ph[i]*0.9-travel);
+      rr=rMax*(0.16+0.84*s);
+      ctx.moveTo(px[i]+rr,py[i]);
+      ctx.arc(px[i],py[i],rr,0,TWO);
+    }
+    ctx.fill();
+
+    // a second, finer counter-traveling lattice in faint grey creates the moire
+    // interference against the first without a second full repaint cost.
+    ctx.fillStyle="rgba(255,255,255,0.10)";
+    ctx.beginPath();
+    for(i=0;i<nCells;i++){
+      s=0.5+0.5*Math.sin(ph[i]*1.18+travel*0.83);
+      rr=rMax*0.5*(0.1+0.9*s);
+      ctx.moveTo(px[i]+rr,py[i]);
+      ctx.arc(px[i],py[i],rr,0,TWO);
+    }
+    ctx.fill();
+  }
+
+  function frame(now){
+    if(!running)return;
+    if(!t0)t0=now;
+    var t=(now-t0)*0.001;
+    draw(t*0.6); // slow travel
+    raf=requestAnimationFrame(frame);
+  }
+
+  function drawOneFrame(){
+    draw(0.7);
+  }
+
+  function start(){
+    if(running)return;
+    running=true;t0=0;
+    raf=requestAnimationFrame(frame);
+  }
+  function stop(){
+    running=false;
+    if(raf)cancelAnimationFrame(raf);
+    raf=0;
+  }
+
+  window.addEventListener("resize",function(){
+    build();
+    if(reduce){drawOneFrame();}
+  });
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden){stop();}
+    else{start();}
+  });
+
+  build();
+  if(reduce){drawOneFrame();return;}
+  start();
+})();
+</script>
+</body>
+</html>

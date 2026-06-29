@@ -1,0 +1,129 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A violet constellation drawn by a single continuous self-animating line, with anchor nodes blooming in then fading and redrawing in a loop.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Stroke Draw-On</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0b0d12;display:grid;place-items:center}
+.ssa01-stage{width:min(86vmin,640px);height:min(86vmin,640px);position:relative}
+#ssa01-c{width:100%;height:100%;display:block}
+/* continuous self-drawing line */
+.ssa01-line{
+  fill:none;stroke:#7c5cff;stroke-width:1.6;
+  stroke-linecap:round;stroke-linejoin:round;
+  filter:drop-shadow(0 0 6px rgba(124,92,255,.55));
+}
+/* node dots that pop in as the line passes */
+.ssa01-node{fill:#cdbcff;opacity:0}
+/* faint construction grid ring */
+.ssa01-ring{fill:none;stroke:#7c5cff;stroke-width:.6;opacity:.10}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#7c5cff;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+@media (prefers-reduced-motion:reduce){
+  .ssa01-line{stroke-dashoffset:0!important;opacity:1!important;animation:none!important}
+  .ssa01-node{opacity:.9!important;animation:none!important}
+}
+</style></head><body>
+<div class="ssa01-stage" role="img" aria-label="A constellation drawn by a single continuous animated line">
+  <svg id="ssa01-c" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+</div>
+<div class="cap">Stroke Draw-On</div>
+<script>(function(){
+  var NS='http://www.w3.org/2000/svg';
+  var svg=document.getElementById('ssa01-c');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // A constellation as one continuous polyline through anchor stars, plus
+  // outgoing "rays". Points chosen for a balanced, intentional asterism.
+  var P=[
+    [42,150],[58,118],[44,86],[70,70],[96,92],[120,58],[150,44],[168,72],
+    [146,98],[160,132],[132,150],[108,132],[96,156],[72,150],[58,118]
+  ];
+  // build a smooth catmull-rom path through P (closed-ish loop ends on start)
+  function smooth(pts){
+    var d='M'+pts[0][0]+' '+pts[0][1],n=pts.length;
+    for(var i=0;i<n-1;i++){
+      var p0=pts[i?i-1:0],p1=pts[i],p2=pts[i+1],p3=pts[i+2<n?i+2:n-1];
+      var c1x=p1[0]+(p2[0]-p0[0])/6,c1y=p1[1]+(p2[1]-p0[1])/6;
+      var c2x=p2[0]-(p3[0]-p1[0])/6,c2y=p2[1]-(p3[1]-p1[1])/6;
+      d+='C'+c1x.toFixed(1)+' '+c1y.toFixed(1)+' '+c2x.toFixed(1)+' '+c2y.toFixed(1)+' '+p2[0]+' '+p2[1];
+    }
+    return d;
+  }
+
+  // faint construction ring (drawn first, very subtle)
+  var ring=document.createElementNS(NS,'circle');
+  ring.setAttribute('class','ssa01-ring');
+  ring.setAttribute('cx','100');ring.setAttribute('cy','100');ring.setAttribute('r','78');
+  svg.appendChild(ring);
+
+  var path=document.createElementNS(NS,'path');
+  path.setAttribute('class','ssa01-line');
+  path.setAttribute('d',smooth(P));
+  svg.appendChild(path);
+
+  var len=path.getTotalLength();
+  path.style.strokeDasharray=len;
+
+  // nodes at each anchor — they bloom when the pen passes their arc-position
+  var nodes=[];
+  for(var i=0;i<P.length-1;i++){ // skip dup last
+    var c=document.createElementNS(NS,'circle');
+    c.setAttribute('class','ssa01-node');
+    c.setAttribute('cx',P[i][0]);c.setAttribute('cy',P[i][1]);
+    c.setAttribute('r','2.4');
+    svg.appendChild(c);
+    nodes.push({el:c,at:i/(P.length-1)}); // fractional position along draw
+  }
+
+  if(reduce){
+    path.style.strokeDashoffset='0';
+    nodes.forEach(function(n){n.el.setAttribute('opacity','.9');});
+    return;
+  }
+
+  // Timeline (ms): draw -> hold -> fade -> redraw. Eased per-phase.
+  var DRAW=2600,HOLD=1500,FADE=900,GAP=350;
+  var TOTAL=DRAW+HOLD+FADE+GAP;
+  var raf=0,t0=0,running=true;
+
+  function ease(x){return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;} // inOutCubic
+  function outBack(x){var c=1.7;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2);}
+
+  function frame(now){
+    if(!running)return;
+    if(!t0)t0=now;
+    var t=(now-t0)%TOTAL;
+    var prog,grpOp,grpFade;
+    if(t<DRAW){                    // drawing on
+      prog=ease(t/DRAW);grpFade=1;
+    }else if(t<DRAW+HOLD){         // held complete
+      prog=1;grpFade=1;
+    }else if(t<DRAW+HOLD+FADE){    // fade whole glyph out
+      prog=1;grpFade=1-ease((t-DRAW-HOLD)/FADE);
+    }else{                         // dark gap before redraw
+      prog=0;grpFade=0;
+    }
+    path.style.strokeDashoffset=(len*(1-prog)).toFixed(2);
+    path.style.opacity=(t<DRAW?1:grpFade).toFixed(3);
+
+    for(var i=0;i<nodes.length;i++){
+      var n=nodes[i],local=(prog-n.at)/0.06; // 6% window of reveal
+      var o;
+      if(prog>=n.at){
+        o=Math.min(1,outBack(Math.min(1,Math.max(0,local))));
+      }else o=0;
+      n.el.setAttribute('opacity',(o*grpFade).toFixed(3));
+      var s=0.6+0.4*Math.min(1,Math.max(0,local));
+      n.el.setAttribute('r',(2.4*s).toFixed(2));
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  raf=requestAnimationFrame(frame);
+
+  function vis(){
+    if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+    else if(!running){running=true;t0=0;raf=requestAnimationFrame(frame);}
+  }
+  document.addEventListener('visibilitychange',vis);
+})();</script>
+</body></html>

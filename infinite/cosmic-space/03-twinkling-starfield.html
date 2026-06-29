@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A field of multicolor stars twinkles in brightness and size, with sparkle crosses on larger ones, brightening near the cursor.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Twinkling Starfield</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#040616;}
+  #c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.08em;color:#cfe0ff;opacity:.32;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Twinkling Starfield</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR;
+  const N=115,stars=[];const cols=['#ffffff','#bcd4ff','#fff0c8','#ffd0d8'];
+  function seed(){
+    stars.length=0;
+    for(let i=0;i<N;i++)stars.push({
+      x:Math.random(),y:Math.random(),
+      r:0.4+Math.random()*1.7,
+      ph:Math.random()*Math.PI*2,sp:0.5+Math.random()*1.6,
+      c:cols[(Math.random()*cols.length)|0]
+    });
+  }
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize',size);size();seed();
+  let t=0,px=0.5,py=0.5;
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+    px=(e.clientX-r.left)/W;py=(e.clientY-r.top)/H;});
+  function frame(){
+    t+=reduce?0:0.03;
+    ctx.fillStyle='#040616';ctx.fillRect(0,0,W,H);
+    const k=Math.min(W,H);
+    stars.forEach(s=>{
+      const tw=reduce?0.7:0.5+0.5*Math.sin(t*s.sp+s.ph);
+      const dx=s.x-px,dy=s.y-py,near=1-Math.min(1,Math.hypot(dx,dy)*2);
+      const a=0.25+tw*0.7+near*0.3;
+      const rr=s.r*(0.7+tw*0.6+near*0.5);
+      ctx.globalAlpha=Math.min(1,a);ctx.fillStyle=s.c;
+      ctx.beginPath();ctx.arc(s.x*W,s.y*H,rr,0,Math.PI*2);ctx.fill();
+      if(rr>1.6){ // sparkle cross on bigger stars
+        ctx.globalAlpha=Math.min(1,a)*0.5;ctx.strokeStyle=s.c;ctx.lineWidth=0.6;
+        ctx.beginPath();ctx.moveTo(s.x*W-rr*2.4,s.y*H);ctx.lineTo(s.x*W+rr*2.4,s.y*H);
+        ctx.moveTo(s.x*W,s.y*H-rr*2.4);ctx.lineTo(s.x*W,s.y*H+rr*2.4);ctx.stroke();
+      }
+    });
+    ctx.globalAlpha=1;
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){frame();}else start();
+})();
+</script>
+</body>
+</html>

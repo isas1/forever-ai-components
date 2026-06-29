@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Victory Boogie Marquee — Piet Mondrian. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Victory Boogie Marquee</title>
+<style>
+  html,body{margin:0;height:100%;background:#f7f4ec;overflow:hidden}
+  #mon06-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mon06-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mon06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#15110d;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mon06-stage" role="img" aria-label="A Mondrian grid set on its point as a diamond, with marching squares of red, blue and yellow rippling along the diagonals in a boogie-woogie rhythm.">
+  <canvas id="mon06-cv"></canvas>
+</div>
+<div class="mon06-cap">Victory Boogie Marquee</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mon06-cv'); if(!cv) return;
+  const C={white:'#f7f4ec',black:'#15110d',red:'#d6191e',blue:'#1d3bd1',yellow:'#f6c700'};
+  const PAL=[C.red,C.blue,C.yellow];
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h};
+  }
+  let S=fitCanvas(cv),N=9,step=0,last=performance.now();
+  function draw(now){
+    const dt=now-last;last=now;const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle=C.white;ctx.fillRect(0,0,W,H);
+    const cx=W/2,cy=H/2,R=Math.min(W,H)*0.46;
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(Math.PI/4);
+    const side=R*Math.SQRT2*0.9,half=side/2,cell=side/N;
+    step+=dt*(REDUCED?0.0008:0.0025);
+    const shift=Math.floor(step)%N;
+    for(let i=0;i<N;i++)for(let j=0;j<N;j++){
+      const x=-half+i*cell,y=-half+j*cell;
+      let col=C.white;
+      if((i+j+shift)%3===0&&(i*j+shift)%2===0)col=PAL[(i+shift)%3];
+      else if((i*7+j*3+shift)%9<2)col=PAL[(j+shift)%3];
+      if(col!==C.white){ctx.fillStyle=col;ctx.fillRect(x+2,y+2,cell-4,cell-4);}
+    }
+    ctx.fillStyle=C.black;const TH=5;
+    for(let i=0;i<=N;i++){const p=-half+i*cell;ctx.fillRect(-half,p-TH/2,side,TH);ctx.fillRect(p-TH/2,-half,TH,side);}
+    ctx.restore();
+  }
+
+  let raf=0,running=false;
+  function loop(){if(!running)return;draw(performance.now());raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;last=performance.now();raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED)draw(performance.now());},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else start();});
+
+  if(REDUCED){draw(performance.now());}
+  else start();
+})();
+</script>
+</body>
+</html>

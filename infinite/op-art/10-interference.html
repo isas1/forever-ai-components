@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Overlapping radial white ray bursts on black drift and warp into slow shimmering moire interference with a soft central bloom.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Interference</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a}
+  #op10-stage{position:fixed;inset:0;background:#0a0a0a;overflow:hidden}
+  #op10-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="op10-stage" role="img" aria-label="Op art: overlapping radial line bursts shimmering into slow moire interference, white on black">
+  <canvas id="op10-c"></canvas>
+</div>
+<div class="cap">Interference</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('op10-stage');
+  var cv=document.getElementById('op10-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // Three radial burst sources. Each emits N straight rays from a center.
+  // Overlapping ray fields create moire interference where lines cross.
+  var SRC=[
+    {x:0.34,y:0.40,rays:88,rot:0,spin:0.013,wob:0.10,wph:0.0,acc:false},
+    {x:0.66,y:0.58,rays:88,rot:1.1,spin:-0.011,wob:0.10,wph:2.1,acc:false},
+    {x:0.50,y:0.50,rays:64,rot:0.5,spin:0.007,wob:0.07,wph:4.0,acc:true}
+  ];
+
+  var W=0,H=0,DPR=1,CX=0,CY=0,DIAG=0,run=true,raf=0,t=0;
+
+  function resize(){
+    var r=stage.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,r.width); H=Math.max(1,r.height);
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    cv.style.width=W+'px'; cv.style.height=H+'px';
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    CX=W*0.5; CY=H*0.5;
+    DIAG=Math.sqrt(W*W+H*H)*0.62;
+  }
+
+  function drawBurst(s,len){
+    var ox=s.x*W, oy=s.y*H;
+    var n=s.rays, base=s.rot, wob=s.wob, wph=s.wph;
+    ctx.beginPath();
+    for(var i=0;i<n;i++){
+      // even angular spacing + slow sinusoidal warp -> Riley-style bending
+      var a=(i/n)*Math.PI*2 + base;
+      var warp=Math.sin(a*3 + wph)*wob;
+      var aa=a+warp;
+      var dx=Math.cos(aa), dy=Math.sin(aa);
+      ctx.moveTo(ox,oy);
+      ctx.lineTo(ox+dx*len, oy+dy*len);
+    }
+    ctx.stroke();
+  }
+
+  function frame(now){
+    if(!run) return;
+    t=now*0.001;
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#0a0a0a';
+    ctx.fillRect(0,0,W,H);
+
+    // additive overlap = bright shimmer where ray fields interfere
+    ctx.globalCompositeOperation='lighter';
+    ctx.lineCap='butt';
+
+    var len=DIAG;
+    for(var k=0;k<SRC.length;k++){
+      var s=SRC[k];
+      s.rot += s.spin*0.016;          // slow, frame-rate-independent-ish creep
+      s.wph += 0.0;
+      var breathe=0.5+0.5*Math.sin(t*0.35 + k*2.0); // slow opacity breathing
+      if(s.acc){
+        ctx.strokeStyle='rgba(255,255,255,'+(0.05+0.05*breathe)+')';
+        ctx.lineWidth=0.7;
+      }else{
+        ctx.strokeStyle='rgba(255,255,255,'+(0.09+0.07*breathe)+')';
+        ctx.lineWidth=0.6;
+      }
+      // animate warp phase slowly for living moire
+      s.wph += 0.0008 + 0.0006*k;
+      drawBurst(s,len);
+    }
+
+    // central interference bloom: a static-radius soft ring drawn additively,
+    // pulsing only via opacity (no layout / no filter)
+    var pulse=0.5+0.5*Math.sin(t*0.5);
+    var rad=DIAG*0.20;
+    var g=ctx.createRadialGradient(CX,CY,0,CX,CY,rad);
+    g.addColorStop(0,'rgba(255,255,255,'+(0.10+0.06*pulse)+')');
+    g.addColorStop(0.6,'rgba(255,255,255,0.02)');
+    g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.arc(CX,CY,rad,0,Math.PI*2);
+    ctx.fill();
+
+    raf=requestAnimationFrame(frame);
+  }
+
+  function drawOneFrame(){
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#0a0a0a';
+    ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    ctx.lineCap='butt';
+    for(var k=0;k<SRC.length;k++){
+      var s=SRC[k];
+      ctx.strokeStyle=s.acc?'rgba(255,255,255,0.07)':'rgba(255,255,255,0.12)';
+      ctx.lineWidth=s.acc?0.7:0.6;
+      drawBurst(s,DIAG);
+    }
+    var rad=DIAG*0.20;
+    var g=ctx.createRadialGradient(CX,CY,0,CX,CY,rad);
+    g.addColorStop(0,'rgba(255,255,255,0.13)');
+    g.addColorStop(0.6,'rgba(255,255,255,0.02)');
+    g.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath();ctx.arc(CX,CY,rad,0,Math.PI*2);ctx.fill();
+  }
+
+  function start(){
+    if(reduce){ drawOneFrame(); return; }
+    run=true;
+    raf=requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize',function(){
+    resize();
+    if(reduce) drawOneFrame();
+  },{passive:true});
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce) return;
+    if(document.hidden){ run=false; cancelAnimationFrame(raf); }
+    else if(!run){ run=true; raf=requestAnimationFrame(frame); }
+  });
+
+  resize();
+  start();
+})();
+</script>
+</body>
+</html>

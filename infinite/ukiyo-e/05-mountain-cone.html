@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A snow-capped Fuji-like cone under a bokashi sky that slowly cycles night-dawn-day-dusk as a sun-moon disc arcs and cranes drift.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mountain Cone</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  #uk05-stage{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #uk05-c{position:absolute;inset:0;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="uk05-stage" role="img" aria-label="A snow-capped Mount Fuji-like cone beneath a woodblock sky that slowly shifts through the times of day, in the Japanese ukiyo-e style.">
+  <canvas id="uk05-c"></canvas>
+</div>
+<div class="cap">Mountain Cone</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("uk05-c"),ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,DPR=1,running=true,raf=0,t0=0;
+
+  // Four times of day: night, dawn, day, dusk. [skyTop, skyBottom, glow, hill]
+  var KEYS=[
+    {top:[15,24,46], bot:[42,52,84], glow:[120,140,200], hill:[18,30,48]},   // night indigo
+    {top:[58,52,86], bot:[232,160,124], glow:[244,196,140], hill:[60,46,72]}, // dawn coral
+    {top:[96,150,196], bot:[224,212,176], glow:[244,232,196], hill:[120,150,150]}, // day
+    {top:[44,40,78], bot:[204,108,96], glow:[232,140,110], hill:[52,40,66]}  // dusk
+  ];
+  var BG="#0f1822", CREAM="#e8d5b0", INDIGO="#283a5e", CORAL="#d96b54";
+  var SNOW="#f3ece0", SNOWSHADE="#cdbfa9";
+
+  // birds (cranes): small typed pool
+  var NB=7, bx=new Float32Array(NB), by=new Float32Array(NB), bs=new Float32Array(NB), bp=new Float32Array(NB);
+  for(var i=0;i<NB;i++){bx[i]=Math.random();by[i]=Math.random();bs[i]=0.5+Math.random()*0.7;bp[i]=Math.random()*6.28;}
+
+  function lerp(a,b,k){return a+(b-a)*k;}
+  function mix(c1,c2,k){return "rgb("+(lerp(c1[0],c2[0],k)|0)+","+(lerp(c1[1],c2[1],k)|0)+","+(lerp(c1[2],c2[2],k)|0)+")";}
+  function mixA(c1,c2,k){return [lerp(c1[0],c2[0],k),lerp(c1[1],c2[1],k),lerp(c1[2],c2[2],k)];}
+  function rgb(c){return "rgb("+(c[0]|0)+","+(c[1]|0)+","+(c[2]|0)+")";}
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  function phase(time){
+    // full cycle every 24s; returns {a:keyA,b:keyB,k}
+    var cyc=(time/24)%1; if(cyc<0)cyc+=1;
+    var f=cyc*4, idx=f|0, k=f-idx;
+    // smoothstep
+    k=k*k*(3-2*k);
+    return {a:KEYS[idx%4], b:KEYS[(idx+1)%4], k:k};
+  }
+
+  function draw(time){
+    var ph=phase(time);
+    var top=mixA(ph.a.top,ph.b.top,ph.k);
+    var bot=mixA(ph.a.bot,ph.b.bot,ph.k);
+    var glow=mixA(ph.a.glow,ph.b.glow,ph.k);
+    var hill=mixA(ph.a.hill,ph.b.hill,ph.k);
+
+    var horizon=H*0.70;
+
+    // --- bokashi sky: smooth vertical wipe gradient ---
+    var sky=ctx.createLinearGradient(0,0,0,horizon);
+    sky.addColorStop(0,rgb(top));
+    sky.addColorStop(0.62,mix(top,bot,0.6));
+    sky.addColorStop(1,rgb(bot));
+    ctx.fillStyle=sky;
+    ctx.fillRect(0,0,W,horizon);
+
+    // --- sun/moon static radial glow disc, travels with phase ---
+    var cyc=(time/24)%1; if(cyc<0)cyc+=1;
+    var arc=cyc*Math.PI*2;                       // around the sky
+    var sunX=W*0.5 + Math.cos(arc-Math.PI/2)*W*0.42;
+    var sunY=horizon*0.66 + Math.sin(arc-Math.PI/2)*horizon*0.46;
+    var disc=ctx.createRadialGradient(sunX,sunY,1,sunX,sunY,Math.min(W,H)*0.20);
+    disc.addColorStop(0,rgb([Math.min(255,glow[0]+30),Math.min(255,glow[1]+24),Math.min(255,glow[2]+16)]));
+    disc.addColorStop(0.16,rgb(glow));
+    disc.addColorStop(1,"rgba(0,0,0,0)");
+    ctx.globalCompositeOperation="lighter";
+    ctx.fillStyle=disc;
+    ctx.beginPath();ctx.arc(sunX,sunY,Math.min(W,H)*0.20,0,6.2832);ctx.fill();
+    ctx.globalCompositeOperation="source-over";
+    // solid disc body
+    ctx.fillStyle=rgb([Math.min(255,glow[0]+34),Math.min(255,glow[1]+28),Math.min(255,glow[2]+20)]);
+    ctx.beginPath();ctx.arc(sunX,sunY,Math.min(W,H)*0.045,0,6.2832);ctx.fill();
+
+    // --- thin woodblock clouds: flat banded planes ---
+    var cloudCol="rgba("+(bot[0]|0)+","+(bot[1]|0)+","+(bot[2]|0)+",0.30)";
+    ctx.fillStyle=cloudCol;
+    for(var ci=0;ci<3;ci++){
+      var cy=horizon*(0.30+ci*0.13);
+      var drift=((time*0.012*(ci+1)) % 1.4)-0.2;
+      var cxw=W*0.34, cx=W*drift;
+      lozenge(cx,cy,cxw,H*0.026);
+      lozenge(cx+W*0.55,cy+H*0.02,cxw*0.7,H*0.022);
+    }
+
+    // --- distant water/land band below horizon ---
+    var land=ctx.createLinearGradient(0,horizon,0,H);
+    land.addColorStop(0,mix(hill,top,0.15));
+    land.addColorStop(1,mix(hill,[10,16,26],0.5));
+    ctx.fillStyle=land;
+    ctx.fillRect(0,horizon-1,W,H-horizon+1);
+
+    // --- the mountain cone ---
+    var peakX=W*0.5, peakY=horizon-Math.min(W,H)*0.46, baseY=horizon+H*0.02;
+    var halfW=Math.min(W,H)*0.40;
+    // body
+    var coneG=ctx.createLinearGradient(0,peakY,0,baseY);
+    coneG.addColorStop(0,mix(hill,top,0.30));
+    coneG.addColorStop(1,mix(hill,bot,0.10));
+    ctx.fillStyle=coneG;
+    ctx.beginPath();
+    ctx.moveTo(peakX,peakY);
+    ctx.lineTo(peakX+halfW,baseY);
+    // gentle concave Fuji flank
+    ctx.quadraticCurveTo(peakX,baseY+H*0.012,peakX-halfW,baseY);
+    ctx.closePath();
+    ctx.fill();
+
+    // snow cap — flat irregular plane near peak
+    ctx.fillStyle=SNOW;
+    ctx.beginPath();
+    ctx.moveTo(peakX,peakY);
+    var snowB=peakY+halfW*0.42;
+    var sxr=(snowB-peakY)/(baseY-peakY)*halfW;
+    ctx.lineTo(peakX+sxr,snowB);
+    // jagged drip edges
+    ctx.lineTo(peakX+sxr*0.55,snowB-halfW*0.10);
+    ctx.lineTo(peakX+sxr*0.34,snowB+halfW*0.07);
+    ctx.lineTo(peakX,snowB-halfW*0.05);
+    ctx.lineTo(peakX-sxr*0.30,snowB+halfW*0.06);
+    ctx.lineTo(peakX-sxr*0.58,snowB-halfW*0.09);
+    ctx.lineTo(peakX-sxr,snowB);
+    ctx.closePath();
+    ctx.fill();
+    // snow shade ridge
+    ctx.fillStyle=SNOWSHADE;
+    ctx.beginPath();
+    ctx.moveTo(peakX,peakY);
+    ctx.lineTo(peakX+sxr*0.30,snowB);
+    ctx.lineTo(peakX,snowB-halfW*0.05);
+    ctx.closePath();
+    ctx.fill();
+
+    // bold outline of cone (keyblock)
+    ctx.strokeStyle="rgba(20,26,40,0.85)";
+    ctx.lineWidth=Math.max(1.4,Math.min(W,H)*0.006);
+    ctx.lineJoin="round";
+    ctx.beginPath();
+    ctx.moveTo(peakX-halfW,baseY);
+    ctx.quadraticCurveTo(peakX,baseY+H*0.012,peakX+halfW,baseY);
+    ctx.lineTo(peakX,peakY);
+    ctx.closePath();
+    ctx.stroke();
+
+    // --- cranes drifting ---
+    var birdCol="rgba(20,26,40,0.78)";
+    ctx.strokeStyle=birdCol;
+    ctx.lineWidth=Math.max(1,Math.min(W,H)*0.004);
+    ctx.lineCap="round";
+    for(var b=0;b<NB;b++){
+      bx[b]+=0.00018*bs[b]; if(bx[b]>1.15)bx[b]=-0.15;
+      var X=bx[b]*W, Y=by[b]*horizon*0.55+horizon*0.06;
+      var flap=Math.sin(time*2.2*bs[b]+bp[b])*0.5;
+      var wsz=Math.min(W,H)*0.022*bs[b];
+      ctx.beginPath();
+      ctx.moveTo(X-wsz, Y+flap*wsz);
+      ctx.quadraticCurveTo(X, Y-wsz*0.5, X, Y);
+      ctx.quadraticCurveTo(X, Y-wsz*0.5, X+wsz, Y+flap*wsz);
+      ctx.stroke();
+    }
+    ctx.lineCap="butt";
+
+    // --- vignette / frame tone (static, no repaint cost issue) ---
+    // (single fill, drawn each frame but cheap & on compositor-free 2d ctx)
+    var vg=ctx.createRadialGradient(W*0.5,H*0.5,Math.min(W,H)*0.30,W*0.5,H*0.5,Math.max(W,H)*0.72);
+    vg.addColorStop(0,"rgba(15,24,34,0)");
+    vg.addColorStop(1,"rgba(15,24,34,0.42)");
+    ctx.fillStyle=vg;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function lozenge(x,y,w,h){
+    ctx.beginPath();
+    ctx.moveTo(x-w,y);
+    ctx.quadraticCurveTo(x-w*0.4,y-h,x,y-h);
+    ctx.quadraticCurveTo(x+w*0.4,y-h,x+w,y);
+    ctx.quadraticCurveTo(x+w*0.4,y+h,x,y+h);
+    ctx.quadraticCurveTo(x-w*0.4,y+h,x-w,y);
+    ctx.closePath();ctx.fill();
+  }
+
+  function frame(ts){
+    if(!running)return;
+    if(!t0)t0=ts;
+    var time=(ts-t0)/1000;
+    draw(time);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){running=true;t0=0;raf=requestAnimationFrame(frame);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  window.addEventListener("resize",function(){resize();if(reduce)draw(13);});
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){stop();}
+    else if(!reduce){start();}
+  });
+
+  resize();
+  if(reduce){draw(13);return;} // settle on a daytime frame
+  start();
+})();
+</script>
+</body>
+</html>

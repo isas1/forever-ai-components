@@ -1,0 +1,84 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="The word WEIGHT animates a travelling bell-curve wave of variable font weight, heavy letters lifting and warming to a gold glow as the crest">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Weight Wave</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0a0b10;display:grid;place-items:center}
+.tte04-stage{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+.tte04-word{display:flex;font-family:"Inter",system-ui,sans-serif;
+  font-size:clamp(38px,17vmin,118px);line-height:1;letter-spacing:-.01em;
+  font-variation-settings:"wght" 100;will-change:contents}
+.tte04-l{display:inline-block;color:#eef0f6;
+  /* glow lives on a static text-shadow so the per-frame wght change never repaints a blur */
+  text-shadow:0 0 18px rgba(245,215,110,0);
+  font-variation-settings:"wght" 100;
+  transform:translateZ(0);transform-origin:50% 60%}
+.tte04-sp{display:inline-block;width:.34em}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#f5d76e;opacity:.42;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+@media (prefers-reduced-motion:reduce){
+  .tte04-word{font-variation-settings:"wght" 460}
+  .tte04-l{font-variation-settings:"wght" 460!important;color:#f5d76e;
+    text-shadow:0 0 16px rgba(245,215,110,.28)!important}
+}
+</style></head><body>
+<div class="tte04-stage"><div class="tte04-word" id="tte04-w" role="img" aria-label="The word Weight rendered with a travelling wave of font weight"></div></div>
+<div class="cap">Weight Wave</div>
+<script>(function(){
+  var word=document.getElementById('tte04-w');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var TEXT="WEIGHT";
+  var letters=[];
+  for(var i=0;i<TEXT.length;i++){
+    var s=document.createElement('span');
+    s.className='tte04-l';s.textContent=TEXT[i];
+    word.appendChild(s);letters.push(s);
+  }
+  if(reduce){return;}                 // CSS reduced-motion block paints the static frame
+
+  var N=letters.length;
+  var MIN=130,MAX=860;                // wght axis span the wave swings between
+  var SPREAD=1.05;                    // phase offset per letter (radians) — sets wave length
+  var SPEED=2.05;                     // radians/sec the crest travels
+  // bell curve: only letters near the crest bulge; shoulders stay thin and crisp
+  function bell(x){return Math.exp(-(x*x)/(2*0.62*0.62));}
+
+  var running=true,raf=0,t0=performance.now();
+  function frame(now){
+    if(!running)return;
+    var t=(now-t0)/1000;
+    // crest sweeps left→right, wraps with a held breath at the ends via eased cosine drift
+    var crest=((t*SPEED)%(N+2.4))-1.2;     // moving index, runs slightly past both edges
+    for(var i=0;i<N;i++){
+      var d=i-crest;
+      var b=bell(d*SPREAD);                 // 0..1 proximity of this letter to the crest
+      var w=MIN+(MAX-MIN)*b;
+      var L=letters[i];
+      L.style.fontVariationSettings='"wght" '+(w|0);
+      // secondary motion: heavy letters lift a hair and warm toward the accent — anticipation + follow-through
+      var lift=-b*0.09;                     // em
+      var sc=1+b*0.05;
+      L.style.transform='translateY('+lift.toFixed(3)+'em) scale('+sc.toFixed(3)+')';
+      // colour + glow ride the same envelope; glow alpha capped so repaint stays cheap
+      var g=b*b;
+      L.style.color='rgb('+(238+ (245-238)*g|0)+','+(240-(240-215)*g|0)+','+(246-(246-110)*g|0)+')';
+      L.style.textShadow='0 0 '+(10+22*g).toFixed(0)+'px rgba(245,215,110,'+(0.5*g).toFixed(3)+')';
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  var elapsed=0;                       // banked time so the wave resumes where it paused
+  function vis(){
+    if(document.hidden){
+      if(running){elapsed=(performance.now()-t0)/1000;running=false;}
+      if(raf)cancelAnimationFrame(raf);raf=0;
+    }else if(!running){
+      running=true;t0=performance.now()-elapsed*1000;raf=requestAnimationFrame(frame);
+    }
+  }
+  document.addEventListener('visibilitychange',vis);
+  raf=requestAnimationFrame(frame);
+})();</script>
+</body></html>

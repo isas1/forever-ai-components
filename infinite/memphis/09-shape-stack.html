@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Clashing Memphis shapes — bars, circle, arch, diamond — balanced into a glowing totem that gently wobbles, crowned by a squiggle, over a ter">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shape Stack</title>
+<style>
+  :root{
+    --mp09-bg:#141019;
+    --mp09-teal:#36d6c3;
+    --mp09-pink:#ff4f9a;
+    --mp09-yellow:#ffd23e;
+    --mp09-blue:#3b6dff;
+    --mp09-orange:#ff7a2f;
+    --mp09-lilac:#b07cff;
+  }
+  html,body{margin:0;height:100%}
+  body{background:var(--mp09-bg)}
+  .mp09-stage{
+    position:fixed;inset:0;overflow:hidden;background:var(--mp09-bg);
+  }
+  /* static terrazzo speckle — painted once, never repaints */
+  .mp09-stage::before{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.42;
+    background:
+      radial-gradient(circle at 12% 18%, var(--mp09-yellow) 0 2.2px, transparent 3px),
+      radial-gradient(circle at 86% 12%, var(--mp09-pink) 0 2.2px, transparent 3px),
+      radial-gradient(circle at 22% 88%, var(--mp09-blue) 0 2.2px, transparent 3px),
+      radial-gradient(circle at 78% 80%, var(--mp09-orange) 0 2.2px, transparent 3px),
+      radial-gradient(circle at 60% 30%, var(--mp09-lilac) 0 1.8px, transparent 3px),
+      radial-gradient(circle at 40% 60%, var(--mp09-teal) 0 1.8px, transparent 3px);
+  }
+  .mp09-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mp09-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+  }
+</style>
+</head>
+<body>
+  <div class="mp09-stage" role="img" aria-label="Clashing Memphis-style shapes — circles, triangles, arches and bars in bright colors — balanced into a gently wobbling totem against a confetti-terrazzo field">
+    <canvas class="mp09-c" id="mp09-c" aria-hidden="true"></canvas>
+  </div>
+  <div class="mp09-cap">Shape Stack</div>
+
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("mp09-c");
+  if(!cv||!cv.getContext) return;
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  var COL={teal:"#36d6c3",pink:"#ff4f9a",yellow:"#ffd23e",blue:"#3b6dff",orange:"#ff7a2f",lilac:"#b07cff"};
+  // Totem layers, bottom -> top. Each clashes with its neighbour. (8 layers, well under cap.)
+  // t = shape type, w/h relative to base unit, c = fill, s = swing scale, p = phase
+  var L=[
+    {t:"bar",   w:2.30,h:0.42,c:COL.blue,   s:0.30,p:0.0},
+    {t:"tri",   w:1.70,h:1.05,c:COL.orange, s:0.55,p:0.7},
+    {t:"circle",w:1.30,h:1.30,c:COL.teal,   s:0.80,p:1.5},
+    {t:"arch",  w:1.55,h:0.95,c:COL.pink,   s:1.05,p:2.3},
+    {t:"diamond",w:1.10,h:1.20,c:COL.yellow,s:1.35,p:3.0},
+    {t:"bar",   w:1.45,h:0.34,c:COL.lilac,  s:1.65,p:3.8},
+    {t:"semi",  w:1.20,h:0.65,c:COL.blue,   s:2.00,p:4.6},
+    {t:"circle",w:0.62,h:0.62,c:COL.pink,   s:2.45,p:5.3}
+  ];
+  var N=L.length;
+  // precompute cumulative vertical offset (in base units) of each layer's centre
+  var cy=new Float32Array(N), tot=0, gap=0.08, i;
+  for(i=0;i<N;i++){ tot += L[i].h + (i?gap:0); }
+  var run=0;
+  for(i=0;i<N;i++){ run += (i?gap:0)+L[i].h*0.5; cy[i]=run; run += L[i].h*0.5; }
+
+  var W=0,H=0,unit=0,baseX=0,baseY=0,dpr=1;
+  // offscreen sprites (glow baked in ONCE per resize, never repainted per frame)
+  var sprites=new Array(N), squig=null, GLOW=14;
+  function size(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    var r=cv.getBoundingClientRect();
+    W=Math.max(1,r.width); H=Math.max(1,r.height);
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    var span=Math.min(W,H);
+    unit=span/(tot*1.18);          // base unit so totem fits with margin
+    baseX=W*0.5;
+    baseY=H*0.5 + (tot*unit)*0.5;  // bottom of totem
+    buildSprites();
+  }
+
+  function poly(g,pts){
+    g.beginPath();
+    g.moveTo(pts[0],pts[1]);
+    for(var k=2;k<pts.length;k+=2) g.lineTo(pts[k],pts[k+1]);
+    g.closePath();
+  }
+  // draw one layer onto context g, centred at local (0,0); w,h already in pixels
+  function shape(g,t,w,h){
+    var hw=w*0.5, hh=h*0.5;
+    if(t==="circle"){ g.beginPath(); g.ellipse(0,0,hw,hh,0,0,6.2832); g.fill(); return; }
+    if(t==="bar"){
+      var rr=hh*0.6; // rounded bar
+      g.beginPath();
+      g.moveTo(-hw+rr,-hh); g.lineTo(hw-rr,-hh); g.arc(hw-rr,0,rr,-1.5708,1.5708);
+      g.lineTo(-hw+rr,hh); g.arc(-hw+rr,0,rr,1.5708,4.7124); g.fill(); return;
+    }
+    if(t==="tri"){ poly(g,[0,-hh, hw,hh, -hw,hh]); g.fill(); return; }
+    if(t==="diamond"){ poly(g,[0,-hh, hw,0, 0,hh, -hw,0]); g.fill(); return; }
+    if(t==="semi"){ // half-disc flat-side down
+      g.beginPath(); g.ellipse(0,hh,hw,h,Math.PI,0,Math.PI*1,true); g.lineTo(-hw,hh); g.fill(); return;
+    }
+    if(t==="arch"){ // tombstone: rect + semicircle top
+      g.beginPath();
+      g.moveTo(-hw,hh); g.lineTo(-hw,-hh+hw); g.arc(0,-hh+hw,hw,Math.PI,0); g.lineTo(hw,hh);
+      g.closePath(); g.fill(); return;
+    }
+  }
+
+  // make an offscreen canvas with a centred origin; cb draws into it at device scale
+  function makeSprite(wpx,hpx,cb){
+    var pad=(GLOW+2)*dpr;                 // room for the baked glow bleed
+    var cw=Math.ceil(wpx*dpr)+pad*2, ch=Math.ceil(hpx*dpr)+pad*2;
+    var oc=document.createElement("canvas");
+    oc.width=cw; oc.height=ch;
+    var g=oc.getContext("2d");
+    g.setTransform(dpr,0,0,dpr,0,0);
+    g.translate(cw/(2*dpr), ch/(2*dpr)); // centre origin (in CSS px)
+    g.lineJoin="round"; g.lineCap="round";
+    cb(g);
+    return {cv:oc, ox:cw/2, oy:ch/2};     // ox/oy = centre offset in DEVICE px
+  }
+
+  // pre-render every layer (shape + STATIC glow + inner mark) ONCE per resize
+  function buildSprites(){
+    for(var j=0;j<N;j++){
+      var ly=L[j], pxw=ly.w*unit, pxh=ly.h*unit;
+      sprites[j]=(function(ly,pxw,pxh){
+        return makeSprite(Math.max(pxw,pxh),Math.max(pxw,pxh),function(g){
+          g.fillStyle=ly.c;
+          g.shadowColor=ly.c; g.shadowBlur=GLOW; // baked here ONCE, not per frame
+          shape(g,ly.t,pxw,pxh);
+          g.shadowBlur=0; g.shadowColor="transparent";
+          if(ly.t==="circle"){ g.fillStyle="rgba(20,16,25,.85)"; g.beginPath(); g.arc(0,0,pxw*0.22,0,6.2832); g.fill(); }
+          else if(ly.t==="bar"){ g.strokeStyle="rgba(20,16,25,.7)"; g.lineWidth=Math.max(2,pxh*0.18);
+            g.beginPath(); g.moveTo(-pxw*0.3,0); g.lineTo(pxw*0.3,0); g.stroke(); }
+        });
+      })(ly,pxw,pxh);
+    }
+    // crowning squiggle sprite
+    var sw=unit*0.85;
+    squig=makeSprite(sw*2.2, unit*1.2, function(g){
+      g.strokeStyle=COL.yellow; g.lineWidth=Math.max(2.5,unit*0.10);
+      g.shadowColor=COL.yellow; g.shadowBlur=GLOW*0.8; // baked ONCE
+      g.beginPath();
+      g.moveTo(-sw,0);
+      g.quadraticCurveTo(-sw*0.5,-unit*0.5, 0,0);
+      g.quadraticCurveTo(sw*0.5,unit*0.5, sw,0);
+      g.stroke();
+    });
+  }
+
+  // per frame: only clear + transform + blit pre-rendered sprites (no shadowBlur, no path fills)
+  function drawFrame(t){
+    ctx.clearRect(0,0,W,H);
+    // sprites are device-pixel bitmaps → draw in raw device space
+    ctx.setTransform(1,0,0,1,0,0);
+    var bx=baseX*dpr, by=baseY*dpr;
+    // accumulate sway: each layer leans relative to the one below (totem physics feel)
+    var sway=0, dx=0, j;
+    for(j=0;j<N;j++){
+      var ly=L[j];
+      // gentle, slow wobble — frequency kept low for seizure safety
+      sway += Math.sin(t*1.15 + ly.p) * (0.05*ly.s); // radians lean
+      var ypx=(baseY - cy[j]*unit)*dpr;
+      // horizontal drift grows up the stack from accumulated lean
+      dx += Math.sin(t*1.15 + ly.p)*ly.s*unit*0.10;
+
+      var sp=sprites[j];
+      ctx.save();
+      ctx.translate(bx+dx*dpr, ypx);
+      ctx.rotate(sway);
+      ctx.drawImage(sp.cv, -sp.ox, -sp.oy);
+      ctx.restore();
+    }
+    // crowning squiggle on top of the totem
+    var topY=(baseY - tot*unit - unit*0.18)*dpr;
+    ctx.save();
+    ctx.translate(bx+dx*dpr, topY);
+    ctx.rotate(Math.sin(t*1.15+6.0)*0.18);
+    ctx.drawImage(squig.cv, -squig.ox, -squig.oy);
+    ctx.restore();
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  var rafId=0, running=false, t0=0;
+  function loop(now){
+    if(!running) return;
+    if(!t0) t0=now;
+    drawFrame((now-t0)*0.001);
+    rafId=requestAnimationFrame(loop);
+  }
+  function start(){ if(running) return; running=true; t0=0; rafId=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(rafId) cancelAnimationFrame(rafId); rafId=0; }
+
+  function init(){
+    size();
+    if(reduce){ drawFrame(0.9); return; } // one settled, on-brand frame, no loop
+    start();
+  }
+
+  var rt=0;
+  window.addEventListener("resize",function(){
+    if(rt) clearTimeout(rt);
+    rt=setTimeout(function(){ size(); if(reduce){ drawFrame(0.9); } },120);
+  });
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

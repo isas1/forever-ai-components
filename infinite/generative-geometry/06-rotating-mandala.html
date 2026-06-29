@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="A 12-fold symmetric mandala of nested rotating polygons in purple-pink hues that breathe and counter-spin.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rotating Mandala</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#160a1e}
+  #c{display:block;width:100%;height:100%}
+  #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
+       color:#e0a3ff;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">rotating mandala</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  let W,H,DPR,spin=0;
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  function draw(t){
+    ctx.fillStyle='#160a1e';ctx.fillRect(0,0,W,H);
+    const s=Math.min(W,H)*0.46;
+    ctx.save();ctx.translate(W/2,H/2);
+    const sym=12;
+    const breathe=1+Math.sin(t*0.0009)*0.06;
+    for(let ring=0;ring<5;ring++){
+      const rad=s*(0.22+ring*0.18)*breathe;
+      const rot=t*0.0003*(ring%2?-1:1)*(1+ring*0.3)+spin;
+      const hue=(t*0.02+ring*55)%360;
+      for(let i=0;i<sym;i++){
+        const a=rot+i*(Math.PI*2/sym);
+        const x=Math.cos(a)*rad,y=Math.sin(a)*rad;
+        ctx.save();ctx.translate(x,y);ctx.rotate(a+t*0.0006);
+        const sz=s*(0.10-ring*0.012)*(1+Math.sin(t*0.0012+ring)*0.18);
+        ctx.strokeStyle='hsl('+hue+',80%,65%)';
+        ctx.fillStyle='hsla('+((hue+30)%360)+',85%,60%,0.18)';
+        ctx.lineWidth=1.4;
+        ctx.beginPath();
+        const sides=3+ring;
+        for(let k=0;k<=sides;k++){const an=k/sides*Math.PI*2;
+          const px=Math.cos(an)*sz,py=Math.sin(an)*sz;k===0?ctx.moveTo(px,py):ctx.lineTo(px,py);}
+        ctx.closePath();ctx.fill();ctx.stroke();ctx.restore();
+      }
+    }
+    // center
+    ctx.fillStyle='hsl('+((t*0.04)%360)+',90%,70%)';
+    ctx.beginPath();ctx.arc(0,0,s*0.06*(1+Math.sin(t*0.002)*0.2),0,7);ctx.fill();
+    ctx.restore();
+  }
+  let raf;
+  function loop(t){if(!reduce){spin*=0.96;draw(t);}raf=requestAnimationFrame(loop);}
+  function start(){cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+  addEventListener('resize',resize);
+  cv.addEventListener('pointerdown',()=>spin+=0.5);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
+  resize();if(reduce)draw(0);else start();
+})();
+</script>
+</body>
+</html>

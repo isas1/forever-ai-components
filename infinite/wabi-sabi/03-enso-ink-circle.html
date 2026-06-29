@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Enso Ink Circle — Wabi-Sabi. A self-contained, zero-dependency animated web component.">
+<title>Enso Ink Circle</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
+.en-wrap{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+.en-svg{width:min(88vmin,340px);height:min(88vmin,340px)}
+.en-paper{fill:url(#en-paper-grad);filter:url(#en-grain)}
+/* Ink circle draws itself continuously: dash-draw 3s then loops */
+.en-stroke{
+  fill:none;
+  stroke:url(#en-ink-grad);
+  stroke-width:18;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  filter:url(#en-blur);
+  stroke-dasharray:550;
+  animation:en-draw-loop 3s cubic-bezier(0.4,0,0.6,1) infinite;
+}
+/* Secondary glow stroke that pulses — clearly visible */
+.en-glow{
+  fill:none;
+  stroke:rgba(80,55,35,0.5);
+  stroke-width:28;
+  stroke-linecap:round;
+  stroke-dasharray:550;
+  filter:url(#en-blur2);
+  animation:en-glow-pulse 1.8s ease-in-out infinite;
+}
+.en-drip{
+  fill:#0e0b08;
+  animation:en-drip-fall 8s ease-in-out infinite;
+}
+.en-drip:nth-child(2){animation-delay:4s;animation-duration:7s}
+@keyframes en-draw-loop{
+  0%{stroke-dashoffset:550;opacity:0.7}
+  70%{stroke-dashoffset:0;opacity:1}
+  85%{stroke-dashoffset:0;opacity:0.9}
+  100%{stroke-dashoffset:-550;opacity:0.4}
+}
+@keyframes en-glow-pulse{
+  0%,100%{opacity:0.15;stroke-width:26}
+  50%{opacity:0.45;stroke-width:32}
+}
+@keyframes en-drip-fall{
+  0%{opacity:0;transform:translateY(0)}
+  12%{opacity:0.7}
+  45%{opacity:0.4;transform:translateY(10px)}
+  65%{opacity:0}
+  100%{opacity:0;transform:translateY(14px)}
+}
+.en-caption{position:fixed;left:8px;bottom:7px;font:11px/1 monospace;color:#4a5240;opacity:0.4;pointer-events:none}
+</style>
+</head>
+<body>
+<div class="en-wrap">
+  <svg class="en-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="en-paper-grad" cx="50%" cy="48%" r="70%">
+        <stop offset="0%" stop-color="#d4c5a9"/>
+        <stop offset="60%" stop-color="#bfb090"/>
+        <stop offset="100%" stop-color="#a09070"/>
+      </radialGradient>
+      <linearGradient id="en-ink-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#0e0b08"/>
+        <stop offset="30%" stop-color="#1a1510"/>
+        <stop offset="65%" stop-color="#2c1810"/>
+        <stop offset="100%" stop-color="#3a2518"/>
+      </linearGradient>
+      <filter id="en-grain">
+        <feTurbulence type="fractalNoise" baseFrequency="0.72" numOctaves="4" stitchTiles="stitch" result="n"/>
+        <feColorMatrix type="saturate" values="0.3" in="n" result="g"/>
+        <feBlend in="SourceGraphic" in2="g" mode="multiply" result="b"/>
+        <feComposite in="b" in2="SourceGraphic" operator="in"/>
+      </filter>
+      <filter id="en-blur">
+        <feGaussianBlur stdDeviation="0.5"/>
+      </filter>
+      <filter id="en-blur2">
+        <feGaussianBlur stdDeviation="3"/>
+      </filter>
+    </defs>
+
+    <!-- washi paper background -->
+    <rect class="en-paper" x="5" y="8" width="190" height="186" rx="3" transform="rotate(-1.5 100 100)"/>
+
+    <!-- ink bleed at edges -->
+    <ellipse fill="#b8a888" opacity="0.2" cx="28" cy="172" rx="18" ry="8" transform="rotate(-20 28 172)"/>
+    <ellipse fill="#b8a888" opacity="0.15" cx="175" cy="35" rx="12" ry="5" transform="rotate(10 175 35)"/>
+
+    <!-- glow halo behind stroke — pulses independently -->
+    <path class="en-glow"
+      d="M108,28 C145,28 168,52 168,90 C168,130 148,155 108,162
+         C68,169 40,148 35,112 C30,76 50,42 88,32 C94,30 101,28 108,28"
+      stroke-dashoffset="0"/>
+
+    <!-- the enso — continuously draws itself -->
+    <path class="en-stroke"
+      d="M108,28
+         C145,28 168,52 168,90
+         C168,130 148,155 108,162
+         C68,169 40,148 35,112
+         C30,76 50,42 88,32
+         C94,30 101,28 108,28"/>
+
+    <!-- ink drips near brush end -->
+    <ellipse class="en-drip" cx="110" cy="30" rx="1.8" ry="2.5" transform="rotate(-15 110 30)"/>
+    <ellipse class="en-drip" cx="104" cy="27" rx="1.2" ry="1.8" transform="rotate(5 104 27)"/>
+  </svg>
+</div>
+<div class="en-caption">enso / 円相</div>
+<script>
+(()=>{
+  const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if(reduce){
+    const s = document.querySelector('.en-stroke');
+    s.style.strokeDashoffset = '0';
+    s.style.animation = 'none';
+    document.querySelector('.en-glow').style.animation = 'none';
+    return;
+  }
+  // JS: stroke-width breathes organically on top of CSS draw loop
+  let paused = false;
+  let t = 0;
+  const stroke = document.querySelector('.en-stroke');
+  function tick(){
+    if(paused){ requestAnimationFrame(tick); return; }
+    t += 0.025;
+    stroke.setAttribute('stroke-width', 18 + Math.sin(t) * 3);
+    requestAnimationFrame(tick);
+  }
+  document.addEventListener('visibilitychange',()=>{
+    paused = document.hidden;
+    if(!paused) requestAnimationFrame(tick);
+  });
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

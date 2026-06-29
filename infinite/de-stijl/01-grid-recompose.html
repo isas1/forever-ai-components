@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Mondrian-style black grid lines slide to continuously repartition red, blue and yellow rectangles in shifting equilibrium.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grid Recompose</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0e10}
+  #ds01-stage{position:fixed;inset:0;overflow:hidden;background:#0e0e10}
+  #ds01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="ds01-stage" role="img" aria-label="De Stijl Neoplastic composition: black grid lines slide to repartition red, blue, and yellow rectangles in dynamic equilibrium on a near-black field">
+    <canvas id="ds01-c"></canvas>
+  </div>
+  <div class="cap">Grid Recompose</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('ds01-stage');
+  var cv=document.getElementById('ds01-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // Neoplastic palette around the brief accent #1b5fc4
+  var PAINT='#f4f1e9';            // off-white plane
+  var LINE ='#101012';            // black grid lines (against #0e0e10 bg)
+  var RED  ='#c8261d';
+  var BLUE ='#1b5fc4';            // brief accent
+  var YEL  ='#e8b714';
+  var COLS=[null,RED,BLUE,YEL,PAINT,PAINT];  // weighted toward plane
+
+  var W=0,H=0,DPR=1,S=0,OX=0,OY=0;            // S=square side, OX/OY=letterbox offset
+  // Grid: 3 vertical + 3 horizontal interior lines. Each animates between two normalized positions.
+  // a = current frac, b = target frac, t0/t1 = timing window for the current slide.
+  var VN=3, HN=3;
+  var vx=new Float32Array(VN), vTo=new Float32Array(VN), vFr=new Float32Array(VN);
+  var hy=new Float32Array(HN), hTo=new Float32Array(HN), hFr=new Float32Array(HN);
+  var vS=new Float32Array(VN), vD=new Float32Array(VN);   // start-time, duration per line
+  var hS=new Float32Array(HN), hD=new Float32Array(HN);
+  var LW=0;                                                // line weight px
+
+  // candidate slot positions (asymmetric — dynamic equilibrium, never centered)
+  var VSLOTS=[0.18,0.30,0.44,0.62,0.78];
+  var HSLOTS=[0.22,0.36,0.55,0.70,0.84];
+
+  function rnd(a,b){return a+Math.random()*(b-a);}
+  function pick(arr,not){var v;do{v=arr[(Math.random()*arr.length)|0];}while(v===not);return v;}
+
+  function seed(){
+    for(var i=0;i<VN;i++){vFr[i]=vx[i]=VSLOTS[i+1]; vTo[i]=vx[i];}
+    for(var j=0;j<HN;j++){hFr[j]=hy[j]=HSLOTS[j+1]; hTo[j]=hy[j];}
+  }
+
+  // cell coloring: derived deterministically from line positions so it stays coherent.
+  // We pick a stable palette assignment seeded once; cells read it.
+  var cellCol=[];
+  function buildCells(){
+    cellCol.length=0;
+    // 4x4 cells. Most planes, a few primaries placed for balance.
+    var base=[
+      4,4,1,4,
+      4,2,4,4,
+      3,4,4,1,
+      4,4,2,4
+    ];
+    for(var k=0;k<16;k++)cellCol.push(base[k]);
+  }
+
+  function resize(){
+    W=stage.clientWidth; H=stage.clientHeight;
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    S=Math.min(W,H); OX=(W-S)/2; OY=(H-S)/2;
+    LW=Math.max(3,Math.round(S*0.022));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  // ease in-out cubic
+  function ez(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+  function scheduleLine(arr,frArr,toArr,sArr,dArr,i,slots,now){
+    frArr[i]=arr[i];
+    toArr[i]=pick(slots,arr[i]);
+    sArr[i]=now+rnd(0,1.1);
+    dArr[i]=rnd(1.6,2.6);
+  }
+
+  function rescheduleAll(now){
+    for(var i=0;i<VN;i++)scheduleLine(vx,vFr,vTo,vS,vD,i,VSLOTS,now);
+    for(var j=0;j<HN;j++)scheduleLine(hy,hFr,hTo,hS,hD,j,HSLOTS,now);
+  }
+
+  var t0=0, cycle=6.2, lastCycle=-1;
+  function advance(now){
+    var i;
+    for(i=0;i<VN;i++){
+      var p=(now-vS[i])/vD[i];
+      if(p<=0)vx[i]=vFr[i];
+      else if(p>=1)vx[i]=vTo[i];
+      else vx[i]=vFr[i]+(vTo[i]-vFr[i])*ez(p);
+    }
+    for(i=0;i<HN;i++){
+      var q=(now-hS[i])/hD[i];
+      if(q<=0)hy[i]=hFr[i];
+      else if(q>=1)hy[i]=hTo[i];
+      else hy[i]=hFr[i]+(hTo[i]-hFr[i])*ez(q);
+    }
+  }
+
+  // sorted copies for stable cell boundaries
+  var vSort=new Float32Array(VN+2), hSort=new Float32Array(HN+2);
+  function boundaries(){
+    var i;
+    vSort[0]=0; for(i=0;i<VN;i++)vSort[i+1]=vx[i]; vSort[VN+1]=1;
+    hSort[0]=0; for(i=0;i<HN;i++)hSort[i+1]=hy[i]; hSort[HN+1]=1;
+    // insertion sort interior (tiny n)
+    sortRange(vSort,1,VN);
+    sortRange(hSort,1,HN);
+  }
+  function sortRange(a,lo,n){
+    for(var i=lo+1;i<lo+n;i++){var v=a[i],j=i-1;while(j>=lo&&a[j]>v){a[j+1]=a[j];j--;}a[j+1]=v;}
+  }
+
+  function draw(){
+    boundaries();
+    var x0=OX, y0=OY;
+    // base plane
+    ctx.fillStyle='#0e0e10';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=PAINT;
+    ctx.fillRect(x0,y0,S,S);
+
+    // cells
+    var r,c,idx=0;
+    for(r=0;r<4;r++){
+      var ya=y0+hSort[r]*S, yb=y0+hSort[r+1]*S;
+      for(c=0;c<4;c++){
+        var xa=x0+vSort[c]*S, xb=x0+vSort[c+1]*S;
+        var ci=cellCol[idx++];
+        if(ci!==4){
+          ctx.fillStyle=COLS[ci];
+          ctx.fillRect(xa,ya,xb-xa,yb-ya);
+        }
+      }
+    }
+
+    // grid lines (vertical then horizontal). Black bars with the canonical heavy weight.
+    ctx.fillStyle=LINE;
+    var hw=LW/2,i;
+    for(i=1;i<=VN;i++){
+      var px=x0+vSort[i]*S;
+      ctx.fillRect(px-hw,y0-hw,LW,S+LW);
+    }
+    for(i=1;i<=HN;i++){
+      var py=y0+hSort[i]*S;
+      ctx.fillRect(x0-hw,py-hw,S+LW,LW);
+    }
+    // outer frame edge keeps the composition contained
+    ctx.fillRect(x0-hw,y0-hw,S+LW,LW);
+    ctx.fillRect(x0-hw,y0+S-hw,S+LW,LW);
+    ctx.fillRect(x0-hw,y0-hw,LW,S+LW);
+    ctx.fillRect(x0+S-hw,y0-hw,LW,S+LW);
+  }
+
+  var raf=0, running=false, start=0;
+  function loop(ts){
+    if(!running)return;
+    if(!start)start=ts;
+    var now=(ts-start)/1000;
+    var cyc=Math.floor(now/cycle);
+    if(cyc!==lastCycle){ lastCycle=cyc; rescheduleAll(now); }
+    advance(now);
+    draw();
+    raf=requestAnimationFrame(loop);
+  }
+
+  function startLoop(){ if(running)return; running=true; start=0; raf=requestAnimationFrame(loop); }
+  function stopLoop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    resize(); buildCells(); seed();
+    if(reduce){ rescheduleAll(0); advance(0.8); draw(); return; }
+    rescheduleAll(0); startLoop();
+  }
+
+  var rt;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ resize(); if(reduce)draw(); },120);
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden)stopLoop(); else startLoop();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

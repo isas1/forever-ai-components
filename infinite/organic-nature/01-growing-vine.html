@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A sinuous green vine grows upward sprouting alternating leaves and a pale bud, then retracts in a loop on deep forest green; cursor wobbles">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Growing Vine</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d2818}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
+       letter-spacing:.08em;text-transform:uppercase;color:#9fe6b8;opacity:.32;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Growing Vine</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,t=0,leaves=[];
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',size);size();
+// vine described as a sinuous path that "grows" by progress p
+function pt(s){ // s in 0..1 along stem
+  const cx=W*0.5;
+  const sway=Math.sin(s*7+Math.sin(s*3)*1.5)*W*0.18*(0.4+s*0.6);
+  return {x:cx+sway, y:H*0.96 - s*H*0.92};
+}
+function build(){leaves=[];for(let i=0;i<14;i++){leaves.push({s:0.08+i*0.063,side:i%2?1:-1,sz:5+Math.random()*5});}}
+build();
+let mx=-1,my=-1;
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();mx=e.clientX-r.left;my=e.clientY-r.top;});
+cv.addEventListener('pointerleave',()=>{mx=-1;});
+function leaf(px,py,ang,sz,g){
+  x.save();x.translate(px,py);x.rotate(ang);
+  const gr=x.createLinearGradient(0,0,sz*2,0);
+  gr.addColorStop(0,'#3aa55f');gr.addColorStop(1,'#7fe6a0');
+  x.fillStyle=gr;x.globalAlpha=g;
+  x.beginPath();x.moveTo(0,0);
+  x.quadraticCurveTo(sz*1.1,-sz*0.9,sz*2.1,0);
+  x.quadraticCurveTo(sz*1.1,sz*0.9,0,0);x.fill();
+  x.restore();
+}
+function frame(){
+  t+=reduce?0:0.006;
+  const p=reduce?1:(0.5-0.5*Math.cos((t%2)*Math.PI)); // grow then retract loop
+  x.clearRect(0,0,W,H);
+  // stem
+  x.lineCap='round';x.lineJoin='round';
+  const N=80;
+  for(let pass=0;pass<2;pass++){
+    x.beginPath();
+    let started=false;
+    for(let i=0;i<=N;i++){
+      const s=i/N; if(s>p)break;
+      const q=pt(s);
+      if(!started){x.moveTo(q.x,q.y);started=true;}else x.lineTo(q.x,q.y);
+    }
+    x.strokeStyle=pass?'#6fd98e':'#2f7a47';
+    x.lineWidth=pass?2.5:6.5*(1-0.4);
+    x.globalAlpha=pass?0.9:1;
+    x.stroke();
+  }
+  x.globalAlpha=1;
+  // leaves appear as growth passes them
+  for(const lf of leaves){
+    if(p>lf.s){
+      const g=Math.min(1,(p-lf.s)*9);
+      const base=pt(lf.s);
+      const nxt=pt(Math.min(1,lf.s+0.01));
+      const dir=Math.atan2(nxt.y-base.y,nxt.x-base.x);
+      let wob=Math.sin(t*3+lf.s*20)*0.12;
+      if(mx>=0){const d=Math.hypot(mx-base.x,my-base.y);if(d<60)wob+=(1-d/60)*0.5*lf.side;}
+      leaf(base.x,base.y,dir+lf.side*1.1+wob,lf.sz*Math.min(1,g),g);
+    }
+  }
+  // bud at tip
+  if(p<1){const tip=pt(p);x.fillStyle='#bdf5c9';x.globalAlpha=0.9;
+    x.beginPath();x.arc(tip.x,tip.y,3.5,0,7);x.fill();x.globalAlpha=1;}
+  raf=requestAnimationFrame(frame);
+}
+let raf=requestAnimationFrame(frame);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>

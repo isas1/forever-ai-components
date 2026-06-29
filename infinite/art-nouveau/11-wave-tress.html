@@ -1,0 +1,147 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Whiplash hair tresses in gold, sage and rose sway and curl over a dark green field with floral stained-glass blossoms.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wave Tress</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e1310}
+  #an11-stage{position:fixed;inset:0;overflow:hidden;background:
+    radial-gradient(120% 95% at 28% 18%,#1a241c 0%,#11170f 46%,#0e1310 100%)}
+  #an11-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static frame, never repaints — gold vignette + stained-glass corner cell */
+  #an11-stage::after{content:"";position:absolute;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 90px 14px rgba(7,11,8,.85),
+               inset 0 0 26px 2px rgba(201,162,75,.10);
+    border:1px solid rgba(201,162,75,.16)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="an11-stage" role="img" aria-label="Art Nouveau flowing hair tresses curling in whiplash curves over a dark green field">
+  <canvas id="an11-c"></canvas>
+</div>
+<div class="cap">Wave Tress</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("an11-stage"),
+      cv=document.getElementById("an11-c"),
+      ctx=cv.getContext("2d"),
+      reduce=matchMedia("(prefers-reduced-motion:reduce)").matches,
+      W=0,H=0,dpr=1,running=true,raf=0,t0=0;
+
+  // Art Nouveau palette: muted gold, sage, rose, ivory
+  var GOLD="#c9a24b",GOLD2="#e3c87e",SAGE="#7f9b6e",ROSE="#b9697a",IVORY="#efe6cf";
+
+  // N tresses, each a whiplash strand with its own phase/curl (count well under cap)
+  var N=9, strands=[];
+  function build(){
+    strands.length=0;
+    for(var i=0;i<N;i++){
+      strands.push({
+        x:0.10+0.82*(i/(N-1)),      // base x (fraction)
+        amp:0.05+0.085*((i*7)%5)/4, // sway amplitude
+        curl:1.1+1.6*((i*3)%5)/4,   // vertical wave count
+        ph:i*0.83,                  // phase offset
+        sp:0.45+0.5*((i*5)%4)/3,    // drift speed
+        hue:i%3                     // 0 gold,1 sage,2 rose
+      });
+    }
+  }
+  build();
+
+  function resize(){
+    var r=stage.getBoundingClientRect();
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,r.width); H=Math.max(1,r.height);
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function strandColor(h){return h===0?GOLD:h===1?SAGE:ROSE;}
+
+  // draw one tress as a tapering whiplash ribbon of strokes
+  function drawStrand(s,time){
+    var bx=s.x*W, top=-0.06*H, bot=1.06*H, span=bot-top;
+    var sway=s.amp*W, drift=Math.sin(time*s.sp+s.ph)*0.5+0.5;
+    // ribbon: 3 offset lines (highlight, body, shadow) for hair sheen
+    var offs=[-3,0,3], wid=[1.0,2.4,1.4],
+        cols=[GOLD2, strandColor(s.hue), "rgba(7,11,8,.55)"];
+    for(var k=0;k<3;k++){
+      ctx.beginPath();
+      ctx.lineWidth=wid[k];
+      ctx.strokeStyle=cols[k];
+      ctx.globalAlpha=k===0?0.55:(k===2?0.5:0.9);
+      var steps=30;
+      for(var j=0;j<=steps;j++){
+        var u=j/steps, y=top+u*span;
+        // whiplash: combine a big S sweep with a tightening curl near the end
+        var swell=Math.sin(u*Math.PI);                 // fat in middle
+        var wave=Math.sin(u*s.curl*Math.PI*2 + time*0.9 + s.ph);
+        var tip=Math.pow(u,2.2)*Math.sin(time*0.7+s.ph)*0.5; // curling tail
+        var x=bx + sway*(wave*swell + tip) + (drift-0.5)*sway*0.6 + offs[k]*swell;
+        if(j===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // a few floral nodes where tresses gather — stained-glass dots
+  function drawBlossom(cx,cy,r,col){
+    ctx.globalAlpha=0.9; ctx.fillStyle=col;
+    ctx.beginPath();
+    for(var p=0;p<5;p++){
+      var a=p/5*Math.PI*2-Math.PI/2,
+          x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r;
+      if(p===0)ctx.moveTo(x,y);
+      var a2=a+Math.PI/5, mx=cx+Math.cos(a2)*r*2.0, my=cy+Math.sin(a2)*r*2.0;
+      ctx.quadraticCurveTo(mx,my,
+        cx+Math.cos(a+Math.PI*2/5)*r, cy+Math.sin(a+Math.PI*2/5)*r);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha=0.95; ctx.fillStyle=GOLD2;
+    ctx.beginPath(); ctx.arc(cx,cy,r*0.5,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  function frame(time){
+    ctx.clearRect(0,0,W,H);
+    ctx.lineCap="round"; ctx.lineJoin="round";
+    var i,s;
+    for(i=0;i<N;i++) drawStrand(strands[i],time);
+    // blossoms anchored at three gathering points (static-ish, gentle bob)
+    var pts=[[0.22,0.30,ROSE],[0.55,0.20,GOLD],[0.80,0.40,SAGE]];
+    var br=Math.max(7,W*0.018);
+    for(i=0;i<pts.length;i++){
+      var bob=Math.sin(time*0.6+i*2.1)*W*0.012;
+      drawBlossom(pts[i][0]*W, pts[i][1]*H+bob, br, pts[i][2]);
+    }
+  }
+
+  function loop(now){
+    if(!running)return;
+    if(!t0)t0=now;
+    frame((now-t0)/1000);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){ if(!running){running=true; t0=0; raf=requestAnimationFrame(loop);} }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    resize();
+    if(reduce){ frame(2.1); return; }   // single composed still frame
+    running=true; raf=requestAnimationFrame(loop);
+  }
+
+  window.addEventListener("resize",function(){ resize(); if(reduce)frame(2.1); });
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden)stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body></html>

@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Striped retro sun bobs up over a neon perspective grid, twinkling stars and a magenta-to-amber sky, all crossed by faint scanlines.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scanline Sun</title>
+<style>
+  :root{
+    --vw03-bg:#160a2a; --vw03-cyan:#22d3ee; --vw03-mag:#ff2bd6;
+    --vw03-orange:#ff7a59; --vw03-amber:#ffd166; --vw03-deep:#7a1f8f;
+  }
+  html,body{margin:0;height:100%}
+  #vw03-stage{
+    position:fixed; inset:0; background:var(--vw03-bg);
+    overflow:hidden; isolation:isolate;
+  }
+  #vw03-c{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="vw03-stage" role="img" aria-label="A striped retro vaporwave sun rising over a neon perspective grid, crossed by horizontal scanlines, beneath a magenta-to-amber sunset sky.">
+    <canvas id="vw03-c"></canvas>
+  </div>
+  <div class="cap">Scanline Sun</div>
+
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('vw03-stage');
+  var cvs=document.getElementById('vw03-c');
+  var ctx=cvs.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  var W=0,H=0,DPR=1, cx=0, horizon=0, running=false, raf=0, t0=0;
+
+  // palette (warm sun core to magenta rim)
+  var SUN=['#ffe7a0','#ffd166','#ff9e4f','#ff6a4d','#ff3da0','#ff2bd6'];
+  var STAR_N=70;
+  var sx=new Float32Array(STAR_N), sy=new Float32Array(STAR_N),
+      sr=new Float32Array(STAR_N), sp=new Float32Array(STAR_N);
+  var seeded=false;
+
+  function seedStars(){
+    for(var i=0;i<STAR_N;i++){
+      sx[i]=Math.random(); sy[i]=Math.random()*0.55;
+      sr[i]=0.4+Math.random()*1.1; sp[i]=Math.random()*Math.PI*2;
+    }
+    seeded=true;
+  }
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cvs.width=Math.round(W*DPR); cvs.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2; horizon=H*0.62;
+    if(!seeded) seedStars();
+  }
+
+  // ---- static layers drawn each frame (cheap, no layout reads) ----
+  function sky(){
+    var g=ctx.createLinearGradient(0,0,0,horizon);
+    g.addColorStop(0,'#1a0c33'); g.addColorStop(0.5,'#46145e');
+    g.addColorStop(0.82,'#a3246f'); g.addColorStop(1,'#ff7a59');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,horizon);
+    // lower (grid void)
+    var g2=ctx.createLinearGradient(0,horizon,0,H);
+    g2.addColorStop(0,'#2a0c3e'); g2.addColorStop(1,'#0c0420');
+    ctx.fillStyle=g2; ctx.fillRect(0,horizon,W,H-horizon);
+  }
+
+  function stars(time){
+    ctx.fillStyle='#dff6ff';
+    for(var i=0;i<STAR_N;i++){
+      var y=sy[i]*horizon;
+      // twinkle via opacity only (compositor-safe equivalent: alpha)
+      var a=0.35+0.45*(0.5+0.5*Math.sin(time*1.6+sp[i]));
+      ctx.globalAlpha=a;
+      ctx.fillRect(sx[i]*W, y, sr[i], sr[i]);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function sun(time){
+    var R=Math.min(W,H)*0.30;
+    // rise: slow bob upward, settling near horizon
+    var rise = reduce ? 0 : (1-Math.min(1,time*0.18))*R*0.55;
+    var sunCY=horizon - R*0.62 + rise;
+    var top=sunCY-R, bot=sunCY+R;
+
+    ctx.save();
+    // clip to circle
+    ctx.beginPath(); ctx.arc(cx,sunCY,R,0,Math.PI*2); ctx.clip();
+    var g=ctx.createLinearGradient(0,top,0,bot);
+    g.addColorStop(0,SUN[0]); g.addColorStop(0.28,SUN[1]);
+    g.addColorStop(0.5,SUN[2]); g.addColorStop(0.7,SUN[3]);
+    g.addColorStop(0.86,SUN[4]); g.addColorStop(1,SUN[5]);
+    ctx.fillStyle=g; ctx.fillRect(cx-R,top,R*2,R*2);
+
+    // signature horizontal slices in lower half (widen downward)
+    ctx.fillStyle=var_bg();
+    var slices=7;
+    for(var i=0;i<slices;i++){
+      var f=i/slices;
+      var syy=sunCY + R*0.18 + f*R*0.82;
+      var hgt=2 + f*5;
+      ctx.fillRect(cx-R, syy, R*2, hgt);
+    }
+    ctx.restore();
+
+    // static rim glow (drawn once per frame, not animated -> no repaint storm)
+    ctx.globalAlpha=0.5;
+    ctx.strokeStyle=SUN[4]; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(cx,sunCY,R+1.5,0,Math.PI*2); ctx.stroke();
+    ctx.globalAlpha=1;
+    return {cy:sunCY,R:R};
+  }
+  function var_bg(){ return '#190a30'; } // slice color = sky-toned mask
+
+  function grid(time){
+    var top=horizon, drift = reduce?0:((time*40)% 1);
+    ctx.strokeStyle='rgba(34,211,238,0.55)'; ctx.lineWidth=1;
+    // horizontal lines receding (perspective: spacing shrinks toward horizon)
+    var rows=14;
+    ctx.beginPath();
+    for(var i=0;i<=rows;i++){
+      // p in [0..1], 0 at horizon, 1 at bottom; scrolling adds drift
+      var p=(i+drift)/rows;
+      var ease=p*p; // accelerate toward viewer
+      var y=top + ease*(H-top);
+      ctx.moveTo(0,y); ctx.lineTo(W,y);
+    }
+    ctx.stroke();
+    // vertical converging lines
+    ctx.strokeStyle='rgba(255,43,214,0.42)';
+    ctx.beginPath();
+    var cols=12;
+    for(var j=0;j<=cols;j++){
+      var fx=(j/cols-0.5);
+      ctx.moveTo(cx+fx*W*0.10, top);     // near horizon: tight spread
+      ctx.lineTo(cx+fx*W*1.9, H);        // bottom: wide spread
+    }
+    ctx.stroke();
+  }
+
+  function scanlines(){
+    // STATIC overlay: subtle dark horizontal lines across whole frame
+    ctx.fillStyle='rgba(0,0,0,0.16)';
+    for(var y=0;y<H;y+=3){ ctx.fillRect(0,y,W,1); }
+  }
+
+  function frame(now){
+    if(!running) return;
+    if(!t0) t0=now;
+    var time=(now-t0)/1000;
+    ctx.clearRect(0,0,W,H);
+    sky();
+    stars(time);
+    sun(time);
+    grid(time);
+    scanlines();
+    raf=requestAnimationFrame(frame);
+  }
+
+  function drawOne(){
+    ctx.clearRect(0,0,W,H);
+    sky(); stars(2.0); sun(0); grid(0); scanlines();
+  }
+
+  function start(){ if(running)return; running=true; t0=0; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  window.addEventListener('resize',function(){ resize(); if(reduce){drawOne();} });
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden) stop(); else start();
+  });
+
+  resize();
+  if(reduce){ drawOne(); return; }
+  start();
+})();
+</script>
+</body>
+</html>

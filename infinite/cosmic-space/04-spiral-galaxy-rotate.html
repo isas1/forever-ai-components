@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A two-armed spiral galaxy of pink and blue stars rotates slowly around a glowing violet core, spinning faster on pointer move.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spiral Galaxy Rotate</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#06040f;}
+  #c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.08em;color:#e6d6ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Spiral Galaxy Rotate</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,scale;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;scale=Math.min(W,H)/420;
+  }
+  addEventListener('resize',size);size();
+  const N=115,arms=2,parts=[];
+  for(let i=0;i<N;i++){
+    const arm=i%arms,rr=Math.pow(Math.random(),0.6)*190;
+    parts.push({
+      r:rr, base:arm*(Math.PI*2/arms)+rr*0.022,
+      jit:(Math.random()-0.5)*0.5,
+      sz:0.6+Math.random()*1.8,
+      c:rr<40?'#fff3d0':rr<110?'#bcd4ff':(Math.random()<0.3?'#ff9ad0':'#9ab8ff')
+    });
+  }
+  let t=0,spin=1;
+  cv.addEventListener('pointermove',()=>{spin=2.4;});
+  function frame(){
+    spin+=(1-spin)*0.04;
+    t+=reduce?0:0.0055*spin;
+    ctx.fillStyle='rgba(6,4,15,0.3)';ctx.fillRect(0,0,W,H);
+    ctx.save();ctx.translate(cx,cy);ctx.scale(1,0.62);ctx.rotate(t);
+    // core glow
+    const g=ctx.createRadialGradient(0,0,0,0,0,55*scale);
+    g.addColorStop(0,'rgba(255,240,210,0.9)');g.addColorStop(.5,'rgba(220,160,255,0.25)');
+    g.addColorStop(1,'rgba(120,90,200,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,55*scale,0,Math.PI*2);ctx.fill();
+    parts.forEach(p=>{
+      const a=p.base+p.jit+t*0.15*(60/Math.max(p.r,20));
+      const x=Math.cos(a)*p.r*scale,y=Math.sin(a)*p.r*scale;
+      ctx.globalAlpha=0.85;ctx.fillStyle=p.c;
+      ctx.beginPath();ctx.arc(x,y,p.sz*scale,0,Math.PI*2);ctx.fill();
+    });
+    ctx.restore();ctx.globalAlpha=1;
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ctx.fillStyle='#06040f';ctx.fillRect(0,0,W,H);frame();}else start();
+})();
+</script>
+</body>
+</html>

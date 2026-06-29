@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Bokashi Sky — Utagawa Hiroshige. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bokashi Sky</title>
+<style>
+  html,body{margin:0;height:100%;background:#2a3550;overflow:hidden}
+  #hir02-stage{position:fixed;inset:0;width:100%;height:100%}
+  #hir02-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .hir02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="hir02-stage" role="img" aria-label="A woodblock bokashi graded sky cycling dawn to day to dusk to night, sun and moon arcing across the band while a single bird crosses and low hills sit beneath.">
+  <canvas id="hir02-cv"></canvas>
+</div>
+<div class="hir02-cap">Bokashi Sky</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('hir02-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  const INK='#16202b';
+  function mixRgb(a,b,k){return [Math.round(a[0]+(b[0]-a[0])*k),Math.round(a[1]+(b[1]-a[1])*k),Math.round(a[2]+(b[2]-a[2])*k)];}
+  function hx(a){return [parseInt(a.slice(1,3),16),parseInt(a.slice(3,5),16),parseInt(a.slice(5,7),16)];}
+  function rgb(c){return 'rgb('+c[0]+','+c[1]+','+c[2]+')';}
+  function lerpHex(a,b,k){return mixRgb(hx(a),hx(b),k);}
+  function mixInk(c,k){return rgb(mixRgb(c,hx(INK),k));}
+  const PHASES=[
+    {top:'#2a3f63', bot:'#d98a5a', sun:'#f2c27a', name:'dawn'},
+    {top:'#3f6f9f', bot:'#cfe6ee', sun:'#fdf6e3', name:'day'},
+    {top:'#3a3360', bot:'#c4663f', sun:'#e8934a', name:'dusk'},
+    {top:'#101a2e', bot:'#22324b', sun:'#e8edf2', name:'night'}
+  ];
+  let S=fitCanvas(cv), t=0, last=performance.now();
+  const PERIOD=18;
+  function draw(now){
+    let dt=(now-last)/1000;last=now;if(dt>0.05)dt=0.05;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    const u=(t%PERIOD)/PERIOD;
+    const fi=u*PHASES.length;
+    const i0=Math.floor(fi)%PHASES.length, i1=(i0+1)%PHASES.length;
+    const k=fi-Math.floor(fi);
+    const top=lerpHex(PHASES[i0].top,PHASES[i1].top,k);
+    const bot=lerpHex(PHASES[i0].bot,PHASES[i1].bot,k);
+    const sun=lerpHex(PHASES[i0].sun,PHASES[i1].sun,k);
+    const g=ctx.createLinearGradient(0,0,0,H*0.82);
+    g.addColorStop(0,rgb(top));
+    g.addColorStop(0.55,rgb(mixRgb(top,bot,0.55)));
+    g.addColorStop(1,rgb(bot));
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    const sx=W*u;
+    const arcY=H*0.62 - Math.sin(u*Math.PI*2)*H*0.42;
+    const isNight=(PHASES[i0].name==='night');
+    ctx.save();
+    const rad=isNight?14:18;
+    const grd=ctx.createRadialGradient(sx,arcY,2,sx,arcY,rad*2.6);
+    grd.addColorStop(0,rgb(sun));grd.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=grd;ctx.beginPath();ctx.arc(sx,arcY,rad*2.6,0,7);ctx.fill();
+    ctx.fillStyle=rgb(sun);ctx.beginPath();ctx.arc(sx,arcY,rad,0,7);ctx.fill();
+    ctx.restore();
+    const nightAmt=(PHASES[i0].name==='night'?(1-k):0)+(PHASES[i1].name==='night'?k:0);
+    if(nightAmt>0.02){
+      for(let s=0;s<26;s++){
+        const sxx=((s*97.3)%W), syy=((s*53.7)%(H*0.5));
+        const tw=0.5+0.5*Math.sin(t*2+s);
+        ctx.globalAlpha=nightAmt*tw*0.9;
+        ctx.fillStyle='rgba(242,240,232,1)';
+        ctx.fillRect(sxx,syy,1.4,1.4);
+      }
+      ctx.globalAlpha=1;
+    }
+    ctx.fillStyle=mixInk(bot,0.30);
+    ctx.beginPath();ctx.moveTo(0,H*0.80);
+    ctx.quadraticCurveTo(W*0.25,H*0.70,W*0.5,H*0.78);
+    ctx.quadraticCurveTo(W*0.78,H*0.86,W,H*0.74);
+    ctx.lineTo(W,H);ctx.lineTo(0,H);ctx.closePath();ctx.fill();
+    const bu=(t*0.06)%1;
+    const bx=W*0.1+bu*W*0.85;
+    const by=H*0.22+Math.sin(t*0.8)*H*0.03;
+    ctx.strokeStyle=mixInk(top,0.5);ctx.globalAlpha=0.7;ctx.lineWidth=2;
+    const wf=Math.sin(t*5)*4;
+    ctx.beginPath();
+    ctx.moveTo(bx-7,by+wf);ctx.quadraticCurveTo(bx,by-4,bx,by);
+    ctx.quadraticCurveTo(bx,by-4,bx+7,by+wf);ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

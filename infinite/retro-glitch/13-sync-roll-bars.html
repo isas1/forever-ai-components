@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Amber CRT test-pattern picture rolls vertically with a tearing sync seam, rising bright bands, scanlines and vignette.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sync Roll Bars</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1205;}
+  #srb-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#ffd23f;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="srb-c"></canvas>
+<div class="cap">Sync Roll Bars</div>
+<script>
+(function(){
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('srb-c'),ctx=cv.getContext('2d');
+  let W,H,DPR;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize',size);size();
+
+  // Render the "picture" content (test-pattern phosphor field) at a given vertical scroll offset.
+  function picture(g,yOff){
+    g.save();g.translate(0,yOff);
+    for(let pass=-1;pass<=1;pass++){
+      const o=pass*H;
+      // amber phosphor base + vertical color bars (PM5544-ish)
+      const cols=['#2a1d06','#5a3a06','#9c6a0a','#caa317','#ffd23f','#caa317','#9c6a0a','#5a3a06'];
+      const bw=W/cols.length;
+      for(let i=0;i<cols.length;i++){g.fillStyle=cols[i];g.fillRect(i*bw,o,bw+1,H);}
+      // dark center band with bright title strip
+      g.fillStyle='#120c03';g.fillRect(0,o+H*0.40,W,H*0.20);
+      g.fillStyle='#ffd23f';g.fillRect(0,o+H*0.46,W,H*0.014);
+      g.fillStyle='#1a1205';g.fillRect(0,o+H*0.49,W,H*0.07);
+      // grid grey blocks
+      g.fillStyle='rgba(255,210,63,0.10)';
+      const gb=W/10;
+      for(let r=0;r<2;r++)for(let c=0;c<10;c++){if((r+c)&1)g.fillRect(c*gb,o+H*(0.60+r*0.12),gb-2,H*0.10);}
+    }
+    g.restore();
+  }
+
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.5,4);});
+  cv.addEventListener('click',()=>{nudge=8;});
+
+  function frame(){
+    t+=reduce?0:1;
+    const sp=(1.4+nudge);
+    nudge*=0.93;
+    // vertical hold scroll: whole picture creeps, tears at a seam that itself drifts
+    const scroll=((t*sp)%H+H)%H;
+    const seam=H - scroll;                 // tear line where bottom slice wraps to top
+
+    ctx.clearRect(0,0,W,H);
+    picture(ctx,-scroll);
+    picture(ctx,H-scroll);
+
+    // horizontal-tear jitter at the seam: re-draw a thin band shifted sideways (no pixel readback)
+    const tearH=Math.max(5,H*0.02);
+    const ty=Math.max(0,Math.min(H-tearH,seam-tearH/2));
+    const dx=(Math.sin(t*0.9)*5+Math.sin(t*0.31)*9)*(0.6+nudge*0.4);
+    ctx.save();
+    ctx.beginPath();ctx.rect(0,ty,W,tearH);ctx.clip();
+    ctx.clearRect(0,ty,W,tearH);
+    ctx.fillStyle='#1a1205';ctx.fillRect(0,ty,W,tearH);
+    ctx.translate(dx,0);
+    picture(ctx,-scroll);
+    picture(ctx,H-scroll);
+    ctx.restore();
+    // seam blanking line (sync drop-out)
+    ctx.fillStyle='rgba(8,5,1,0.85)';ctx.fillRect(0,seam-1,W,2);
+
+    // rolling bright bands crawling UPWARD
+    const bands=2;
+    for(let b=0;b<bands;b++){
+      const cy=((H*1.4) - ((t*sp*1.7 + b*H/bands)%(H*1.4)));
+      const bh=H*0.26;
+      const lg=ctx.createLinearGradient(0,cy-bh,0,cy+bh);
+      lg.addColorStop(0,'rgba(255,210,63,0)');
+      lg.addColorStop(0.42,'rgba(255,228,150,0.10)');
+      lg.addColorStop(0.5,'rgba(255,248,225,0.28)');
+      lg.addColorStop(0.58,'rgba(255,228,150,0.10)');
+      lg.addColorStop(1,'rgba(255,210,63,0)');
+      ctx.globalCompositeOperation='screen';
+      ctx.fillStyle=lg;ctx.fillRect(0,cy-bh,W,bh*2);
+      ctx.globalCompositeOperation='source-over';
+    }
+
+    // scanlines
+    ctx.fillStyle='rgba(0,0,0,0.22)';
+    for(let y=0;y<H;y+=3)ctx.fillRect(0,y,W,1);
+    // vignette
+    const v=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.3,W/2,H/2,Math.max(W,H)*0.62);
+    v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,0.55)');
+    ctx.fillStyle=v;ctx.fillRect(0,0,W,H);
+
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=H*0.18;frame();}else start();
+})();
+</script>
+</body>
+</html>

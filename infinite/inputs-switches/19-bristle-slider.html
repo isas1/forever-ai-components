@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Gold handle drags across a field of teal-green bristles that bend, spring, and glow with travel speed on a dark green ground.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bristle Slider</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#102418;}
+  #bs-c{display:block;width:100%;height:100%;touch-action:none;cursor:ew-resize;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.14em;color:#ffd23f;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="bs-c"></canvas>
+<div class="cap">Bristle Slider</div>
+<script>
+(function(){
+  const cv=document.getElementById('bs-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG='#102418',AC='#ffd23f';
+  let W,H,DPR,N,bx,by,bw,gap,baseY,len;
+  // bristle state: bend angle + angular velocity
+  let bend=[],vel=[];
+  let handle=0.5, target=0.5, prevHandle=0.5, speed=0, t=0;
+
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    bx=W*0.10; bw=W*0.80; by=H*0.5;
+    const dens=Math.max(7,Math.round(bw/9));
+    N=dens; gap=bw/(N-1);
+    len=Math.min(H*0.30,bw*0.16);
+    baseY=by+len*0.55;
+    bend=new Array(N).fill(0); vel=new Array(N).fill(0);
+  }
+  addEventListener('resize',size);size();
+
+  function px(){return bx+handle*bw;}
+
+  function setTarget(clientX){
+    const r=cv.getBoundingClientRect();
+    target=Math.max(0,Math.min(1,(clientX-r.left-bx)/bw));
+  }
+  cv.addEventListener('pointerdown',e=>{cv.setPointerCapture(e.pointerId);setTarget(e.clientX);});
+  cv.addEventListener('pointermove',e=>{if(e.pressure>0||e.buttons){setTarget(e.clientX);}});
+
+  // autonomous drift when idle so the field always breathes
+  let autoT=Math.random()*6.28, idle=0;
+
+  function step(dt){
+    idle+=dt;
+    if(idle>1.4 && !reduce){ // user hasn't touched in a while -> graceful sweep
+      autoT+=dt*0.9;
+      target=0.5+0.42*Math.sin(autoT)*Math.sin(autoT*0.37+1.1);
+    }
+    prevHandle=handle;
+    handle+=(target-handle)*Math.min(1,dt*9);
+    const hv=(handle-prevHandle)/Math.max(dt,1/120); // handle velocity (frac/s)
+    speed+=(Math.abs(hv)-speed)*0.25;
+    const dir=hv>=0?1:-1;
+    const hxFrac=handle;
+    // push bristles: bend grows with proximity + travel speed; direction = travel
+    for(let i=0;i<N;i++){
+      const bf=i/(N-1);
+      const d=(bf-hxFrac)*bw;
+      const ad=Math.abs(d);
+      const reach=gap*4.2;
+      let drive=0;
+      if(ad<reach){
+        const prox=1-ad/reach;            // 0..1
+        const push=prox*prox;
+        // speed sets the bend angle; sign = travel direction, lean toward where handle came from
+        const want = -dir*push*Math.min(1.25,0.18+speed*1.5);
+        // bristles just behind the handle bend most; ahead bend slightly toward it
+        const ahead=(d*dir)>0; // bristle is in front of motion
+        drive = ahead ? want*0.45 : want;
+      }
+      // spring toward drive target, with trailing lag via velocity
+      const k=120, damp=11;
+      const force=(drive-bend[i])*k - vel[i]*damp;
+      vel[i]+=force*dt;
+      bend[i]+=vel[i]*dt;
+    }
+    idle=(Math.abs(hv)>0.02)?0:idle;
+  }
+
+  function draw(){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    const hx=px();
+
+    // track groove
+    ctx.strokeStyle='rgba(255,210,63,0.14)';
+    ctx.lineWidth=Math.max(1,len*0.05);
+    ctx.beginPath();ctx.moveTo(bx,baseY+2);ctx.lineTo(bx+bw,baseY+2);ctx.stroke();
+
+    // bristles
+    for(let i=0;i<N;i++){
+      const x0=bx+i*gap;
+      const a=bend[i];                       // radians-ish lean
+      const tipx=x0+Math.sin(a)*len;
+      const tipy=baseY-Math.cos(a)*len;
+      const midx=x0+Math.sin(a*0.5)*len*0.5;
+      const midy=baseY-Math.cos(a*0.5)*len*0.5;
+      const d=Math.abs(x0-hx);
+      const lit=Math.max(0,1-d/(gap*5));     // glow near handle
+      const g=Math.abs(a);
+      // colour: resting = muted teal-green, bent = accent gold
+      const mix=Math.min(1,g*1.7+lit*0.6);
+      const cr=Math.round(56+(255-56)*mix);
+      const cg=Math.round(102+(210-102)*mix);
+      const cb=Math.round(70+(63-70)*mix);
+      ctx.strokeStyle='rgb('+cr+','+cg+','+cb+')';
+      ctx.lineWidth=Math.max(1,len*0.085)*(1+lit*0.5);
+      ctx.lineCap='round';
+      ctx.beginPath();
+      ctx.moveTo(x0,baseY);
+      ctx.quadraticCurveTo(midx,midy,tipx,tipy);
+      ctx.stroke();
+      // tip dot
+      ctx.fillStyle='rgb('+cr+','+cg+','+cb+')';
+      ctx.globalAlpha=0.55+lit*0.45;
+      ctx.beginPath();ctx.arc(tipx,tipy,Math.max(1,len*0.07)*(0.7+lit),0,6.2832);ctx.fill();
+      ctx.globalAlpha=1;
+    }
+
+    // handle: a blade that drags through the field
+    const grad=ctx.createLinearGradient(hx,by-len,hx,baseY+len*0.2);
+    grad.addColorStop(0,'rgba(255,210,63,0)');
+    grad.addColorStop(0.5,'rgba(255,210,63,0.22)');
+    grad.addColorStop(1,'rgba(255,210,63,0)');
+    ctx.fillStyle=grad;
+    ctx.fillRect(hx-len*0.10,by-len*1.1,len*0.20,len*2.2);
+
+    ctx.fillStyle=AC;
+    ctx.beginPath();
+    const r=Math.max(5,len*0.26);
+    ctx.arc(hx,by-len*0.15,r,0,6.2832);ctx.fill();
+    // inner ring confessing speed
+    ctx.strokeStyle=BG;ctx.lineWidth=Math.max(1.5,r*0.16);
+    ctx.beginPath();ctx.arc(hx,by-len*0.15,r*0.5,0,6.2832);ctx.stroke();
+    // speed ticks radiating
+    const sp=Math.min(1,speed*1.6);
+    ctx.strokeStyle=AC;ctx.globalAlpha=0.5*sp;
+    ctx.lineWidth=Math.max(1,r*0.12);
+    for(let s=0;s<6;s++){
+      const ang=(s/6)*6.2832+t*2;
+      const ir=r*1.3,or=r*(1.3+sp*0.9);
+      ctx.beginPath();
+      ctx.moveTo(hx+Math.cos(ang)*ir,by-len*0.15+Math.sin(ang)*ir);
+      ctx.lineTo(hx+Math.cos(ang)*or,by-len*0.15+Math.sin(ang)*or);
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  let raf=0,last=0;
+  function frame(now){
+    const dt=last?Math.min(0.05,(now-last)/1000):0.016; last=now;
+    t+=dt;
+    step(dt); draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf){last=0;raf=requestAnimationFrame(frame);}}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){
+    // single resting frame: a gentle static lean to show the field
+    for(let i=0;i<N;i++)bend[i]=0.18*Math.sin(i*0.5);
+    handle=0.5;target=0.5;draw();
+  } else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A radial petal mandala slowly breathing open and closed with counter-rotating rings in pink-violet-cyan gradients.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mandala Breathe</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  #ps09-stage{
+    position:fixed;inset:0;display:grid;place-items:center;
+    background:radial-gradient(120% 120% at 50% 50%,#190a2b 0%,#0a0612 70%);
+  }
+  /* one petal ring rotates; CSS only feeds the rotation, JS drives the breath */
+  #ps09-svg{width:96vmin;height:96vmin;display:block;
+    /* static glow — never repaints */
+    filter:drop-shadow(0 0 18px rgba(255,61,166,.28));}
+  .ps09-spin{transform-origin:300px 300px;animation:ps09rot 44s linear infinite}
+  .ps09-spin.r2{animation-duration:62s;animation-direction:reverse}
+  @keyframes ps09rot{to{transform:rotate(360deg)}}
+  .ps09-core{transform-origin:300px 300px;animation:ps09pulse 9s ease-in-out infinite}
+  @keyframes ps09pulse{0%,100%{transform:scale(.84);opacity:.85}50%{transform:scale(1.12);opacity:1}}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    .ps09-core{transform:scale(1)!important;opacity:1!important}
+  }
+</style>
+</head>
+<body>
+<div id="ps09-stage" role="img" aria-label="A radial psychedelic mandala slowly breathing open and closed in swirling complementary hues">
+  <svg id="ps09-svg" viewBox="0 0 600 600" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <defs>
+      <radialGradient id="ps09-g1" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffd84d"/>
+        <stop offset="38%" stop-color="#ff3da6"/>
+        <stop offset="100%" stop-color="#6a1fd0"/>
+      </radialGradient>
+      <radialGradient id="ps09-g2" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#43f5d0"/>
+        <stop offset="60%" stop-color="#2a7bff"/>
+        <stop offset="100%" stop-color="#102a66"/>
+      </radialGradient>
+      <linearGradient id="ps09-g3" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#ff7ad1"/>
+        <stop offset="100%" stop-color="#ff3da6"/>
+      </linearGradient>
+    </defs>
+
+    <!-- outer breathing ring of liquid petals -->
+    <g class="ps09-spin r2" id="ps09-ring-out"></g>
+    <!-- mid breathing ring -->
+    <g class="ps09-spin" id="ps09-ring-mid"></g>
+    <!-- core -->
+    <g class="ps09-core" id="ps09-coreg">
+      <circle cx="300" cy="300" r="64" fill="url(#ps09-g1)"/>
+      <circle cx="300" cy="300" r="30" fill="#0a0612" opacity=".55"/>
+      <circle cx="300" cy="300" r="14" fill="url(#ps09-g2)"/>
+    </g>
+  </svg>
+</div>
+<div class="cap">Mandala Breathe</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var ringOut = document.getElementById('ps09-ring-out');
+  var ringMid = document.getElementById('ps09-ring-mid');
+  var SVGNS = 'http://www.w3.org/2000/svg';
+
+  // teardrop / lava petal path, drawn pointing up from centre at given length+width
+  function petal(len, wid){
+    var cx=300, base=300, tip=300-len, w=wid;
+    return 'M'+cx+' '+base+
+      ' C'+(cx-w)+' '+(base-len*0.35)+' '+(cx-w*0.55)+' '+(tip+len*0.18)+' '+cx+' '+tip+
+      ' C'+(cx+w*0.55)+' '+(tip+len*0.18)+' '+(cx+w)+' '+(base-len*0.35)+' '+cx+' '+base+' Z';
+  }
+
+  function buildRing(g, count, len, wid, fill, opacity){
+    var step = 360/count;
+    for(var i=0;i<count;i++){
+      var p = document.createElementNS(SVGNS,'path');
+      p.setAttribute('d', petal(len,wid));
+      p.setAttribute('fill', fill);
+      p.setAttribute('opacity', opacity);
+      p.setAttribute('transform','rotate('+(i*step)+' 300 300)');
+      g.appendChild(p);
+    }
+  }
+
+  // outer ring: 12 long petals, mid ring: 8 fatter petals (capped well under 110)
+  buildRing(ringOut, 12, 232, 46, 'url(#ps09-g3)', 0.92);
+  buildRing(ringMid, 8, 150, 70, 'url(#ps09-g2)', 0.9);
+
+  // breathing: scale both rings around centre via a wrapping transform group.
+  // We keep CSS handling spin; JS only writes a cached scale string -> compositor transform.
+  var WHO = ringOut, WHI = ringMid;
+  // create dedicated breath wrappers so spin (CSS) and breath (JS) don't fight
+  function wrap(g){
+    var w = document.createElementNS(SVGNS,'g');
+    g.parentNode.insertBefore(w, g);
+    w.appendChild(g);
+    w.setAttribute('transform-origin','300 300');
+    return w;
+  }
+  var bOut = wrap(WHO), bMid = wrap(WHI);
+
+  if(reduce){
+    bOut.setAttribute('transform','translate(300 300) scale(1) translate(-300 -300)');
+    bMid.setAttribute('transform','translate(300 300) scale(.92) translate(-300 -300)');
+    return; // one calm static frame, no loop
+  }
+
+  var running = true, raf = 0, t0 = performance.now();
+  // breath period 9s, gentle (matches core pulse), well under seizure thresholds
+  function frame(now){
+    if(!running) return;
+    var t = (now - t0) / 1000;
+    var b = Math.sin(t * (Math.PI*2/9));        // -1..1
+    var sOut = 0.82 + (b*0.5+0.5)*0.30;          // 0.82..1.12
+    var sMid = 1.10 - (b*0.5+0.5)*0.30;          // counter-breath 0.80..1.10
+    bOut.setAttribute('transform','translate(300 300) scale('+sOut.toFixed(4)+') translate(-300 -300)');
+    bMid.setAttribute('transform','translate(300 300) scale('+sMid.toFixed(4)+') translate(-300 -300)');
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){
+      running=false;
+      if(raf) cancelAnimationFrame(raf), raf=0;
+    } else if(!running){
+      running=true; t0 = performance.now();
+      raf = requestAnimationFrame(frame);
+    }
+  });
+})();
+</script>
+</body>
+</html>

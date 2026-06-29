@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A cream full moon and halo rise over layered indigo and coral tide bands that roll with foam crests in woodblock style.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moon Tide</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  #uk08-stage{position:fixed;inset:0;display:block}
+  #uk08-c{position:absolute;inset:0;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="uk08-stage" role="img" aria-label="A full moon rising over layered tide bands in stylised Japanese woodblock style, indigo and coral with a cream moon">
+  <canvas id="uk08-c"></canvas>
+</div>
+<div class="cap">Moon Tide</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('uk08-stage');
+  var cv=document.getElementById('uk08-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // Ukiyo-e palette: indigo deeps, coral, cream moon, dusk sky
+  var SKY1='#1c2c3e', SKY2='#33455c';
+  var MOON='#e8d5b0', MOONHALO='#f3e6c8';
+  var CORAL='#d2694a';
+  // tide band tones, far(top) to near(bottom)
+  var BANDS=['#23394f','#2e4a63','#1b3346','#274a5d','#142a3c'];
+  var FOAM='#cfe0e6';
+
+  var W=0,H=0,DPR=1, moonX=0,moonY=0,moonR=0;
+  // precomputed per band: amp, baseY, wavelen, speed, phase, color, foam
+  var nb=5, amp=[],baseY=[],wl=[],spd=[],ph=[];
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    moonX=W*0.70; moonY=H*0.30; moonR=Math.max(28,Math.min(W,H)*0.135);
+    for(var i=0;i<nb;i++){
+      var t=i/(nb-1);
+      baseY[i]=H*(0.46+t*0.52);
+      amp[i]=(H*0.03)*(0.6+t*0.9);
+      wl[i]=W*(0.55-t*0.22);
+      spd[i]=(0.18+t*0.14)*(i%2?-1:1);
+      ph[i]=i*1.3;
+    }
+  }
+
+  function drawSky(){
+    // bokashi-style vertical gradient (static, drawn each resize-frame only as needed)
+    var g=ctx.createLinearGradient(0,0,0,H*0.6);
+    g.addColorStop(0,SKY1); g.addColorStop(1,SKY2);
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  }
+
+  function drawMoon(){
+    // static halo: concentric rings (no blur/shadow per perf contract)
+    var rings=5,i;
+    for(i=rings;i>=1;i--){
+      var rr=moonR*(1+i*0.16);
+      ctx.beginPath(); ctx.arc(moonX,moonY,rr,0,6.2832);
+      ctx.fillStyle='rgba(243,230,200,'+(0.05*(rings-i+1)/rings)+')';
+      ctx.fill();
+    }
+    ctx.beginPath(); ctx.arc(moonX,moonY,moonR,0,6.2832);
+    ctx.fillStyle=MOON; ctx.fill();
+    // bokashi face: cream to warm cream half
+    var mg=ctx.createLinearGradient(0,moonY-moonR,0,moonY+moonR);
+    mg.addColorStop(0,MOONHALO); mg.addColorStop(1,MOON);
+    ctx.fillStyle=mg; ctx.fill();
+    // outline (flat ukiyo-e key line)
+    ctx.lineWidth=Math.max(1.5,moonR*0.035); ctx.strokeStyle='#0f1822'; ctx.stroke();
+  }
+
+  function drawBand(i,t){
+    var by=baseY[i], a=amp[i], k=6.2832/wl[i], off=t*spd[i]*wl[i]*0.5+ph[i];
+    ctx.beginPath();
+    ctx.moveTo(0,H);
+    ctx.lineTo(0,by+Math.sin(off)*a);
+    var step=Math.max(6,W/60), x;
+    for(x=0;x<=W;x+=step){
+      var y=by+Math.sin(x*k+off)*a + Math.sin(x*k*2.3+off*1.6)*a*0.28;
+      ctx.lineTo(x,y);
+    }
+    ctx.lineTo(W,H); ctx.closePath();
+    ctx.fillStyle=BANDS[i]; ctx.fill();
+    // key-line crest (flat outline) + sparse foam dabs
+    ctx.beginPath();
+    for(x=0;x<=W;x+=step){
+      var y2=by+Math.sin(x*k+off)*a + Math.sin(x*k*2.3+off*1.6)*a*0.28;
+      if(x===0)ctx.moveTo(x,y2);else ctx.lineTo(x,y2);
+    }
+    ctx.lineWidth=1.5; ctx.strokeStyle=i<2?'rgba(207,224,230,0.5)':'rgba(15,24,34,0.55)';
+    ctx.stroke();
+    if(i<3){
+      ctx.fillStyle=FOAM;
+      for(x=wl[i]*0.5;x<W;x+=wl[i]){
+        var fx=((x+off*30)% (W+40))-20;
+        var fy=by+Math.sin(fx*k+off)*a - 2;
+        ctx.beginPath(); ctx.arc(fx,fy,Math.max(1.5,a*0.10),0,6.2832); ctx.fill();
+      }
+    }
+  }
+
+  // moon reflection: a few coral ellipses on near water (static-ish, follows top band)
+  function drawReflection(t){
+    ctx.save();
+    ctx.globalAlpha=0.30; ctx.fillStyle=CORAL;
+    var rb=baseY[2], k=6.2832/wl[2], off=t*spd[2]*wl[2]*0.5+ph[2];
+    for(var i=0;i<5;i++){
+      var ry=rb+i*(H*0.06);
+      var rw=moonR*(0.5+i*0.12);
+      var wob=Math.sin(off+i)*4;
+      ctx.beginPath();
+      ctx.ellipse(moonX+wob,ry+Math.sin(moonX*k+off)*amp[2],rw,Math.max(2,H*0.012),0,0,6.2832);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function frame(t){
+    drawSky();
+    drawMoon();
+    drawReflection(t);
+    for(var i=0;i<nb;i++) drawBand(i,t);
+  }
+
+  var running=true, raf=0, start=0;
+  function loop(now){
+    if(!running)return;
+    if(!start)start=now;
+    var t=(now-start)*0.001;
+    frame(t);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function init(){
+    size();
+    if(reduce){ frame(2.0); return; }
+    raf=requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize',function(){
+    size();
+    if(reduce) frame(2.0);
+  });
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+    else if(!reduce && !running){ running=true; start=0; raf=requestAnimationFrame(loop); }
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

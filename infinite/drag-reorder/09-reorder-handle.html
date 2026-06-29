@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A vertical list of dark rows with grip handles that lift, glow cyan and spring into place when dragged or arrow-keyed to reorder.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drag Handle</title>
+<style>
+  :root{
+    --dr09-bg:#0c0e13; --dr09-accent:#22d3ee; --dr09-ink:#e8ecf2;
+    --dr09-row:#161a23; --dr09-line:#2a3140;
+  }
+  html,body{margin:0;height:100%}
+  #dr09-stage{
+    position:fixed;inset:0;background:var(--dr09-bg);overflow:hidden;
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;
+    display:flex;align-items:center;justify-content:center;
+  }
+  #dr09-list{
+    position:relative;width:78%;max-width:430px;
+    outline:none;
+  }
+  .dr09-row{
+    position:absolute;left:0;right:0;height:var(--dr09-h);
+    display:flex;align-items:center;gap:0;
+    background:var(--dr09-row);
+    border:1px solid var(--dr09-line);
+    border-radius:7px;
+    will-change:transform;
+    box-sizing:border-box;
+    transform:translateY(0) scale(1);
+    /* static lift shadow toggled by class — no animated shadow */
+    box-shadow:0 1px 0 rgba(0,0,0,.4);
+    transition:box-shadow .18s linear, background .18s linear, border-color .18s linear;
+  }
+  .dr09-row.dr09-lift{
+    background:var(--dr09-row);
+    border-color:var(--dr09-accent);
+    box-shadow:0 18px 38px -8px rgba(0,0,0,.7), 0 0 0 1px var(--dr09-accent),
+               0 0 22px -2px rgba(34,211,238,.35);
+    z-index:5;
+  }
+  .dr09-handle{
+    flex:0 0 auto;width:30px;align-self:stretch;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+    cursor:grab;border-right:1px solid var(--dr09-line);
+  }
+  .dr09-row.dr09-lift .dr09-handle{cursor:grabbing}
+  .dr09-dot{width:13px;height:2px;border-radius:2px;background:var(--dr09-line)}
+  .dr09-row.dr09-lift .dr09-dot{background:var(--dr09-accent)}
+  .dr09-body{flex:1 1 auto;padding:0 13px;min-width:0;display:flex;align-items:center;gap:11px}
+  .dr09-num{
+    flex:0 0 auto;width:20px;height:20px;border-radius:5px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:700;color:var(--dr09-bg);background:var(--dr09-accent);
+  }
+  .dr09-bar{flex:1 1 auto;height:7px;border-radius:4px;background:var(--dr09-line)}
+  .dr09-row.dr09-lift .dr09-bar{background:#33404f}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .dr09-hint{
+    position:fixed;right:8px;bottom:7px;font:600 9px/1 ui-monospace,Menlo,monospace;
+    color:var(--dr09-accent);opacity:.5;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+  #dr09-list:focus-visible{box-shadow:0 0 0 2px var(--dr09-accent),0 0 0 6px rgba(34,211,238,.18);border-radius:10px}
+  /* prefers-reduced-motion is honored in JS: the rAF loop never starts and one
+     static, ordered frame is painted (see `if(reduce){…return;}` below). */
+</style>
+</head>
+<body>
+<div id="dr09-stage">
+  <div id="dr09-list" role="listbox" tabindex="0"
+       aria-label="Reorderable list. Use arrow keys to move the selected row."></div>
+</div>
+<div class="cap">Drag Handle</div>
+<div class="dr09-hint" aria-hidden="true">drag / ↑ ↓</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var list = document.getElementById('dr09-list');
+  var N = 5, H = 0, GAP = 9, ROWH = 44;
+
+  // model: order[i] = which row-element index sits at slot i
+  var order = [0,1,2,3,4];
+  var rows = [];
+  // animated Y (px) per row element, target Y per row element
+  var curY = new Float32Array(N), tgtY = new Float32Array(N), vel = new Float32Array(N);
+  var lift = -1;          // element index currently lifted (-1 none)
+  var liftAmt = 0, liftTgt = 0;
+  var sel = 0;            // selected slot for keyboard
+
+  function slotY(slot){ return slot*(ROWH+GAP); }
+  function slotOf(el){ return order.indexOf(el); }
+
+  for(var i=0;i<N;i++){
+    var r=document.createElement('div'); r.className='dr09-row';
+    r.style.setProperty('--dr09-h', ROWH+'px');
+    r.setAttribute('role','option');
+    var h=document.createElement('div'); h.className='dr09-handle';
+    for(var d=0;d<3;d++){var dd=document.createElement('span');dd.className='dr09-dot';h.appendChild(dd);}
+    var b=document.createElement('div'); b.className='dr09-body';
+    var num=document.createElement('div'); num.className='dr09-num';
+    var bar=document.createElement('div'); bar.className='dr09-bar';
+    bar.style.maxWidth = (52+i*9)+'%';
+    b.appendChild(num); b.appendChild(bar);
+    r.appendChild(h); r.appendChild(b);
+    list.appendChild(r);
+    rows.push({el:r,num:num});
+    curY[i]=tgtY[i]=slotY(i);
+  }
+  list.style.height = (N*ROWH+(N-1)*GAP)+'px';
+
+  function renumber(){
+    for(var s=0;s<N;s++){ rows[order[s]].num.textContent=(s+1); }
+  }
+  function retarget(){
+    for(var s=0;s<N;s++){ tgtY[order[s]] = slotY(s); }
+    rows.forEach(function(r,idx){ r.el.setAttribute('aria-selected', slotOf(idx)===sel?'true':'false'); });
+  }
+  renumber(); retarget();
+
+  // move element from slot a -> slot b
+  function moveSlot(a,b){
+    if(a===b||b<0||b>=N) return;
+    var el=order.splice(a,1)[0];
+    order.splice(b,0,el);
+    renumber(); retarget();
+  }
+
+  // ---- self-demo: pick a row, lift, hop one slot, drop ----
+  var demo = !reduce, demoT = 0, phase=0, demoEl=0, demoDir=1;
+  function startHop(){
+    demoEl = order[(Math.random()*N)|0];
+    var s = slotOf(demoEl);
+    demoDir = (s===0)?1 : (s===N-1)?-1 : (Math.random()<.5?1:-1);
+    lift = demoEl; liftTgt = 1;
+    rows[demoEl].el.classList.add('dr09-lift');
+    sel = s;
+    retarget();
+  }
+  function endHop(){
+    var s = slotOf(demoEl);
+    moveSlot(s, s+demoDir);
+    sel = slotOf(demoEl);
+    rows[demoEl].el.classList.remove('dr09-lift');
+    lift=-1; liftTgt=0;
+  }
+
+  // ---- spring integ ----
+  var K=0.18, D=0.74;
+  function step(){
+    for(var i=0;i<N;i++){
+      var f=(tgtY[i]-curY[i])*K;
+      vel[i]=(vel[i]+f)*D;
+      curY[i]+=vel[i];
+    }
+    liftAmt += (liftTgt-liftAmt)*0.22;
+  }
+  function paint(){
+    for(var i=0;i<N;i++){
+      var y=curY[i], sc=1, lz=0;
+      if(i===lift){ sc=1+0.035*liftAmt; lz=-7*liftAmt; }
+      rows[i].el.style.transform='translateY('+(y+lz).toFixed(2)+'px) scale('+sc.toFixed(3)+')';
+    }
+  }
+
+  // ---- user interaction (pointer) ----
+  var dragging=-1, dragSlot=0, startPtr=0, baseY=0, idleAt=0;
+  function userActive(){ demo=false; idleAt=performance.now(); }
+
+  list.addEventListener('pointerdown',function(e){
+    var hr=e.target.closest('.dr09-row'); if(!hr) return;
+    var idx=rows.findIndex(function(r){return r.el===hr;}); if(idx<0)return;
+    userActive();
+    if(lift>=0 && lift!==idx){ rows[lift].el.classList.remove('dr09-lift'); }
+    dragging=idx; lift=idx; liftTgt=1; dragSlot=slotOf(idx); sel=dragSlot;
+    rows[idx].el.classList.add('dr09-lift');
+    startPtr=e.clientY; baseY=slotY(dragSlot); retarget();
+    list.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  list.addEventListener('pointermove',function(e){
+    if(dragging<0)return;
+    var dy=e.clientY-startPtr, y=baseY+dy;
+    tgtY[dragging]=y; curY[dragging]=y; vel[dragging]=0;
+    var ns=Math.max(0,Math.min(N-1,Math.round(y/(ROWH+GAP))));
+    if(ns!==dragSlot){ moveSlot(dragSlot,ns); dragSlot=ns; sel=ns; }
+  });
+  function endDrag(){
+    if(dragging<0)return;
+    rows[dragging].el.classList.remove('dr09-lift');
+    lift=-1; liftTgt=0; vel[dragging]=0; dragging=-1; retarget();
+  }
+  list.addEventListener('pointerup',endDrag);
+  list.addEventListener('pointercancel',endDrag);
+
+  // ---- keyboard ----
+  var kbTimer=0; // closure-scoped keyboard repeat-debounce timer (no globals)
+  list.addEventListener('keydown',function(e){
+    if(e.key!=='ArrowUp'&&e.key!=='ArrowDown')return;
+    e.preventDefault(); userActive();
+    var dir=e.key==='ArrowDown'?1:-1, el=order[sel], ns=sel+dir;
+    if(ns<0||ns>=N)return;
+    if(lift>=0){rows[lift].el.classList.remove('dr09-lift');}
+    lift=el; liftTgt=1; rows[el].el.classList.add('dr09-lift');
+    moveSlot(sel,ns); sel=ns;
+    clearTimeout(kbTimer);
+    kbTimer=setTimeout(function(){
+      rows[el].el.classList.remove('dr09-lift'); lift=-1; liftTgt=0;
+    },260);
+  });
+  list.addEventListener('blur',function(){ idleAt=performance.now(); });
+
+  // ---- loop ----
+  var raf=0, running=true, last=0;
+  function frame(t){
+    if(!running)return;
+    if(!last)last=t; var dt=t-last; last=t;
+    // demo scheduler
+    if(!demo && performance.now()-idleAt>3400 && dragging<0){ demo=true; demoT=t; phase=0; }
+    if(demo){
+      demoT+=dt;
+      if(phase===0 && demoT>900){ startHop(); phase=1; demoT=0; }
+      else if(phase===1 && demoT>520){ endHop(); phase=2; demoT=0; }
+      else if(phase===2 && demoT>700){ phase=0; demoT=0; }
+    }
+    step(); paint();
+    raf=requestAnimationFrame(frame);
+  }
+
+  if(reduce){
+    // settle to a clean static frame: ordered, one row gently emphasized
+    for(var i=0;i<N;i++){curY[i]=tgtY[i]=slotY(i);}
+    rows[1].el.classList.add('dr09-lift'); lift=1; liftAmt=liftTgt=1;
+    sel=1; retarget(); paint();
+    return;
+  }
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; last=0; raf=requestAnimationFrame(frame); }
+  });
+  raf=requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

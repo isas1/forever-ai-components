@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cyan SPH fluid pours into a basin, sloshes and drains on a slow cycle with glowing metaball particles; pointer tilts the liquid.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Liquid Pour SPH</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#071a22;}
+  #lps{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
+       letter-spacing:.14em;color:#34d6ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="lps"></canvas>
+<div class="cap">Liquid Pour SPH</div>
+<script>
+(function(){
+  const cv=document.getElementById('lps'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,S;                       // S = world scale (px per world unit)
+  // basin walls in world units (origin at canvas center-ish, +y down)
+  let bx0,bx1,floorY,topY;
+  // precomputed glow sprite (rebuilt on resize) — avoids createRadialGradient per particle/frame
+  const glow=document.createElement('canvas'),gctx=glow.getContext('2d');
+  let glowR=0;
+  function buildGlow(r){
+    glowR=Math.max(2,r);
+    const d=Math.ceil(glowR*2);
+    glow.width=d;glow.height=d;
+    const c=glowR;
+    const g=gctx.createRadialGradient(c,c,0,c,c,glowR);
+    // bake the MAX alpha (0.26); per-particle brightness scales down via globalAlpha
+    g.addColorStop(0,'rgba(120,236,255,0.26)');
+    g.addColorStop(0.45,'rgba(52,214,255,0.182)');
+    g.addColorStop(1,'rgba(20,120,150,0)');
+    gctx.clearRect(0,0,d,d);
+    gctx.fillStyle=g;gctx.fillRect(0,0,d,d);
+  }
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);
+    bx0=W*0.30; bx1=W*0.70; floorY=H*0.82; topY=H*0.40;
+    buildGlow(S*0.052*0.92);
+  }
+  addEventListener('resize',size);size();
+
+  // ---- SPH params (tuned light for ~22 live iframes) ----
+  const N=reduce?180:200;
+  const h=()=>S*0.052;                 // smoothing radius (px)
+  const REST=2.6, STIFF=0.55, NEAR=1.6, GRAV=0.30, VISC=0.14;
+  const P=[];                          // particles {x,y,px,py,vx,vy}
+  let spawn=0, nudge=0, phase=0, pourX;
+
+  function reset(){P.length=0; phase=0; pourX=(bx0+bx1)/2;}
+  reset();
+
+  function emit(n){
+    for(let i=0;i<n&&P.length<N;i++){
+      const jx=(Math.random()-0.5)*S*0.012;
+      P.push({x:pourX+jx,y:topY-S*0.06,px:0,py:0,
+              vx:jx*0.4,vy:S*0.004+Math.random()*S*0.002});
+    }
+  }
+
+  // spatial hash for neighbour finding
+  let grid=new Map(), cell=1;
+  function key(cx,cy){return cx+','+cy;}
+  function rebuild(){
+    cell=h(); grid.clear();
+    for(let i=0;i<P.length;i++){
+      const p=P[i],cx=Math.floor(p.x/cell),cy=Math.floor(p.y/cell),k=key(cx,cy);
+      let a=grid.get(k); if(!a){a=[];grid.set(k,a);} a.push(i);
+    }
+  }
+  function neigh(p,out){
+    out.length=0; const cx=Math.floor(p.x/cell),cy=Math.floor(p.y/cell);
+    for(let gx=cx-1;gx<=cx+1;gx++)for(let gy=cy-1;gy<=cy+1;gy++){
+      const a=grid.get(key(gx,gy)); if(a)for(let j=0;j<a.length;j++)out.push(a[j]);
+    }
+  }
+
+  function step(dt){
+    const R=h(), R2=R*R;
+    // pour / drain ambient cycle
+    phase+=dt*0.16;
+    const c=Math.sin(phase);                 // -1..1 slow breathing
+    pourX=(bx0+bx1)/2 + Math.sin(phase*0.7)*(bx1-bx0)*0.22;
+    if(c>-0.2){ spawn+=dt*N*1.3; const e=Math.floor(spawn); spawn-=e; emit(e); }
+    const draining=c<-0.55;                   // basin opens, fluid escapes
+
+    // integrate (predict)
+    for(const p of P){
+      p.vy+=GRAV*dt*60; p.px=p.x; p.py=p.y;
+      p.vx+=nudge*0.0; p.x+=p.vx; p.y+=p.vy;
+    }
+    rebuild();
+    const nb=[];
+    // double-density relaxation (Clavet et al.)
+    for(let i=0;i<P.length;i++){
+      const p=P[i]; neigh(p,nb);
+      let dens=0,ndens=0;
+      for(const j of nb){ if(j===i)continue; const q=P[j];
+        const dx=q.x-p.x,dy=q.y-p.y,d2=dx*dx+dy*dy; if(d2>=R2)continue;
+        const r=Math.sqrt(d2)/R,a=1-r; dens+=a*a; ndens+=a*a*a;
+      }
+      let pr=STIFF*(dens-REST), npr=NEAR*ndens;
+      let dxp=0,dyp=0;
+      for(const j of nb){ if(j===i)continue; const q=P[j];
+        const dx=q.x-p.x,dy=q.y-p.y,d2=dx*dx+dy*dy; if(d2>=R2)continue;
+        let d=Math.sqrt(d2)||0.0001; const r=d/R,a=1-r;
+        const D=(pr*a+npr*a*a)*0.5; const ux=dx/d,uy=dy/d;
+        q.x+=ux*D; q.y+=uy*D; dxp-=ux*D; dyp-=uy*D;
+      }
+      p.x+=dxp; p.y+=dyp;
+    }
+    // viscosity (light) + bounds
+    const wL=draining?bx0+(bx1-bx0)*0.42:bx0;
+    const wR=draining?bx1-(bx1-bx0)*0.42:bx1;
+    for(const p of P){
+      p.vx=(p.x-p.px); p.vy=(p.y-p.py);
+      p.vx+=nudge;                              // pointer slosh
+      p.vx*=1-VISC*dt*2;                        // damp horizontal drift
+      // basin collisions
+      if(p.y>floorY){ p.y=floorY; p.vy*=-0.18; p.px=p.x-p.vx; p.py=p.y-p.vy; }
+      if(!draining){
+        if(p.x<wL){ p.x=wL; p.vx*=-0.3; p.px=p.x-p.vx; }
+        if(p.x>wR){ p.x=wR; p.vx*=-0.3; p.px=p.x-p.vx; }
+      }
+      // recycle off-screen
+      if(p.y>H+S*0.1||p.x<-S*0.1||p.x>W+S*0.1){
+        const k=P.indexOf(p); if(k>=0)P.splice(k,1);
+      }
+    }
+    nudge*=0.86;
+    if(P.length<8&&c<=-0.2) phase+=dt*0.4;      // hurry empty basin to refill
+  }
+
+  // ---- render: metaball-ish glow + crest highlights ----
+  function draw(){
+    ctx.fillStyle='rgba(7,26,34,0.30)';ctx.fillRect(0,0,W,H);
+    // basin walls
+    ctx.strokeStyle='rgba(52,214,255,0.16)';ctx.lineWidth=Math.max(1.4,S*0.004);
+    ctx.beginPath();
+    ctx.moveTo(bx0,topY); ctx.lineTo(bx0,floorY); ctx.lineTo(bx1,floorY); ctx.lineTo(bx1,topY);
+    ctx.stroke();
+    // pour stream hint
+    ctx.strokeStyle='rgba(52,214,255,0.10)';ctx.lineWidth=Math.max(1,S*0.006);
+    ctx.beginPath();ctx.moveTo(pourX,0);ctx.lineTo(pourX,topY-S*0.05);ctx.stroke();
+
+    const r=h()*0.92;
+    ctx.globalCompositeOperation='lighter';
+    // draw precomputed glow sprite per particle (cheap) instead of a fresh gradient each
+    for(const p of P){
+      const sp=Math.min(1,(Math.abs(p.vx)+Math.abs(p.vy))/(S*0.03));
+      ctx.globalAlpha=(0.16+sp*0.10)/0.26;   // baked max 0.26 -> actual 0.16+sp*0.10
+      ctx.drawImage(glow,p.x-glowR,p.y-glowR);
+    }
+    ctx.globalAlpha=1;
+    // bright cores
+    for(const p of P){
+      const sp=Math.min(1,(Math.abs(p.vx)+Math.abs(p.vy))/(S*0.035));
+      ctx.fillStyle='rgba(210,248,255,'+(0.22+sp*0.5)+')';
+      ctx.beginPath();ctx.arc(p.x,p.y,r*0.18,0,6.283);ctx.fill();
+    }
+    ctx.globalCompositeOperation='source-over';
+  }
+
+  cv.addEventListener('pointermove',e=>{
+    const rect=cv.getBoundingClientRect();
+    const dir=((e.clientX-rect.left)/W-0.5);
+    nudge+=dir*S*0.006;
+  });
+  cv.addEventListener('click',()=>{nudge+=(Math.random()-0.5)*S*0.03;});
+
+  let raf=0,last=0;
+  function frame(ts){
+    if(!last)last=ts; let dt=(ts-last)/1000; last=ts;
+    dt=Math.min(dt,0.033);
+    if(!reduce){ for(let s=0;s<2;s++) step(dt*0.5); }
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf){last=0;raf=requestAnimationFrame(frame);}}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{if(reduce)return;document.hidden?stop():start();});
+
+  if(reduce){
+    ctx.fillStyle='#071a22';ctx.fillRect(0,0,W,H);
+    // settle a resting pool
+    for(let i=0;i<120;i++) P.push({x:bx0+Math.random()*(bx1-bx0),
+       y:floorY-Math.random()*(floorY-topY)*0.45,px:0,py:0,vx:0,vy:0});
+    for(let k=0;k<40;k++) step(0.016);
+    draw();
+  } else start();
+})();
+</script>
+</body>
+</html>

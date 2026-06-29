@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Monochrome 1D elementary cellular automaton scrolling downward, cycling rules like 90/30/110 with a Sierpinski-style descent and rule label.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cellular Automaton</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000000;}
+  #eca-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
+       letter-spacing:.14em;color:#f2f2f2;opacity:.32;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="eca-c"></canvas>
+<div class="cap">Cellular Automaton</div>
+<script>
+(function(){
+  const cv=document.getElementById('eca-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // rules curated for visual interest: 30 chaos, 90 Sierpinski, 110 universal, 150, 54, 60, 18, 22
+  const RULES=[90,30,110,150,54,60,182,18,22,73];
+  let W,H,DPR,cell,COLS,ROWS,grid,rule,ri,head,acc,caption;
+
+  function pickRule(idx){
+    rule=RULES[((idx%RULES.length)+RULES.length)%RULES.length];
+    caption='RULE '+rule;
+  }
+  function newRow(prev){
+    const r=new Uint8Array(COLS);
+    for(let i=0;i<COLS;i++){
+      const l=prev[(i-1+COLS)%COLS],c=prev[i],n=prev[(i+1)%COLS];
+      const pat=(l<<2)|(c<<1)|n;
+      r[i]=(rule>>pat)&1;
+    }
+    return r;
+  }
+  function seed(){
+    const r=new Uint8Array(COLS);
+    if(rule===90||rule===150||rule===18||rule===22){ r[COLS>>1]=1; }
+    else { for(let i=0;i<COLS;i++) r[i]=Math.random()<0.5?1:0; }
+    return r;
+  }
+
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cell=Math.max(2,Math.round(Math.min(W,H)/120));
+    COLS=Math.ceil(W/cell)+1;ROWS=Math.ceil(H/cell)+2;
+    grid=[];ri=0;head=0;
+    pickRule(ri);
+    grid.push(seed());
+    while(grid.length<ROWS) grid.push(newRow(grid[grid.length-1]));
+  }
+  addEventListener('resize',size);size();
+
+  function step(){
+    grid.push(newRow(grid[grid.length-1]));
+    if(grid.length>ROWS+1){ grid.shift(); head++; }
+    // every full screen of generations, scroll in a fresh rule
+    if(head>0 && head%ROWS===0){
+      ri++;pickRule(ri);
+      grid[grid.length-1]=seed();
+    }
+  }
+
+  function draw(){
+    ctx.fillStyle='#000000';ctx.fillRect(0,0,W,H);
+    const n=grid.length;
+    // newest rows at bottom; oldest fade toward top
+    for(let row=0;row<n;row++){
+      const y=Math.round((row-(n-ROWS))*cell);
+      if(y< -cell || y>H) continue;
+      const g=grid[row];
+      const age=row/n;                 // 0 oldest .. 1 newest
+      const a=0.16+age*0.84;
+      for(let i=0;i<COLS;i++){
+        if(!g[i]) continue;
+        ctx.fillStyle='#f2f2f2';
+        ctx.globalAlpha=a;
+        ctx.fillRect(i*cell,y,cell-(cell>3?1:0),cell-(cell>3?1:0));
+      }
+    }
+    ctx.globalAlpha=1;
+    // active wavefront glow on the newest line
+    const last=grid[n-1],ly=Math.round((ROWS-1)*cell);
+    for(let i=0;i<COLS;i++){
+      if(!last[i])continue;
+      ctx.fillStyle='#f2f2f2';ctx.globalAlpha=1;
+      ctx.fillRect(i*cell,ly,cell-(cell>3?1:0),cell-(cell>3?1:0));
+    }
+    ctx.globalAlpha=1;
+    // ruleset annotation, top-right corner
+    const fs=Math.max(9,Math.round(Math.min(W,H)/34));
+    ctx.font='600 '+fs+'px ui-monospace,Menlo,monospace';
+    ctx.textAlign='right';ctx.textBaseline='top';
+    ctx.globalAlpha=0.85;ctx.fillStyle='#f2f2f2';
+    ctx.fillText(caption,W-10,10);
+    ctx.globalAlpha=0.4;
+    ctx.font='600 '+Math.round(fs*0.62)+'px ui-monospace,Menlo,monospace';
+    ctx.fillText('1D ELEMENTARY',W-10,12+fs);
+    ctx.globalAlpha=1;ctx.textAlign='left';
+  }
+
+  let raf=0;acc=0;
+  function frame(){
+    if(!reduce){
+      acc+=1;
+      // advance one generation every few frames so the descent reads
+      if(acc%3===0) step();
+    }
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+
+  // click / pointer nudges to the next rule
+  function nudge(){ ri++;pickRule(ri);grid[grid.length-1]=seed(); }
+  cv.addEventListener('click',nudge);
+
+  if(reduce){
+    // render one static resting frame: a fully-populated Sierpinski field
+    pickRule(0);grid=[seed()];
+    while(grid.length<ROWS) grid.push(newRow(grid[grid.length-1]));
+    draw();
+  } else start();
+})();
+</script>
+</body>
+</html>

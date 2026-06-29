@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A row of split-flap cards in mint-on-purple flips letter by letter to cycle through words like PIVOT, FLIP and SNAP, departure-board style.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pivot Flip Row</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1b1020;}
+  body{display:flex;align-items:center;justify-content:center;}
+  #pfr{
+    display:block;width:100%;height:100%;
+  }
+  .pfr-cap{position:fixed;right:10px;bottom:8px;font-size:11px;letter-spacing:.14em;
+       color:#80ffdb;opacity:.34;text-transform:uppercase;pointer-events:none;
+       font-family:ui-monospace,"SFMono-Regular","Courier New",monospace;}
+</style>
+</head>
+<body>
+  <canvas id="pfr"></canvas>
+  <div class="pfr-cap">Pivot Flip Row</div>
+<script>
+(function(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('pfr'), ctx=cv.getContext('2d');
+  const DPR=Math.min(devicePixelRatio||1,2);
+  const BG='#1b1020', ACC='#80ffdb';
+  const words=["PIVOT","FLIP","ROW","ENTER","SNAP"];
+  let W=0,H=0;
+  function resize(){
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=W*DPR; cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize',resize);
+
+  // flip state: per-letter progress. A flip = top half folds down 0->1 revealing new glyph.
+  let wi=0, cur=words[0], nxt=words[1];
+  let t0=0, raf=0;
+  const STEP=70;        // ms cascade delay between letters
+  const DUR=320;        // ms per flip
+  function startCycle(now){ t0=now; }
+
+  function ease(x){ // snap-in: fast then settle
+    return x<0.5 ? 4*x*x*x : 1-Math.pow(-2*x+2,3)/2;
+  }
+
+  function drawFlap(cx,cy,fw,fh,prog,oldCh,newCh,fs){
+    const gap=Math.max(1.2,fh*0.03);
+    const half=fh/2;
+    // card body geometry
+    const x=cx-fw/2, yTop=cy-half, yBot=cy+gap;
+    ctx.font='700 '+fs+'px ui-monospace,"SFMono-Regular","Courier New",monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+
+    function card(yy,hh){
+      const r=Math.min(6,fw*0.12);
+      ctx.beginPath();
+      ctx.moveTo(x+r,yy); ctx.lineTo(x+fw-r,yy);
+      ctx.quadraticCurveTo(x+fw,yy,x+fw,yy+r);
+      ctx.lineTo(x+fw,yy+hh-r);
+      ctx.quadraticCurveTo(x+fw,yy+hh,x+fw-r,yy+hh);
+      ctx.lineTo(x+r,yy+hh);
+      ctx.quadraticCurveTo(x,yy+hh,x,yy+hh-r);
+      ctx.lineTo(x,yy+r);
+      ctx.quadraticCurveTo(x,yy,x+r,yy);
+      ctx.closePath();
+    }
+    function glyph(ch,centerY,clipY,clipH){
+      ctx.save();
+      card(clipY,clipH); ctx.clip();
+      ctx.fillStyle='#241634';
+      card(clipY,clipH); ctx.fill();
+      ctx.fillStyle=ACC;
+      ctx.shadowColor='rgba(128,255,219,.45)'; ctx.shadowBlur=fs*0.18;
+      ctx.fillText(ch,cx,centerY);
+      ctx.restore();
+    }
+    // STATIC bottom (lower) half — shows OLD until prog passes 0.5, then NEW
+    const botCh = prog<0.5 ? oldCh : newCh;
+    glyph(botCh, cy, yBot, half-gap);
+    // STATIC top half background already resolved: top shows NEW when settled
+    const topStaticCh = prog>=1 ? newCh : oldCh;
+    // top static plate (the un-flipping back layer = incoming new top once flipped)
+    glyph(prog<0.5?oldCh:newCh, cy, yTop, half);
+
+    // FLAPPING leaf rotating on the hinge (cy)
+    const p=ease(Math.min(1,Math.max(0,prog)));
+    let ang, leafCh, srcY, scaleY;
+    if(p<0.5){
+      // upper leaf folding down: angle 0 -> 90, shows OLD top face
+      const a=p/0.5;          // 0..1
+      scaleY=Math.cos(a*Math.PI/2); // 1 -> 0
+      leafCh=oldCh; srcY=yTop;
+    } else {
+      // lower-incoming leaf rising: angle 90 -> 0, shows NEW top face
+      const a=(p-0.5)/0.5;    // 0..1
+      scaleY=Math.sin(a*Math.PI/2); // 0 -> 1
+      leafCh=newCh; srcY=yTop;
+    }
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.scale(1,scaleY);
+    ctx.translate(-cx,-cy);
+    ctx.beginPath();
+    // clip to top half region
+    const r=Math.min(6,fw*0.12);
+    ctx.rect(x,yTop,fw,half);
+    ctx.clip();
+    ctx.fillStyle='#2c1c40';
+    card(yTop,half); ctx.fill();
+    ctx.fillStyle=ACC;
+    ctx.globalAlpha=0.92;
+    ctx.fillText(leafCh,cx,cy);
+    ctx.restore();
+
+    // hinge line
+    ctx.fillStyle=BG;
+    ctx.fillRect(x,cy-gap*0.5,fw,gap);
+  }
+
+  function frame(now){
+    if(!t0) t0=now;
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+
+    const n=cur.length;
+    const maxLen=Math.max(n,nxt.length);
+    // sizing: fit longest row within ~90% of canvas
+    let fs=Math.min(H*0.42, (W*0.9)/(maxLen*0.92));
+    fs=Math.max(14,fs);
+    const fw=fs*0.74, fh=fs*1.18, gapX=fs*0.18;
+    const totalW=maxLen*fw+(maxLen-1)*gapX;
+    const startX=(W-totalW)/2+fw/2;
+    const cy=H/2;
+
+    let allDone=true;
+    for(let i=0;i<maxLen;i++){
+      const cx=startX+i*(fw+gapX);
+      let prog=(now-t0 - i*STEP)/DUR;
+      if(prog<0) prog=0;
+      if(prog<1) allDone=false;
+      if(prog>1) prog=1;
+      const oldCh=cur[i]||' ';
+      const newCh=nxt[i]||' ';
+      drawFlap(cx,cy,fw,fh,prog,oldCh,newCh,fs);
+    }
+
+    // advance when whole row flipped + hold
+    if(allDone && (now-t0) > maxLen*STEP+DUR+650){
+      wi=(wi+1)%words.length;
+      cur=words[wi];
+      nxt=words[(wi+1)%words.length];
+      t0=now;
+    }
+    raf=requestAnimationFrame(frame);
+  }
+
+  function renderStatic(){
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    const n=cur.length;
+    let fs=Math.min(H*0.42,(W*0.9)/(n*0.78)); fs=Math.max(14,fs);
+    const fw=fs*0.74, fh=fs*1.18, gapX=fs*0.18;
+    const totalW=n*fw+(n-1)*gapX;
+    const startX=(W-totalW)/2+fw/2, cy=H/2;
+    for(let i=0;i<n;i++){
+      const cx=startX+i*(fw+gapX);
+      drawFlap(cx,cy,fw,fh,1,cur[i],cur[i],fs);
+    }
+  }
+
+  function start(){ if(!raf && !reduce){ t0=0; raf=requestAnimationFrame(frame);} }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  cv.addEventListener('click',()=>{ if(reduce) return; t0=0; });
+
+  resize();
+  if(reduce){ renderStatic(); }
+  else start();
+})();
+</script>
+</body>
+</html>

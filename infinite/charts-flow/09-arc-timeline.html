@@ -1,0 +1,178 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Quarter-circle arc timeline on dark navy; a mint playhead sweeps the arc, lighting event markers and tracing a cumulative magnitude ribbon w">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Arc Timeline</title>
+<style>
+  :root{--ch09-bg:#0a0d12;--ch09-ac:#5ad1a0;--ch09-ax:#1c2530;--ch09-dim:#6f8aa0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--ch09-bg);overflow:hidden}
+  #ch09-stage{position:fixed;inset:0;width:100%;height:100%}
+  #ch09-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="ch09-stage" role="img" aria-label="An arc timeline: a quarter-circle axis along which event markers are arranged by time. A radial playhead sweeps across the arc, lighting each event as it passes and tracing the cumulative magnitude of events behind it.">
+  <canvas id="ch09-c"></canvas>
+</div>
+<div class="cap">Arc Timeline</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('ch09-stage');
+  var cv = document.getElementById('ch09-c');
+  var ctx = cv.getContext('2d');
+
+  // palette around accent #5ad1a0
+  var AC='#5ad1a0', AC2='#9be9c7', WARM='#e0b15a', AX='#1c2530', DIM='#3a4a5a';
+
+  // synthetic events: position along arc (0..1) + magnitude (0..1) + kind
+  var N=11, EV=[];
+  (function seed(){
+    var s=20260626;
+    function r(){ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; }
+    for(var i=0;i<N;i++){
+      var t=(i+0.5)/N + (r()-0.5)*0.045;
+      EV.push({ t:Math.max(0.02,Math.min(0.98,t)), m:0.22+r()*0.78, k:r()<0.32?1:0 });
+    }
+  })();
+
+  var W=0,H=0,DPR=1,cx=0,cy=0,R=0,R2=0;
+  var T0=-Math.PI*0.86, T1=-Math.PI*0.14; // arc span (upper arc, left->right)
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    var m=Math.min(W,H);
+    cx=W*0.5; cy=H*0.62;
+    R=m*0.40; R2=m*0.27;
+  }
+
+  function ease(x){ return x<0.5?2*x*x:1-Math.pow(-2*x+2,2)/2; }
+  function ang(t){ return T0+(T1-T0)*t; }
+  function px(t,rad){ return cx+Math.cos(ang(t))*rad; }
+  function py(t,rad){ return cy+Math.sin(ang(t))*rad; }
+
+  function drawArc(rad,col,w){
+    ctx.beginPath(); ctx.lineWidth=w; ctx.strokeStyle=col;
+    ctx.arc(cx,cy,rad,T0,T1); ctx.stroke();
+  }
+
+  function frame(ph){ // ph 0..1 playhead position along arc
+    ctx.clearRect(0,0,W,H);
+    var fs=Math.max(9,Math.min(W,H)*0.028);
+
+    // baseline axes
+    drawArc(R,AX,Math.max(1.5,R*0.012));
+    drawArc(R2,'#141b24',Math.max(1,R*0.008));
+
+    // radial tick spokes
+    ctx.lineWidth=1; ctx.strokeStyle='#16202b';
+    for(var s=0;s<=8;s++){ var tt=s/8;
+      ctx.beginPath(); ctx.moveTo(px(tt,R2-6),py(tt,R2-6)); ctx.lineTo(px(tt,R+8),py(tt,R+8)); ctx.stroke(); }
+
+    // cumulative magnitude ribbon behind playhead (the insight: load builds as time advances)
+    var cum=0, total=0, i;
+    for(i=0;i<N;i++) total+=EV[i].m;
+    ctx.beginPath();
+    var first=true;
+    for(i=0;i<=60;i++){
+      var t=i/60; if(t>ph) break;
+      var c=0; for(var j=0;j<N;j++){ if(EV[j].t<=t) c+=EV[j].m; }
+      var rr=R2+(R-R2)*(c/total)*0.92;
+      var x=px(t,rr), y=py(t,rr);
+      if(first){ctx.moveTo(px(0,R2),py(0,R2));ctx.lineTo(x,y);first=false;} else ctx.lineTo(x,y);
+    }
+    // close ribbon down to inner arc
+    var pt=Math.min(ph,1);
+    ctx.lineTo(px(pt,R2),py(pt,R2));
+    for(i=Math.floor(pt*60);i>=0;i--){ var tb=i/60; ctx.lineTo(px(tb,R2),py(tb,R2)); }
+    ctx.closePath();
+    ctx.fillStyle='rgba(90,209,160,0.10)'; ctx.fill();
+
+    // cumulative line on top
+    ctx.beginPath(); ctx.lineWidth=Math.max(1.5,R*0.012); ctx.strokeStyle=AC; first=true;
+    for(i=0;i<=60;i++){ var t2=i/60; if(t2>ph+0.001) break;
+      var cc=0; for(var k=0;k<N;k++){ if(EV[k].t<=t2) cc+=EV[k].m; }
+      var r3=R2+(R-R2)*(cc/total)*0.92;
+      var xx=px(t2,r3), yy=py(t2,r3);
+      if(first){ctx.moveTo(xx,yy);first=false;} else ctx.lineTo(xx,yy);
+    }
+    ctx.stroke();
+
+    // events
+    for(i=0;i<N;i++){
+      var e=EV[i];
+      var rE=R2+(R-R2)*0.5;
+      var ex=px(e.t,R), ey=py(e.t,R);
+      var ix=px(e.t,R2), iy=py(e.t,R2);
+      var lit=e.t<=ph;
+      var near=Math.abs(e.t-ph);
+      var pulse=lit?Math.max(0,1-near*7):0;
+      // stem
+      ctx.beginPath(); ctx.lineWidth=lit?1.6:1; ctx.strokeStyle=lit?'rgba(90,209,160,0.45)':'#1a242f';
+      ctx.moveTo(ix,iy); ctx.lineTo(ex,ey); ctx.stroke();
+      // marker
+      var base=Math.max(2.4,R*0.018);
+      var rad=base+(e.m)*base*1.4+pulse*base*1.3;
+      var col=e.k? WARM : (lit?AC:DIM);
+      ctx.beginPath(); ctx.arc(ex,ey,rad,0,Math.PI*2);
+      ctx.fillStyle=lit?col:'#26313d'; ctx.fill();
+      if(lit){ ctx.beginPath(); ctx.lineWidth=1.4; ctx.strokeStyle=e.k?'#f3d79a':AC2;
+        ctx.arc(ex,ey,rad+1.5,0,Math.PI*2); ctx.stroke(); }
+    }
+
+    // playhead spoke
+    var hx0=px(ph,R2-10), hy0=py(ph,R2-10), hx1=px(ph,R+14), hy1=py(ph,R+14);
+    ctx.beginPath(); ctx.lineWidth=Math.max(1.5,R*0.011); ctx.strokeStyle=AC2;
+    ctx.moveTo(hx0,hy0); ctx.lineTo(hx1,hy1); ctx.stroke();
+    ctx.beginPath(); ctx.arc(px(ph,R),py(ph,R),Math.max(2.5,R*0.02),0,Math.PI*2);
+    ctx.fillStyle=AC2; ctx.fill();
+
+    // center readout: elapsed fraction + active count
+    var prog=Math.round(ph*100);
+    var fired=0; for(i=0;i<N;i++) if(EV[i].t<=ph) fired++;
+    ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    ctx.fillStyle=AC; ctx.font='700 '+(fs*1.5).toFixed(1)+'px ui-monospace,Menlo,monospace';
+    ctx.fillText(prog+'%', cx, cy-fs*0.2);
+    ctx.fillStyle=DIM; ctx.font='600 '+(fs*0.62).toFixed(1)+'px ui-monospace,Menlo,monospace';
+    ctx.fillText(fired+' / '+N+' EVENTS', cx, cy+fs*0.95);
+    // endpoint labels
+    ctx.fillStyle='#2f3e4c'; ctx.font='600 '+(fs*0.55).toFixed(1)+'px ui-monospace,Menlo,monospace';
+    ctx.textAlign='left'; ctx.fillText('T0', px(0,R)-fs*1.4, py(0,R)-fs*0.4);
+    ctx.textAlign='right'; ctx.fillText('NOW', px(1,R)+fs*1.4, py(1,R)-fs*0.4);
+  }
+
+  var running=true, raf=0, start=0;
+  var DUR=8200;
+  function loop2(ts){
+    if(!running) return;
+    if(!start) start=ts;
+    var raw=((ts-start)%DUR)/DUR;
+    var ph = raw<0.86 ? ease(raw/0.86) : 1; // sweep then hold full
+    frame(ph);
+    raf=requestAnimationFrame(loop2);
+  }
+
+  function go(){
+    size();
+    if(reduce){ frame(1); return; }
+    start=0; running=true; raf=requestAnimationFrame(loop2);
+  }
+
+  window.addEventListener('resize',function(){
+    size(); if(reduce) frame(1);
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+    else if(!reduce){ running=true; start=0; raf=requestAnimationFrame(loop2); }
+  });
+
+  go();
+})();
+</script>
+</body></html>

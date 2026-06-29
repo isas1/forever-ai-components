@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Disc, Breathing — Robert Delaunay. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Disc, Breathing</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0d11;overflow:hidden}
+  #del08-stage{position:fixed;inset:0;width:100%;height:100%}
+  #del08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .del08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3f0e8;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="del08-stage" role="img" aria-label="A single grand concentric disc breathes slowly through the whole spectrum, segment by segment, after Delaunay's pure-disc abstractions: colour alone its form and subject.">
+  <canvas id="del08-cv"></canvas>
+</div>
+<div class="del08-cap">The Disc, Breathing</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('del08-cv'); if(!cv) return;
+  const PAL={ink:'#0d0e12',paper:'#f3f0e8'};
+  const SPECTRUM=['#e23b2e','#f08a24','#f4c81e','#2fa86a','#1f6fd0','#7b3fa0'];
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const RINGS=9, SEG=6;
+  let t=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h,cx=W/2,cy=H/2;
+    const R=Math.min(W,H)*0.46;
+    ctx.fillStyle='#0c0d11';ctx.fillRect(0,0,W,H);
+    ctx.save();
+    ctx.globalAlpha=0.06;
+    for(let i=0;i<24;i++){
+      const a=(i/24)*Math.PI*2 + t*0.05;
+      ctx.strokeStyle=SPECTRUM[i%SPECTRUM.length];ctx.lineWidth=2;
+      ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(a)*R*1.4,cy+Math.sin(a)*R*1.4);ctx.stroke();
+    }
+    ctx.restore();
+    for(let ri=0;ri<RINGS;ri++){
+      const r0=R*ri/RINGS, r1=R*(ri+1)/RINGS;
+      const breath=0.5+0.5*Math.sin(t*0.8 - ri*0.55);
+      const dir=ri%2?-1:1;
+      const rot=t*(0.06+ri*0.015)*dir;
+      for(let s=0;s<SEG;s++){
+        const a0=rot+(s/SEG)*Math.PI*2;
+        const a1=rot+((s+1)/SEG)*Math.PI*2;
+        const idx=(s+ri+Math.floor(t*0.5))%SPECTRUM.length;
+        ctx.beginPath();
+        ctx.arc(cx,cy,r1,a0,a1);
+        ctx.arc(cx,cy,r0,a1,a0,true);
+        ctx.closePath();
+        ctx.fillStyle=SPECTRUM[idx];
+        ctx.globalAlpha=0.55+0.45*breath;
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha=1;
+    const halo=0.5+0.5*Math.sin(t*0.8);
+    ctx.globalCompositeOperation='overlay';
+    ctx.globalAlpha=0.18*halo;
+    ctx.fillStyle=PAL.paper;
+    ctx.beginPath();ctx.arc(cx,cy,R,0,7);ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha=1;
+    ctx.fillStyle=PAL.ink;ctx.beginPath();ctx.arc(cx,cy,R*0.12,0,7);ctx.fill();
+    const cr=R*(0.05+0.03*Math.sin(t*2));
+    ctx.fillStyle=SPECTRUM[Math.floor(t)%SPECTRUM.length];
+    ctx.beginPath();ctx.arc(cx,cy,cr,0,7);ctx.fill();
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#0c0d11';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

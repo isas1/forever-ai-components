@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Distant Mountain — Utagawa Hiroshige. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Distant Mountain</title>
+<style>
+  html,body{margin:0;height:100%;background:#3f6f9f;overflow:hidden}
+  #hir04-stage{position:fixed;inset:0;width:100%;height:100%}
+  #hir04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .hir04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="hir04-stage" role="img" aria-label="Layered ukiyo-e hills and a far snow-capped peak drift at different rates over a graded sky, building woodblock depth from flat overlapping planes.">
+  <canvas id="hir04-cv"></canvas>
+</div>
+<div class="hir04-cap">Distant Mountain</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('hir04-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function mix(a,b,k){
+    const pa=[parseInt(a.slice(1,3),16),parseInt(a.slice(3,5),16),parseInt(a.slice(5,7),16)];
+    const pb=[parseInt(b.slice(1,3),16),parseInt(b.slice(3,5),16),parseInt(b.slice(5,7),16)];
+    return 'rgb('+pa.map((v,i)=>Math.round(v+(pb[i]-v)*k)).join(',')+')';
+  }
+  const PAL={paper:'#f2f0e8',ink:'#16202b',indigo:'#1f3a5f',sky:'#3f6f9f',skySoft:'#7fa8c8',green:'#6f8f6a',sienna:'#9a5b3b',snow:'#f2f0e8'};
+  let S=fitCanvas(cv), drift=0;
+  const layers=[
+    {f:0.06, top:0.30, col:mix(PAL.sky,PAL.indigo,0.30), peak:true},
+    {f:0.14, top:0.52, col:mix(PAL.indigo,PAL.ink,0.15)},
+    {f:0.26, top:0.66, col:mix(PAL.green,PAL.ink,0.20)},
+    {f:0.42, top:0.80, col:mix(PAL.green,PAL.sienna,0.30)}
+  ];
+  function hill(ctx,W,H,top,off,col,peak){
+    ctx.fillStyle=col;
+    ctx.beginPath();ctx.moveTo(-40,H);
+    if(peak){
+      const cx=W*0.5+off;
+      ctx.lineTo(-40,H*(top+0.18));
+      ctx.quadraticCurveTo(W*0.22+off,H*(top+0.10),cx-W*0.16,H*(top+0.02));
+      ctx.lineTo(cx,H*(top-0.10));
+      ctx.lineTo(cx+W*0.16,H*(top+0.02));
+      ctx.quadraticCurveTo(W*0.80+off,H*(top+0.10),W+40,H*(top+0.16));
+    }else{
+      ctx.lineTo(-40,H*top);
+      ctx.quadraticCurveTo(W*0.25+off,H*(top-0.08),W*0.5+off,H*(top+0.03));
+      ctx.quadraticCurveTo(W*0.78+off,H*(top+0.10),W+40,H*(top-0.04));
+    }
+    ctx.lineTo(W+40,H);ctx.closePath();ctx.fill();
+    if(peak){
+      const cx=W*0.5+off;
+      ctx.fillStyle=PAL.snow;
+      ctx.beginPath();ctx.moveTo(cx,H*(top-0.10));
+      ctx.lineTo(cx+W*0.075,H*(top+0.02));
+      ctx.quadraticCurveTo(cx+W*0.02,H*(top-0.02),cx,H*(top));
+      ctx.quadraticCurveTo(cx-W*0.02,H*(top-0.02),cx-W*0.075,H*(top+0.02));
+      ctx.closePath();ctx.fill();
+    }
+  }
+  let last=performance.now();
+  function draw(now){
+    let dt=(now-last)/1000;last=now;if(dt>0.05)dt=0.05;
+    if(!REDUCED) drift += dt*0.18;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,mix(PAL.indigo,PAL.ink,0.20));
+    g.addColorStop(0.5,PAL.sky);
+    g.addColorStop(1,mix(PAL.skySoft,PAL.paper,0.5));
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    const sx=W*0.72, sy=H*0.30;
+    const gr=ctx.createRadialGradient(sx,sy,2,sx,sy,W*0.18);
+    gr.addColorStop(0,'rgba(248,226,180,.9)');gr.addColorStop(1,'rgba(248,226,180,0)');
+    ctx.fillStyle=gr;ctx.beginPath();ctx.arc(sx,sy,W*0.18,0,7);ctx.fill();
+    const pan=Math.sin(drift)*0.5;
+    for(const L of layers){
+      const off = -pan*W*L.f - Math.sin(drift*1.3)*W*L.f*0.25;
+      hill(ctx,W,H,L.top,off,L.col,!!L.peak);
+    }
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

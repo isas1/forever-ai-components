@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Magenta beam sweeps a hex-glyph memory grid, corrupting cells with byte-flip smear and sync-loss before they heal.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bad VRAM Sweep</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0410;}
+  #vram{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:700 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
+       letter-spacing:.14em;color:#ff2e88;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="vram"></canvas>
+<div class="cap">Bad VRAM Sweep</div>
+<script>
+(function(){
+  const cv=document.getElementById('vram'),ctx=cv.getContext('2d',{alpha:false});
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cols,rows,cw,ch;
+  // static memory-page checker background (dead cells included) baked once per resize
+  const bgC=document.createElement('canvas'),bgX=bgC.getContext('2d');
+  const hash=(x,y)=>{let h=(x*374761393+y*668265263)>>>0;h=(h^(h>>13))*1274126177>>>0;return (h>>>0)/4294967296;};
+  // a small deterministic "memory" pattern per cell so corruption is visible
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    const target=Math.max(10,Math.round(W/26));
+    cols=target;cw=W/cols;ch=cw;rows=Math.ceil(H/ch)+1;
+    ctx.textBaseline='middle';ctx.textAlign='center';
+    // bake the static base tiles (checker + dead-cell tint) at DPR
+    bgC.width=W*DPR;bgC.height=H*DPR;bgX.setTransform(DPR,0,0,DPR,0,0);
+    for(let cxi=0;cxi<cols;cxi++){
+      const dead=hash(cxi,777)<0.10;
+      for(let ryi=0;ryi<rows;ryi++){
+        const page=(cxi+ryi)&1;
+        let base=page?'#19082a':'#120620';
+        if(dead)base='#240a1c';
+        bgX.fillStyle=base;
+        bgX.fillRect(cxi*cw,ryi*ch,cw+0.6,ch+0.6);
+      }
+    }
+  }
+  addEventListener('resize',size);size();
+  const GLYPH="0123456789ABCDEF<>/\\#%@&$▓▒░█";
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',e=>{nudge=cv.clientWidth?e.offsetX/cv.clientWidth:0.5;});
+  cv.addEventListener('click',()=>{t+=cols*0.6;});
+  function draw(){
+    // sweep pointer position in cell-columns; loops with healing tail behind
+    const span=cols+10;
+    const head=(t*0.55 + nudge*6)%span;        // bright corruption front
+    ctx.fillStyle='#0a0410';ctx.fillRect(0,0,W,H);
+    ctx.drawImage(bgC,0,0,W,H);                 // static checker/dead-cell base
+    const fs=Math.max(8,ch*0.62);
+    ctx.font='700 '+fs+'px ui-monospace,monospace';
+    for(let cxi=0;cxi<cols;cxi++){
+      const d=head-cxi;                          // distance from sweep head
+      // corruption window: a band trailing the head, healing as |d| grows
+      const corrupt = d>=0 && d<7;               // ahead of head = healed/clean
+      const intensity = corrupt ? 1-(d/7) : 0;
+      // some cells stay partially glitched even when "healed" (dead VRAM)
+      const dead = hash(cxi,777)<0.10;
+      for(let ryi=0;ryi<rows;ryi++){
+        const x=cxi*cw, y=ryi*ch;
+        let n=hash(cxi,ryi);
+        let smear=0, off=0, inv=0;
+        if(intensity>0 || (dead && intensity===0)){
+          const k=Math.max(intensity, dead?0.35:0);
+          // byte flip jitter, seeded per-cell+time so it shimmers
+          const j=hash(cxi+((t*0.7)|0)%97, ryi*3+1);
+          if(j<k*0.7){ smear=(j-0.5)*cw*2.2*k; }          // horizontal repeat/offset
+          off=(hash(cxi,ryi+((t*0.5)|0))-0.5)*ch*0.8*k;    // vertical scanline jump
+          inv=j<k*0.55?1:0;                                 // hue inversion flag
+          n=hash(cxi*7+((t*0.9)|0)%131, ryi);              // flipped byte -> new glyph
+        }
+        // base tile fill is pre-baked into bgC and blitted once per frame
+        // glyph
+        const g=GLYPH[(n*GLYPH.length)|0];
+        const hot=intensity;
+        let r,gr,b;
+        if(inv){ r=46;gr=255;b=200; }                      // inverted -> cyan/green
+        else if(hot>0.55){ r=255;gr=46;b=136; }            // accent magenta at front
+        else if(hot>0){ r=255;gr=120;b=170; }
+        else if(dead){ r=120;gr=30;b=70; }
+        else { r=90;gr=40;b=80; }
+        // smeared repeats (the "dumping VRAM" trails)
+        if(Math.abs(smear)>1){
+          ctx.globalAlpha=0.35;
+          ctx.fillStyle='rgb('+r+','+gr+','+b+')';
+          ctx.fillText(g, x+cw/2+smear, y+ch/2+off);
+          ctx.fillText(g, x+cw/2+smear*0.5, y+ch/2+off*0.5);
+        }
+        ctx.globalAlpha=hot>0?0.7+hot*0.3:(dead?0.5:0.42);
+        ctx.fillStyle='rgb('+r+','+gr+','+b+')';
+        ctx.fillText(g, x+cw/2, y+ch/2+off);
+      }
+      // bright scanning beam at the head column
+      if(Math.abs(head-cxi-0.5)<0.9){
+        ctx.globalAlpha=0.85-Math.abs(head-cxi-0.5);
+        const grd=ctx.createLinearGradient(cxi*cw,0,cxi*cw+cw,0);
+        grd.addColorStop(0,'rgba(255,46,136,0)');
+        grd.addColorStop(0.5,'rgba(255,46,136,0.55)');
+        grd.addColorStop(1,'rgba(255,46,136,0)');
+        ctx.fillStyle=grd;ctx.fillRect(cxi*cw-cw*0.5,0,cw*2,H);
+      }
+    }
+    ctx.globalAlpha=1;
+    // faint horizontal sync-loss bar that drifts
+    const by=((t*1.3)%(H+40))-20;
+    ctx.fillStyle='rgba(46,255,200,0.05)';ctx.fillRect(0,by,W,ch*1.2);
+    nudge*=0.96;
+  }
+  function frame(){ t+=1; draw(); raf=requestAnimationFrame(frame); }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ t=cols*0.4; draw(); } else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cranes Crossing the Moon — Katsushika Hokusai. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cranes Crossing the Moon</title>
+<style>
+  html,body{margin:0;height:100%;background:#e7d9bc;overflow:hidden}
+  #hok05-stage{position:fixed;inset:0;width:100%;height:100%;background:linear-gradient(180deg,#e7d9bc,#f3ead6)}
+  #hok05-svg{width:100%;height:100%;display:block}
+  .hok05-body{fill:#fbf8f0;stroke:#1a1714;stroke-width:2}
+  .hok05-wing{fill:#fbf8f0;stroke:#1a1714;stroke-width:2;transform-origin:0 0}
+  .hok05-trail{fill:none;stroke:rgba(46,92,154,.35);stroke-width:1.4;stroke-dasharray:3 6}
+  .hok05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#1a1714;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="hok05-stage" role="img" aria-label="Cranes crossing the moon: three brush-contour cranes follow a long S-curve flight path, wings beating, past a pale moon ringed in Prussian blue.">
+  <svg id="hok05-svg" viewBox="0 0 600 300"></svg>
+</div>
+<div class="hok05-cap">Cranes Crossing the Moon</div>
+<script>
+(function(){
+  "use strict";
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var svg=document.getElementById('hok05-svg'); if(!svg) return;
+  var NS="http://www.w3.org/2000/svg";
+
+  function add(tag,attrs){ var e=document.createElementNS(NS,tag); for(var k in attrs) e.setAttribute(k,attrs[k]); svg.appendChild(e); return e; }
+  add("circle",{cx:470,cy:95,r:46,fill:"#f3ead6",opacity:0.9});
+  add("circle",{cx:470,cy:95,r:46,fill:"none",stroke:"#1b3a6b","stroke-width":1.4,opacity:0.4});
+  var pathD="M -60 230 C 120 120, 240 260, 360 150 S 560 60, 680 130";
+  add("path",{d:pathD,class:"hok05-trail"});
+  var guide=add("path",{d:pathD,fill:"none",stroke:"none"});
+  var total=guide.getTotalLength();
+
+  function makeCrane(){
+    var g=document.createElementNS(NS,"g");
+    var legs=document.createElementNS(NS,"path");
+    legs.setAttribute("d","M -16 6 L -26 22 M -10 7 L -18 24");
+    legs.setAttribute("stroke","#1a1714"); legs.setAttribute("stroke-width","1.6"); legs.setAttribute("fill","none");
+    var body=document.createElementNS(NS,"path"); body.setAttribute("class","hok05-body");
+    body.setAttribute("d","M -22 4 C -10 0, 6 2, 14 -8 C 18 -14, 22 -16, 26 -16 C 22 -10, 22 -6, 18 -2 C 10 6, -6 8, -22 4 Z");
+    var beak=document.createElementNS(NS,"path"); beak.setAttribute("d","M 26 -16 L 36 -18 L 26 -13 Z");
+    beak.setAttribute("fill","#c98a3c"); beak.setAttribute("stroke","#1a1714"); beak.setAttribute("stroke-width","1");
+    var wingU=document.createElementNS(NS,"path"); wingU.setAttribute("class","hok05-wing");
+    wingU.setAttribute("d","M -2 -2 C -10 -22, -28 -30, -42 -26 C -30 -18, -16 -12, -2 -2 Z");
+    var wingD=document.createElementNS(NS,"path"); wingD.setAttribute("class","hok05-wing");
+    wingD.setAttribute("d","M -2 -2 C -10 -22, -28 -30, -42 -26 C -30 -18, -16 -12, -2 -2 Z");
+    g.appendChild(legs); g.appendChild(body); g.appendChild(beak); g.appendChild(wingD); g.appendChild(wingU);
+    svg.appendChild(g);
+    return {g:g, wingU:wingU, wingD:wingD};
+  }
+  var cranes=[makeCrane(),makeCrane(),makeCrane()];
+
+  var t=0;
+  function frame(){
+    t+=0.0022;
+    for(var i=0;i<cranes.length;i++){
+      var p=(t - i*0.14)%1; if(p<0)p+=1;
+      var len=p*total;
+      var pt=guide.getPointAtLength(len);
+      var pt2=guide.getPointAtLength(Math.min(total,len+1));
+      var ang=Math.atan2(pt2.y-pt.y, pt2.x-pt.x)*180/Math.PI;
+      var beat=Math.sin(t*120 + i*2)*36;
+      var sc=0.9 - i*0.12;
+      cranes[i].g.setAttribute("transform","translate("+pt.x.toFixed(1)+","+pt.y.toFixed(1)+") rotate("+ang.toFixed(1)+") scale("+sc+")");
+      cranes[i].wingU.setAttribute("transform","rotate("+(-beat)+")");
+      cranes[i].wingD.setAttribute("transform","rotate("+(beat)+")");
+    }
+  }
+
+  var raf=0, running=false;
+  function loop(){ if(!running) return; frame(); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange', function(){ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ frame(); } else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Bright Memphis triangles, solid and outlined, tumble and sway downward through faint dotted columns against deep plum.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Triangle Rain</title>
+<style>
+  html,body{margin:0;height:100%;background:#141019;overflow:hidden}
+  #mp08-stage{position:fixed;inset:0;background:#141019}
+  #mp08-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="mp08-stage" role="img" aria-label="Memphis-style bright triangles tumbling down through dotted columns against deep plum">
+  <canvas id="mp08-c"></canvas>
+</div>
+<div class="cap">Triangle Rain</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("mp08-c"),ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var dpr=Math.min(2,window.devicePixelRatio||1);
+  var W=0,H=0,run=true,raf=0,last=0;
+
+  // Memphis palette: teal accent #36d6c3 on plum #141019, with hot clash colors
+  var COL=["#36d6c3","#ff5e8a","#ffd23f","#7b6cff","#ff8a3d","#f4f1ea"];
+  var N=90;
+  var px=new Float32Array(N),py=new Float32Array(N);
+  var vy=new Float32Array(N),vx=new Float32Array(N);
+  var rot=new Float32Array(N),vr=new Float32Array(N),sz=new Float32Array(N);
+  var col=new Uint8Array(N),fill=new Uint8Array(N),sway=new Float32Array(N),swr=new Float32Array(N);
+  var seed=20712;
+  function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
+
+  function reset(i,top){
+    px[i]=rnd()*W;
+    py[i]=top? -30-rnd()*H*0.4 : rnd()*H;
+    sz[i]=10+rnd()*22;
+    vy[i]=0.55+rnd()*1.5+sz[i]*0.02;     // bigger falls a touch faster
+    vx[i]=(rnd()-0.5)*0.3;
+    rot[i]=rnd()*6.2832; vr[i]=(rnd()-0.5)*0.07;
+    col[i]=(rnd()*COL.length)|0;
+    fill[i]=rnd()<0.62?1:0;              // mix solid + outline triangles
+    sway[i]=rnd()*6.2832; swr[i]=0.012+rnd()*0.03;
+  }
+
+  function resize(){
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,(W*dpr)|0); cv.height=Math.max(1,(H*dpr)|0);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  // Static Memphis backdrop: faint dotted columns + a couple of fixed zigzag rails.
+  // Drawn fresh each frame (cheap fills only, no layout reads, no compositor-killers).
+  function backdrop(){
+    ctx.fillStyle="#141019"; ctx.fillRect(0,0,W,H);
+    var step=Math.max(34,W/9);
+    ctx.fillStyle="rgba(54,214,195,0.07)";
+    for(var x=step*0.5;x<W;x+=step){
+      for(var y=step*0.5;y<H;y+=step){
+        ctx.beginPath(); ctx.arc(x,y,2.1,0,6.2832); ctx.fill();
+      }
+    }
+  }
+
+  function tri(s,solid,c){
+    ctx.beginPath();
+    ctx.moveTo(0,-s*0.6);
+    ctx.lineTo(s*0.55,s*0.48);
+    ctx.lineTo(-s*0.55,s*0.48);
+    ctx.closePath();
+    if(solid){ ctx.fillStyle=c; ctx.fill(); }
+    else { ctx.lineWidth=Math.max(2,s*0.14); ctx.strokeStyle=c; ctx.lineJoin="round"; ctx.stroke(); }
+  }
+
+  function drawOne(i){
+    ctx.setTransform(dpr,0,0,dpr,dpr*(px[i]+Math.sin(sway[i])*7),dpr*py[i]);
+    ctx.rotate(rot[i]);
+    tri(sz[i],fill[i]===1,COL[col[i]]);
+  }
+
+  function step(dt){
+    backdrop();
+    for(var i=0;i<N;i++){
+      py[i]+=vy[i]*dt; px[i]+=vx[i]*dt; rot[i]+=vr[i]*dt; sway[i]+=swr[i]*dt;
+      if(py[i]>H+34){ reset(i,true); }
+      drawOne(i);
+    }
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function staticFrame(){
+    // reduced-motion: one calm, legible, on-brand frame of suspended triangles
+    resize(); backdrop();
+    for(var i=0;i<N;i++){
+      reset(i,false); rot[i]=(i%5)*0.4-0.6;
+      drawOne(i);
+    }
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function frame(ts){
+    if(!run) return;
+    var dt=last?(ts-last)/16.667:1; last=ts;
+    if(dt>3) dt=3;            // clamp after tab-resume / long frame
+    step(dt);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){
+    resize();
+    for(var i=0;i<N;i++) reset(i,false);
+    if(reduce){ staticFrame(); return; }
+    last=0; run=true; raf=requestAnimationFrame(frame);
+  }
+
+  window.addEventListener("resize",function(){
+    if(reduce){ staticFrame(); return; }
+    resize();
+  });
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden){ run=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+    else if(!run){ run=true; last=0; raf=requestAnimationFrame(frame); }
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>

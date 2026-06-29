@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Pendulum Diagram — Hilma af Klint. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pendulum Diagram</title>
+<style>
+  html,body{margin:0;height:100%;background:#1d1a24;overflow:hidden}
+  #afk04-stage{position:fixed;inset:0;width:100%;height:100%}
+  #afk04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .afk04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3eee4;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="afk04-stage" role="img" aria-label="A swinging line, two coupled pendulums, traces a harmonograph rosette — petal upon pastel petal — then fades and begins again, the unseen drawing its own automatic figure.">
+  <canvas id="afk04-cv"></canvas>
+</div>
+<div class="afk04-cap">Pendulum Diagram</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('afk04-cv'); if(!cv) return;
+  const PAL={cream:'#f3eee4',lav:'#c3b3da',deep:'#1d1a24'};
+  const PASTELS=['#a9c8e0','#e3a9bd','#ecd58a','#c3b3da','#a9c4a0'];
+  function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), last=performance.now(), cycle=0;
+  function newFig(){
+    return {f1:2+((Math.random()*3)|0),f2:2+((Math.random()*3)|0),
+      f3:2+((Math.random()*3)|0),f4:3+((Math.random()*3)|0),
+      p1:Math.random()*6,p2:Math.random()*6,d:0.0016+Math.random()*0.001,
+      col:PASTELS[(Math.random()*PASTELS.length)|0]};
+  }
+  let P=newFig();
+  const PERIOD=9;
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED){ cycle+=dt; }
+    const ctx=S.ctx,W=S.w,H=S.h, cx=W*0.5, cy=H*0.5;
+    ctx.fillStyle=PAL.deep;ctx.fillRect(0,0,W,H);
+    const A=Math.min(W,H)*0.40;
+    const frac=REDUCED?1:Math.min(1,(cycle%PERIOD)/(PERIOD*0.72));
+    const fade=REDUCED?1:(1-Math.max(0,(cycle%PERIOD)-PERIOD*0.82)/(PERIOD*0.18));
+    const TMAX=64, steps=900;
+    ctx.lineWidth=1.4;ctx.strokeStyle=rgba(P.col,0.62*fade);ctx.beginPath();
+    const upto=steps*frac; let hx=cx,hy=cy;
+    for(let i=0;i<=upto;i++){
+      const tt=(i/steps)*TMAX;
+      const damp=Math.exp(-P.d*tt*8);
+      const x=cx+A*damp*(Math.sin(tt*P.f1+P.p1)+0.4*Math.sin(tt*P.f3))*0.5;
+      const y=cy+A*damp*(Math.sin(tt*P.f2+P.p2)+0.4*Math.sin(tt*P.f4))*0.5;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      hx=x;hy=y;
+    }
+    ctx.stroke();
+    if(frac<1 && !REDUCED){
+      ctx.strokeStyle=rgba(PAL.lav,0.4);ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(hx,hy);ctx.stroke();
+      const g=ctx.createRadialGradient(hx,hy,0,hx,hy,10);
+      g.addColorStop(0,rgba(P.col,0.9));g.addColorStop(1,rgba(P.col,0));
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(hx,hy,10,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=rgba(PAL.cream,0.95);ctx.beginPath();ctx.arc(hx,hy,3,0,Math.PI*2);ctx.fill();
+    }
+    if(cycle>=PERIOD){ cycle=0; P=newFig(); }
+  }
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

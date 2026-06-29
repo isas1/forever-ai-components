@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A bottom-anchored stack of dark notification toasts springs up, drains a colored progress bar, then slides off.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Toast Stack</title>
+<style>
+  :root{--bg:#0b0d12;--ok:#34d399;--err:#fb7185;--warn:#fbbf24;--mut:#5b6472;--ink:#e8edf4;--card:#141822}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);overflow:hidden;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  #fb03-stage{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:center;outline:none}
+  #fb03-stage:focus-visible{box-shadow:inset 0 0 0 2px var(--ok)}
+  #fb03-rail{position:relative;width:min(82%,360px);margin-bottom:clamp(40px,16%,90px);display:flex;flex-direction:column-reverse;gap:9px}
+  .fb03-t{display:flex;align-items:center;gap:11px;padding:12px 13px;border-radius:13px;
+    background:var(--card);color:var(--ink);
+    border:1px solid rgba(255,255,255,.06);
+    box-shadow:0 14px 34px -16px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.02) inset;
+    transform:translateZ(0);will-change:transform,opacity;contain:layout style}
+  .fb03-ic{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:grid;place-items:center}
+  .fb03-ic svg{width:14px;height:14px;display:block}
+  .fb03-bd{flex:1 1 auto;min-width:0}
+  .fb03-ti{font-weight:650;font-size:13px;letter-spacing:.01em;line-height:1.15}
+  .fb03-sb{margin-top:2px;font:500 11px/1.3 ui-monospace,Menlo,monospace;color:var(--mut);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fb03-pg{position:absolute;left:13px;right:13px;bottom:6px;height:2px;border-radius:2px;
+    background:currentColor;opacity:.5;transform-origin:left center;transform:scaleX(1)}
+  .fb03-ok{--c:var(--ok)} .fb03-er{--c:var(--err)} .fb03-em{--c:var(--mut)} .fb03-dn{--c:var(--warn)}
+  .fb03-t .fb03-ic{color:#0b0d12;background:var(--c)}
+  .fb03-t.fb03-em .fb03-ic{color:var(--mut);background:transparent;box-shadow:0 0 0 1.5px var(--mut) inset}
+  .fb03-t .fb03-pg{color:var(--c)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .fb03-hint{position:fixed;right:9px;bottom:8px;font:600 9px/1 ui-monospace,Menlo,monospace;
+    color:var(--ink);opacity:.28;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fb03-stage" role="img" aria-label="A stack of toast notifications springing up from the bottom, each draining a progress bar before sliding away; activate to push another." tabindex="0">
+  <div id="fb03-rail" role="list" aria-hidden="true"></div>
+</div>
+<div class="cap">Toast Stack</div>
+<div class="fb03-hint">space ↵</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var rail = document.getElementById('fb03-rail');
+  var stage = document.getElementById('fb03-stage');
+
+  // SVG glyphs — geometric, original marks (no brand iconography)
+  var G = {
+    ok:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>',
+    er:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    em:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 8h14M5 12h9M5 16h6"/></svg>',
+    dn:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M6.5 6.5l11 11"/></svg>'
+  };
+  var KIND = [
+    {c:'fb03-ok',g:'ok',t:'Saved',     s:'changes synced · just now'},
+    {c:'fb03-er',g:'er',t:'Upload failed', s:'network timeout · retry'},
+    {c:'fb03-dn',g:'dn',t:'Access denied', s:'insufficient permission'},
+    {c:'fb03-em',g:'em',t:'Nothing here yet', s:'no items in this view'}
+  ];
+
+  var MAX = 3, LIFE = 3200; // visible toasts, ms before auto-dismiss
+  var live = []; // {el,bd,pg,born,dur}
+  var seq = 0;
+
+  function makeToast(k){
+    var el = document.createElement('div');
+    el.className = 't '.replace('t','fb03-t')+k.c;
+    el.setAttribute('role','listitem');
+    el.innerHTML =
+      '<span class="fb03-ic">'+G[k.g]+'</span>'+
+      '<span class="fb03-bd"><span class="fb03-ti"></span><span class="fb03-sb"></span></span>'+
+      '<span class="fb03-pg"></span>';
+    el.querySelector('.fb03-ti').textContent = k.t;
+    el.querySelector('.fb03-sb').textContent = k.s;
+    var pg = el.querySelector('.fb03-pg');
+    // enter state: offset + transparent (transform/opacity only)
+    el.style.opacity = '0';
+    el.style.transform = 'translate3d(0,26px,0) scale(.94)';
+    rail.appendChild(el);
+    return {el:el,pg:pg,born:performance.now(),dur:LIFE,leaving:false,leftAt:0,sx:1};
+  }
+
+  function push(k){
+    if (live.length >= MAX){ retire(live[0]); }
+    live.push(makeToast(k));
+  }
+  function retire(o){
+    if(o.leaving) return;
+    o.leaving = true; o.leftAt = performance.now();
+  }
+
+  // spring-ish ease for entrance
+  function spring(t){ // t 0..1 -> slight overshoot
+    if(t>=1) return 1;
+    return 1 - Math.pow(2,-9*t)*Math.cos(t*15);
+  }
+
+  var ENTER = 460, EXIT = 320;
+  var last = 0, running = true, raf = 0;
+
+  function frame(now){
+    if(!running) return;
+    var i, o, n = live.length;
+    for(i=0;i<n;i++){
+      o = live[i];
+      if(!o.leaving){
+        var ageE = now - o.born;
+        var p = ageE/ENTER; if(p>1)p=1;
+        var s = spring(p);
+        var y = (1-s)*26;
+        var sc = 0.94 + 0.06*s;
+        o.el.style.opacity = (p<1? s : 1);
+        o.el.style.transform = 'translate3d(0,'+y+'px,0) scale('+sc.toFixed(3)+')';
+        // life progress bar (scaleX only)
+        var lifeP = (now - o.born - ENTER)/o.dur;
+        if(lifeP<0)lifeP=0; if(lifeP>1)lifeP=1;
+        o.pg.style.transform = 'scaleX('+(1-lifeP).toFixed(3)+')';
+        if(now - o.born - ENTER >= o.dur) retire(o);
+      } else {
+        var ageX = now - o.leftAt;
+        var q = ageX/EXIT; if(q>1)q=1;
+        var e = q*q*(3-2*q); // smoothstep out
+        o.el.style.opacity = (1-e);
+        o.el.style.transform = 'translate3d('+(e*46)+'px,0,0) scale('+(1-0.06*e)+')';
+        if(q>=1){
+          o.el.remove();
+          live.splice(i,1); i--; n--;
+        }
+      }
+    }
+    raf = requestAnimationFrame(frame);
+  }
+
+  // ---- self-demo timer + handoff ----
+  var demoAt = 0, idleSince = performance.now(), userHold = false;
+  function tick(now){
+    if(!userHold && now - demoAt > 1700 && live.length < MAX){
+      push(KIND[seq % KIND.length]); seq++;
+      demoAt = now;
+    }
+    // ease back to self-demo after idle
+    if(userHold && now - idleSince > 3400){ userHold = false; demoAt = now - 900; }
+    demoTimer = setTimeout(function(){ tick(performance.now()); }, 280);
+  }
+  var demoTimer = 0;
+
+  function userTrigger(){
+    userHold = true; idleSince = performance.now();
+    push(KIND[seq % KIND.length]); seq++;
+    demoAt = performance.now();
+  }
+
+  stage.addEventListener('pointerdown', function(){ userTrigger(); });
+  stage.addEventListener('keydown', function(e){
+    if(e.key===' '||e.key==='Enter'){ e.preventDefault(); userTrigger(); }
+  });
+
+  // ---- reduced motion: one static, legible frame ----
+  if(reduce){
+    [KIND[0],KIND[2],KIND[3]].forEach(function(k){
+      var o = makeToast(k);
+      o.el.style.opacity='1';
+      o.el.style.transform='none';
+      o.pg.style.transform='scaleX(.6)';
+      live.push(o);
+    });
+    return;
+  }
+
+  // ---- visibility pause/resume ----
+  function start(){
+    if(running) return;
+    running = true; raf = requestAnimationFrame(frame);
+    demoAt = performance.now(); tick(performance.now());
+  }
+  function stop(){
+    running = false;
+    if(raf) cancelAnimationFrame(raf);
+    if(demoTimer) clearTimeout(demoTimer);
+  }
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) stop(); else start();
+  });
+
+  // kick off
+  running = true;
+  raf = requestAnimationFrame(frame);
+  demoAt = performance.now() - 1400;
+  tick(performance.now());
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric rings of pink gradient petals open and close around a luminous hub, depth-sorted in 3D on a deep plum background.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Depth-Sorted Petals</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#241327;}
+  #dsp-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.16em;color:#e879b9;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="dsp-c"></canvas>
+<div class="cap">Depth-Sorted Petals</div>
+<script>
+(function(){
+  const cv=document.getElementById('dsp-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,S;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;S=Math.min(W,H)/520;
+  }
+  addEventListener('resize',size);size();
+
+  const RINGS=4, PER=11, FOV=560;       // perspective focal length
+  const petals=[];
+  for(let r=0;r<RINGS;r++){
+    for(let i=0;i<PER;i++){
+      const base=(i/PER)*Math.PI*2 + r*0.34;   // rotateZ offset per ring
+      petals.push({
+        ring:r, ang:base,
+        len:130-r*16, wid:40-r*4,
+        zOff:-r*46,                              // stepped Z depth per ring
+        phase:(i*0.5+r*1.3),                     // pitch animation phase
+        spin:(r%2?-1:1)*0.0016                   // alternating ring rotation
+      });
+    }
+  }
+
+  // rotate point about Z then about X (pitch), translate to hub depth
+  function vtx(px,py,pz,cosZ,sinZ,cosX,sinX,hubZ){
+    let x=px*cosZ-py*sinZ, y=px*sinZ+py*cosZ, z=pz;
+    let y2=y*cosX-z*sinX, z2=y*sinX+z*cosX;
+    return [x*S, y2*S, z2+hubZ];
+  }
+  function proj(v){ const k=FOV/(FOV-v[2]); return [cx+v[0]*k, cy+v[1]*k, v[2]]; }
+
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.4,1.6);});
+  cv.addEventListener('click',()=>{nudge=2.2;});
+
+  function build(){
+    const quads=[];
+    for(const p of petals){
+      p.ang+=reduce?0:p.spin;
+      const cosZ=Math.cos(p.ang),sinZ=Math.sin(p.ang);
+      // pitch: petals open/close, base pitch ~70deg, oscillating
+      const pitch=(reduce?0.9:0.78+Math.sin(t*0.018+p.phase)*0.5+nudge*0.3);
+      const cosX=Math.cos(pitch),sinX=Math.sin(pitch);
+      const hubZ=p.zOff;
+      // teardrop quad in petal-local plane (x across, y along length)
+      const w=p.wid,l=p.len;
+      const a=vtx(0,8,0,cosZ,sinZ,cosX,sinX,hubZ);
+      const b=vtx(-w,l*0.42,0,cosZ,sinZ,cosX,sinX,hubZ);
+      const c=vtx(0,l,0,cosZ,sinZ,cosX,sinX,hubZ);
+      const d=vtx(w,l*0.42,0,cosZ,sinZ,cosX,sinX,hubZ);
+      const pa=proj(a),pb=proj(b),pc=proj(c),pd=proj(d);
+      const zc=(a[2]+b[2]+c[2]+d[2])/4;
+      quads.push({pa,pb,pc,pd,zc,ring:p.ring,
+        tipx:pc[0],tipy:pc[1]});
+    }
+    quads.sort((m,n)=>m.zc-n.zc);   // back-to-front manual depth sort
+    return quads;
+  }
+
+  function draw(){
+    ctx.fillStyle='#241327';ctx.fillRect(0,0,W,H);
+    const quads=build();
+    let zmin=1e9,zmax=-1e9;
+    for(const q of quads){if(q.zc<zmin)zmin=q.zc;if(q.zc>zmax)zmax=q.zc;}
+    const span=Math.max(zmax-zmin,1);
+    for(const q of quads){
+      const depth=(q.zc-zmin)/span;          // 0 back -> 1 front
+      // graded opacity + petal gradient sells layered volume
+      const g=ctx.createLinearGradient(q.pa[0],q.pa[1],q.tipx,q.tipy);
+      const al=0.10+depth*0.34;
+      g.addColorStop(0,`rgba(244,140,210,${al*0.55})`);
+      g.addColorStop(0.55,`rgba(232,121,185,${al})`);
+      g.addColorStop(1,`rgba(124,58,118,${al*0.85})`);
+      ctx.fillStyle=g;
+      ctx.beginPath();
+      ctx.moveTo(q.pa[0],q.pa[1]);
+      ctx.quadraticCurveTo(q.pb[0],q.pb[1],q.pc[0],q.pc[1]);
+      ctx.quadraticCurveTo(q.pd[0],q.pd[1],q.pa[0],q.pa[1]);
+      ctx.fill();
+      // bright depth-graded rim along the spine
+      ctx.strokeStyle=`rgba(255,210,240,${0.05+depth*0.30})`;
+      ctx.lineWidth=0.8+depth*0.8;
+      ctx.beginPath();ctx.moveTo(q.pa[0],q.pa[1]);ctx.lineTo(q.tipx,q.tipy);ctx.stroke();
+    }
+    // luminous hub
+    const hr=14*S+6;
+    const hg=ctx.createRadialGradient(cx,cy,1,cx,cy,hr);
+    hg.addColorStop(0,'rgba(255,235,248,0.95)');
+    hg.addColorStop(0.4,'rgba(232,121,185,0.7)');
+    hg.addColorStop(1,'rgba(232,121,185,0)');
+    ctx.fillStyle=hg;ctx.beginPath();ctx.arc(cx,cy,hr,0,Math.PI*2);ctx.fill();
+  }
+
+  let raf=0;
+  function frame(){t+=1;nudge*=0.95;draw();raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=20;draw();}else start();
+})();
+</script>
+</body>
+</html>

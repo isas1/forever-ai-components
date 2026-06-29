@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Atom Series — Hilma af Klint. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atom Series</title>
+<style>
+  html,body{margin:0;height:100%;background:#ece4d4;overflow:hidden}
+  #afk05-stage{position:fixed;inset:0;width:100%;height:100%}
+  #afk05-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .afk05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2730;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="afk05-stage" role="img" aria-label="Concentric pastel diagrams with orbiting nodes and abstract glyphs, after af Klint's studies of the atom — each a small cosmology connected by a faint triangle.">
+  <canvas id="afk05-cv"></canvas>
+</div>
+<div class="afk05-cap">Atom Series</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('afk05-cv'); if(!cv) return;
+  const PAL={ink:'#2a2730'};
+  const PASTELS=['#a9c8e0','#e3a9bd','#ecd58a','#c3b3da','#a9c4a0'];
+  function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), atoms=[], last=performance.now(), t=0;
+  (function build(){
+    const cells=[[0.28,0.32],[0.72,0.30],[0.5,0.66]];
+    cells.forEach((c,ci)=>{
+      atoms.push({cx:c[0],cy:c[1],rings:2+((Math.random()*3)|0),sat:2+((Math.random()*4)|0),
+        col:PASTELS[ci%PASTELS.length],col2:PASTELS[(ci+2)%PASTELS.length],
+        sp:(0.3+Math.random()*0.5)*(Math.random()<0.5?-1:1),ph:Math.random()*6,glyph:(Math.random()*4)|0});
+    });
+  })();
+  function glyph(ctx,x,y,r,kind,col){
+    ctx.strokeStyle=col;ctx.lineWidth=1.4;
+    if(kind===0){ctx.beginPath();ctx.moveTo(x,y-r);ctx.lineTo(x+r*0.9,y+r*0.7);ctx.lineTo(x-r*0.9,y+r*0.7);ctx.closePath();ctx.stroke();}
+    else if(kind===1){ctx.beginPath();ctx.moveTo(x-r,y);ctx.lineTo(x+r,y);ctx.moveTo(x,y-r);ctx.lineTo(x,y+r);ctx.stroke();}
+    else if(kind===2){ctx.beginPath();ctx.arc(x,y,r*0.7,0,Math.PI*2);ctx.stroke();}
+    else {ctx.beginPath();ctx.moveTo(x-r,y-r);ctx.lineTo(x+r,y+r);ctx.moveTo(x+r,y-r);ctx.lineTo(x-r,y+r);ctx.stroke();}
+  }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.clearRect(0,0,W,H);
+    const unit=Math.min(W,H);
+    ctx.strokeStyle=rgba(PAL.ink,0.14);ctx.lineWidth=1;ctx.beginPath();
+    ctx.moveTo(atoms[0].cx*W,atoms[0].cy*H);
+    ctx.lineTo(atoms[1].cx*W,atoms[1].cy*H);
+    ctx.lineTo(atoms[2].cx*W,atoms[2].cy*H);
+    ctx.closePath();ctx.stroke();
+    atoms.forEach(a=>{
+      const cx=a.cx*W, cy=a.cy*H, R=unit*0.17;
+      for(let i=1;i<=a.rings;i++){
+        const r=R*(i/a.rings);
+        ctx.strokeStyle=rgba(i%2?a.col:a.col2,0.55);ctx.lineWidth=1.3;
+        ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
+      }
+      const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*0.5);
+      g.addColorStop(0,rgba(a.col,0.4));g.addColorStop(1,rgba(a.col,0));
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*0.5,0,Math.PI*2);ctx.fill();
+      for(let s=0;s<a.sat;s++){
+        const ang=a.ph+t*a.sp+(s/a.sat)*Math.PI*2;
+        const orb=R*0.78;
+        const x=cx+Math.cos(ang)*orb, y=cy+Math.sin(ang)*orb;
+        ctx.fillStyle=rgba(a.col2,0.95);
+        ctx.beginPath();ctx.arc(x,y,3.2,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle=rgba(PAL.ink,0.35);ctx.lineWidth=0.8;ctx.stroke();
+      }
+      glyph(ctx,cx,cy,R*0.22,a.glyph,rgba(PAL.ink,0.7));
+    });
+  }
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

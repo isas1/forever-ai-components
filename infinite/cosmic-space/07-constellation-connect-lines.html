@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Drifting blue-white star nodes link with proximity lines and twinkle, connecting to the cursor on hover like a constellation network.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Constellation Connect Lines</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#060a16;}
+  #c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.08em;color:#cfe2ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Constellation Connect</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR;
+  const N=46,nodes=[];
+  function seed(){
+    nodes.length=0;
+    for(let i=0;i<N;i++)nodes.push({
+      x:Math.random(),y:Math.random(),
+      vx:(Math.random()-0.5)*0.0006,vy:(Math.random()-0.5)*0.0006,
+      r:0.6+Math.random()*1.6,ph:Math.random()*6.28
+    });
+  }
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize',size);size();seed();
+  let t=0,mx=-1,my=-1;
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+    mx=(e.clientX-r.left)/W;my=(e.clientY-r.top)/H;});
+  cv.addEventListener('pointerleave',()=>{mx=-1;my=-1;});
+  const LINK=0.2;
+  function frame(){
+    t+=0.02;
+    ctx.fillStyle='#060a16';ctx.fillRect(0,0,W,H);
+    if(!reduce)nodes.forEach(n=>{
+      n.x+=n.vx;n.y+=n.vy;
+      if(n.x<0||n.x>1)n.vx*=-1;if(n.y<0||n.y>1)n.vy*=-1;
+    });
+    for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){
+      const a=nodes[i],b=nodes[j],d=Math.hypot(a.x-b.x,a.y-b.y);
+      if(d<LINK){
+        let al=(1-d/LINK)*0.5;
+        ctx.strokeStyle='rgba(140,180,255,'+al.toFixed(3)+')';ctx.lineWidth=0.7;
+        ctx.beginPath();ctx.moveTo(a.x*W,a.y*H);ctx.lineTo(b.x*W,b.y*H);ctx.stroke();
+      }
+    }
+    nodes.forEach(n=>{
+      const near=mx<0?0:Math.max(0,1-Math.hypot(n.x-mx,n.y-my)*4);
+      const tw=0.6+0.4*Math.sin(t+n.ph);
+      ctx.fillStyle='rgba(220,235,255,'+(0.5+tw*0.5).toFixed(3)+')';
+      ctx.beginPath();ctx.arc(n.x*W,n.y*H,n.r*(1+near*1.5),0,Math.PI*2);ctx.fill();
+      if(near>0){ // link to cursor
+        ctx.strokeStyle='rgba(150,210,255,'+(near*0.6).toFixed(3)+')';ctx.lineWidth=0.8;
+        ctx.beginPath();ctx.moveTo(n.x*W,n.y*H);ctx.lineTo(mx*W,my*H);ctx.stroke();
+      }
+    });
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){frame();}else start();
+})();
+</script>
+</body>
+</html>

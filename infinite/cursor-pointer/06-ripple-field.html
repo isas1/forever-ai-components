@@ -1,0 +1,136 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A grid of dots ripples outward in expanding rings as the pointer moves, dots brightening pink and displacing along each wavefront.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Ripple Field</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#0a0a0f}
+#ccp06-c{display:block;width:100vw;height:100vh}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#ff5ca8;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+</style></head><body>
+<canvas id="ccp06-c"></canvas>
+<div class="cap">Ripple Field</div>
+<script>(function(){
+var cv=document.getElementById('ccp06-c'), x=cv.getContext('2d');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,dpr=Math.min(2,window.devicePixelRatio||1),DT=0;
+var ACC=[255,92,168];
+var dots=[],cols=0,rows=0,gap=0,ox=0,oy=0,R=2.2;
+var ripples=[],MAXR=8;
+function resize(){
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*dpr;cv.height=H*dpr;x.setTransform(dpr,0,0,dpr,0,0);
+  gap=Math.max(14,Math.min(W,H)/16);
+  R=Math.max(1.6,gap*0.16);
+  cols=Math.floor(W/gap)-1;rows=Math.floor(H/gap)-1;
+  cols=Math.max(3,cols);rows=Math.max(3,rows);
+  ox=(W-(cols-1)*gap)/2;oy=(H-(rows-1)*gap)/2;
+  dots.length=0;
+  for(var j=0;j<rows;j++)for(var i=0;i<cols;i++){
+    dots.push({hx:ox+i*gap,hy:oy+j*gap,x:0,y:0,s:1,o:0});
+  }
+}
+function fire(px,py){
+  if(ripples.length>=MAXR)ripples.shift();
+  ripples.push({x:px,y:py,t:0,life:1.55});
+}
+// virtual pointer
+var vt=0,vx=0,vy=0,px=0,py=0,real=false,lastMove=-1e9,lastFire=0;
+function lissa(t){
+  var cx=W*0.5,cy=H*0.5,ax=W*0.34,ay=H*0.30;
+  return [cx+Math.sin(t*0.62)*ax, cy+Math.sin(t*0.41+0.9)*ay];
+}
+function vis(){if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);}else if(!running&&!reduce){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}
+var running=true,raf=0,last=0;
+window.addEventListener('resize',resize);
+cv.addEventListener('pointermove',function(e){
+  var r=cv.getBoundingClientRect();
+  px=e.clientX-r.left;py=e.clientY-r.top;real=true;lastMove=performance.now();
+});
+document.addEventListener('visibilitychange',vis);
+
+function step(dt){
+  var now=performance.now();
+  if(real&&now-lastMove>2600)real=false;
+  vt+=dt;
+  var tx,ty;
+  if(real){tx=px;ty=py;}else{var p=lissa(vt);tx=p[0];ty=p[1];}
+  // spring follow for cursor marker
+  vx+=(tx-vx)*Math.min(1,dt*(real?14:5));
+  vy+=(ty-vy)*Math.min(1,dt*(real?14:5));
+  // auto-fire taps along the path / under real pointer
+  lastFire+=dt;
+  var interval=real?0.34:0.62;
+  if(lastFire>=interval){lastFire=0;fire(vx,vy);}
+  // advance ripples
+  for(var k=ripples.length-1;k>=0;k--){
+    var rp=ripples[k];rp.t+=dt;if(rp.t>=rp.life)ripples.splice(k,1);
+  }
+  // displace dots
+  var ringSpeed=Math.max(W,H)*0.62;
+  for(var n=0;n<dots.length;n++){
+    var d=dots[n],dx=0,dy=0,sc=1,glow=0;
+    for(var k2=0;k2<ripples.length;k2++){
+      var rp2=ripples[k2],e=rp2.t/rp2.life;
+      var rad=rp2.t*ringSpeed;
+      var ddx=d.hx-rp2.x,ddy=d.hy-rp2.y,dist=Math.sqrt(ddx*ddx+ddy*ddy)||1;
+      var band=dist-rad;
+      var w=Math.exp(-(band*band)/(gap*gap*2.4));
+      var amp=(1-e)*w;
+      if(amp>0.002){
+        var push=amp*gap*0.55/dist;
+        dx+=ddx*push;dy+=ddy*push;
+        sc+=amp*1.4;glow+=amp;
+      }
+    }
+    d.x+=(dx-d.x)*Math.min(1,dt*16);
+    d.y+=(dy-d.y)*Math.min(1,dt*16);
+    d.s+=(sc-d.s)*Math.min(1,dt*16);
+    d.o+=(Math.min(1,glow)-d.o)*Math.min(1,dt*14);
+  }
+}
+function draw(){
+  x.clearRect(0,0,W,H);
+  var a=ACC;
+  for(var n=0;n<dots.length;n++){
+    var d=dots[n],r=R*d.s;
+    var base=0.16+d.o*0.84;
+    x.beginPath();x.arc(d.hx+d.x,d.hy+d.y,r,0,6.2832);
+    if(d.o>0.04){
+      x.fillStyle='rgba('+a[0]+','+a[1]+','+a[2]+','+base.toFixed(3)+')';
+    }else{
+      x.fillStyle='rgba(150,150,168,'+base.toFixed(3)+')';
+    }
+    x.fill();
+  }
+  // ripple rings
+  var ringSpeed=Math.max(W,H)*0.62;
+  for(var k=0;k<ripples.length;k++){
+    var rp=ripples[k],e=rp.t/rp.life,rad=rp.t*ringSpeed;
+    x.beginPath();x.arc(rp.x,rp.y,rad,0,6.2832);
+    x.strokeStyle='rgba('+a[0]+','+a[1]+','+a[2]+','+((1-e)*0.22).toFixed(3)+')';
+    x.lineWidth=1.2;x.stroke();
+  }
+  // cursor marker
+  x.beginPath();x.arc(vx,vy,R*1.5,0,6.2832);
+  x.strokeStyle='rgba('+a[0]+','+a[1]+','+a[2]+',0.55)';
+  x.lineWidth=1.4;x.stroke();
+  x.beginPath();x.arc(vx,vy,R*0.5,0,6.2832);
+  x.fillStyle='rgba('+a[0]+','+a[1]+','+a[2]+',0.9)';x.fill();
+}
+function loop(now){
+  if(!running)return;
+  var dt=Math.min(0.05,(now-last)/1000);last=now;
+  step(dt);draw();
+  raf=requestAnimationFrame(loop);
+}
+resize();
+if(reduce){
+  // single static, legible frame: a few settled ripples
+  fire(W*0.42,H*0.45);fire(W*0.62,H*0.6);
+  for(var s=0;s<40;s++)step(0.016);
+  vx=W*0.5;vy=H*0.5;draw();
+}else{
+  last=performance.now();raf=requestAnimationFrame(loop);
+}
+})();</script>
+</body></html>

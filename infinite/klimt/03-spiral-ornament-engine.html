@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Spiral Ornament Engine — Gustav Klimt. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spiral Ornament Engine</title>
+<style>
+  html,body{margin:0;height:100%;background:#070502;overflow:hidden}
+  #kli03-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kli03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kli03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#e6cf86;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kli03-stage" role="img" aria-label="A generative field of Klimt's ornamental vocabulary: gold spirals, all-seeing eyes and gilded triangles arrive, hold, and dissolve back into the dark.">
+  <canvas id="kli03-cv"></canvas>
+</div>
+<div class="kli03-cap">Spiral Ornament Engine</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('kli03-cv'); if(!cv) return;
+  const GOLD='#c8a951', GOLD2='#9a7d28', GOLD_HI='#e6cf86', LAPIS='#1c3f8f', VERM='#b8331f';
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function goldGrad(ctx,x,y,r){
+    const g=ctx.createRadialGradient(x-r*0.3,y-r*0.3,r*0.1,x,y,r);
+    g.addColorStop(0,GOLD_HI);g.addColorStop(0.55,GOLD);g.addColorStop(1,GOLD2);return g;
+  }
+  let S=fitCanvas(cv);
+  let elems=[];
+  function spawn(){
+    const t=Math.random();
+    elems.push({born:performance.now(), life:3000+Math.random()*3600,
+      x:Math.random()*S.w, y:Math.random()*S.h, rot:Math.random()*7,
+      sz:14+Math.random()*42, spin:(Math.random()-.5)*0.5,
+      kind: t<.4?'spiral': t<.7?'eye':'tri', jewel: Math.random()<.18});
+    if(elems.length>26) elems.shift();
+  }
+  function motif(ctx,e,a){
+    ctx.save();ctx.translate(e.x,e.y);ctx.rotate(e.rot);ctx.globalAlpha=a;
+    ctx.strokeStyle=GOLD;ctx.lineWidth=1.6;
+    if(e.kind==='spiral'){
+      ctx.beginPath();let r=1.5,an=0;
+      for(let k=0;k<40;k++){an+=0.45;r*=1.066;ctx.lineTo(Math.cos(an)*r,Math.sin(an)*r);}
+      ctx.strokeStyle=GOLD_HI;ctx.stroke();
+    }else if(e.kind==='eye'){
+      ctx.beginPath();ctx.ellipse(0,0,e.sz,e.sz*0.55,0,0,7);ctx.strokeStyle=GOLD;ctx.stroke();
+      ctx.beginPath();ctx.arc(0,0,e.sz*0.34,0,7);ctx.fillStyle=e.jewel?LAPIS:GOLD2;ctx.fill();
+      ctx.beginPath();ctx.arc(0,0,e.sz*0.14,0,7);ctx.fillStyle=GOLD_HI;ctx.fill();
+    }else{
+      const z=e.sz;
+      ctx.beginPath();ctx.moveTo(0,-z);ctx.lineTo(z*.86,z*.6);ctx.lineTo(-z*.86,z*.6);ctx.closePath();
+      ctx.fillStyle=e.jewel?VERM:goldGrad(ctx,0,0,z);ctx.globalAlpha=a*0.9;ctx.fill();
+      ctx.globalAlpha=a;ctx.strokeStyle=GOLD_HI;ctx.stroke();
+    }
+    ctx.restore();
+  }
+  let acc=0,last=performance.now();
+  function draw(now){
+    const dt=now-last;last=now;acc+=dt;
+    const ms=REDUCED?1600:560;
+    if(acc>ms){acc=0;spawn();}
+    S.ctx.clearRect(0,0,S.w,S.h);
+    for(const e of elems){
+      const age=(now-e.born)/e.life;
+      if(age>1){e.dead=true;continue;}
+      const fade=age<0.14?age/0.14:age>0.78?(1-age)/0.22:1;
+      if(!REDUCED) e.rot+=e.spin*0.016;
+      motif(S.ctx,e,Math.max(0,Math.min(1,fade))*0.95);
+    }
+    S.ctx.globalAlpha=1;
+    elems=elems.filter(e=>!e.dead);
+  }
+  for(let i=0;i<10;i++) spawn();
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#070502';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ for(let i=0;i<4;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

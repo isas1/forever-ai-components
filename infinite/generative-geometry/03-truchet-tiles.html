@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="8x8 grid of rainbow Truchet quarter-arc tiles that flip orientation in waves, weaving shifting interlocked curves.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Truchet Tiles</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1224}
+  #c{display:block;width:100%;height:100%}
+  #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
+       color:#ffb3e6;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">truchet tiles</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  let W,H,DPR,cells,n,cell,ox,oy,mouse=null;
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);build();}
+  function build(){
+    const s=Math.min(W,H);n=8;cell=s/n;ox=(W-s)/2;oy=(H-s)/2;
+    cells=[];for(let i=0;i<n*n;i++)cells.push({r:Math.random()<.5?0:1,a:Math.random()*Math.PI*2,sp:0.4+Math.random()*0.8,fl:Math.random()*6});
+  }
+  function draw(t){
+    ctx.fillStyle='#1a1224';ctx.fillRect(0,0,W,H);
+    ctx.lineWidth=Math.max(2,cell*0.16);ctx.lineCap='round';
+    for(let y=0;y<n;y++)for(let x=0;x<n;x++){
+      const c=cells[y*n+x];
+      const X=ox+x*cell,Y=oy+y*cell,r=cell/2;
+      const hue=(t*0.02+x*16+y*16)%360;
+      ctx.strokeStyle='hsl('+hue+',80%,65%)';
+      const flip=Math.sin(t*0.0007*c.sp+c.fl)>0?c.r:1-c.r;
+      ctx.beginPath();
+      if(flip===0){
+        ctx.arc(X,Y,r,0,Math.PI/2);
+        ctx.arc(X+cell,Y+cell,r,Math.PI,Math.PI*1.5);
+      }else{
+        ctx.arc(X+cell,Y,r,Math.PI/2,Math.PI);
+        ctx.arc(X,Y+cell,r,Math.PI*1.5,Math.PI*2);
+      }
+      ctx.stroke();
+    }
+  }
+  let raf;
+  function loop(t){if(!reduce)draw(t);raf=requestAnimationFrame(loop);}
+  function start(){cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+  addEventListener('resize',resize);
+  cv.addEventListener('pointerdown',e=>{
+    const r=cv.getBoundingClientRect();const px=(e.clientX-r.left-ox)/cell|0,py=(e.clientY-r.top-oy)/cell|0;
+    const i=py*n+px;if(cells[i])cells[i].r=1-cells[i].r;
+  });
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
+  resize();if(reduce)draw(0);else start();
+})();
+</script>
+</body>
+</html>

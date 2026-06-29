@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Chord diagram of eight ring nodes whose curved additive-blended ribbons continuously swell and shrink as relationship weights rebalance into">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chord Diagram</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0d12;overflow:hidden}
+  #ch02-stage{position:fixed;inset:0;display:block}
+  #ch02-c{width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ch02-stage" role="img" aria-label="A chord diagram: eight nodes arranged on a ring with curved ribbons connecting them. The ribbons swell and shrink as relationship weights continuously rebalance, revealing shifting alliances.">
+  <canvas id="ch02-c"></canvas>
+</div>
+<div class="cap">Chord Diagram</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('ch02-c');
+  var cx = cv.getContext('2d');
+  var stage = document.getElementById('ch02-stage');
+
+  // Bauhaus-adjacent palette anchored on the brand teal accent.
+  var PAL = ['#5ad1a0','#4aa3d6','#e6b450','#d96b6b','#9b7fd4','#5ad1a0','#4aa3d6','#e6b450'];
+  var N = 8;                 // node count
+  var GAP = 0.045;           // angular gap between arcs (rad)
+  var TAU = Math.PI*2;
+
+  // Synthetic relationship matrix (symmetric, no self-links).
+  var cur = new Float32Array(N*N);
+  var tgt = new Float32Array(N*N);
+  function seed(m, rnd){
+    for(var i=0;i<N;i++) for(var j=i+1;j<N;j++){
+      var v = Math.pow(rnd(),2.1)*((i+j)%3===0?1:0.55);
+      m[i*N+j]=v; m[j*N+i]=v;
+    }
+  }
+  var s=20240626;
+  function rng(){ s=(s*1664525+1013904223)>>>0; return s/4294967296; }
+  seed(cur,rng); seed(tgt,rng);
+
+  var W=0,H=0,cxp=0,cyp=0,R=0,RI=0,DPR=1;
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,W*DPR|0); cv.height=Math.max(1,H*DPR|0);
+    cx.setTransform(DPR,0,0,DPR,0,0);
+    cxp=W/2; cyp=H/2;
+    var m=Math.min(W,H);
+    R=m*0.40; RI=m*0.34;
+  }
+  resize();
+  window.addEventListener('resize',resize);
+
+  // Per-node arc geometry, recomputed each frame from current weights.
+  var sums=new Float32Array(N), a0=new Float32Array(N), a1=new Float32Array(N);
+  // Ribbon endpoint angle within a node's arc, by partner.
+  function layout(m){
+    var total=0,i,j;
+    for(i=0;i<N;i++){ var sm=0; for(j=0;j<N;j++) sm+=m[i*N+j]; sums[i]=sm; total+=sm; }
+    if(total<=0) total=1;
+    var avail=TAU - N*GAP, ang=-Math.PI/2;
+    for(i=0;i<N;i++){
+      var span=avail*(sums[i]/total);
+      a0[i]=ang; a1[i]=ang+span; ang+=span+GAP;
+    }
+  }
+
+  // Endpoint angle for the ribbon from node i toward node j (packed within arc i).
+  function endAngle(m,i,j){
+    var acc=0,k,sm=sums[i]||1;
+    for(k=0;k<N;k++){ if(k===j) break; acc+=m[i*N+k]; }
+    var lo=a0[i], hi=a1[i];
+    var f0=acc/sm, f1=(acc+m[i*N+j])/sm;
+    return [lo+(hi-lo)*f0, lo+(hi-lo)*f1];
+  }
+
+  function pt(ang,rad){ return [cxp+Math.cos(ang)*rad, cyp+Math.sin(ang)*rad]; }
+
+  function ribbon(a,b,c,d,col,alpha){
+    var p1=pt(a,RI), p2=pt(b,RI), p3=pt(c,RI), p4=pt(d,RI);
+    cx.beginPath();
+    cx.moveTo(p1[0],p1[1]);
+    cx.arc(cxp,cyp,RI,a,b);
+    cx.quadraticCurveTo(cxp,cyp,p3[0],p3[1]);
+    cx.arc(cxp,cyp,RI,c,d);
+    cx.quadraticCurveTo(cxp,cyp,p1[0],p1[1]);
+    cx.closePath();
+    cx.globalAlpha=alpha; cx.fillStyle=col; cx.fill();
+  }
+
+  var t=0, raf=0, running=true;
+
+  function frame(m){
+    cx.clearRect(0,0,W,H);
+    layout(m);
+    var i,j;
+    // Ribbons: draw each unordered pair once. Color by stronger endpoint.
+    cx.globalCompositeOperation='lighter';
+    for(i=0;i<N;i++){
+      for(j=i+1;j<N;j++){
+        var w=m[i*N+j];
+        if(w<0.004) continue;
+        var ei=endAngle(m,i,j);
+        var ej=endAngle(m,j,i);
+        var col=PAL[(i+j)%PAL.length];
+        var al=Math.min(0.5,0.10+w*0.9);
+        ribbon(ei[0],ei[1],ej[0],ej[1],col,al);
+      }
+    }
+    cx.globalCompositeOperation='source-over';
+    // Node arcs (the ring segments).
+    cx.globalAlpha=1; cx.lineCap='butt';
+    var lw=Math.max(4,Math.min(W,H)*0.022);
+    cx.lineWidth=lw;
+    for(i=0;i<N;i++){
+      cx.beginPath();
+      cx.arc(cxp,cyp,(R+RI)/2,a0[i],a1[i]);
+      cx.strokeStyle=PAL[i%PAL.length];
+      cx.stroke();
+    }
+  }
+
+  function step(){
+    if(!running) return;
+    raf=requestAnimationFrame(step);
+    t+=0.016;
+    // Ease current weights toward target; occasionally pick a new target.
+    var i,k=N*N;
+    for(i=0;i<k;i++) cur[i]+=(tgt[i]-cur[i])*0.018;
+    if(t>3.2){
+      t=0;
+      // Re-seed target symmetrically: shift alliances.
+      for(i=0;i<N;i++) for(var j2=i+1;j2<N;j2++){
+        var v=Math.pow(rng(),2.1)*((rng()<0.4)?1.0:0.4);
+        tgt[i*N+j2]=v; tgt[j2*N+i]=v;
+      }
+    }
+    frame(cur);
+  }
+
+  function drawStatic(){
+    // Settle to a balanced legible frame.
+    for(var i=0;i<N*N;i++) cur[i]=tgt[i];
+    frame(cur);
+  }
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf) cancelAnimationFrame(raf); }
+    else if(!reduce){ running=true; raf=requestAnimationFrame(step); }
+  });
+
+  if(reduce){ drawStatic(); return; }
+  raf=requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>

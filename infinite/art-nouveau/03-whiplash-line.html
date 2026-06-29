@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Paired S-curve whiplash ribbons in gold, sage and rose breathe and sway with five-petal rosette nodes on a dark ground.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Whiplash Line</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e1310;overflow:hidden}
+  #an03-stage{position:fixed;inset:0;width:100%;height:100%;display:block;
+    /* STATIC vignette + warm glow, never repainted in the loop */
+    background:
+      radial-gradient(120% 95% at 40% 22%, #1a241d 0%, #0e1310 58%, #080b09 100%);
+  }
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<canvas id="an03-stage" role="img"
+  aria-label="Art Nouveau whiplash lines: paired S-curves of gold, green and rose flowing and breathing in slow asymmetric arcs against a dark ground."></canvas>
+<div class="cap">Whiplash Line</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("an03-stage");
+  if(!cv||!cv.getContext)return;
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // ---- palette (Mucha/Horta era: muted gold, sage, rose, ivory) ----
+  var COLS=["#c9a24b","#e7c98f","#7e9c63","#b56a78","#d9c9a3"];
+
+  // ---- whiplash ribbons. Each is an S-curve described by control anchors;
+  //      we precompute static base points and breathe them with cached phase. ----
+  // anchors in normalized 0..1 space (asymmetric, flowing off-frame)
+  var RIB=[
+    {col:0, w:5.4, amp:0.052, sp:0.55, ph:0.0,  pts:[[-.05,1.08],[.34,.74],[.05,.46],[.46,.22],[.30,-.06]]},
+    {col:2, w:3.6, amp:0.046, sp:0.71, ph:1.7,  pts:[[1.06,1.05],[.66,.78],[.92,.50],[.55,.30],[.74,-.05]]},
+    {col:3, w:3.0, amp:0.060, sp:0.63, ph:3.1,  pts:[[-.04,.32],[.30,.40],[.20,.66],[.58,.74],[.52,1.05]]},
+    {col:1, w:1.7, amp:0.050, sp:0.58, ph:0.6,  pts:[[-.05,1.08],[.34,.74],[.05,.46],[.46,.22],[.30,-.06]]},
+    {col:4, w:1.5, amp:0.066, sp:0.80, ph:4.2,  pts:[[1.04,.10],[.70,.34],[.86,.60],[.52,.74],[.40,1.06]]}
+  ];
+  // small floral nodes that sit on a ribbon param t and pulse open (transform/opacity-safe analog)
+  var NODE=[
+    {rib:0,t:.18,r:7.0,col:0,ph:0.0},
+    {rib:0,t:.86,r:9.0,col:1,ph:2.3},
+    {rib:1,t:.30,r:6.0,col:3,ph:1.1},
+    {rib:2,t:.70,r:7.5,col:0,ph:3.4},
+    {rib:1,t:.92,r:5.2,col:4,ph:0.7}
+  ];
+
+  var W=0,H=0,S=0,dpr=1,running=true,raf=0,t0=0;
+
+  function size(){
+    var w=cv.clientWidth||window.innerWidth, h=cv.clientHeight||window.innerHeight;
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.max(1,Math.round(w*dpr));
+    cv.height=Math.max(1,Math.round(h*dpr));
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    W=w;H=h;S=Math.min(w,h); // scale ref so curves keep proportion at any size
+  }
+
+  // de Casteljau-ish: evaluate a smooth curve through anchors using
+  // Catmull-Rom -> point at param u (0..1) along the ribbon. Allocation-free.
+  function ptX(a,b,c,d,u){var u2=u*u,u3=u2*u;
+    return 0.5*((2*b)+(-a+c)*u+(2*a-5*b+4*c-d)*u2+(-a+3*b-3*c+d)*u3);}
+
+  // breathing offset for a ribbon, cached trig per call site
+  function draw(now){
+    if(!running)return;
+    var tt=(now-t0)/1000;
+    ctx.clearRect(0,0,W,H);
+    // map normalized x,y to pixels. xs centered, off-frame allowed.
+    var ox=(W-S)*0.5, oy=(H-S)*0.5, i, k;
+
+    for(i=0;i<RIB.length;i++){
+      var rb=RIB[i], pts=rb.pts, n=pts.length;
+      var col=COLS[rb.col];
+      var breathe=tt*rb.sp+rb.ph;
+      ctx.beginPath();
+      // sample the catmull-rom through anchors; breathe sideways along normal-ish wobble
+      var first=true, seg, lu, u, ax,ay,bx,by,cx,cy,dx,dy, px,py, ph;
+      for(seg=0;seg<n-1;seg++){
+        ax=pts[seg>0?seg-1:0][0]; ay=pts[seg>0?seg-1:0][1];
+        bx=pts[seg][0];           by=pts[seg][1];
+        cx=pts[seg+1][0];         cy=pts[seg+1][1];
+        dx=pts[seg+2<n?seg+2:n-1][0]; dy=pts[seg+2<n?seg+2:n-1][1];
+        for(k=0;k<=10;k++){
+          u=k/10;
+          // wobble phase rides up the curve for a travelling-breath feel
+          ph=breathe+(seg+u)*1.15;
+          var wob=Math.sin(ph)*rb.amp;
+          px=ptX(ax,bx,cx,dx,u)+wob;
+          py=ptX(ay,by,cy,dy,u)+Math.cos(ph*0.9)*rb.amp*0.5;
+          var X=ox+px*S, Y=oy+py*S;
+          if(first){ctx.moveTo(X,Y);first=false;}else{ctx.lineTo(X,Y);}
+        }
+      }
+      ctx.lineCap="round";ctx.lineJoin="round";
+      ctx.strokeStyle=col;
+      ctx.globalAlpha=rb.col===1||rb.col===4?0.7:0.95;
+      ctx.lineWidth=rb.w*(S/400);
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+
+    // floral nodes — pulse scale via radius (canvas redraw, not layout)
+    for(i=0;i<NODE.length;i++){
+      var nd=NODE[i], rb2=RIB[nd.rib], p2=rb2.pts, n2=p2.length;
+      // locate point at param t along ribbon (reuse same eval)
+      var ttot=(n2-1)*nd.t, segi=Math.min(n2-2,ttot|0), uu=ttot-segi;
+      var Ax=p2[segi>0?segi-1:0][0],Ay=p2[segi>0?segi-1:0][1];
+      var Bx=p2[segi][0],By=p2[segi][1];
+      var Cx=p2[segi+1][0],Cy=p2[segi+1][1];
+      var Dx=p2[segi+2<n2?segi+2:n2-1][0],Dy=p2[segi+2<n2?segi+2:n2-1][1];
+      var bre=tt*rb2.sp+rb2.ph+(segi+uu)*1.15;
+      var nx=ptX(Ax,Bx,Cx,Dx,uu)+Math.sin(bre)*rb2.amp;
+      var ny=ptX(Ay,By,Cy,Dy,uu)+Math.cos(bre*0.9)*rb2.amp*0.5;
+      var NX=ox+nx*S, NY=oy+ny*S;
+      var pulse=0.78+0.22*Math.sin(tt*1.1+nd.ph);
+      var R=nd.r*(S/400)*pulse;
+      // five-petal whiplash rosette
+      ctx.save();
+      ctx.translate(NX,NY);
+      ctx.rotate(tt*0.12+nd.ph);
+      ctx.fillStyle=COLS[nd.col];
+      ctx.globalAlpha=0.9;
+      for(k=0;k<5;k++){
+        var a0=(k/5)*Math.PI*2;
+        ctx.beginPath();
+        ctx.moveTo(0,0);
+        ctx.quadraticCurveTo(Math.cos(a0-0.5)*R*1.5,Math.sin(a0-0.5)*R*1.5,Math.cos(a0)*R,Math.sin(a0)*R);
+        ctx.quadraticCurveTo(Math.cos(a0+0.5)*R*1.5,Math.sin(a0+0.5)*R*1.5,0,0);
+        ctx.fill();
+      }
+      // core
+      ctx.globalAlpha=1;
+      ctx.fillStyle="#0e1310";
+      ctx.beginPath();ctx.arc(0,0,R*0.42,0,6.2832);ctx.fill();
+      ctx.fillStyle=COLS[1];
+      ctx.beginPath();ctx.arc(0,0,R*0.26,0,6.2832);ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha=1;
+    raf=requestAnimationFrame(draw);
+  }
+
+  function start(){t0=performance.now();running=true;raf=requestAnimationFrame(draw);}
+
+  size();
+  var rt=0;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);rt=setTimeout(function(){
+      size();
+      if(reduce){drawStatic();}
+    },120);
+  });
+
+  function drawStatic(){
+    // settle to one calm, fully-bloomed frame at a pleasing phase
+    running=false;cancelAnimationFrame(raf);
+    var saved=performance.now();
+    t0=saved-1400; // freeze at a phase where curves are open and balanced
+    running=true; draw(saved); running=false; cancelAnimationFrame(raf);
+  }
+
+  if(reduce){drawStatic();return;}
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){running=false;cancelAnimationFrame(raf);}
+    else if(!running){start();}
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>

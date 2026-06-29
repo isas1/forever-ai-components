@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Golden-angle phyllotaxis spiral of amber-gold seed dots grows outward and rotates from a glowing nucleus; pointer speeds the spin.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phyllotaxis Sunflower</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1206;}
+  #phs-c{display:block;width:100%;height:100%;}
+  .phs-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.12em;color:#ffc845;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="phs-c"></canvas>
+<div class="phs-cap">Phyllotaxis Sunflower</div>
+<script>
+(function(){
+  const cv=document.getElementById('phs-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const GA=Math.PI*(3-Math.sqrt(5)); // golden angle ~137.5deg
+  let W,H,DPR,cx,cy,R;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;R=Math.min(W,H)*0.46;
+    bgGrad=ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.25);
+    bgGrad.addColorStop(0,'#241808');bgGrad.addColorStop(.7,'#1a1206');bgGrad.addColorStop(1,'#120c04');
+  }
+  let bgGrad;
+  addEventListener('resize',size);size();
+  const N=620;          // florets on screen
+  const c=R/Math.sqrt(N);// Fermat spacing so outermost seed sits near rim
+  let t=0,boost=0,phase=0;
+  cv.addEventListener('pointermove',()=>{boost=1;});
+  cv.addEventListener('click',()=>{boost=1.6;});
+  // hue grades core(amber) -> rim(deep gold-orange); accent #ffc845
+  function seed(i,growth){
+    // i: floret index (0 = newest at core). f01: 0 core -> 1 rim
+    const idx=i+growth;                 // continuous index -> seeds drift outward
+    const f=idx/N;                      // normalized radial position
+    const rad=c*Math.sqrt(idx);         // Fermat spiral radius
+    const ang=idx*GA + phase;           // each seed turned by golden angle
+    const x=cx+Math.cos(ang)*rad, y=cy+Math.sin(ang)*rad;
+    return {x,y,f,rad};
+  }
+  function draw(growth){
+    // subtle radial vignette wash (gradient cached on resize)
+    ctx.fillStyle=bgGrad;ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    for(let i=N;i>=0;i--){
+      const s=seed(i,growth);
+      if(s.f>1.02)continue;
+      const f=Math.max(0,Math.min(1,s.f));
+      // size: small at core, swells mid, tapers at rim
+      const sz=(1.4+ (1-Math.abs(f-0.55))*5.6)*Math.min(W,H)/420 + 1.2;
+      // hue: 52 (pale gold) core -> 28 (amber-orange) rim
+      const hue=52-f*26;
+      const sat=70+f*20;
+      const lig=46+(1-f)*30;
+      const a=0.22+0.6*(1-Math.abs(f-0.5)*1.1);
+      // soft glow halo
+      ctx.beginPath();
+      ctx.fillStyle='hsla('+hue+','+sat+'%,'+lig+'%,'+(a*0.5)+')';
+      ctx.arc(s.x,s.y,sz*1.9,0,6.283);ctx.fill();
+      // crisp seed core
+      ctx.beginPath();
+      ctx.fillStyle='hsla('+hue+','+(sat+8)+'%,'+(lig+14)+'%,'+a+')';
+      ctx.arc(s.x,s.y,sz,0,6.283);ctx.fill();
+    }
+    // bright nucleus
+    ctx.beginPath();
+    ctx.fillStyle='rgba(255,200,69,0.9)';
+    ctx.arc(cx,cy,Math.min(W,H)/120,0,6.283);ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+  }
+  function frame(){
+    boost*=0.93;
+    t+=1;
+    // continuous outward growth + parastichy rotation
+    const growth=(t*0.10)%1;            // new seed born at core each ~10 frames
+    phase+=(0.0016+boost*0.01);         // spiral arms appear to turn
+    draw(growth);
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){draw(0);}else start();
+})();
+</script>
+</body>
+</html>

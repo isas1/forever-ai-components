@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="VHS head-switching dropout: a frayed hash-noise band along the bottom edge with rising scanline ghosts and snapping chroma-split desync line">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tape Head Switching Noise</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0c0c0c;}
+  #ths-c{display:block;width:100%;height:100%;}
+  .ths-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#c0c8ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="ths-c"></canvas>
+<div class="ths-cap">Tape Head Switching Noise</div>
+<script>
+(function(){
+  const cv=document.getElementById('ths-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR;
+  // dedicated low-res noise buffer (cheap turbulence-style hash)
+  const NW=240; let NH=1, noise, nbuf;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.imageSmoothingEnabled=false;
+    NH=Math.max(24,Math.round(H*0.34));
+    noise=document.createElement('canvas');noise.width=NW;noise.height=NH;
+    const nx=noise.getContext('2d');
+    nbuf=nx.createImageData(NW,NH);
+  }
+  addEventListener('resize',size);size();
+
+  // accent #c0c8ff -> 192,200,255
+  function paintNoise(t,boost){
+    const d=nbuf.data, A=NW*NH;
+    // horizontal "head-switching hash": rows have a random phase offset that
+    // makes hash streak sideways; brightness banded toward the very bottom.
+    for(let y=0;y<NH;y++){
+      const fy=y/NH;                              // 0 top .. 1 bottom
+      const tear=fy*fy;                           // hash density grows downward
+      const rowSeed=(y*2654435761>>>0)^((t*0.7|0)*40503>>>0);
+      const streak=Math.sin(y*0.7+t*0.18)*6|0;    // sideways desync per row
+      for(let x=0;x<NW;x++){
+        const i=(y*NW+x)<<2;
+        const sx=(x+streak+x*((y&1)*2))>>>0;
+        let h=((sx*374761393)^(rowSeed+ y*668265263))>>>0;
+        h^=h>>>13; h=(h*1274126177)>>>0; h^=h>>>16;
+        const r=(h&255)/255;
+        // gate: only some pixels light up, more near the bottom + flicker
+        const on=r < (0.10+tear*0.55+boost*0.25);
+        if(on){
+          const v=tear*(0.55+r*0.45);
+          d[i]  =192*v+ (235-192)*v*r;            // warm-cool tinted hash
+          d[i+1]=200*v;
+          d[i+2]=255*v;
+          d[i+3]=(150+r*105)*(0.45+tear*0.55);
+        } else { d[i]=d[i+1]=d[i+2]=d[i+3]=0; }
+      }
+    }
+    noise.getContext('2d').putImageData(nbuf,0,0);
+  }
+
+  let t=0,boost=0,raf=0,desync=0;
+  cv.addEventListener('pointermove',()=>{boost=Math.min(1.4,boost+0.5);});
+  cv.addEventListener('click',()=>{boost=1.4;desync=1;});
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    // base black already from bg; faint upward scanline ghosts drifting up
+    const band=NH/H*H; // px height of dropout band == NH scaled
+    const bandH=H*0.34;
+    const bandTop=H-bandH;
+
+    // --- drifting scanline ghosts above the band (rising desaturated lines) ---
+    ctx.globalCompositeOperation='lighter';
+    const gn=Math.min(7,Math.round(H/90));
+    for(let i=0;i<gn;i++){
+      const ph=(t*0.6+i*137)%(bandTop+40);
+      const y=bandTop-ph;                         // rises from band, upward
+      if(y<-2)continue;
+      const a=Math.max(0,(y/bandTop))*0.10;       // fades as it climbs
+      ctx.fillStyle='rgba(192,200,255,'+a.toFixed(3)+')';
+      ctx.fillRect(0,y,W, y>bandTop-6?2:1);
+    }
+    ctx.globalCompositeOperation='source-over';
+
+    // --- the head-switching hash band along the lower edge ---
+    paintNoise(t,boost);
+    // jitter the band horizontally (the slice that never settles)
+    const jx=(Math.sin(t*0.9)*3 + Math.sin(t*5.3)*2 + (Math.random()-0.5)*4*(0.4+desync))|0;
+    ctx.save();
+    ctx.translate(jx,0);
+    // ragged top edge: clip to a torn baseline so the band has a frayed top
+    ctx.beginPath();
+    const segs=Math.max(14,Math.round(W/14));
+    ctx.moveTo(-8,H+2);
+    for(let s=0;s<=segs;s++){
+      const x=-8+(W+16)*s/segs;
+      const r=((s*2246822519)^((t*1.3|0)*3266489917))>>>0;
+      const frill=(r&31)/31;                      // 0..1 tear depth
+      const yy=bandTop + (8 - frill*22) - Math.sin(s*1.7+t*0.4)*3;
+      ctx.lineTo(x,yy);
+    }
+    ctx.lineTo(W+8,H+2);
+    ctx.closePath();ctx.clip();
+    ctx.drawImage(noise,0,bandTop,W,bandH);
+    // a second, offset hash layer for density + chroma fringe (cyan/violet)
+    ctx.globalAlpha=0.5;ctx.globalCompositeOperation='lighter';
+    ctx.drawImage(noise,2,bandTop-1,W,bandH);
+    ctx.restore();
+    ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+
+    // --- the flickering desync slice: a single bright torn line that snaps ---
+    const sliceY=bandTop + (Math.sin(t*0.23)*0.5+0.5)*(bandH*0.5) - 4;
+    const snap=( (t*7|0) % 13 ===0 )?1:0;
+    const sh=2+snap*5+desync*6;
+    const so=(Math.sin(t*11)*W*0.06)+(snap?(Math.random()-0.5)*W*0.5:0);
+    ctx.globalCompositeOperation='lighter';
+    const grad=ctx.createLinearGradient(0,sliceY,0,sliceY+sh);
+    grad.addColorStop(0,'rgba(192,200,255,0)');
+    grad.addColorStop(.5,'rgba(220,225,255,'+(0.55+snap*0.3).toFixed(2)+')');
+    grad.addColorStop(1,'rgba(160,170,255,0)');
+    ctx.fillStyle=grad;
+    ctx.fillRect(so,sliceY,W*1.2,sh);
+    // chroma-split echoes of the slice
+    ctx.fillStyle='rgba(120,255,230,0.18)';ctx.fillRect(so-3,sliceY,W*1.2,sh*0.6);
+    ctx.fillStyle='rgba(255,120,200,0.16)';ctx.fillRect(so+3,sliceY+1,W*1.2,sh*0.6);
+    ctx.globalCompositeOperation='source-over';
+
+    // thin bright fray line accenting the torn top edge
+    ctx.strokeStyle='rgba(192,200,255,0.22)';ctx.lineWidth=1;
+    ctx.beginPath();
+    for(let s=0;s<=segs;s++){
+      const x=(W)*s/segs;
+      const r=((s*2246822519)^((t*1.3|0)*3266489917))>>>0;
+      const frill=(r&31)/31;
+      const yy=bandTop + (8 - frill*22) - Math.sin(s*1.7+t*0.4)*3;
+      s?ctx.lineTo(x+jx,yy):ctx.moveTo(x+jx,yy);
+    }
+    ctx.stroke();
+  }
+
+  function frame(){
+    t+=1; boost*=0.93; desync*=0.92;
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=42;draw();}else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Stylized Japanese woodblock cresting wave with curling foam claws over an indigo sea, a Fuji-like cone, cream sky and low coral sun.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wave Crest</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  #uk01-stage{position:fixed;inset:0;width:100%;height:100%}
+  #uk01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .uk01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){#uk01-stage,.uk01-cap{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="uk01-stage" role="img" aria-label="A stylised Japanese woodblock cresting wave with curling foam fingers over an indigo sea, a pale cream sky, and a low coral sun.">
+  <canvas id="uk01-c"></canvas>
+</div>
+<div class="uk01-cap">Wave Crest</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("uk01-c"), ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,dpr=1,running=false,raf=0,t=0;
+
+  // palette
+  var INDIGO="#1c3a5e", DEEP="#102438", SEA="#2f5e86", FOAM="#f3ead4",
+      CREAM="#e8d5b0", SKY="#f0e3c6", CORAL="#d96a4a", INK="#0c151f", SUN="#e89a6a";
+
+  // foam fingers along the crest: position 0..1 + phase
+  var N=11, fx=new Float32Array(N), fph=new Float32Array(N), fln=new Float32Array(N);
+  for(var i=0;i<N;i++){fx[i]=0.07+i*(0.86/(N-1));fph[i]=i*0.9;fln[i]=0.55+(i%3)*0.18;}
+
+  function resize(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  // a smooth crest baseline; returns y for a given normalized x
+  function crestY(nx,tt){
+    var base=H*0.46;
+    var swell=Math.sin(nx*3.1+tt*0.9)*H*0.05;
+    var lift=Math.exp(-Math.pow((nx-0.42),2)*9)* -H*0.20; // the rising crest
+    return base+swell+lift;
+  }
+
+  function drawSky(){
+    // bokashi gradient cream->sky
+    var g=ctx.createLinearGradient(0,0,0,H*0.55);
+    g.addColorStop(0,SKY); g.addColorStop(1,CREAM);
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H*0.6);
+    // low coral sun, flat disc
+    ctx.fillStyle=SUN;
+    ctx.beginPath(); ctx.arc(W*0.76,H*0.27,Math.min(W,H)*0.11,0,6.2832); ctx.fill();
+    ctx.fillStyle=CORAL; ctx.globalAlpha=.5;
+    ctx.beginPath(); ctx.arc(W*0.76,H*0.27,Math.min(W,H)*0.075,0,6.2832); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  // distant Fuji-like cone behind the swell
+  function drawCone(){
+    var cx=W*0.30, peak=H*0.34, bw=W*0.26, bot=H*0.46;
+    ctx.fillStyle=DEEP;
+    ctx.beginPath();
+    ctx.moveTo(cx-bw,bot); ctx.lineTo(cx,peak); ctx.lineTo(cx+bw,bot); ctx.closePath(); ctx.fill();
+    // snow cap, flat plane
+    ctx.fillStyle=FOAM;
+    ctx.beginPath();
+    ctx.moveTo(cx-bw*0.22,peak+H*0.045);
+    ctx.lineTo(cx,peak);
+    ctx.lineTo(cx+bw*0.22,peak+H*0.045);
+    ctx.lineTo(cx+bw*0.10,peak+H*0.028);
+    ctx.lineTo(cx,peak+H*0.052);
+    ctx.lineTo(cx-bw*0.10,peak+H*0.028);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function frame(tt){
+    // sea body: filled region under crest curve
+    ctx.beginPath();
+    ctx.moveTo(0,H);
+    var nx,x,y,steps=34,k;
+    for(k=0;k<=steps;k++){nx=k/steps; x=nx*W; y=crestY(nx,tt); ctx.lineTo(x,y);}
+    ctx.lineTo(W,H); ctx.closePath();
+    var sg=ctx.createLinearGradient(0,H*0.3,0,H);
+    sg.addColorStop(0,SEA); sg.addColorStop(0.5,INDIGO); sg.addColorStop(1,DEEP);
+    ctx.fillStyle=sg; ctx.fill();
+
+    // bold ink outline of crest
+    ctx.lineJoin="round"; ctx.lineCap="round";
+    ctx.strokeStyle=INK; ctx.lineWidth=Math.max(2,Math.min(W,H)*0.012);
+    ctx.beginPath();
+    for(k=0;k<=steps;k++){nx=k/steps;x=nx*W;y=crestY(nx,tt); if(k===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+    ctx.stroke();
+
+    // foam fingers curling at the crest peak
+    var i,bx,by,curl,fw=Math.max(2,Math.min(W,H)*0.009);
+    ctx.lineWidth=fw; ctx.strokeStyle=FOAM;
+    for(i=0;i<N;i++){
+      nx=fx[i]; bx=nx*W; by=crestY(nx,tt);
+      // intensity peaks near the crest (nx~0.42)
+      var amp=Math.exp(-Math.pow((nx-0.42),2)*7);
+      if(amp<0.06) continue;
+      curl=(Math.sin(tt*1.4+fph[i])*0.5+0.5);
+      var len=fln[i]*amp*H*0.16*(0.6+curl*0.7);
+      // a curling claw: control points spiral
+      ctx.beginPath();
+      ctx.moveTo(bx,by);
+      var c1x=bx+len*0.2, c1y=by-len*0.9;
+      var c2x=bx+len*(0.9+curl*0.5), c2y=by-len*(0.55);
+      var ex=bx+len*(1.0+curl*0.6), ey=by-len*0.15+ curl*len*0.2;
+      ctx.bezierCurveTo(c1x,c1y,c2x,c2y,ex,ey);
+      ctx.stroke();
+      // foam bead at tip, flat dot
+      ctx.fillStyle=FOAM;
+      ctx.beginPath(); ctx.arc(ex,ey,fw*1.4,0,6.2832); ctx.fill();
+    }
+
+    // scatter foam dots along crest (static-count, deterministic)
+    ctx.fillStyle=FOAM;
+    for(i=0;i<N;i++){
+      nx=fx[i]+0.03; bx=nx*W; by=crestY(nx,tt)+ (Math.sin(tt+fph[i])* H*0.012);
+      var a2=Math.exp(-Math.pow((nx-0.42),2)*8);
+      if(a2<0.1) continue;
+      ctx.globalAlpha=a2*0.9;
+      ctx.beginPath(); ctx.arc(bx,by-H*0.02,fw*0.9,0,6.2832); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    drawSky(); drawCone(); frame(t);
+  }
+
+  function loop(){
+    if(!running) return;
+    t+=0.016;
+    render();
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){ if(running)return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    resize();
+    if(reduce){ t=0.9; render(); return; }
+    start();
+  }
+
+  window.addEventListener("resize",function(){ resize(); if(reduce)render(); },{passive:true});
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

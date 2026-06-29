@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Financial candlestick chart: green and red OHLC candles stream in from the right over a faint grid, with a dashed last-price marker tracing">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Candlesticks</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0d12;overflow:hidden}
+  #ch04-stage{position:fixed;inset:0;width:100%;height:100%}
+  #ch04-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ch04-stage" role="img" aria-label="An animated financial candlestick chart. Green and red candles stream in from the right, each showing open, high, low and close with thin wicks, tracing a rising and falling price series against a faint grid.">
+  <canvas id="ch04-c"></canvas>
+</div>
+<div class="cap">Candlesticks</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('ch04-c');
+  var ctx = cv.getContext('2d');
+  var stage = document.getElementById('ch04-stage');
+
+  // palette around #5ad1a0
+  var UP = '#5ad1a0', UPW = '#8fe7c4', DN = '#e0607a', DNW = '#f29bac', GRID = 'rgba(120,150,170,0.10)', AXIS = 'rgba(120,150,170,0.22)';
+
+  var W=0,H=0,dpr=1,pad=0,plotW=0,plotH=0,plotY=0;
+  var N = 26;                 // visible candles
+  var slot=0, bw=0, gap=0;
+  // OHLC typed arrays (one extra for the incoming candle pipeline)
+  var CAP = N+2;
+  var o=new Float32Array(CAP),h=new Float32Array(CAP),l=new Float32Array(CAP),c=new Float32Array(CAP);
+  var lo=0, hi=1;             // price range for scaling
+  var price=0, count=0;
+  var seed=20240626;
+  function rnd(){ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }
+
+  function genCandle(open){
+    // synthetic random-walk OHLC with momentum
+    var drift=(rnd()-0.47)*0.9;
+    var vol=0.5+rnd()*1.6;
+    var close=open+drift*vol;
+    var hh=Math.max(open,close)+rnd()*vol*0.9;
+    var ll=Math.min(open,close)-rnd()*vol*0.9;
+    return {o:open,h:hh,l:ll,c:close};
+  }
+
+  function pushCandle(){
+    // shift left
+    for(var i=0;i<CAP-1;i++){o[i]=o[i+1];h[i]=h[i+1];l[i]=l[i+1];c[i]=c[i+1];}
+    var g=genCandle(price);
+    o[CAP-1]=g.o;h[CAP-1]=g.h;l[CAP-1]=g.l;c[CAP-1]=g.c;
+    price=g.c; count++;
+  }
+
+  function seedSeries(){
+    price=50;
+    for(var i=0;i<CAP;i++){var g=genCandle(price);o[i]=g.o;h[i]=g.h;l[i]=g.l;c[i]=g.c;price=g.c;}
+  }
+
+  function resize(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    pad=Math.max(10,Math.min(W,H)*0.06);
+    plotW=W-pad*2; plotH=H-pad*2; plotY=pad;
+    slot=plotW/N;
+    bw=Math.max(2,slot*0.56);
+    gap=slot;
+  }
+
+  function priceRange(){
+    var mn=1e9,mx=-1e9;
+    for(var i=1;i<CAP;i++){ if(l[i]<mn)mn=l[i]; if(h[i]>mx)mx=h[i]; }
+    var m=(mx-mn)*0.12+0.001;
+    lo=mn-m; hi=mx+m;
+  }
+  function Y(v){ return plotY+plotH-((v-lo)/(hi-lo))*plotH; }
+
+  function drawGrid(){
+    ctx.lineWidth=1;
+    ctx.strokeStyle=GRID;
+    ctx.beginPath();
+    var rows=4;
+    for(var r=0;r<=rows;r++){ var yy=plotY+(plotH/rows)*r; ctx.moveTo(pad,yy); ctx.lineTo(W-pad,yy); }
+    ctx.stroke();
+    // baseline axis
+    ctx.strokeStyle=AXIS; ctx.beginPath();
+    ctx.moveTo(pad,plotY+plotH); ctx.lineTo(W-pad,plotY+plotH); ctx.stroke();
+  }
+
+  // animation: newest candle slides + grows; whole series glides one slot on each push
+  var slideT=0;               // 0..1 progress of the current slot-shift
+  var slideDur=1100;          // ms per candle
+  var last=0, running=true, raf=0;
+
+  function drawCandle(idx, x, grow){
+    var oo=o[idx], hh=h[idx], ll=l[idx], cc=c[idx];
+    var up=cc>=oo;
+    var bodyCol=up?UP:DN, wickCol=up?UPW:DNW;
+    var yO=Y(oo), yC=Y(cc), yH=Y(hh), yL=Y(ll);
+    var top=Math.min(yO,yC), bot=Math.max(yO,yC);
+    var bodyH=Math.max(1.4,bot-top);
+    // grow factor animates body+wick height from close pivot for the incoming candle
+    var piv=yC;
+    if(grow<1){
+      yH=piv+(yH-piv)*grow; yL=piv+(yL-piv)*grow;
+      top=piv+(top-piv)*grow; bot=piv+(bot-piv)*grow;
+      bodyH=Math.max(0.6,bot-top);
+    }
+    var cx=x+bw/2;
+    // wick
+    ctx.strokeStyle=wickCol; ctx.lineWidth=Math.max(1,bw*0.16);
+    ctx.beginPath(); ctx.moveTo(cx,yH); ctx.lineTo(cx,yL); ctx.stroke();
+    // body
+    ctx.fillStyle=bodyCol;
+    ctx.globalAlpha=grow<1?(0.4+0.6*grow):1;
+    ctx.fillRect(x,top,bw,bodyH);
+    ctx.globalAlpha=1;
+  }
+
+  function frame(now){
+    if(!running) return;
+    var dt=now-last; last=now;
+    slideT += dt/slideDur;
+    while(slideT>=1){ slideT-=1; pushCandle(); }
+    priceRange();
+
+    ctx.clearRect(0,0,W,H);
+    drawGrid();
+
+    // horizontal shift in px for smooth streaming
+    var shift=slideT*slot;
+    // draw the visible window indices 1..N (index 0 scrolls out, CAP-1 is incoming)
+    for(var k=0;k<=N;k++){
+      var idx=k+1;            // candle data index
+      var x=pad + k*slot - shift + (slot-bw)/2;
+      if(x+bw< pad-1 || x> W-pad+1) continue;
+      var grow=1;
+      if(idx===CAP-1){ grow=Math.min(1,slideT*1.6); } // newest grows in
+      // edge fade as candles leave/enter
+      var a=1;
+      if(x< pad) a=Math.max(0,(x+bw-pad)/bw);
+      drawCandle(idx,x,grow*Math.max(0.0001,a===1?1:a));
+    }
+
+    // last-price marker line
+    var yp=Y(c[CAP-2]);
+    ctx.strokeStyle='rgba(90,209,160,0.30)'; ctx.lineWidth=1;
+    ctx.setLineDash([4,5]);
+    ctx.beginPath(); ctx.moveTo(pad,yp); ctx.lineTo(W-pad,yp); ctx.stroke();
+    ctx.setLineDash([]);
+
+    raf=requestAnimationFrame(frame);
+  }
+
+  function drawOneFrame(){
+    priceRange();
+    ctx.clearRect(0,0,W,H);
+    drawGrid();
+    for(var k=0;k<N;k++){
+      var idx=k+1;
+      var x=pad + k*slot + (slot-bw)/2;
+      drawCandle(idx,x,1);
+    }
+    var yp=Y(c[N]);
+    ctx.strokeStyle='rgba(90,209,160,0.30)'; ctx.lineWidth=1;
+    ctx.setLineDash([4,5]);
+    ctx.beginPath(); ctx.moveTo(pad,yp); ctx.lineTo(W-pad,yp); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function start(){
+    if(reduce){ drawOneFrame(); return; }
+    last=performance.now(); running=true; raf=requestAnimationFrame(frame);
+  }
+
+  seedSeries(); resize();
+
+  window.addEventListener('resize', function(){ resize(); if(reduce)drawOneFrame(); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){
+    if(reduce) return;
+    if(document.hidden){ running=false; cancelAnimationFrame(raf); }
+    else if(!running){ last=performance.now(); running=true; raf=requestAnimationFrame(frame); }
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>

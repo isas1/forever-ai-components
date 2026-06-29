@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Interlocking primary-colored discs, square plates and triangle vanes turn like a precise meshing machine linked by black levers.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mechanical Ballet</title>
+<style>
+  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  #bh08-stage{position:fixed;inset:0;display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<canvas id="bh08-stage" role="img" aria-label="Mechanical Ballet: interlocking discs and levers of Bauhaus primary shapes turning like a precise machine"></canvas>
+<div class="cap">Mechanical Ballet</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("bh08-stage"),ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  // Bauhaus primary palette
+  var RED="#e63329",BLUE="#1f4ea8",YEL="#f2c200",BLK="#0a0a0c",OFF="#ece6d8";
+  var W=0,H=0,S=0,cx=0,cy=0,DPR=1;
+
+  // Gear/lever rig: each node is a rotating hub carrying primary-shape arms.
+  // hubs mesh by ratio so the whole thing reads as one machine.
+  // type: 0 disc(circle), 1 square plate, 2 triangle vane
+  var rig=[
+    {x:-0.26,y:-0.14,r:0.20,sp:1.0,ph:0.0, col:RED, arm:2, arms:3, hubc:OFF},
+    {x: 0.22,y:-0.20,r:0.135,sp:-1.48,ph:0.6,col:BLUE,arm:1, arms:4, hubc:YEL},
+    {x: 0.02,y: 0.10,r:0.16,sp:0.66,ph:1.7, col:YEL, arm:0, arms:5, hubc:RED},
+    {x:-0.30,y: 0.26,r:0.10,sp:-2.0,ph:0.2, col:BLUE,arm:2, arms:3, hubc:OFF},
+    {x: 0.34,y: 0.22,r:0.105,sp:1.9,ph:1.1, col:RED, arm:1, arms:4, hubc:YEL}
+  ];
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);cx=W/2;cy=H/2;
+  }
+
+  // draw a primary-shape arm of length L, half-width hw, at given color
+  function vane(type,L,hw,col){
+    ctx.fillStyle=col;
+    if(type===0){ // circle terminal on a thin stem
+      ctx.fillRect(0,-hw*0.34,L*0.7,hw*0.68);
+      ctx.beginPath();ctx.arc(L,0,hw*0.95,0,6.2832);ctx.fill();
+    }else if(type===1){ // square plate
+      ctx.fillRect(0,-hw*0.5,L,hw);
+      ctx.fillStyle=BLK;
+      ctx.fillRect(L-hw*0.9,-hw*0.32,hw*0.64,hw*0.64);
+    }else{ // triangle vane
+      ctx.beginPath();
+      ctx.moveTo(0,-hw*0.55);ctx.lineTo(0,hw*0.55);ctx.lineTo(L,0);
+      ctx.closePath();ctx.fill();
+    }
+  }
+
+  function hub(n,t){
+    var px=cx+n.x*S, py=cy+n.y*S, R=n.r*S;
+    var ang=n.ph+ (reduce?0.7:t*n.sp*0.9);
+    // back ring (static-weight disc, primary color, off-dark cut)
+    ctx.save();
+    ctx.translate(px,py);
+    // base disc
+    ctx.beginPath();ctx.arc(0,0,R,0,6.2832);
+    ctx.fillStyle=n.col;ctx.fill();
+    // inner cut for mechanical depth
+    ctx.beginPath();ctx.arc(0,0,R*0.62,0,6.2832);
+    ctx.fillStyle=BLK;ctx.fill();
+    // rotating arms
+    ctx.save();
+    ctx.rotate(ang);
+    var i,a,step=6.2832/n.arms, L=R*1.02, hw=R*0.30;
+    for(i=0;i<n.arms;i++){
+      ctx.save();
+      ctx.rotate(i*step);
+      vane(n.arm,L,hw,n.col);
+      ctx.restore();
+    }
+    ctx.restore();
+    // center cap (counter-rotating accent square)
+    ctx.save();
+    ctx.rotate(-ang*0.6);
+    ctx.fillStyle=n.hubc;
+    var c=R*0.30;
+    ctx.fillRect(-c,-c,c*2,c*2);
+    ctx.restore();
+    // bolt
+    ctx.beginPath();ctx.arc(0,0,R*0.10,0,6.2832);ctx.fillStyle=BLK;ctx.fill();
+    ctx.restore();
+    return {px:px,py:py,R:R,ang:ang};
+  }
+
+  // connecting levers between hub centers — rhythm lines of the machine
+  function lever(ax,ay,bx,by,col,w){
+    var dx=bx-ax,dy=by-ay,d=Math.hypot(dx,dy);
+    if(d<0.0001)return;
+    ctx.save();
+    ctx.translate(ax,ay);ctx.rotate(Math.atan2(dy,dx));
+    ctx.fillStyle=col;
+    ctx.fillRect(0,-w/2,d,w);
+    ctx.fillStyle=BLK;
+    ctx.fillRect(d*0.5-w*0.7,-w*0.7,w*1.4,w*1.4);
+    ctx.restore();
+  }
+
+  function frame(t){
+    ctx.fillStyle="#101012";ctx.fillRect(0,0,W,H);
+    // composition frame band (Bauhaus modular margin)
+    var m=S*0.045;
+    ctx.fillStyle=OFF;ctx.fillRect(m,m,W-2*m,S*0.012);
+    ctx.fillStyle=RED;ctx.fillRect(W-m-S*0.10,H-m-S*0.012,S*0.10,S*0.012);
+
+    var lw=S*0.022;
+    // levers first (under hubs)
+    lever(cx+rig[0].x*S,cy+rig[0].y*S, cx+rig[2].x*S,cy+rig[2].y*S, OFF,lw);
+    lever(cx+rig[2].x*S,cy+rig[2].y*S, cx+rig[1].x*S,cy+rig[1].y*S, OFF,lw);
+    lever(cx+rig[3].x*S,cy+rig[3].y*S, cx+rig[2].x*S,cy+rig[2].y*S, BLUE,lw*0.8);
+    lever(cx+rig[4].x*S,cy+rig[4].y*S, cx+rig[1].x*S,cy+rig[1].y*S, YEL,lw*0.8);
+
+    var i;
+    for(i=0;i<rig.length;i++) hub(rig[i],t);
+  }
+
+  var running=true,raf=0,t0=0;
+  function loop(now){
+    if(!running)return;
+    if(!t0)t0=now;
+    frame((now-t0)/1000);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){
+    if(reduce){frame(0);return;}
+    running=true;t0=0;raf=requestAnimationFrame(loop);
+  }
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden)stop();else start();
+  });
+  window.addEventListener("resize",function(){size();if(reduce)frame(0);});
+
+  size();start();
+})();
+</script>
+</body>
+</html>

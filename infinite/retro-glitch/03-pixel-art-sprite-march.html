@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Pixelated two-frame 8x8 sprites march in colored rows across a scrolling starfield over a purple ground, pointer controls speed.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pixel-art sprite march</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1030}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{width:100%;height:100%;display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,Menlo,monospace;
+    color:#ffd23f;opacity:.4;letter-spacing:.5px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div class="cap">SPRITE MARCH</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+let W,H,t=0,raf,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){W=c.width=160;H=c.height=160;}
+size();x.imageSmoothingEnabled=false;
+// 8x8 sprite, two frames (legs)
+const A=["..AA....",".AAAA...","..AA....",".BAAB...","BBAAAB..",".B.AB...","..A.A...",".A...A.."];
+const B=["..AA....",".AAAA...","..AA....","BBAAAB..",".BAAB...","..AAB...",".A..A...","A....A.."];
+const pal={A:'#ffd23f',B:'#ff5f8f'};
+const rows=[{col:'#ff5f8f',y:0.30,sp:1.0,off:0},
+            {col:'#3fe0ff',y:0.52,sp:1.4,off:30},
+            {col:'#7dff7d',y:0.74,sp:0.8,off:60}];
+function sprite(px,py,sc,frame,tint){
+  const g=frame?B:A;
+  for(let r=0;r<8;r++)for(let col=0;col<8;col++){
+    const ch=g[r][col];if(ch==='.')continue;
+    x.fillStyle=ch==='A'?tint:pal.B;
+    x.fillRect(px+col*sc,py+r*sc,sc,sc);
+  }
+}
+function draw(){
+  // starfield bg
+  x.fillStyle='#1a1030';x.fillRect(0,0,W,H);
+  x.fillStyle='#3a2a5a';
+  for(let i=0;i<40;i++){const sx=(i*53)%W,sy=(i*97+Math.floor(t*4))%H;x.fillRect(sx,sy,2,2);}
+  // ground
+  x.fillStyle='#2a1d44';x.fillRect(0,H*0.88,W,H*0.12);
+  const sc=2,spw=8*sc;
+  for(const row of rows){
+    const py=H*row.y;
+    const frame=Math.floor(t*6*row.sp)%2;
+    const span=spw+18;
+    const base=((t*22*row.sp+row.off)%(W+span))-span;
+    for(let k=-1;k<4;k++){
+      const px=base+k*(span);
+      sprite(px,py+ (frame?-2:0),sc,frame,row.col);
+    }
+  }
+  t+=reduce?0:0.03;
+  raf=requestAnimationFrame(draw);
+}
+function play(){cancelAnimationFrame(raf);draw();}
+document.addEventListener('visibilitychange',()=>document.hidden?cancelAnimationFrame(raf):play());
+addEventListener('pointermove',e=>{rows.forEach(r=>r.sp=0.6+ (e.clientX/innerWidth)*1.6);});
+play();
+</script>
+</body>
+</html>

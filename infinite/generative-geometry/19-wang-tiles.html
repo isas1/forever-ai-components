@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Aperiodic Wang-tile mosaic of four-wedge tiles that domino-flip into place in a cascade with seam-matching glow on warm earth tones.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wang Tiles</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1c1014;}
+  #wt-c{display:block;width:100%;height:100%;}
+  .wt-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#e8643c;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="wt-c"></canvas>
+<div class="wt-cap">Wang Tiles</div>
+<script>
+(function(){
+  const cv=document.getElementById('wt-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Four edge colours (the tile-set alphabet). Order: top,right,bottom,left.
+  const PAL=['#e8643c','#f0a85a','#5fa8a0','#7a3b52'],K=4;
+  // Complete Wang tile set: derive right/bottom from (top,left) so EVERY
+  // (top,left) pair has exactly one tile -> placement never fails, seams always match.
+  const SET=[];
+  for(let top=0;top<K;top++)for(let left=0;left<K;left++){
+    SET.push([top,(top+left+1)%K,(top*2+left+2)%K,left]);
+  }
+  function findTile(top,left){
+    const cand=[];
+    for(let i=0;i<SET.length;i++)
+      if((top<0||SET[i][0]===top)&&(left<0||SET[i][3]===left))cand.push(i);
+    // unconstrained first row/col -> random; otherwise the unique match
+    return cand[(Math.random()*cand.length)|0];
+  }
+  let W,H,DPR,cols,rows,S,ox,oy,grid;
+  function build(){
+    grid=[];
+    for(let r=0;r<rows;r++){grid[r]=[];for(let c=0;c<cols;c++){
+      const top=r>0?SET[grid[r-1][c].t][2]:-1, left=c>0?SET[grid[r][c-1].t][1]:-1;
+      grid[r][c]={t:findTile(top,left),born:(r+c)*0.85+Math.random()*0.3};
+    }}
+  }
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    const m=Math.min(W,H);
+    S=Math.max(34,Math.round(m/6));            // tile size scales with frame
+    cols=Math.ceil(W/S)+1;rows=Math.ceil(H/S)+1;
+    ox=(W-cols*S)/2;oy=(H-rows*S)/2;
+    build();
+  }
+  addEventListener('resize',size);size();
+
+  // draw one edge wedge: triangle from tile centre out to an edge, coloured by edge.
+  function wedge(x,y,s,ci,colIdx){
+    const cx=x+s/2,cy=y+s/2;
+    const pts=[[x,y],[x+s,y],[x+s,y+s],[x,y+s]];
+    const edges=[[0,1],[1,2],[2,3],[3,0]]; // top,right,bottom,left
+    const [a,b]=edges[ci];
+    ctx.beginPath();ctx.moveTo(cx,cy);
+    ctx.lineTo(pts[a][0],pts[a][1]);ctx.lineTo(pts[b][0],pts[b][1]);ctx.closePath();
+    ctx.fillStyle=PAL[colIdx];ctx.fill();
+  }
+
+  let t=0,raf=0,cycle=0,nudge=0;
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.4,6);});
+  cv.addEventListener('click',()=>{cycle=999;});
+
+  function frame(){
+    t+=reduce?0:(0.022+nudge*0.01);nudge*=0.92;
+    ctx.fillStyle='#1c1014';ctx.fillRect(0,0,W,H);
+    const wave=t*1.0; // cascade front sweeps across the grid
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      const cell=grid[r][c];
+      let p=reduce?1:(wave-cell.born);          // local progress 0..1+
+      p=Math.max(0,Math.min(1,p));
+      if(p<=0)continue;
+      const e=1-Math.pow(1-p,3);                 // ease-out
+      const x=ox+c*S,y=oy+r*S;
+      // domino-flip: scaleY from 0->1 with slight overshoot, dim->lit
+      const flip=Math.sin(Math.min(p,1)*Math.PI*0.5);
+      const sy=flip, alpha=0.25+0.75*e;
+      ctx.save();
+      ctx.translate(x+S/2,y+S/2);ctx.scale(1,Math.max(0.02,sy));ctx.translate(-(x+S/2),-(y+S/2));
+      ctx.globalAlpha=alpha;
+      const gap=1.2;
+      for(let ci=0;ci<4;ci++) wedge(x+gap,y+gap,S-gap*2,ci,SET[cell.t][ci]);
+      // centre stud
+      ctx.globalAlpha=alpha*0.9;
+      ctx.fillStyle='#1c1014';
+      ctx.beginPath();ctx.arc(x+S/2,y+S/2,S*0.07,0,Math.PI*2);ctx.fill();
+      ctx.restore();
+      // seam glow: when a tile has just landed, light the matching edges it shares
+      const glow=Math.max(0,1-(wave-cell.born-1.0)); // fades ~1s after landing
+      if(glow>0&&p>=1&&!reduce){
+        ctx.globalAlpha=glow*0.9;ctx.lineWidth=2.2;
+        // right seam shared with c+1 (same colour by construction)
+        if(c<cols-1){ctx.strokeStyle=PAL[SET[cell.t][1]];
+          ctx.beginPath();ctx.moveTo(x+S,y+2);ctx.lineTo(x+S,y+S-2);ctx.stroke();}
+        // bottom seam shared with r+1
+        if(r<rows-1){ctx.strokeStyle=PAL[SET[cell.t][2]];
+          ctx.beginPath();ctx.moveTo(x+2,y+S);ctx.lineTo(x+S-2,y+S);ctx.stroke();}
+      }
+    }
+    ctx.globalAlpha=1;
+    // when the cascade has fully swept the grid, regenerate a fresh aperiodic mosaic
+    if(!reduce&&(wave>(cols+rows)*0.85+3.2||cycle>500)){t=0;cycle=0;build();}
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=9999;frame();}else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cadmium Gourd Stripes — Infinitude. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cadmium Gourd Stripes</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0608;overflow:hidden}
+  #dot07-stage{position:fixed;inset:0;width:100%;height:100%}
+  #dot07-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .dot07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#0a0608;opacity:.6;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="dot07-stage" role="img" aria-label="Wavy yellow and black bands scrolling and undulating, freckled with white and red dots drifting upward — a humming cadmium field.">
+  <canvas id="dot07-cv"></canvas>
+</div>
+<div class="dot07-cap">Cadmium Gourd Stripes</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('dot07-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), last=performance.now(), t=0;
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx, time=t, bandH=26;
+    for(let y=-bandH;y<S.h+bandH;y+=bandH){
+      const idx=Math.round(y/bandH);
+      ctx.fillStyle=(idx%2===0)?'#ffd400':'#0a0608';
+      ctx.beginPath(); ctx.moveTo(0,y);
+      for(let x=0;x<=S.w;x+=12){
+        ctx.lineTo(x, y+Math.sin(x*0.025+time*1.4+idx*0.5)*7);
+      }
+      for(let x2=S.w;x2>=0;x2-=12){
+        ctx.lineTo(x2, (y+bandH)+Math.sin(x2*0.025+time*1.4+idx*0.5)*7);
+      }
+      ctx.closePath(); ctx.fill();
+    }
+    const n=70;
+    for(let i=0;i<n;i++){
+      const seedx=(i*97)%100/100, seedy=((i*53)%100)/100;
+      const px=seedx*S.w;
+      let py=(seedy*S.h-time*22)%S.h; if(py<0) py+=S.h;
+      const rr=2+(i%5);
+      ctx.fillStyle=(i%7===0)?'#e8112d':'#fbf6ef';
+      ctx.globalAlpha=0.9;
+      ctx.beginPath(); ctx.arc(px,py,rr,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#0a0608'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ for(let i=0;i<3;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

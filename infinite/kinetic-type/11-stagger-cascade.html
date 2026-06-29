@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Amber canvas glyphs drop in one by one with motion trails and spring squash on impact, then the settled word breathes and cycles.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stagger Cascade</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d0b1a;}
+  #sc-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;right:10px;bottom:8px;font:600 10px/1.2 ui-monospace,monospace;
+       letter-spacing:.16em;color:#f5b700;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="sc-c"></canvas>
+<div class="cap">Stagger Cascade</div>
+<script>
+(function(){
+  const cv=document.getElementById('sc-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,fs;
+  const ACC='#f5b700';
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    fs=Math.max(34,Math.min(W,H)*0.30);
+  }
+  addEventListener('resize',size);size();
+
+  const WORDS=["DROP","CASCADE","RHYTHM","FALL","STAGGER"];
+  let wi=0, glyphs=[], lineLift=0, lineT=0, phase=0, nudge=0;
+
+  function setFont(){ ctx.font='800 '+fs+'px ui-monospace,"SF Mono",Menlo,monospace'; }
+
+  function build(){
+    const word=WORDS[wi]; setFont();
+    let total=0; const w=[];
+    for(const ch of word){ const m=ctx.measureText(ch).width; w.push(m); total+=m; }
+    const tr=fs*0.06, span=total+tr*(word.length-1);
+    let x=-span/2;
+    glyphs=[];
+    for(let i=0;i<word.length;i++){
+      glyphs.push({ch:word[i], x:x+w[i]/2, w:w[i],
+        delay:6+i*7, y:0, v:0, started:false, done:false});
+      x+=w[i]+tr;
+    }
+    lineLift=0; lineT=0; phase=0;
+  }
+  build();
+
+  // elastic settle: spring toward 0 from above
+  function tick(){
+    setFont();
+    ctx.fillStyle='#0d0b1a';ctx.fillRect(0,0,W,H);
+
+    const cx=W/2, cy=H/2;
+    const drop=fs*1.6;          // travel distance above baseline
+    let allDone=true;
+
+    // whole-line breathing lift once settled
+    if(phase===2){
+      lineT+=0.018;
+      lineLift=Math.sin(lineT)*fs*0.10;
+      if(lineT>Math.PI*2+0.4){ wi=(wi+1)%WORDS.length; build(); }
+    }
+
+    for(let i=0;i<glyphs.length;i++){
+      const g=glyphs[i];
+      if(phase===0){
+        if(g.delay>0){ g.delay--; g.y=-drop; allDone=false; continue; }
+        if(!g.started){ g.started=true; g.y=-drop; g.v=0; }
+        // spring toward 0
+        const k=0.085, damp=0.78;
+        g.v+=( -g.y )*k; g.v*=damp; g.y+=g.v;
+        if(Math.abs(g.y)<0.4 && Math.abs(g.v)<0.4){ g.y=0; g.v=0; g.done=true; }
+        if(!g.done) allDone=false;
+      }
+    }
+    if(phase===0 && allDone){ phase=2; lineT=0; }
+
+    const liftY = (phase===2? lineLift : 0) + nudge;
+    nudge*=0.86;
+
+    for(let i=0;i<glyphs.length;i++){
+      const g=glyphs[i];
+      const gx=cx+g.x, gy=cy+g.y+liftY;
+      const settling = phase===0 && g.started && !g.done;
+      // motion trail while falling
+      if(g.y<-2){
+        const steps=4;
+        for(let s=1;s<=steps;s++){
+          ctx.globalAlpha=0.06*(steps-s+1);
+          ctx.fillStyle=ACC;
+          ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText(g.ch, gx, gy - g.y*0.18*s);
+        }
+      }
+      // squash on impact (when near rest moving down)
+      let sx=1, sy=1;
+      if(settling && g.y> -fs*0.05 && g.v>0.6){ sy=0.86; sx=1.10; }
+      else if(settling && g.v<-0.6){ sy=1.06; sx=0.96; }
+
+      ctx.globalAlpha=1;
+      ctx.save();
+      ctx.translate(gx,gy);
+      ctx.scale(sx,sy);
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      // soft glow
+      ctx.shadowColor='rgba(245,183,0,0.55)';
+      ctx.shadowBlur=fs*0.22;
+      ctx.fillStyle=ACC;
+      ctx.fillText(g.ch,0,0);
+      ctx.shadowBlur=0;
+      ctx.restore();
+    }
+
+    // baseline guide tick
+    ctx.globalAlpha=0.10;ctx.strokeStyle=ACC;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(cx-fs*2.6,cy+fs*0.62+liftY);
+    ctx.lineTo(cx+fs*2.6,cy+fs*0.62+liftY);ctx.stroke();
+    ctx.globalAlpha=1;
+
+    raf=requestAnimationFrame(tick);
+  }
+
+  cv.addEventListener('pointermove',()=>{ nudge=-fs*0.05; });
+  cv.addEventListener('click',()=>{ wi=(wi+1)%WORDS.length; build(); });
+
+  function staticFrame(){
+    setFont();
+    ctx.fillStyle='#0d0b1a';ctx.fillRect(0,0,W,H);
+    const cx=W/2,cy=H/2;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.shadowColor='rgba(245,183,0,0.5)';ctx.shadowBlur=fs*0.2;ctx.fillStyle=ACC;
+    for(const g of glyphs) ctx.fillText(g.ch,cx+g.x,cy);
+    ctx.shadowBlur=0;
+    ctx.globalAlpha=0.10;ctx.strokeStyle=ACC;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(cx-fs*2.6,cy+fs*0.62);ctx.lineTo(cx+fs*2.6,cy+fs*0.62);ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+
+  let raf=0;
+  function start(){ if(!raf&&!reduce) raf=requestAnimationFrame(tick); }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ build(); staticFrame(); } else start();
+})();
+</script>
+</body>
+</html>

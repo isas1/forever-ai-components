@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Checkerboard Fugue — Wassily Kandinsky. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checkerboard Fugue</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4efe2;overflow:hidden}
+  #kan07-stage{position:fixed;inset:0;width:100%;height:100%}
+  .kan07-grid{position:absolute;inset:0;display:grid;}
+  .kan07-cell{position:relative;}
+  .kan07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#16130f;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kan07-stage" role="img" aria-label="A Bauhaus checkerboard fugue: a diagonal wave of blue, yellow, red, black and paper travels the grid in tempo, each square waking and sleeping in turn.">
+  <div class="kan07-grid" id="kan07-grid"></div>
+</div>
+<div class="kan07-cap">Checkerboard Fugue</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={paper:'#f4efe2',ink:'#16130f',blue:'#1438a8',yellow:'#f7c80b',red:'#d8321b'};
+  const grid=document.getElementById('kan07-grid'); if(!grid) return;
+  const COLS=10, ROWS=8;
+  grid.style.gridTemplateColumns=`repeat(${COLS},1fr)`;
+  grid.style.gridTemplateRows=`repeat(${ROWS},1fr)`;
+  const cells=[];
+  const pal=[PAL.blue,PAL.yellow,PAL.red,PAL.ink,PAL.paper];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const d=document.createElement('div');d.className='kan07-cell';
+    d.style.borderRight='1px solid rgba(22,19,15,.25)';
+    d.style.borderBottom='1px solid rgba(22,19,15,.25)';
+    d.style.transition='background .4s ease, transform .4s ease';
+    d.style.background=(r+c)%2? PAL.paper : '#e6dcc4';
+    grid.appendChild(d);
+    cells.push({d, diag:r+c, base:(r+c)%2? PAL.paper : '#e6dcc4'});
+  }
+  const maxDiag=COLS+ROWS;
+  let t=0,last=performance.now();
+  function step(){
+    if(!running) return;
+    const now=performance.now();const dt=(now-last)/1000;last=now;
+    t+=dt;
+    const head=(t*3.2)%(maxDiag+4);
+    cells.forEach(c=>{
+      const dist=Math.abs(c.diag-head);
+      if(dist<1.6){
+        c.d.style.background=pal[(c.diag)%pal.length===4?0:(c.diag)%pal.length];
+        c.d.style.transform='scale(0.86)';
+      }else{
+        c.d.style.background=c.base;
+        c.d.style.transform='scale(1)';
+      }
+    });
+    raf=requestAnimationFrame(step);
+  }
+  let raf=0, running=false;
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(step); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(!REDUCED) start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A twisting amber-to-slate Mobius strip slowly rotating with shimmering edge glints built from many CSS quads.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Möbius Ribbon</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d1b2a;}
+  .mob-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    perspective:clamp(440px,90vw,900px);perspective-origin:50% 46%;}
+  .mob-rot{position:relative;width:1px;height:1px;transform-style:preserve-3d;
+    transform:rotateX(58deg) rotateZ(0deg);will-change:transform;}
+  .mob-spin{position:absolute;transform-style:preserve-3d;}
+  .mob-q{position:absolute;left:0;top:0;transform-style:preserve-3d;
+    backface-visibility:visible;}
+  .mob-q::before{content:"";position:absolute;left:50%;top:50%;
+    width:var(--w);height:var(--h);transform:translate(-50%,-50%);
+    background:linear-gradient(180deg,
+      rgba(224,164,88,var(--a1)) 0%,
+      rgba(224,164,88,var(--a2)) 42%,
+      rgba(120,150,180,var(--a3)) 100%);
+    border-top:1px solid rgba(245,210,160,var(--e));}
+  .mob-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
+    letter-spacing:.14em;color:#e0a458;opacity:.36;text-transform:uppercase;
+    pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+  <div class="mob-stage"><div class="mob-rot" id="mobRot"><div class="mob-spin" id="mobSpin"></div></div></div>
+  <div class="mob-cap">Möbius Ribbon</div>
+<script>
+(function(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const spin = document.getElementById('mobSpin');
+  const rot  = document.getElementById('mobRot');
+  const N = 60, TAU = Math.PI*2;
+  const R = () => Math.min(innerWidth,innerHeight)*0.30; // ribbon radius (px)
+  let radius = R(), quads = [];
+
+  // Build N quads along the Möbius strip parametrisation.
+  // u in [0,TAU); the strip makes one half-twist => angle = u/2.
+  function build(){
+    spin.innerHTML=''; quads=[];
+    const segLen = (TAU*radius)/N * 1.18;   // quad length to overlap seams
+    const width  = radius*0.42;             // strip half-width *2
+    for(let i=0;i<N;i++){
+      const u = (i/N)*TAU;
+      const el=document.createElement('div');
+      el.className='mob-q';
+      el.style.setProperty('--w', segLen.toFixed(2)+'px');
+      el.style.setProperty('--h', width.toFixed(2)+'px');
+      spin.appendChild(el);
+      quads.push({el,u});
+    }
+  }
+
+  // position one quad: place its frame on the centreline, twist the cross-section
+  function place(q, twistPhase){
+    const u = q.u;
+    const ang = u/2 + twistPhase;            // cross-section roll (half-twist over full loop)
+    // centreline point (ring in XY plane)
+    const cx = Math.cos(u)*radius;
+    const cy = Math.sin(u)*radius;
+    // tangent direction (deg) so the quad lies along the path
+    const tang = (u*180/Math.PI) + 90;
+    const rollDeg = ang*180/Math.PI;
+    // lighting: how much the strip face turns toward the viewer/light
+    const face = Math.abs(Math.cos(ang));    // 1 = flat to light, 0 = edge-on
+    const lit  = 0.18 + 0.82*face;
+    q.el.style.transform =
+      'translate3d('+cx.toFixed(2)+'px,'+cy.toFixed(2)+'px,0) '+
+      'rotateZ('+tang.toFixed(2)+'deg) '+
+      'rotateX('+rollDeg.toFixed(2)+'deg)';
+    // fold the former glow brightness into the fill alphas (compositor-safe, no shadow repaint)
+    const glow=0.20+0.55*face;
+    q.el.style.setProperty('--a1',(0.30*lit+0.10*glow).toFixed(3));
+    q.el.style.setProperty('--a2',(0.62*lit+0.12*glow).toFixed(3));
+    q.el.style.setProperty('--a3',(0.40*lit).toFixed(3));
+    q.el.style.setProperty('--e',(0.15+0.85*(1-face)).toFixed(3)); // edge glints when edge-on
+  }
+
+  let t=0, raf=0, nudge=0;
+  function frame(){
+    t += reduce?0:0.0042;
+    nudge*=0.95;
+    const spinDeg = (t*42)%360 + nudge*40;
+    rot.style.transform = 'rotateX(58deg) rotateZ('+spinDeg.toFixed(2)+'deg)';
+    // a slow secondary travel of the twist along the band for shimmer
+    const twistPhase = Math.sin(t*1.7)*0.10;
+    for(let i=0;i<quads.length;i++) place(quads[i], twistPhase);
+    raf = reduce?0:requestAnimationFrame(frame);
+  }
+  function start(){ if(!raf && !reduce) raf=requestAnimationFrame(frame); }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  addEventListener('resize',()=>{ radius=R(); build(); if(reduce){frame();} });
+  addEventListener('pointermove',()=>{ nudge=1; });
+
+  radius=R(); build();
+  if(reduce){ frame(); } else start();
+})();
+</script>
+</body>
+</html>

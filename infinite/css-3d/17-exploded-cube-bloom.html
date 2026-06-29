@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A pink-neon wireframe cube with latticed panels breathes between sealed and exploded states while continuously spinning on two axes.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Exploded Cube Bloom</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#16040c;}
+  .ecb-stage{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    perspective:760px;perspective-origin:50% 50%;
+  }
+  .ecb-rig{
+    --s:clamp(66px,22vmin,140px);
+    width:var(--s);height:var(--s);position:relative;
+    transform-style:preserve-3d;
+    will-change:transform;
+  }
+  .ecb-face{
+    position:absolute;inset:0;
+    transform-style:preserve-3d;
+    border:1px solid rgba(255,90,138,.55);
+    background:
+      radial-gradient(120% 120% at 30% 24%,rgba(255,90,138,.16),rgba(255,90,138,.015) 62%),
+      linear-gradient(135deg,rgba(255,90,138,.05),rgba(255,90,138,0));
+    box-shadow:inset 0 0 22px rgba(255,90,138,.14);
+    backface-visibility:visible;
+  }
+  /* fine inner lattice so the faces read as engineered panels */
+  .ecb-face::before{
+    content:"";position:absolute;inset:9%;
+    border:1px solid rgba(255,90,138,.22);
+    background-image:
+      linear-gradient(rgba(255,90,138,.10) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,90,138,.10) 1px,transparent 1px);
+    background-size:25% 25%,25% 25%;
+  }
+  .ecb-face::after{
+    content:"";position:absolute;left:50%;top:50%;width:14%;height:14%;
+    transform:translate(-50%,-50%);border-radius:50%;
+    background:radial-gradient(circle,#ff5a8a,rgba(255,90,138,0) 70%);
+    box-shadow:0 0 14px rgba(255,90,138,.7);
+  }
+  .ecb-cap{
+    position:fixed;left:9px;bottom:8px;
+    font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+    letter-spacing:.16em;color:#ff5a8a;opacity:.36;
+    text-transform:uppercase;pointer-events:none;user-select:none;
+  }
+</style>
+</head>
+<body>
+  <div class="ecb-stage">
+    <div class="ecb-rig" id="ecbRig">
+      <div class="ecb-face" data-ax="0"  data-ay="0"></div>
+      <div class="ecb-face" data-ax="0"  data-ay="180"></div>
+      <div class="ecb-face" data-ax="0"  data-ay="90"></div>
+      <div class="ecb-face" data-ax="0"  data-ay="-90"></div>
+      <div class="ecb-face" data-ax="90" data-ay="0"></div>
+      <div class="ecb-face" data-ax="-90" data-ay="0"></div>
+    </div>
+  </div>
+  <div class="ecb-cap">Exploded Cube Bloom</div>
+<script>
+(function(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const rig = document.getElementById('ecbRig');
+  const faces = [].slice.call(rig.querySelectorAll('.ecb-face'));
+  // resting half-extent in face-units; half the cube edge so faces seal flush
+  const HALF = 0.5;
+
+  // cache per-face axes once + the resolved --s size; re-read only on resize
+  const faceData = faces.map(f=>({ el:f, ax:+f.dataset.ax, ay:+f.dataset.ay }));
+  let s = 120;
+  function readSize(){
+    s = parseFloat(getComputedStyle(rig).getPropertyValue('--s')) || 120;
+  }
+  readSize();
+  addEventListener('resize', readSize);
+
+  function layout(half, t){
+    const z = half * s;                         // translateZ along each face normal
+    const op = (0.5 + 0.5*Math.min(1, half/0.5)).toFixed(3);
+    for(const f of faceData){
+      // slight per-face stagger gives the bloom a breathing, organic edge
+      f.el.style.transform =
+        'rotateX('+f.ax+'deg) rotateY('+f.ay+'deg) translateZ('+z+'px)';
+      f.el.style.opacity = op;
+    }
+  }
+
+  let t=0, raf=0, push=0;
+  function frame(){
+    t += 0.016;
+    // inhale / exhale: ease between sealed (HALF) and exploded (~2.2x edge)
+    const breath = 0.5 - 0.5*Math.cos(t*0.42);   // 0..1 slow
+    const eased = breath*breath*(3-2*breath);    // smoothstep
+    const explode = HALF + (0.95 + push) * eased;
+    layout(explode, t);
+    // continuous parent spin on two axes — the rig never stops turning
+    const rx = -22 + 9*Math.sin(t*0.27);
+    const ry = t*22;
+    rig.style.transform = 'rotateX('+rx+'deg) rotateY('+ry+'deg)';
+    push *= 0.95;
+    raf = requestAnimationFrame(frame);
+  }
+
+  function start(){ if(!raf && !reduce) raf=requestAnimationFrame(frame); }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  addEventListener('pointermove',()=>{ push = Math.min(push+0.12, 1.1); });
+  addEventListener('click',()=>{ push = 1.1; });
+
+  if(reduce){
+    // one static resting frame: mid-bloom, tilted so all six panels read
+    layout(HALF + 0.62, 0);
+    rig.style.transform = 'rotateX(-24deg) rotateY(34deg)';
+  } else {
+    start();
+  }
+})();
+</script>
+</body>
+</html>

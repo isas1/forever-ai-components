@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="White on White — Kazimir Malevich. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>White on White</title>
+<style>
+  html,body{margin:0;height:100%;background:#f6f4ef;overflow:hidden}
+  #mal08-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mal08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mal08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#111;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mal08-stage" role="img" aria-label="The zero of form: barely-there white Suprematist squares, circles, crosses and bars upon white, held to the field by the faintest of shadows, drifting in silence.">
+  <canvas id="mal08-cv"></canvas>
+</div>
+<div class="mal08-cap">White on White</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mal08-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const kinds=['sq','circ','cross','bar'];
+  const forms=[];
+  for(let i=0;i<8;i++){
+    forms.push({bx:0.12+Math.random()*0.76, by:0.14+Math.random()*0.72,
+      sz:0.05+Math.random()*0.10, ratio:3+Math.random()*3, rot:(-0.5+Math.random()),
+      ax:0.01+Math.random()*0.02, ay:0.01+Math.random()*0.02,
+      sx:0.2+Math.random()*0.5, sy:0.2+Math.random()*0.5, ph:Math.random()*Math.PI*2,
+      tone:248+((Math.random()*8)|0), kind:kinds[i%kinds.length], sprite:null});
+  }
+  /* Bake each form (shape + soft drop shadow) into an offscreen sprite once,
+     so the per-frame loop never touches shadowBlur. */
+  function bakeSprites(){
+    const unit=Math.min(S.w,S.h), pad=22;
+    for(const f of forms){
+      const z=f.sz*unit;
+      const half=(f.kind==='bar'? z*f.ratio*0.5 : (f.kind==='cross'? z*1.05 : z*0.85));
+      const half2=(f.kind==='bar'? z*0.5*0.5 : half);
+      const ext=Math.max(half,half2)+pad;
+      const c=document.createElement('canvas');
+      c.width=c.height=Math.ceil(ext*2);
+      const g=c.getContext('2d');
+      g.translate(ext,ext);
+      g.shadowColor='rgba(17,17,17,0.13)'; g.shadowBlur=14; g.shadowOffsetX=5; g.shadowOffsetY=7;
+      g.fillStyle='rgb('+f.tone+','+(f.tone-1)+','+(f.tone-6)+')';
+      g.strokeStyle='rgba(17,17,17,0.06)'; g.lineWidth=1;
+      if(f.kind==='sq'){ g.fillRect(-z*0.75,-z*0.75,z*1.5,z*1.5); g.shadowColor='transparent'; g.strokeRect(-z*0.75,-z*0.75,z*1.5,z*1.5); }
+      else if(f.kind==='circ'){ g.beginPath();g.arc(0,0,z*0.85,0,7);g.fill(); g.shadowColor='transparent'; g.stroke(); }
+      else if(f.kind==='bar'){ const w=z*f.ratio,h=z*0.5; g.fillRect(-w/2,-h/2,w,h); g.shadowColor='transparent'; g.strokeRect(-w/2,-h/2,w,h); }
+      else { const arm=z*1.05,th=z*0.32; g.fillRect(-arm,-th,2*arm,2*th); g.fillRect(-th,-arm,2*th,2*arm); }
+      f.sprite=c; f.ext=ext;
+    }
+  }
+  bakeSprites();
+  let t=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt*0.5;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle='#f6f4ef'; ctx.fillRect(0,0,W,H);
+    for(const f of forms){
+      const x=(f.bx + Math.sin(t*f.sx+f.ph)*f.ax)*W;
+      const y=(f.by + Math.cos(t*f.sy+f.ph)*f.ay)*H;
+      ctx.save(); ctx.translate(x,y); ctx.rotate(f.rot + Math.sin(t*0.3+f.ph)*0.04);
+      ctx.drawImage(f.sprite,-f.ext,-f.ext);
+      ctx.restore();
+    }
+  }
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#f6f4ef'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); bakeSprites(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

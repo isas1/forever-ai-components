@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Thin pink word BREATHE whose letter-spacing widens and tightens like a slow breath, hairlines glowing in the gaps from the center out.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kerning Breath</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1014;}
+  .kb-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+       font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",sans-serif;}
+  .kb-word{
+    display:flex;white-space:nowrap;
+    font-size:clamp(40px,17vw,150px);
+    font-weight:200;
+    color:#ff7b9c;
+    will-change:contents;
+  }
+  .kb-word .kb-g{
+    display:inline-block;
+    color:#ffd9e2;
+  }
+  .kb-word .kb-sp{
+    display:inline-block;
+    position:relative;
+  }
+  .kb-cap{position:fixed;right:11px;bottom:9px;font-size:10px;letter-spacing:.22em;
+       color:#ff7b9c;opacity:.34;text-transform:uppercase;pointer-events:none;
+       font-family:ui-monospace,"SFMono-Regular",monospace;}
+</style>
+</head>
+<body>
+  <div class="kb-stage"><div class="kb-word" id="kbWord"></div></div>
+  <div class="kb-cap">Kerning Breath</div>
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var word = "BREATHE";
+  var root = document.getElementById('kbWord');
+  var glyphs=[], gaps=[];
+
+  // build glyph spans interleaved with breathing-gap spans
+  for(var i=0;i<word.length;i++){
+    var g=document.createElement('span'); g.className='kb-g'; g.textContent=word[i];
+    root.appendChild(g); glyphs.push(g);
+    if(i<word.length-1){
+      var s=document.createElement('span'); s.className='kb-sp';
+      root.appendChild(s); gaps.push(s);
+    }
+  }
+
+  var raf=0, t=0, push=0;
+  // per-gap phase offset so the breath ripples outward from the centre
+  var mid=(gaps.length-1)/2;
+  var phase=gaps.map(function(_,i){ return Math.abs(i-mid)*0.34; });
+
+  // eased breath: slow inhale, held top, slower exhale, held bottom
+  function breath(x){
+    // x in [0,1) over the cycle; map to 0..1..0 with long holds
+    var u;
+    if(x<0.42){ u=ease(x/0.42); }                 // inhale (wide)
+    else if(x<0.5){ u=1; }                         // hold full
+    else if(x<0.92){ u=1-ease((x-0.5)/0.42); }     // exhale (tight)
+    else { u=0; }                                  // hold empty
+    return u;
+  }
+  function ease(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
+
+  var MINGAP=0.02, MAXGAP=0.74; // em
+
+  // cache font size once; re-read only on resize (never inside the rAF loop)
+  var fs=100;
+  function measure(){ fs=parseFloat(getComputedStyle(root).fontSize)||100; }
+  measure();
+
+  function render(){
+    for(var i=0;i<gaps.length;i++){
+      var ph=(t - phase[i]);
+      var u=breath(((ph%1)+1)%1);
+      var em=MINGAP + (MAXGAP-MINGAP)*u;
+      gaps[i].style.width=(em*fs + push*22*u)+'px';
+    }
+    paintLines();
+  }
+
+  // lightweight hairlines drawn as child nodes (one per gap)
+  var lines=gaps.map(function(g){
+    var L=document.createElement('span');
+    L.style.cssText='position:absolute;top:50%;left:50%;width:1px;height:0.5em;'+
+      'transform:translate(-50%,-50%);background:linear-gradient(to bottom,'+
+      'transparent,#ff7b9c,transparent);opacity:0;pointer-events:none;';
+    g.appendChild(L); return L;
+  });
+  function paintLines(){
+    for(var i=0;i<gaps.length;i++){
+      var ph=(t - phase[i]);
+      var u=breath(((ph%1)+1)%1);
+      lines[i].style.opacity=(u*0.85).toFixed(3);
+    }
+    var peak=breath(((t%1)+1)%1);
+    var pk=Math.round(peak*40)/40;           // quantize -> skip identical shadow rewrites
+    if(pk!==lastPeak){
+      lastPeak=pk;
+      root.style.textShadow='0 0 '+(8+26*pk).toFixed(1)+'px rgba(255,123,156,'+(0.15+0.4*pk).toFixed(3)+')';
+    }
+  }
+  var lastPeak=-1;
+
+  var last=0, period=5.2; // seconds per full breath
+  function tick(now){
+    if(!last) last=now;
+    var dt=(now-last)/1000; last=now;
+    t += dt/period;
+    push *= Math.pow(0.9, dt*60);
+    render();
+    raf=requestAnimationFrame(tick);
+  }
+  function start(){ if(!raf&&!reduce){ last=0; raf=requestAnimationFrame(tick); } }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  window.addEventListener('resize',function(){ measure(); render(); });
+  // pointer nudge: a sharp inhale
+  document.addEventListener('pointermove',function(){ push=Math.min(push+0.15,1.4); });
+  document.addEventListener('click',function(){ push=1.8; });
+
+  if(reduce){ t=0.46; render(); } else { render(); start(); }
+})();
+</script>
+</body>
+</html>

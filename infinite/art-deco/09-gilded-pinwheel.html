@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Eight gold sunburst blades turn with eased motion over a counter-spinning star and pulsing core on black and emerald.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gilded Pinwheel</title>
+<style>
+  :root{
+    --ad09-bg:#0c0b08; --ad09-gold:#d4af37; --ad09-gold-lt:#f1d98a;
+    --ad09-gold-dk:#8a6d1f; --ad09-emerald:#10362c;
+  }
+  html,body{margin:0;height:100%;background:var(--ad09-bg);overflow:hidden}
+  .ad09-stage{position:fixed;inset:0;display:grid;place-items:center;
+    background:
+      radial-gradient(115% 95% at 50% 50%, var(--ad09-emerald) 0%, transparent 52%),
+      radial-gradient(46% 46% at 50% 50%, rgba(241,217,138,.16) 0%, transparent 62%),
+      var(--ad09-bg);
+  }
+  .ad09-svg{width:100%;height:100%;display:block}
+  /* the whole pinwheel turns — one transform on one group. eased, not linear. */
+  .ad09-wheel{transform-box:fill-box;transform-origin:50% 50%;
+    animation:ad09-turn 9s cubic-bezier(.62,0,.38,1) infinite both}
+  @keyframes ad09-turn{
+    0%{transform:rotate(0deg)}
+    100%{transform:rotate(90deg)}      /* one quarter per beat -> 4-fold symmetry reads continuous */
+  }
+  /* counter-turning inner star, slower, opposite sense — deco layered movement */
+  .ad09-inner{transform-box:fill-box;transform-origin:50% 50%;
+    animation:ad09-turn2 9s cubic-bezier(.62,0,.38,1) infinite both}
+  @keyframes ad09-turn2{
+    0%{transform:rotate(0deg)}
+    100%{transform:rotate(-45deg)}
+  }
+  /* breathing core medallion — opacity only, never repaints layout/shadow */
+  .ad09-pulse{transform-box:fill-box;transform-origin:50% 50%;
+    animation:ad09-pulse 9s ease-in-out infinite both}
+  @keyframes ad09-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    .ad09-wheel{transform:rotate(22.5deg)!important}
+    .ad09-inner{transform:rotate(-22.5deg)!important}
+    .ad09-pulse{opacity:1!important}
+  }
+</style>
+</head>
+<body>
+<div class="ad09-stage">
+  <svg class="ad09-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"
+       role="img" aria-label="Art Deco gilded pinwheel of symmetric gold sunburst blades turning with eased motion over deep black and emerald"
+       id="ad09-c">
+    <defs>
+      <linearGradient id="ad09-bladeG" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="var(--ad09-gold-dk)"/>
+        <stop offset="58" stop-color="var(--ad09-gold)"/>
+        <stop offset="100" stop-color="var(--ad09-gold-lt)"/>
+      </linearGradient>
+      <linearGradient id="ad09-bladeG2" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stop-color="#6e560f"/>
+        <stop offset="100" stop-color="var(--ad09-gold)"/>
+      </linearGradient>
+      <radialGradient id="ad09-coreG" cx="50%" cy="50%" r="50%">
+        <stop offset="0" stop-color="var(--ad09-gold-lt)"/>
+        <stop offset="62" stop-color="var(--ad09-gold)"/>
+        <stop offset="100" stop-color="var(--ad09-gold-dk)"/>
+      </radialGradient>
+      <radialGradient id="ad09-haloG" cx="50%" cy="50%" r="50%">
+        <stop offset="0" stop-color="rgba(241,217,138,.32)"/>
+        <stop offset="100" stop-color="rgba(241,217,138,0)"/>
+      </radialGradient>
+    </defs>
+
+    <!-- static halo (gradient, never animates) -->
+    <circle cx="50" cy="50" r="44" fill="url(#ad09-haloG)"/>
+
+    <!-- static fine-gold concentric guide rings (deco linework) -->
+    <g fill="none" stroke="var(--ad09-gold)" opacity=".22">
+      <circle cx="50" cy="50" r="42" stroke-width=".3"/>
+      <circle cx="50" cy="50" r="34" stroke-width=".3"/>
+      <circle cx="50" cy="50" r="11" stroke-width=".4"/>
+    </g>
+
+    <!-- the turning pinwheel: built by JS for exact rotational symmetry -->
+    <g class="ad09-wheel" id="ad09-wheel"></g>
+
+    <!-- counter-turning inner star -->
+    <g class="ad09-inner" id="ad09-inner"></g>
+
+    <!-- core medallion (static geometry, only opacity pulses) -->
+    <g class="ad09-pulse">
+      <circle cx="50" cy="50" r="9.4" fill="url(#ad09-coreG)"/>
+      <circle cx="50" cy="50" r="9.4" fill="none" stroke="var(--ad09-bg)" stroke-width=".8"/>
+      <circle cx="50" cy="50" r="5.2" fill="none" stroke="var(--ad09-bg)" stroke-width=".7"/>
+      <circle cx="50" cy="50" r="1.7" fill="var(--ad09-bg)"/>
+    </g>
+  </svg>
+</div>
+<div class="cap">Gilded Pinwheel</div>
+
+<script>
+(function(){
+  "use strict";
+  var ns="http://www.w3.org/2000/svg";
+  var wheel=document.getElementById("ad09-wheel");
+  var inner=document.getElementById("ad09-inner");
+  if(!wheel||!inner)return;
+
+  // --- outer pinwheel: 8 swept blades, each a chevron-tipped vane pivoting off center ---
+  var N=8, i, a;
+  // a single blade: a swept fan vane from the core (r=10) out to r=41, tip skewed for "turning" read
+  var blade="M50 40 L46.2 12 Q50 8.6 50 8.6 L57.6 14 Z";
+  for(i=0;i<N;i++){
+    a=i*(360/N);
+    var b=document.createElementNS(ns,"path");
+    b.setAttribute("d",blade);
+    b.setAttribute("transform","rotate("+a+" 50 50)");
+    b.setAttribute("fill", i%2 ? "url(#ad09-bladeG2)" : "url(#ad09-bladeG)");
+    b.setAttribute("stroke","var(--ad09-bg)");
+    b.setAttribute("stroke-width",".4");
+    wheel.appendChild(b);
+    // fine gold spine line riding each blade — deco detailing
+    var s=document.createElementNS(ns,"line");
+    s.setAttribute("x1","50");s.setAttribute("y1","40");
+    s.setAttribute("x2","50");s.setAttribute("y2","9.6");
+    s.setAttribute("transform","rotate("+a+" 50 50)");
+    s.setAttribute("stroke","var(--ad09-gold-lt)");
+    s.setAttribute("stroke-width",".3");
+    s.setAttribute("opacity",".75");
+    wheel.appendChild(s);
+  }
+
+  // --- inner counter-star: 8-point sharp star, mirrors symmetry, turns opposite ---
+  var M=8, pts="", rOut=22, rIn=8.6, cx=50, cy=50, k, ang, r;
+  for(k=0;k<M*2;k++){
+    ang=(Math.PI/M)*k - Math.PI/2;
+    r=(k%2===0)?rOut:rIn;
+    pts+=(cx+r*Math.cos(ang)).toFixed(2)+","+(cy+r*Math.sin(ang)).toFixed(2)+" ";
+  }
+  var star=document.createElementNS(ns,"polygon");
+  star.setAttribute("points",pts.trim());
+  star.setAttribute("fill","none");
+  star.setAttribute("stroke","var(--ad09-gold)");
+  star.setAttribute("stroke-width",".7");
+  star.setAttribute("opacity",".85");
+  inner.appendChild(star);
+  // a second, half-rotated faint star for layered deco shimmer (static within group)
+  var star2=document.createElementNS(ns,"polygon");
+  star2.setAttribute("points",pts.trim());
+  star2.setAttribute("transform","rotate(22.5 50 50) scale(.74)");
+  star2.setAttribute("transform-origin","50 50");
+  star2.setAttribute("fill","none");
+  star2.setAttribute("stroke","var(--ad09-gold-lt)");
+  star2.setAttribute("stroke-width",".4");
+  star2.setAttribute("opacity",".45");
+  inner.appendChild(star2);
+
+  // honor reduced motion: settle to a single static frame, no loop
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  function setState(p){
+    wheel.style.animationPlayState=p;
+    inner.style.animationPlayState=p;
+    var pulse=document.querySelector(".ad09-pulse");
+    if(pulse)pulse.style.animationPlayState=p;
+  }
+  if(reduce){return;}   // CSS @media already settles to one frame
+  // pause/resume with the tab — no rAF, no layout reads
+  document.addEventListener("visibilitychange",function(){
+    setState(document.hidden?"paused":"running");
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="100 blue-violet particles streaming along a Perlin-style flow field on dark navy, deflecting around the cursor.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flow Field</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#060a12}
+  #c{display:block;width:100%;height:100%}
+  #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
+       color:#8fb6ff;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">perlin flow-field</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  let W,H,DPR,parts,mouse=null,seed=Math.random()*1000;
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const N=100;
+  // cheap value-noise
+  function noise(x,y,t){
+    return (Math.sin(x*1.7+t*0.3+seed)+Math.sin(y*1.9-t*0.2)+Math.sin((x+y)*1.1+t*0.15))*0.5;
+  }
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.fillStyle='#060a12';ctx.fillRect(0,0,W,H);init();}
+  function init(){parts=[];for(let i=0;i<N;i++)parts.push(mk());}
+  function mk(){return {x:Math.random()*W,y:Math.random()*H,h:Math.random()*60+190,life:Math.random()*200};}
+  function draw(t){
+    ctx.fillStyle='rgba(6,10,18,0.06)';ctx.fillRect(0,0,W,H);
+    const sc=4/Math.min(W,H);
+    for(const p of parts){
+      let a=noise(p.x*sc,p.y*sc,t*0.001)*Math.PI*2;
+      if(mouse){const dx=p.x-mouse.x,dy=p.y-mouse.y,d=Math.hypot(dx,dy);
+        if(d<120){a+=Math.atan2(dy,dx)*(1-d/120)*1.5;}}
+      const nx=p.x+Math.cos(a)*1.6,ny=p.y+Math.sin(a)*1.6;
+      ctx.strokeStyle='hsla('+p.h+',80%,65%,0.5)';ctx.lineWidth=1.1;
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(nx,ny);ctx.stroke();
+      p.x=nx;p.y=ny;p.life--;
+      if(p.life<0||p.x<0||p.x>W||p.y<0||p.y>H)Object.assign(p,mk());
+    }
+  }
+  let raf;
+  function loop(t){if(!reduce)draw(t);raf=requestAnimationFrame(loop);}
+  function start(){cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+  addEventListener('resize',resize);
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();mouse={x:e.clientX-r.left,y:e.clientY-r.top};});
+  cv.addEventListener('pointerleave',()=>mouse=null);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
+  resize();if(reduce){for(let k=0;k<60;k++)draw(k*16);}else start();
+})();
+</script>
+</body>
+</html>

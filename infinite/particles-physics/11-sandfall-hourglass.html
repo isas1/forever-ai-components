@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Amber cellular-automaton sand grains topple through an hourglass cavity and auto-flip when the bulb drains; click reverses gravity.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sandfall Hourglass</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a120b;}
+  #sfh-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.09em;color:#e8a44c;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="sfh-c"></canvas>
+<div class="cap">Sandfall Hourglass</div>
+<script>
+(function(){
+  const cv=document.getElementById('sfh-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // cellular grid: 0 empty, 1..N sand shade. Hourglass mask carved into grid.
+  let W,H,DPR,COLS,ROWS,cell,grid,mask,offx,offy;
+  const PAL=['#3a2310','#6b3d18','#9c5a22','#cf8336','#e8a44c','#f6c878'];
+  // static layers (wash + outline) baked once per resize — mask never changes per frame
+  const bg=document.createElement('canvas'),bgx=bg.getContext('2d');
+  function build(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    const S=Math.min(W,H);
+    cell=Math.max(2,Math.round(S/110));            // grain size scales with frame
+    COLS=Math.floor(W/cell);ROWS=Math.floor(H/cell);
+    offx=(W-COLS*cell)/2;offy=(H-ROWS*cell)/2;
+    grid=new Int8Array(COLS*ROWS);
+    mask=new Uint8Array(COLS*ROWS);                // 1 = inside glass cavity
+    const mx=COLS/2, neck=Math.max(1.4,COLS*0.05), bulge=COLS*0.40;
+    for(let y=0;y<ROWS;y++){
+      const v=y/(ROWS-1), tn=Math.abs(v-0.5)*2;    // 0 at neck, 1 at ends
+      const halfW=neck+(bulge-neck)*Math.pow(tn,1.35);
+      for(let x=0;x<COLS;x++){
+        if(Math.abs(x-mx)<=halfW) mask[y*COLS+x]=1;
+      }
+    }
+    // fill the top bulb with sand grains
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+      const i=y*COLS+x;
+      if(mask[i] && y < ROWS*0.46) grid[i]=1+((x*7+y*3)%5);
+    }
+    bakeBg();
+  }
+  // pre-render the static glass cavity wash + outline once (was redrawn every frame)
+  function bakeBg(){
+    bg.width=W*DPR;bg.height=H*DPR;bgx.setTransform(DPR,0,0,DPR,0,0);
+    bgx.clearRect(0,0,W,H);
+    bgx.fillStyle='rgba(232,164,76,0.04)';
+    for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++) if(mask[y*COLS+x])
+      bgx.fillRect(offx+x*cell,offy+y*cell,cell,cell);
+    bgx.strokeStyle='rgba(232,164,76,0.30)';bgx.lineWidth=1;
+    bgx.beginPath();
+    for(let y=0;y<ROWS;y++){
+      let lx=-1,rx=-1;
+      for(let x=0;x<COLS;x++){const m=mask[y*COLS+x]; if(m){if(lx<0)lx=x;rx=x;}}
+      if(lx<0)continue;
+      const py=offy+y*cell+cell/2;
+      bgx.moveTo(offx+lx*cell,py-cell/2);bgx.lineTo(offx+lx*cell,py+cell/2);
+      bgx.moveTo(offx+(rx+1)*cell,py-cell/2);bgx.lineTo(offx+(rx+1)*cell,py+cell/2);
+    }
+    bgx.stroke();
+  }
+  addEventListener('resize',build);build();
+  let flip=0, dir=1, kick=0;                        // dir: gravity sign
+  cv.addEventListener('pointermove',()=>{kick=6;});
+  cv.addEventListener('click',()=>{dir*=-1;});
+
+  function step(){
+    const gy = dir>0?1:-1;
+    const y0 = dir>0?ROWS-2:1, y1=dir>0?-1:ROWS, dy=dir>0?-1:1;
+    const odd = (flip&1);                            // alternate scan bias for symmetry
+    for(let y=y0; y!==y1; y+=dy){
+      for(let k=0;k<COLS;k++){
+        const x = odd? COLS-1-k : k;
+        const i=y*COLS+x, below=i+gy*COLS;
+        const v=grid[i]; if(!v) continue;
+        if(mask[below] && !grid[below]){ grid[below]=v; grid[i]=0; continue; }
+        // angle-of-repose toppling: slide diagonally into empty neighbour
+        const dl=below-1, dr=below+1;
+        const cl=(x>0)&&mask[dl]&&!grid[dl]&&!grid[i-1];
+        const cr=(x<COLS-1)&&mask[dr]&&!grid[dr]&&!grid[i+1];
+        if(cl&&cr){ if((x+y+flip)&1){grid[dl]=v;}else{grid[dr]=v;} grid[i]=0; }
+        else if(cl){ grid[dl]=v; grid[i]=0; }
+        else if(cr){ grid[dr]=v; grid[i]=0; }
+      }
+    }
+    flip++;
+    // auto-flip the frame once the falling bulb has mostly drained
+    if(flip%4===0){
+      let top=0,bot=0;
+      for(let y=0;y<ROWS;y++){const row=y<ROWS/2; for(let x=0;x<COLS;x++) if(grid[y*COLS+x]){row?top++:bot++;}}
+      const drained = dir>0? top : bot;
+      const settled = dir>0? bot : top;
+      if(drained<2 && settled>4){ dir*=-1; }
+    }
+  }
+
+  function draw(){
+    ctx.fillStyle='#1a120b';ctx.fillRect(0,0,W,H);
+    // static glass cavity wash (pre-rendered, was a full-grid fillRect loop per frame)
+    ctx.drawImage(bg,0,0,W,H);
+    // grains (dynamic)
+    for(let y=0;y<ROWS;y++)for(let x=0;x<COLS;x++){
+      const v=grid[y*COLS+x]; if(!v) continue;
+      ctx.fillStyle=PAL[v];
+      ctx.fillRect(offx+x*cell,offy+y*cell,cell-0.4,cell-0.4);
+    }
+    // static glass outline pre-rendered into bg above
+  }
+
+  let raf=0,acc=0,last=0;
+  function frame(t){
+    const d=last?t-last:16;last=t;acc+=d;
+    let n=0;
+    while(acc>=33 && n<3){ step(); if(kick>0){step();kick--;} acc-=33;n++;}
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf){last=0;raf=requestAnimationFrame(frame);}}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{if(reduce)return;document.hidden?stop():start();});
+  if(reduce){ for(let s=0;s<900;s++) step(); draw(); }
+  else start();
+})();
+</script>
+</body>
+</html>

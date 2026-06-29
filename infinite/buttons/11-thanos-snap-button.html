@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+<meta name="description" content="Thanos Snap Delete — Buttons &amp; Toggles. A self-contained, zero-dependency animated web component.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thanos Snap Button</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #111116;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    .snap-cap {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 12px;
+      pointer-events: none;
+      letter-spacing: 0.5px;
+    }
+
+    .snap-btn-container {
+      position: relative;
+    }
+
+    .snap-btn {
+      background: linear-gradient(135deg, #ff4757, #ff6b81);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 16px 32px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(255, 71, 87, 0.4);
+      transition: transform 0.1s, box-shadow 0.1s;
+      letter-spacing: 1px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .snap-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(255, 71, 87, 0.6);
+    }
+
+    .snap-btn:active {
+      transform: translateY(1px) scale(0.95);
+      box-shadow: 0 2px 10px rgba(255, 71, 87, 0.4);
+    }
+
+    .snap-btn.snapping {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Dust particles */
+    .dust-particle {
+      position: absolute;
+      background: #ff4757;
+      pointer-events: none;
+      z-index: 3;
+      border-radius: 50%;
+    }
+
+    .reset-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #888;
+      background: none;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.5s ease 1s;
+      text-decoration: underline;
+    }
+
+    .snapped .reset-btn {
+      opacity: 1;
+      visibility: visible;
+    }
+
+  </style>
+</head>
+<body>
+
+  <div class="snap-btn-container" id="container">
+    <button class="snap-btn" id="snapBtn">DELETE</button>
+    <button class="reset-btn" id="resetBtn">Restore</button>
+  </div>
+
+  <div class="snap-cap">Thanos Snap Button</div>
+
+  <script>
+    (() => {
+      const btn = document.getElementById('snapBtn');
+      const container = document.getElementById('container');
+      const resetBtn = document.getElementById('resetBtn');
+      const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      
+      let particles = [];
+      let isSnapping = false;
+      let animationFrame;
+
+      const createParticles = () => {
+        const rect = btn.getBoundingClientRect();
+        const cols = 20;
+        const rows = 10;
+        const pWidth = rect.width / cols;
+        const pHeight = rect.height / rows;
+
+        for (let i = 0; i < cols; i++) {
+          for (let j = 0; j < rows; j++) {
+            // Don't create particles for empty transparent corners (approximate)
+            const isCorner = (i < 2 && j < 2) || (i > cols-3 && j < 2) || (i < 2 && j > rows-3) || (i > cols-3 && j > rows-3);
+            if (isCorner && Math.random() > 0.3) continue;
+
+            const p = document.createElement('div');
+            p.classList.add('dust-particle');
+            p.style.width = `${pWidth * 1.5}px`;
+            p.style.height = `${pHeight * 1.5}px`;
+            
+            // Randomly pick a color from the gradient
+            p.style.background = Math.random() > 0.5 ? '#ff4757' : '#ff6b81';
+            if (Math.random() > 0.8) p.style.background = '#ffffff';
+
+            const startX = i * pWidth;
+            const startY = j * pHeight;
+            
+            p.style.left = `${startX}px`;
+            p.style.top = `${startY}px`;
+
+            container.appendChild(p);
+
+            particles.push({
+              el: p,
+              x: startX,
+              y: startY,
+              vx: (Math.random() - 0.2) * 5 + 2, // mostly right
+              vy: (Math.random() - 0.8) * 5, // mostly up
+              rotation: Math.random() * 360,
+              vRot: (Math.random() - 0.5) * 10,
+              life: 1.0,
+              decay: Math.random() * 0.02 + 0.015
+            });
+          }
+        }
+      };
+
+      const animateSnap = () => {
+        let allDead = true;
+
+        particles.forEach(p => {
+          if (p.life > 0) {
+            allDead = false;
+            p.x += p.vx;
+            p.y += p.vy;
+            p.rotation += p.vRot;
+            p.life -= p.decay;
+
+            p.el.style.transform = `translate(${p.x - parseFloat(p.el.style.left)}px, ${p.y - parseFloat(p.el.style.top)}px) rotate(${p.rotation}deg) scale(${p.life})`;
+            p.el.style.opacity = p.life;
+          } else if (p.el.parentNode) {
+            p.el.parentNode.removeChild(p.el);
+          }
+        });
+
+        if (!allDead) {
+          animationFrame = requestAnimationFrame(animateSnap);
+        } else {
+          particles = [];
+        }
+      };
+
+      btn.addEventListener('click', () => {
+        if (isSnapping) return;
+        isSnapping = true;
+
+        if (prefersReducedMotion) {
+          btn.classList.add('snapping');
+          container.classList.add('snapped');
+          return;
+        }
+
+        createParticles();
+        btn.classList.add('snapping');
+        container.classList.add('snapped');
+        animateSnap();
+      });
+
+      resetBtn.addEventListener('click', () => {
+        isSnapping = false;
+        btn.classList.remove('snapping');
+        container.classList.remove('snapped');
+        
+        // Clean up any remaining particles
+        particles.forEach(p => {
+          if (p.el.parentNode) p.el.parentNode.removeChild(p.el);
+        });
+        particles = [];
+        cancelAnimationFrame(animationFrame);
+      });
+      
+      // Stub required contract functions
+      window.start = () => {};
+      window.stop = () => cancelAnimationFrame(animationFrame);
+
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Optical Mixing — Georges Seurat. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Optical Mixing</title>
+<style>
+  html,body{margin:0;height:100%;background:#f1ecdf;overflow:hidden}
+  #seu02-stage{position:fixed;inset:0;width:100%;height:100%}
+  #seu02-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .seu02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2620;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="seu02-stage" role="img" aria-label="Interleaved orange and blue dots that slowly fuse into a third quiet hue and separate again — divisionism demonstrated as the eye does the mixing.">
+  <canvas id="seu02-cv"></canvas>
+</div>
+<div class="seu02-cap">Optical Mixing</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('seu02-cv'); if(!cv) return;
+  const RGB={sky:[143,184,214],orange:[224,138,46]};
+  const CREAM='#f1ecdf';
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function rgba(t,a){return 'rgba('+t[0]+','+t[1]+','+t[2]+','+a+')';}
+  function dot(ctx,x,y,r,col,a){ctx.globalAlpha=a;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.globalAlpha=1;}
+  let S=fitCanvas(cv);
+  function draw(t){
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle=CREAM;ctx.fillRect(0,0,W,H);
+    const fuse=REDUCED?0.5:(Math.sin(t*0.5)*0.5+0.5);
+    const gap=14;
+    const breathe=REDUCED?0:Math.sin(t*0.9)*0.06;
+    const mix=[(RGB.orange[0]+RGB.sky[0])/2|0,(RGB.orange[1]+RGB.sky[1])/2|0,(RGB.orange[2]+RGB.sky[2])/2|0];
+    for(let gy=gap/2,row=0;gy<H;gy+=gap,row++){
+      for(let gx=gap/2+(row%2)*gap/2;gx<W;gx+=gap){
+        const isOrange=((row+Math.round(gx/gap))%2)===0;
+        const base=isOrange?RGB.orange:RGB.sky;
+        const col3=[base[0]+(mix[0]-base[0])*fuse|0,base[1]+(mix[1]-base[1])*fuse|0,base[2]+(mix[2]-base[2])*fuse|0];
+        const r=(4.2+breathe*2)*(1-0.18*fuse);
+        const jitter=(1-fuse)*1.6;
+        const jx=jitter*Math.sin(t*1.4+gx*0.05+row);
+        const jy=jitter*Math.cos(t*1.2+gy*0.05);
+        dot(ctx,gx+jx,gy+jy,r,rgba(col3,1),0.92);
+      }
+    }
+  }
+  let raf=0,running=false,t0=performance.now();
+  function loop(){if(!running)return;draw((performance.now()-t0)/1000);raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED)draw(0);},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else{t0=performance.now();start();}});
+  if(REDUCED)draw(0);else start();
+})();
+</script>
+</body>
+</html>

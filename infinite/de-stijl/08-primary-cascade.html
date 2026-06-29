@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Primary red, blue and yellow squares fall down vertical channels of a black grid on warm white, stacking onto stepped shelves then recycling">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Primary Cascade</title>
+<style>
+  :root{
+    --ds08-bg:#0e0e10; --ds08-line:#07070a; --ds08-paper:#ece9e1;
+    --ds08-red:#c8202a; --ds08-blu:#1b5fc4; --ds08-yel:#f2c014;
+  }
+  html,body{margin:0;height:100%;background:var(--ds08-bg)}
+  #ds08-stage{position:fixed;inset:0;display:grid;place-items:center;
+    background:var(--ds08-bg);overflow:hidden}
+  /* tense square canvas of the composition, on warm paper with a STATIC depth shadow */
+  #ds08-comp{position:relative;width:88vmin;height:88vmin;max-width:640px;max-height:640px;
+    background:var(--ds08-paper);box-shadow:0 0 0 1px #000,0 24px 60px -22px #000}
+  #ds08-c{position:absolute;inset:0;display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+  }
+</style>
+</head>
+<body>
+<div id="ds08-stage">
+  <div id="ds08-comp" role="img"
+    aria-label="De Stijl Neoplastic composition: primary red, blue and yellow squares cascading down vertical channels of a black grid on warm white, settling into a balanced asymmetric arrangement.">
+    <canvas id="ds08-c"></canvas>
+  </div>
+</div>
+<div class="cap">Primary Cascade</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("ds08-c"),
+      g=cv.getContext("2d"),
+      reduce=matchMedia("(prefers-reduced-motion:reduce)").matches,
+      PAPER="#ece9e1",LINE="#07070a",
+      COL=["#c8202a","#1b5fc4","#f2c014"], // red, blue, yellow
+      W=0,H=0,DPR=1,running=true,raf=0;
+
+  // five vertical channels of unequal width — Neoplastic asymmetry, pure verticals.
+  var FR=[0.00,0.17,0.40,0.58,0.79,1.00]; // channel boundaries (fraction of width)
+  var NCH=FR.length-1;
+  var BW=0;            // bar weight (px), set on resize
+  // horizontal "rest shelves" (fraction of height) where squares stack to a stop
+  var SHELF=[1.00,0.82,0.66,0.44,0.30];
+
+  // squares: typed arrays, capped well under 110
+  var N=44, cx=new Float32Array(N), cy=new Float32Array(N), sz=new Float32Array(N),
+      vy=new Float32Array(N), rest=new Float32Array(N), ch=new Int8Array(N),
+      ci=new Int8Array(N), settled=new Uint8Array(N);
+  var stackTop=new Float32Array(NCH); // current top of the stack per channel (px)
+  var seed=0;
+  function rnd(){ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }
+
+  function chBounds(c){ return [FR[c]*W, FR[c+1]*W]; }
+
+  function resetStacks(){
+    for(var c=0;c<NCH;c++){
+      // each channel rests on a different shelf -> stepped, balanced silhouette
+      stackTop[c]=SHELF[c]*H;
+    }
+  }
+  function spawn(i){
+    var c=(Math.random()*NCH)|0;
+    var b=chBounds(c), inner=b[1]-b[0]-BW*2;
+    var s=Math.min(inner, (b[1]-b[0])*(0.42+rnd()*0.5));
+    sz[i]=s;
+    cx[i]=b[0]+BW+(inner-s)*rnd(); // left edge inside channel gutters
+    cy[i]=-s-rnd()*H*0.5;          // start above the frame, staggered
+    vy[i]=0; ch[i]=c; ci[i]=(Math.random()*3)|0; settled[i]=0;
+    rest[i]=0;
+  }
+
+  function size(){
+    var r=cv.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,Math.round(r.width)); H=Math.max(1,Math.round(r.height));
+    cv.width=W*DPR; cv.height=H*DPR;
+    g.setTransform(DPR,0,0,DPR,0,0);
+    BW=Math.max(2,Math.round(W*0.018));
+    resetStacks();
+    for(var i=0;i<N;i++) spawn(i);
+  }
+
+  function drawGrid(){
+    g.fillStyle=LINE;
+    // verticals
+    for(var k=1;k<FR.length-1;k++){
+      g.fillRect(Math.round(FR[k]*W-BW/2),0,BW,H);
+    }
+    // a couple of horizontal lines for true grid tension (static)
+    g.fillRect(0,Math.round(0.30*H-BW/2),W,BW);
+    g.fillRect(Math.round(FR[3]*W-BW/2),Math.round(0.62*H-BW/2),W-Math.round(FR[3]*W-BW/2),BW);
+    // frame
+    g.fillRect(0,0,W,BW); g.fillRect(0,H-BW,W,BW);
+    g.fillRect(0,0,BW,H); g.fillRect(W-BW,0,BW,H);
+  }
+
+  function draw(){
+    g.fillStyle=PAPER; g.fillRect(0,0,W,H);
+    // squares first, then grid lines sit on top as Neoplastic black bars
+    for(var i=0;i<N;i++){
+      g.fillStyle=COL[ci[i]];
+      g.fillRect(cx[i]|0, cy[i]|0, sz[i]|0, sz[i]|0);
+      // crisp black edge so each square reads as a discrete plane
+      g.fillStyle=LINE;
+      g.fillRect(cx[i]|0,(cy[i]+sz[i])|0,sz[i]|0,Math.max(1,BW*0.6)|0);
+    }
+    drawGrid();
+  }
+
+  var GRAV=0.0000034, last=0;
+  function step(t){
+    if(!running) return;
+    raf=requestAnimationFrame(step);
+    if(!last) last=t;
+    var dt=t-last; last=t;
+    if(dt>48) dt=48; // clamp after tab restore
+    for(var i=0;i<N;i++){
+      if(settled[i]){
+        rest[i]-=dt;
+        if(rest[i]<=0){ // collapse this column's stack a touch and recycle from top
+          var c=ch[i]; stackTop[c]+=sz[i]; if(stackTop[c]>SHELF[c]*H) stackTop[c]=SHELF[c]*H;
+          spawn(i);
+        }
+        continue;
+      }
+      vy[i]+=GRAV*H*dt; // gravity scaled to canvas height + elapsed time
+      var vmax=H*0.0009; if(vy[i]>vmax) vy[i]=vmax; // terminal velocity: measured descent
+      cy[i]+=vy[i]*dt;
+      var c=ch[i], floor=stackTop[c]-sz[i];
+      if(cy[i]>=floor){
+        cy[i]=floor; vy[i]=0; settled[i]=1;
+        rest[i]=900+rnd()*2600;
+        stackTop[c]-=sz[i]+BW*0.4; // next square rests above this one
+        if(stackTop[c]<H*0.10) stackTop[c]=SHELF[c]*H; // reset tall stacks
+      }
+    }
+    draw();
+  }
+
+  function staticFrame(){
+    // settle into one balanced, legible composition for reduced-motion
+    for(var c=0;c<NCH;c++) stackTop[c]=SHELF[c]*H;
+    for(var i=0;i<N;i++){
+      var c=ch[i], floor=stackTop[c]-sz[i];
+      cy[i]=floor; settled[i]=1; stackTop[c]-=sz[i]+BW*0.4;
+    }
+    draw();
+  }
+
+  function start(){ if(reduce){staticFrame();return;} last=0; running=true; raf=requestAnimationFrame(step); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf), raf=0; }
+
+  size();
+  if(reduce){ staticFrame(); }
+  else{
+    start();
+    document.addEventListener("visibilitychange",function(){
+      if(document.hidden) stop(); else if(!running) start();
+    });
+  }
+  var rt=0;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt); rt=setTimeout(function(){ size(); if(reduce) staticFrame(); },140);
+  });
+})();
+</script>
+</body>
+</html>

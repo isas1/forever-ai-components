@@ -1,0 +1,199 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="An open Bauhaus vessel sits empty while mint motes drift, scatter on poke, and spring back to settle above it.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Empty State</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0d12;overflow:hidden}
+  #fb06-stage{position:absolute;inset:0;display:grid;place-items:center;outline:none}
+  #fb06-c{display:block;width:100%;height:100%}
+  #fb06-stage:focus-visible{box-shadow:inset 0 0 0 2px #34d399aa}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="fb06-stage" tabindex="0" role="img"
+  aria-label="Empty state illustration: an open container with motes gently drifting and settling, nothing inside.">
+  <canvas id="fb06-c"></canvas>
+</div>
+<div class="cap">Empty State</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var stage=document.getElementById("fb06-stage");
+  var cv=document.getElementById("fb06-c");
+  var ctx=cv.getContext("2d");
+  var ACC="#34d399", INK="#5b6678", DIM="#222836";
+  var W=0,H=0,DPR=1,cx=0,cy=0,S=1;
+
+  // ---- motes: cap 26, typed arrays, allocation-free loop ----
+  var N=26;
+  var px=new Float32Array(N),py=new Float32Array(N),
+      vx=new Float32Array(N),vy=new Float32Array(N),
+      hx=new Float32Array(N),hy=new Float32Array(N), // home (rest) position
+      pr=new Float32Array(N),ph=new Float32Array(N); // radius, phase
+  var seeded=false;
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2; cy=H/2; S=Math.min(W,H)/320; // scale unit
+    seed();
+  }
+  function rnd(a,b){return a+Math.random()*(b-a);}
+  function seed(){
+    // rest positions: a loose cloud hovering above the empty container
+    for(var i=0;i<N;i++){
+      var ang=(i/N)*Math.PI*2;
+      var rad=(34+((i*53)%70))*S;
+      hx[i]=cx+Math.cos(ang)*rad*0.95;
+      hy[i]=cy-26*S+Math.sin(ang)*rad*0.55;
+      ph[i]=rnd(0,Math.PI*2);
+      pr[i]=(1.1+((i*7)%9)*0.18)*S;
+      if(!seeded){px[i]=hx[i];py[i]=hy[i];}
+    }
+    seeded=true;
+  }
+
+  // ---- container geometry (Bauhaus: circle base + open lid arc) ----
+  function drawScene(t,settle){
+    ctx.clearRect(0,0,W,H);
+    var u=S;
+    // soft breathing of the whole scene
+    var br=reduce?0:Math.sin(t*0.0011)*2.2*u;
+    var oy=cy+18*u;
+
+    // --- empty container: a low open vessel, drawn as primitives ---
+    ctx.save();
+    ctx.translate(cx,oy+br*0.4);
+    ctx.lineCap="round"; ctx.lineJoin="round";
+    var rw=64*u, rh=20*u, depth=30*u;
+
+    // back rim ellipse (the opening)
+    ctx.strokeStyle=DIM; ctx.lineWidth=2*u;
+    ctx.beginPath(); ctx.ellipse(0,0,rw,rh,0,0,Math.PI*2); ctx.stroke();
+    // interior void shading
+    ctx.fillStyle="#10131a";
+    ctx.beginPath(); ctx.ellipse(0,0,rw*0.92,rh*0.84,0,0,Math.PI*2); ctx.fill();
+    // walls
+    ctx.strokeStyle=INK; ctx.lineWidth=2.4*u;
+    ctx.beginPath();
+    ctx.moveTo(-rw,0); ctx.bezierCurveTo(-rw,depth*0.9,-rw*0.62,depth,0,depth);
+    ctx.bezierCurveTo(rw*0.62,depth,rw,depth*0.9,rw,0); ctx.stroke();
+    // front rim accent — brightness keyed to settle (alive when settled)
+    var rimA=0.35+0.55*settle;
+    ctx.strokeStyle=ACC; ctx.globalAlpha=rimA; ctx.lineWidth=2.2*u;
+    ctx.beginPath(); ctx.ellipse(0,0,rw,rh,0,Math.PI*0.06,Math.PI*0.94); ctx.stroke();
+    ctx.globalAlpha=1;
+
+    // a single dashed "nothing here" ground line below
+    ctx.strokeStyle="#1b212d"; ctx.lineWidth=1.4*u;
+    ctx.setLineDash([4*u,7*u]);
+    ctx.beginPath(); ctx.moveTo(-rw*1.4,depth+12*u); ctx.lineTo(rw*1.4,depth+12*u); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
+  // ---- physics: spring motes toward home, plus idle drift ----
+  var lastIdle=true, ctrl=0, idleAt=0;
+
+  function step(t,dt){
+    var settle=0;
+    var drift=reduce?0:1;
+    for(var i=0;i<N;i++){
+      // gentle orbital idle wobble baked into target
+      var tx=hx[i], ty=hy[i];
+      if(drift){
+        var w=t*0.0009+ph[i];
+        tx+=Math.cos(w)*6*S; ty+=Math.sin(w*1.3)*5*S;
+      }
+      // spring
+      var ax=(tx-px[i])*0.018, ay=(ty-py[i])*0.018;
+      vx[i]=(vx[i]+ax)*0.90; vy[i]=(vy[i]+ay)*0.90;
+      px[i]+=vx[i]*dt*0.06; py[i]+=vy[i]*dt*0.06;
+      var d=Math.abs(px[i]-tx)+Math.abs(py[i]-ty);
+      if(d<2*S) settle++;
+    }
+    return settle/N; // 0..1 how settled
+  }
+
+  function drawMotes(t,settle){
+    for(var i=0;i<N;i++){
+      var tw=reduce?1:(0.55+0.45*Math.sin(t*0.003+ph[i]));
+      ctx.globalAlpha=0.20+0.55*tw*(0.5+0.5*settle);
+      ctx.fillStyle=ACC;
+      ctx.beginPath(); ctx.arc(px[i],py[i],pr[i],0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // ---- interaction: scatter on input, spring re-settles ----
+  function scatter(ax,ay,power){
+    for(var i=0;i<N;i++){
+      var dx=px[i]-ax, dy=py[i]-ay, dd=Math.sqrt(dx*dx+dy*dy)+0.001;
+      var f=power*(120*S)/(dd+40*S);
+      vx[i]+=dx/dd*f; vy[i]+=dy/dd*f;
+    }
+  }
+  function userPoke(x,y){ ctrl=1; idleAt=performance.now(); scatter(x,y,3.2); }
+
+  stage.addEventListener("pointerdown",function(e){
+    var r=cv.getBoundingClientRect();
+    userPoke(e.clientX-r.left,e.clientY-r.top);
+  });
+  stage.addEventListener("pointermove",function(e){
+    if(e.buttons||ctrl){
+      var r=cv.getBoundingClientRect();
+      ctrl=1; idleAt=performance.now();
+      scatter(e.clientX-r.left,e.clientY-r.top,0.7);
+    }
+  });
+  stage.addEventListener("keydown",function(e){
+    if(e.key==="Enter"||e.key===" "||e.key==="ArrowUp"||e.key==="ArrowDown"){
+      e.preventDefault(); userPoke(cx+rnd(-40,40)*S,cy+rnd(-30,10)*S);
+    }
+  });
+
+  // ---- self-demo: synthesize a gentle poke when idle ----
+  var nextDemo=0;
+  function autodemo(t){
+    if(ctrl){ if(t-idleAt>2600) ctrl=0; return; } // hand back after idle
+    if(t>nextDemo){
+      // a soft synthesized settle pulse from a drifting "phantom" item
+      scatter(cx+rnd(-30,30)*S, cy-50*S, 1.4);
+      nextDemo=t+rnd(3200,4600);
+    }
+  }
+
+  // ---- loop ----
+  var running=true, raf=0, prev=0;
+  function frame(t){
+    if(!running) return;
+    var dt=prev?Math.min(40,t-prev):16; prev=t;
+    autodemo(t);
+    var settle=step(t,dt);
+    drawScene(t,settle);
+    drawMotes(t,settle);
+    raf=requestAnimationFrame(frame);
+  }
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!reduce){ running=true; prev=0; raf=requestAnimationFrame(frame); }
+  });
+  window.addEventListener("resize",size);
+
+  size();
+  if(reduce){
+    // one static, legible, on-brand frame, then stop
+    for(var k=0;k<N;k++){px[k]=hx[k];py[k]=hy[k];}
+    drawScene(0,1); drawMotes(0,1);
+    return;
+  }
+  nextDemo=1800;
+  raf=requestAnimationFrame(frame);
+})();
+</script>
+</body></html>

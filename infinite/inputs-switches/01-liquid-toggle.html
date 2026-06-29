@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Teal gooey SVG toggle whose knob slides with trailing liquid droplets while the track fades between off and on colors.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Liquid Toggle</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{height:100%;display:flex;align-items:center;justify-content:center}
+  .stage{width:min(62vmin,300px);aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}
+  svg{width:100%;height:auto}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#3fe0c5;opacity:.4;text-transform:uppercase}
+  .track{transition:fill .5s}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="stage">
+<svg viewBox="0 0 200 110" role="img" aria-label="Liquid toggle">
+  <defs>
+    <filter id="goo"><feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/>
+      <feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -11" result="g"/>
+      <feBlend in="SourceGraphic" in2="g"/></filter>
+    <radialGradient id="knob" cx="40%" cy="35%"><stop offset="0" stop-color="#eafff9"/><stop offset="1" stop-color="#7df0db"/></radialGradient>
+  </defs>
+  <rect class="track" x="6" y="22" width="188" height="66" rx="33" fill="#1d2a33"/>
+  <g filter="url(#goo)" fill="url(#knob)">
+    <circle id="main" cx="55" cy="55" r="26"/>
+    <circle id="d1" cx="55" cy="55" r="13"/>
+    <circle id="d2" cx="55" cy="55" r="9"/>
+  </g>
+</svg>
+</div></div>
+<div class="cap">Liquid Toggle</div>
+<script>
+(function(){
+  const main=document.getElementById('main'),d1=document.getElementById('d1'),d2=document.getElementById('d2'),track=document.querySelector('.track');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let t=0,on=false,phase=0,running=true;
+  const L=55,R=145;
+  function ease(x){return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;}
+  function frame(){
+    if(!running)return;
+    phase+=0.012;
+    if(phase>=1){phase=0;on=!on;}
+    const p=ease(phase);
+    const from=on?R:L, to=on?L:R;
+    const x=from+(to-from)*p;
+    main.setAttribute('cx',x);
+    track.setAttribute('fill', on? blend(p) : blend(1-p));
+    // trailing droplets lag behind for liquid feel
+    const lag=Math.sin(p*Math.PI);
+    const dir=(to-from);
+    d1.setAttribute('cx', x - dir*0.18*lag); d1.setAttribute('cy',55+Math.sin(t*0.05)*2);
+    d2.setAttribute('cx', x - dir*0.30*lag); d2.setAttribute('cy',55-Math.sin(t*0.07)*2);
+    t++;
+    requestAnimationFrame(frame);
+  }
+  function blend(p){
+    // off #1d2a33 -> on #0e8f7a
+    const a=[29,42,51],b=[14,143,122];
+    const c=a.map((v,i)=>Math.round(v+(b[i]-v)*p));
+    return 'rgb('+c.join(',')+')';
+  }
+  function toggleNow(){phase=0;on=!on;}
+  document.body.addEventListener('pointerdown',toggleNow);
+  document.addEventListener('visibilitychange',()=>{running=!document.hidden; if(running&&!reduce)requestAnimationFrame(frame);});
+  if(reduce){on=true;main.setAttribute('cx',L);track.setAttribute('fill',blend(1));}
+  else requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

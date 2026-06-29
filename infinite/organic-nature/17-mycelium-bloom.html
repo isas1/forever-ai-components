@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Branching mycelium hyphae spread and anastomose on near-black, seeding pulsing bioluminescent teal fruiting nodes where the web is densest.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mycelium Bloom</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#100b06;}
+  #myc-c{display:block;width:100%;height:100%;}
+  .myc-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#6ad6c4;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="myc-c"></canvas>
+<div class="myc-cap">Mycelium Bloom</div>
+<script>
+(function(){
+  const cv=document.getElementById('myc-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,scale,tips,nodes,grid,cell,gw,gh,t,seedT;
+
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    scale=Math.min(W,H)/400;
+    cell=Math.max(7,9*scale);gw=Math.ceil(W/cell)+1;gh=Math.ceil(H/cell)+1;
+    reset();
+  }
+  function reset(){
+    ctx.fillStyle='#100b06';ctx.fillRect(0,0,W,H);
+    grid=new Float32Array(gw*gh); // density field for anastomosis + node glow
+    nodes=[];tips=[];t=0;seedT=0;
+    const cx=W/2,cy=H/2,k=3+((Math.random()*3)|0);
+    for(let i=0;i<k;i++){
+      const a=(i/k)*Math.PI*2+Math.random();
+      tips.push({x:cx,y:cy,a,life:0,gen:0,w:1.7*scale});
+    }
+  }
+  function gidx(x,y){const gx=x/cell|0,gy=y/cell|0;if(gx<0||gy<0||gx>=gw||gy>=gh)return -1;return gy*gw+gx;}
+
+  function grow(){
+    const speed=1.5*scale,maxTips=reduce?40:160;
+    const nt=[];
+    for(let i=0;i<tips.length;i++){
+      const p=tips[i];
+      // wander: smooth angular jitter, a probabilistic growth grammar
+      p.a+=(Math.random()-0.5)*0.5;
+      const nx=p.x+Math.cos(p.a)*speed, ny=p.y+Math.sin(p.a)*speed;
+      const gi=gidx(nx,ny);
+      // out of bounds -> retire
+      if(gi<0){continue;}
+      const dens=grid[gi];
+      // anastomosis: fuse into existing network where dense -> drop a node, retire tip
+      if(dens>2.4 && p.life>6 && Math.random()<0.55){
+        nodes.push({x:nx,y:ny,r:(1.4+Math.random()*2.4)*scale,ph:Math.random()*6.28,bright:Math.min(1,dens/6)});
+        ctx.strokeStyle='rgba(106,214,196,0.10)';ctx.lineWidth=p.w;
+        ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(nx,ny);ctx.stroke();
+        continue;
+      }
+      // deposit hyphal segment
+      const taper=Math.max(0.35*scale,p.w*0.997);
+      const fade=0.16+0.22*Math.min(1,dens/3);
+      ctx.strokeStyle='rgba(150,196,176,'+fade+')';ctx.lineWidth=taper;ctx.lineCap='round';
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(nx,ny);ctx.stroke();
+      grid[gi]+=1;
+      p.x=nx;p.y=ny;p.w=taper;p.life++;
+      // branch split at soft angles
+      if(tips.length+nt.length<maxTips && p.life>4 && Math.random()<0.045){
+        const da=0.4+Math.random()*0.5, s=Math.random()<0.5?1:-1;
+        nt.push({x:nx,y:ny,a:p.a+da*s,life:0,gen:p.gen+1,w:p.w*0.86});
+        p.a-=da*s*0.5;
+      }
+      if(p.life<420)nt.push(p);
+    }
+    tips=nt;
+    // re-seed when network quiets, keeps the bloom perpetual
+    if(tips.length<2){seedT++;if(seedT>40)reset();}
+  }
+
+  function frame(){
+    if(!reduce){
+      // gentle fade keeps trails alive while letting the canvas breathe
+      ctx.fillStyle='rgba(16,11,6,0.018)';ctx.fillRect(0,0,W,H);
+      for(let s=0;s<2;s++)grow();
+      t++;
+    }
+    // bioluminescent fruiting nodes pulse where the network is densest
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<nodes.length;i++){
+      const n=nodes[i];
+      const pulse=reduce?0.7:0.45+0.55*(0.5+0.5*Math.sin(t*0.04+n.ph));
+      const a=pulse*(0.22+0.5*n.bright);
+      const R=n.r*(2.6+pulse*1.6);
+      const g=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,R);
+      g.addColorStop(0,'rgba(150,255,236,'+(a*0.9)+')');
+      g.addColorStop(0.4,'rgba(106,214,196,'+(a*0.5)+')');
+      g.addColorStop(1,'rgba(106,214,196,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(n.x,n.y,R,0,6.2832);ctx.fill();
+      ctx.fillStyle='rgba(214,255,247,'+(a*0.95)+')';
+      ctx.beginPath();ctx.arc(n.x,n.y,n.r*0.7,0,6.2832);ctx.fill();
+    }
+    ctx.globalCompositeOperation='source-over';
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  addEventListener('resize',()=>{size();if(!reduce)start();});
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  // pointer nudge: spawn a fresh growth tip at the cursor
+  cv.addEventListener('pointermove',e=>{
+    if(reduce||tips.length>150)return;
+    const r=cv.getBoundingClientRect();
+    if(Math.random()<0.25)tips.push({x:e.clientX-r.left,y:e.clientY-r.top,a:Math.random()*6.28,life:0,gen:0,w:1.5*scale});
+  });
+
+  size();
+  if(reduce){for(let i=0;i<260;i++)grow();frame();}else start();
+})();
+</script>
+</body>
+</html>

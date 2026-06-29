@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric rings and a bold R split into RGB channels, pulsing to a beat and tracking the pointer with scanlines.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chromatic aberration pulse</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#07070c}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{width:100%;height:100%;display:block}
+  .cap{position:fixed;right:8px;bottom:7px;font:600 10px ui-monospace,monospace;
+    color:#fff;opacity:.32;letter-spacing:.5px;pointer-events:none;mix-blend-mode:difference}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div class="cap">CHROMA PULSE</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+let W,H,t=0,raf,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+let mx=0.5,my=0.5;
+function size(){W=c.width=Math.floor(innerWidth);H=c.height=Math.floor(innerHeight);}
+addEventListener('resize',size);size();
+// draw the same glyph 3 times offset in R/G/B with additive blend
+function shape(cx,cy,sc,rot){
+  x.save();x.translate(cx,cy);x.rotate(rot);
+  x.lineWidth=Math.max(3,sc*0.05);
+  // concentric rings + bold letter
+  for(let i=0;i<3;i++){x.beginPath();x.arc(0,0,sc*(0.5+i*0.22),0,7);x.stroke();}
+  x.font='900 '+Math.round(sc*0.9)+'px "Arial Black",Impact,sans-serif';
+  x.textAlign='center';x.textBaseline='middle';
+  x.fillText('R',0,0);
+  x.restore();
+}
+function draw(){
+  x.fillStyle='#07070c';x.fillRect(0,0,W,H);
+  const cx=W/2,cy=H/2,sc=Math.min(W,H)*0.3;
+  // pulse amount: rhythmic + extra near pointer
+  const beat=Math.pow(Math.sin(t*1.6)*0.5+0.5,3);
+  const amt=(4+beat*Math.min(W,H)*0.07);
+  const rot=Math.sin(t*0.5)*0.2;
+  const ang=t*1.2;
+  const ox=Math.cos(ang)*amt,oy=Math.sin(ang)*amt;
+  const px=(mx-0.5)*amt*1.5,py=(my-0.5)*amt*1.5;
+  x.globalCompositeOperation='screen';
+  x.strokeStyle='#ff1133';x.fillStyle='#ff1133';shape(cx+ox+px,cy+oy+py,sc,rot);
+  x.strokeStyle='#11ff66';x.fillStyle='#11ff66';shape(cx-ox,cy-oy,sc,rot);
+  x.strokeStyle='#2277ff';x.fillStyle='#2277ff';shape(cx-px,cy-py,sc,rot);
+  x.globalCompositeOperation='source-over';
+  // scanline flicker overlay
+  if(!reduce){x.fillStyle='rgba(255,255,255,'+(0.02+beat*0.05)+')';
+    for(let yy=0;yy<H;yy+=4)x.fillRect(0,yy,W,1);}
+  if(reduce){ return; }                  // reduced-motion: one static frame, no loop
+  t+=0.03;
+  raf=requestAnimationFrame(draw);
+}
+function play(){cancelAnimationFrame(raf);draw();}
+document.addEventListener('visibilitychange',()=>document.hidden?cancelAnimationFrame(raf):play());
+addEventListener('pointermove',e=>{mx=e.clientX/innerWidth;my=e.clientY/innerHeight; if(reduce) draw();});
+play();
+</script>
+</body>
+</html>

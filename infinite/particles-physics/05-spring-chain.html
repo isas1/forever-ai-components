@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A springy 16-node tail in blue-to-purple gradient whips and follows the cursor, drifting in a figure-eight when idle.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spring Chain</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d0a18}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#c084fc;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Spring Chain</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,nodes=[],t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);init();}
+function init(){nodes=[];const N=16;for(let i=0;i<N;i++)nodes.push({x:W/2,y:H/2,vx:0,vy:0,i});}
+addEventListener('resize',size);size();
+let target={x:0,y:0},hover=false;
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+  target.x=e.clientX-r.left;target.y=e.clientY-r.top;hover=true;});
+cv.addEventListener('pointerleave',()=>hover=false);
+const k=0.32,damp=0.74,seg=Math.min(W,H)*0.055;
+function step(){
+  x.clearRect(0,0,W,H);t+=0.018;
+  let tx,ty;
+  if(hover){tx=target.x;ty=target.y;}
+  else{tx=W/2+Math.cos(t)*W*0.3;ty=H/2+Math.sin(t*1.6)*H*0.3;}
+  nodes[0].x+=(tx-nodes[0].x)*0.35;nodes[0].y+=(ty-nodes[0].y)*0.35;
+  for(let i=1;i<nodes.length;i++){const n=nodes[i],p=nodes[i-1];
+    const dx=p.x-n.x,dy=p.y-n.y,d=Math.hypot(dx,dy)||0.001,f=(d-seg)*k/d;
+    n.vx+=dx*f;n.vy+=dy*f;n.vx*=damp;n.vy*=damp;n.x+=n.vx;n.y+=n.vy;}
+  for(let i=0;i<nodes.length-1;i++){const a=nodes[i],b=nodes[i+1];
+    const h=210+i*9;x.strokeStyle='hsl('+h+',85%,65%)';x.lineWidth=Math.max(1.5,7-i*0.32);
+    x.lineCap='round';x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();}
+  for(let i=0;i<nodes.length;i++){const n=nodes[i],h=210+i*9;
+    x.fillStyle='hsl('+h+',90%,'+(70-i*1.5)+'%)';
+    x.beginPath();x.arc(n.x,n.y,Math.max(1.6,6-i*0.27),0,7);x.fill();}
+}
+let raf;function loop(){step();raf=requestAnimationFrame(loop);}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+function stop(){cancelAnimationFrame(raf);raf=0;}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+play();
+</script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="An elementary cellular automaton scrolling upward, computing each new row from a fixed rule to reveal violet fractal triangles.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Elementary CA</title>
+<style>
+  html,body{margin:0;height:100%;background:#06070b}
+  #fr08-stage{position:fixed;inset:0;overflow:hidden;background:#06070b}
+  #fr08-c{position:absolute;inset:0;width:100%;height:100%;display:block;
+    image-rendering:pixelated;
+    box-shadow:inset 0 0 130px 34px rgba(6,7,11,.92),inset 0 0 26px 5px rgba(155,140,255,.10)}
+  .fr08-vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(125% 120% at 50% 38%,transparent 50%,rgba(6,7,11,.80) 100%)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fr08-stage" role="img" aria-label="An elementary cellular automaton: each new row is computed from the one above by a fixed three-cell rule, scrolling upward to reveal violet fractal triangles and self-similar texture on a dark field.">
+  <canvas id="fr08-c"></canvas>
+  <div class="fr08-vig"></div>
+</div>
+<div class="cap">Elementary CA</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('fr08-stage');
+  var cv = document.getElementById('fr08-c');
+  var ctx = cv.getContext('2d', { alpha:false });
+
+  // Palette around #9b8cff over #06070b. A live cell fades over its lifetime as it scrolls
+  // away from the generation front: bright accent at birth -> cool deep violet aging out.
+  // 12-step packed-RGBA LUT (0xAABBGGRR) precomputed once; dead cells -> background.
+  var BG=[6,7,11];
+  var HOT=[206,193,255], MID=[155,140,255], COOL=[92,80,168];
+  var STEPS=12, liveLUT=new Uint32Array(STEPS), dead;
+  (function(){
+    dead=(255<<24)|(BG[2]<<16)|(BG[1]<<8)|BG[0];
+    for(var i=0;i<STEPS;i++){
+      var t=i/(STEPS-1), r,g,b;
+      if(t<0.5){var k=t/0.5; r=HOT[0]+(MID[0]-HOT[0])*k; g=HOT[1]+(MID[1]-HOT[1])*k; b=HOT[2]+(MID[2]-HOT[2])*k;}
+      else{var k2=(t-0.5)/0.5; r=MID[0]+(COOL[0]-MID[0])*k2; g=MID[1]+(COOL[1]-MID[1])*k2; b=MID[2]+(COOL[2]-MID[2])*k2;}
+      liveLUT[i]=(255<<24)|((b|0)<<16)|((g|0)<<8)|(r|0);
+    }
+  })();
+
+  // A curated set of "interesting" elementary rules — chaotic, nested, and complex classes.
+  var RULES=[30,90,110,150,182,22,60,105,73,45];
+  var rule=30, ruleBit=new Uint8Array(8);
+  function setRule(n){ rule=n; for(var i=0;i<8;i++) ruleBit[i]=(n>>i)&1; }
+
+  var COLS=0, ROWS=0, PW=0, PH=0;
+  var rowA=null, rowB=null;      // current / next generation (Uint8Array, width COLS)
+  var ageGrid=null;              // Uint8Array COLS*ROWS, 0=dead else age+1 (1..STEPS)
+  var img=null, buf32=null;
+  var head=0;                    // ring-buffer index of the newest row
+  var gens=0;                    // generations emitted since last reseed
+
+  function newSeed(){
+    var i;
+    for(i=0;i<COLS;i++) rowA[i]=0;
+    // Mix single-seed (classic fractal) with sparse-random starts for variety.
+    if(Math.random()<0.55){ rowA[COLS>>1]=1; }
+    else { for(i=0;i<COLS;i++) rowA[i]=Math.random()<0.5?1:0; }
+    setRule(RULES[(Math.random()*RULES.length)|0]);
+    gens=0;
+  }
+
+  function resize(){
+    var w=stage.clientWidth||300, h=stage.clientHeight||300;
+    var dpr=Math.min(2,window.devicePixelRatio||1);
+    var cell=Math.max(2,Math.round(Math.min(w,h)/150));
+    COLS=Math.min(220,Math.max(40,Math.ceil(w/cell)));
+    ROWS=Math.min(220,Math.max(40,Math.ceil(h/cell)));
+    PW=COLS; PH=ROWS;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    rowA=new Uint8Array(COLS); rowB=new Uint8Array(COLS);
+    ageGrid=new Uint8Array(COLS*ROWS);
+    img=ctx.createImageData(PW,PH); buf32=new Uint32Array(img.data.buffer);
+    head=0; ctx.imageSmoothingEnabled=false;
+    newSeed();
+    // Prime the whole field so the first frame is full, not blank.
+    for(var s=0;s<ROWS;s++) emit();
+  }
+
+  // Compute next generation into rowB, swap, write it as the new head row of the ring.
+  function emit(){
+    var c=COLS, i, left, self, right, idx;
+    for(i=0;i<c;i++){
+      left = rowA[(i-1+c)%c];
+      self = rowA[i];
+      right= rowA[(i+1)%c];
+      rowB[i] = ruleBit[(left<<2)|(self<<1)|right];
+    }
+    var t=rowA; rowA=rowB; rowB=t;
+    head=(head+1)%ROWS;
+    var base=head*c;
+    for(i=0;i<c;i++) ageGrid[base+i]=rowA[i]?1:0;
+    gens++;
+    // Reseed periodically so the canvas keeps revealing fresh rules/structure.
+    if(gens>ROWS*3) newSeed();
+  }
+
+  function render(){
+    var c=COLS, r=ROWS, dst=0;
+    // Draw newest row at the bottom, oldest at the top -> visual scroll upward.
+    for(var y=0;y<r;y++){
+      var src=((head-(r-1-y))%r+r)%r;     // ring index for visual row y
+      var base=src*c;
+      for(var x=0;x<c;x++){
+        var a=ageGrid[base+x];
+        buf32[dst++]= a? liveLUT[a-1] : dead;
+      }
+    }
+    ctx.putImageData(img,0,0);
+    ctx.drawImage(cv,0,0,PW,PH,0,0,cv.width,cv.height);
+  }
+
+  // Age every live cell by one step (toward COOL) so older rows recede — done in render-prep.
+  function ageAll(){
+    var len=COLS*ROWS, v;
+    for(var i=0;i<len;i++){ v=ageGrid[i]; if(v && v<STEPS) ageGrid[i]=v+1; }
+  }
+
+  var running=true, raf=0, last=0, STEP_MS=78, acc=0;
+  function loop(ts){
+    if(!running) return;
+    raf=requestAnimationFrame(loop);
+    var dt=ts-last; last=ts; if(dt>250)dt=250; acc+=dt;
+    if(acc>=STEP_MS){
+      acc-=STEP_MS; if(acc>STEP_MS)acc=0;
+      ageAll(); emit(); render();
+    }
+  }
+
+  resize();
+  render();
+
+  if(reduce){
+    // Settle a clean, legible Rule 30 still frame from a single seed, then stop.
+    setRule(30);
+    for(var i=0;i<COLS;i++) rowA[i]=0;
+    rowA[COLS>>1]=1;
+    ageGrid.fill(0); head=0;
+    for(var s=0;s<ROWS;s++){ ageAll(); emit(); }
+    render();
+    return;
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(function(){resize();render();},160);});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; last=performance.now(); acc=0; raf=requestAnimationFrame(loop); }
+  });
+  last=performance.now();
+  raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Vertical teal radio list where the selected ring dips then blooms a spring-loaded dot with an outward pulse, cycling through options.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Radio Dot Bloom</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#102A2E;}
+  .rdb-wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:ui-monospace,"SFMono-Regular","Menlo",monospace;}
+  .rdb-list{display:flex;flex-direction:column;gap:clamp(8px,2.4vw,16px);
+    width:min(74%,360px);}
+  .rdb-row{display:flex;align-items:center;gap:clamp(10px,3.2vw,18px);cursor:pointer;
+    padding:clamp(4px,1.4vw,8px) 0;-webkit-tap-highlight-color:transparent;}
+  .rdb-ring{position:relative;flex:none;
+    width:clamp(20px,6.4vw,30px);height:clamp(20px,6.4vw,30px);}
+  .rdb-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;
+    display:block;}
+  .rdb-label{color:#7FA9A6;font-size:clamp(11px,3.4vw,16px);letter-spacing:.04em;
+    transition:color .35s ease;}
+  .rdb-row.on .rdb-label{color:#E6FFFB;}
+  .rdb-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,monospace;
+    letter-spacing:.14em;color:#2DD4BF;opacity:.36;text-transform:uppercase;
+    pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<div class="rdb-wrap">
+  <div class="rdb-list" id="rdbList"></div>
+</div>
+<div class="rdb-cap">Radio Dot Bloom</div>
+<script>
+(function(){
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ACC='#2DD4BF', DIM='#33585A';
+  const labels=['Anticipation','Resolution','Cadence','Overshoot','Settle'];
+  const list=document.getElementById('rdbList');
+  const rows=labels.map((tx,i)=>{
+    const row=document.createElement('div'); row.className='rdb-row';
+    row.innerHTML='<span class="rdb-ring"><svg class="rdb-svg" viewBox="-20 -20 40 40">'+
+      '<circle class="rdb-pulse" r="14" fill="none" stroke="'+ACC+'" stroke-width="1.4"/>'+
+      '<circle class="rdb-out" r="13" fill="none" stroke="'+DIM+'" stroke-width="2.2"/>'+
+      '<circle class="rdb-dot" r="0" fill="'+ACC+'"/></svg></span>'+
+      '<span class="rdb-label">'+tx+'</span>';
+    list.appendChild(row);
+    const o={ row, out:row.querySelector('.rdb-out'), dot:row.querySelector('.rdb-dot'),
+      pulse:row.querySelector('.rdb-pulse'),
+      sel:0, dip:0, bloom:0, ring:0, ph:0 };
+    row.addEventListener('click',()=>select(i,true));
+    return o;
+  });
+
+  let cur=0, t=0, last=performance.now();
+  function select(i,user){
+    if(i===cur) return;
+    const p=rows[cur];
+    p.ph=performance.now(); p.sel=0;      // hand-off: previous starts de-selecting
+    cur=i;
+    const n=rows[i];
+    n.ph=performance.now()+ (user?70:110);  // staggered entrance after hand-off begins
+    n.sel=1; n.ring=0;
+  }
+  rows[0].sel=1; rows[0].dot.setAttribute('r','6'); rows[0].ph=-1;
+
+  // spring-ish ease for the bloom
+  function spring(x){ // 0..>1 overshoot then settle
+    if(x>=1) return 1;
+    return 1 - Math.pow(2,-9*x)*Math.cos(x*13.5);
+  }
+  function ease(x){ return x<0?0:x>1?1:x*x*(3-2*x); }
+
+  let auto=0;
+  function step(now){
+    const dt=Math.min(now-last,50); last=now; t+=dt;
+    rows.forEach((o)=>{
+      const age=(now-o.ph)/1000;
+      let outR=13, outStroke=2.2, dotR, outCol=DIM;
+      if(o.sel){
+        // anticipatory dip: ring scales DOWN then back up
+        const a=ease(age/0.16), b=ease((age-0.12)/0.5);
+        const dip = a - b;                       // pulse 0..1..0 over the squeeze
+        outR = 13 - dip*2.6 + b*1.6;             // dip in, settle slightly larger
+        outStroke = 2.2 + b*0.6;
+        outCol = mix(DIM,ACC, ease(age/0.28));
+        // dot blooms with spring after the dip starts releasing
+        const bl=spring(Math.max(0,(age-0.10))/0.62);
+        dotR = bl*6.4;
+        // concentric pulse rings outward once
+        const pr=(age-0.06)/0.85;
+        if(pr>0&&pr<1){
+          o.pulse.setAttribute('r',(13+pr*9).toFixed(2));
+          o.pulse.setAttribute('stroke-width',(1.6*(1-pr)).toFixed(2));
+          o.pulse.setAttribute('opacity',(0.5*(1-pr)).toFixed(3));
+        } else o.pulse.setAttribute('opacity','0');
+      } else {
+        // staggered de-select: dot collapses, ring eases back to dim
+        const d=ease(age/0.34);
+        dotR = 6.4*(1-d);
+        outR = 13 + (1-d)*1.6;
+        outCol = mix(ACC,DIM, d);
+        o.pulse.setAttribute('opacity','0');
+      }
+      o.out.setAttribute('r',outR.toFixed(2));
+      o.out.setAttribute('stroke-width',outStroke.toFixed(2));
+      o.out.setAttribute('stroke',outCol);
+      o.dot.setAttribute('r',Math.max(0,dotR).toFixed(2));
+      o.row.classList.toggle('on',o.sel===1);
+    });
+    auto+=dt;
+    if(auto>1700){ auto=0; select((cur+1)%rows.length,false); }
+    raf=requestAnimationFrame(step);
+  }
+  function mix(a,b,k){
+    const pa=[parseInt(a.slice(1,3),16),parseInt(a.slice(3,5),16),parseInt(a.slice(5,7),16)];
+    const pb=[parseInt(b.slice(1,3),16),parseInt(b.slice(3,5),16),parseInt(b.slice(5,7),16)];
+    const c=pa.map((v,i)=>Math.round(v+(pb[i]-v)*Math.max(0,Math.min(1,k))));
+    return 'rgb('+c[0]+','+c[1]+','+c[2]+')';
+  }
+
+  let raf=0;
+  function start(){ if(!raf&&!reduce){ last=performance.now(); raf=requestAnimationFrame(step);} }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+
+  if(reduce){
+    rows.forEach((o,i)=>{ const on=i===0;
+      o.out.setAttribute('r','13'); o.out.setAttribute('stroke',on?ACC:DIM);
+      o.dot.setAttribute('r',on?'6':'0'); o.row.classList.toggle('on',on);
+      o.pulse.setAttribute('opacity','0'); });
+  } else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A purple double pendulum swings chaotically, its glowing bob tracing a slowly fading ribbon ghost; pointer nudges, click rekicks.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Double Pendulum Ghost</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0e0b14;}
+  #dpg-c{display:block;width:100%;height:100%;}
+  .dpg-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#b388ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="dpg-c"></canvas>
+<div class="dpg-cap">Double Pendulum Ghost</div>
+<script>
+(function(){
+  const cv=document.getElementById('dpg-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,L;
+  // trail layer (offscreen) so the ribbon fades independently of the rods
+  const tr=document.createElement('canvas'),tctx=tr.getContext('2d');
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    tr.width=W*DPR;tr.height=H*DPR;tctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H*0.40;L=Math.min(W,H)*0.235;
+  }
+  addEventListener('resize',size);size();
+  // state: angles + angular velocities. exact Lagrangian for equal masses & lengths.
+  const g=9.8,m1=1,m2=1;
+  let a1=2.2,a2=2.5,v1=0,v2=0;
+  function deriv(a1,a2,v1,v2){
+    const d=a1-a2,sd=Math.sin(d),cd=Math.cos(d),den=(m1+m2)-m2*cd*cd;
+    const d1=( m2*L*v1*v1*sd*cd + m2*g*Math.sin(a2)*cd + m2*L*v2*v2*sd - (m1+m2)*g*Math.sin(a1) )/(L*den);
+    const d2=( -m2*L*v2*v2*sd*cd + (m1+m2)*(g*Math.sin(a1)*cd - L*v1*v1*sd - g*Math.sin(a2)) )/(L*den);
+    return [d1,d2];
+  }
+  let px=null,py=null;
+  function tip(a1,a2){
+    return [cx+Math.sin(a1)*L+Math.sin(a2)*L, cy+Math.cos(a1)*L+Math.cos(a2)*L];
+  }
+  function step(h){ // RK4 on full state [a1,a2,v1,v2] — energy-stable, no false decay
+    const f=(A1,A2,V1,V2)=>{const a=deriv(A1,A2,V1,V2);return [V1,V2,a[0],a[1]];};
+    const k1=f(a1,a2,v1,v2);
+    const k2=f(a1+k1[0]*h/2,a2+k1[1]*h/2,v1+k1[2]*h/2,v2+k1[3]*h/2);
+    const k3=f(a1+k2[0]*h/2,a2+k2[1]*h/2,v1+k2[2]*h/2,v2+k2[3]*h/2);
+    const k4=f(a1+k3[0]*h,a2+k3[1]*h,v1+k3[2]*h,v2+k3[3]*h);
+    a1+=h*(k1[0]+2*k2[0]+2*k3[0]+k4[0])/6;
+    a2+=h*(k1[1]+2*k2[1]+2*k3[1]+k4[1])/6;
+    v1+=h*(k1[2]+2*k2[2]+2*k3[2]+k4[2])/6;
+    v2+=h*(k1[3]+2*k2[3]+2*k3[3]+k4[3])/6;
+    v1*=0.99992;v2*=0.99992; // a whisper of damping -> drifts toward rest, then rekicks
+  }
+  function rekick(){ // loop back to stillness then fling off anew
+    a1=Math.PI*(0.55+Math.random()*0.9);a2=Math.PI*(0.55+Math.random()*0.9);
+    v1=(Math.random()-0.5)*0.06;v2=(Math.random()-0.5)*0.06;px=py=null;
+  }
+  cv.addEventListener('pointermove',e=>{ // nudge the chaos
+    const r=cv.getBoundingClientRect();
+    v1+=((e.clientX-r.left)/W-0.5)*0.04;v2+=((e.clientY-r.top)/H-0.5)*0.04;
+  });
+  cv.addEventListener('click',rekick);
+  let hue=0,still=0;
+  function draw(){
+    if(!reduce)for(let s=0;s<8;s++)step(0.04); // substeps = smooth, energy-stable ribbon
+    // fade the trail slowly (the "ghost")
+    tctx.globalCompositeOperation='destination-out';
+    tctx.fillStyle='rgba(0,0,0,0.012)';tctx.fillRect(0,0,W,H);
+    tctx.globalCompositeOperation='lighter';
+    const [tx,ty]=tip(a1,a2);
+    if(px!=null){
+      const sp=Math.hypot(tx-px,ty-py);
+      hue=(hue+0.6)%360;
+      tctx.lineCap='round';
+      // accent-tinted ribbon, brighter where the tip moves fast
+      tctx.strokeStyle=`hsla(${262+Math.sin(hue*0.017)*26},${72}%,${58+Math.min(sp,18)*1.6}%,0.5)`;
+      tctx.lineWidth=1.1+Math.min(sp,16)*0.16;
+      tctx.beginPath();tctx.moveTo(px,py);tctx.lineTo(tx,ty);tctx.stroke();
+    }
+    px=tx;py=ty;
+    // detect near-stillness -> rekick
+    const ke=v1*v1+v2*v2;
+    if(ke<0.0008){still++;if(still>120){rekick();still=0;}}else still=0;
+    // compose
+    ctx.fillStyle='#0e0b14';ctx.fillRect(0,0,W,H);
+    ctx.drawImage(tr,0,0,W,H);
+    // rods + bobs
+    const mx=cx+Math.sin(a1)*L,my=cy+Math.cos(a1)*L;
+    ctx.strokeStyle='rgba(179,136,255,0.85)';ctx.lineWidth=Math.max(1.4,L*0.012);
+    ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(mx,my);ctx.lineTo(tx,ty);ctx.stroke();
+    function bob(x,y,r,c){const rg=ctx.createRadialGradient(x,y,0,x,y,r*3);
+      rg.addColorStop(0,c);rg.addColorStop(.4,c);rg.addColorStop(1,'rgba(179,136,255,0)');
+      ctx.fillStyle=rg;ctx.beginPath();ctx.arc(x,y,r*3,0,6.29);ctx.fill();
+      ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(x,y,r*0.55,0,6.29);ctx.fill();}
+    ctx.fillStyle='#b388ff';ctx.beginPath();ctx.arc(cx,cy,Math.max(2,L*0.02),0,6.29);ctx.fill();
+    bob(mx,my,Math.max(3,L*0.034),'rgba(179,136,255,0.9)');
+    bob(tx,ty,Math.max(3.5,L*0.04),'rgba(214,184,255,0.95)');
+    raf=requestAnimationFrame(draw);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(draw);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){a1=2.0;a2=2.7;px=py=null;draw();stop();}else start();
+})();
+</script>
+</body>
+</html>

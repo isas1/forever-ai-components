@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Colored stippled dots fall as rain and splash into expanding ripple rings on a glowing amber puddle over deep blue.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pointillist Rain</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  #po09-stage{position:fixed;inset:0;background:#0d0f14}
+  #po09-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="po09-stage" role="img" aria-label="Pointillist rain falling as colored dots and gathering into a reflective puddle, in the divisionist style of optically mixing color">
+  <canvas id="po09-c"></canvas>
+</div>
+<div class="cap">Pointillist Rain</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("po09-c"), ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,DPR=1,horizon=0,running=false,raf=0;
+
+  // Divisionist palette: warm accent against cool complements (optical mix)
+  var SKY=["#1a2438","#22304a","#2b3a52","#3a4a66"];
+  var DROP=["#f0a830","#f6c25a","#7fb0d8","#b9d0e6","#e8b96a","#9ec4dd"];
+  var PUD=["#f0a830","#e8943a","#6f9fc8","#8fb6d6","#caa050","#3a5274"];
+
+  // Rain agents (capped). Typed arrays, allocation-free.
+  var N=104;
+  var rx=new Float32Array(N), ry=new Float32Array(N), rv=new Float32Array(N);
+  var rl=new Float32Array(N), rc=new Int8Array(N);
+
+  function rnd(a,b){return a+Math.random()*(b-a);}
+
+  function seed(i){
+    rx[i]=Math.random()*W;
+    ry[i]=-rnd(0,H*0.6);
+    rv[i]=rnd(H*0.012,H*0.026);
+    rl[i]=rnd(8,20)*DPR;
+    rc[i]=(Math.random()*DROP.length)|0;
+  }
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,(cv.clientWidth*DPR)|0);
+    H=Math.max(1,(cv.clientHeight*DPR)|0);
+    cv.width=W; cv.height=H;
+    horizon=H*0.62;
+    for(var i=0;i<N;i++) seed(i);
+  }
+
+  // A pointillist dot: stippled core so color mixes optically, never a flat disc.
+  function dot(x,y,r,col,alpha){
+    ctx.globalAlpha=alpha;
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill();
+  }
+
+  // Pre-rendered static backdrop: divisionist sky of fixed dots + puddle band.
+  // Drawn once per resize to an offscreen canvas (no per-frame repaint of bg).
+  var bg=document.createElement("canvas"), bx=bg.getContext("2d");
+  function buildBg(){
+    bg.width=W; bg.height=H;
+    bx.fillStyle="#0d0f14"; bx.fillRect(0,0,W,H);
+    var i,x,y,r,t;
+    // sky stipple
+    var sn=Math.min(2600,(W*horizon)/(190));
+    for(i=0;i<sn;i++){
+      x=Math.random()*W; y=Math.random()*horizon;
+      t=y/horizon;
+      bx.globalAlpha=0.10+0.16*t;
+      bx.fillStyle=SKY[(Math.random()*SKY.length)|0];
+      r=(0.9+Math.random()*1.5)*DPR;
+      bx.beginPath(); bx.arc(x,y,r,0,6.2832); bx.fill();
+    }
+    // puddle base band: reflected accent glow as STATIC stipple gradient
+    var pn=Math.min(2200,(W*(H-horizon))/(150));
+    for(i=0;i<pn;i++){
+      x=Math.random()*W; y=horizon+Math.random()*(H-horizon);
+      t=(y-horizon)/(H-horizon);
+      bx.globalAlpha=0.05+0.20*(1-t);
+      // accent concentrated near center, cool toward edges
+      var cx=Math.abs(x-W/2)/(W/2);
+      bx.fillStyle = cx<0.45 ? PUD[(Math.random()*3)|0] : PUD[3+((Math.random()*3)|0)];
+      r=(1.0+Math.random()*2.0)*DPR;
+      bx.beginPath(); bx.arc(x,y,r,0,6.2832); bx.fill();
+    }
+    bx.globalAlpha=1;
+  }
+
+  // Ripple ring buffer for puddle impacts (capped, no allocation in loop).
+  var RN=10, kx=new Float32Array(RN), kr=new Float32Array(RN), kc=new Int8Array(RN), kk=0;
+  function splash(x,c){
+    kx[kk]=x; kr[kk]=1; kc[kk]=c; kk=(kk+1)%RN;
+  }
+
+  function frame(){
+    if(!running) return;
+    // trail fade: translucent backdrop blit keeps motion smeared into dots
+    ctx.globalAlpha=0.34;
+    ctx.drawImage(bg,0,0);
+    ctx.globalAlpha=1;
+
+    var i;
+    for(i=0;i<N;i++){
+      ry[i]+=rv[i];
+      // falling streak as a short column of optically-mixed dots
+      var seg=4, sy;
+      for(var s=0;s<seg;s++){
+        sy=ry[i]-s*(rl[i]/seg);
+        if(sy<horizon && sy>-10){
+          dot(rx[i], sy, (1.1+ (seg-s)*0.32)*DPR, DROP[rc[i]], 0.82-0.16*s);
+        }
+      }
+      if(ry[i]>=horizon){
+        splash(rx[i], rc[i]);
+        seed(i); ry[i]=-rnd(0,H*0.25);
+      }
+    }
+
+    // ripple rings: expanding stippled arcs in the puddle
+    for(i=0;i<RN;i++){
+      if(kr[i]>0 && kr[i]<H*0.16){
+        var rr=kr[i]*DPR, n=10+((rr/DPR)|0), col=PUD[kc[i]%PUD.length];
+        var yb=horizon + rr*0.22; // shallow elliptical
+        for(var a=0;a<n;a++){
+          var ang=(a/n)*6.2832;
+          var px=kx[i]+Math.cos(ang)*rr;
+          var py=yb+Math.sin(ang)*rr*0.34;
+          if(py>horizon && py<H){
+            dot(px,py,1.3*DPR,col, 0.5*(1-kr[i]/(H*0.16)));
+          }
+        }
+        kr[i]+=H*0.0045;
+      } else kr[i]=0;
+    }
+
+    // accent surface shimmer: a few bright reflected dots near center waterline
+    for(i=0;i<14;i++){
+      var sxp=W*0.5 + (Math.random()-0.5)*W*0.5;
+      var syp=horizon + Math.random()*(H-horizon)*0.5;
+      dot(sxp,syp,(0.9+Math.random())*DPR,"#f0a830",0.06);
+    }
+
+    raf=requestAnimationFrame(frame);
+  }
+
+  function drawStatic(){
+    ctx.drawImage(bg,0,0);
+    // one settled frame: a quiet field of suspended drops + a calm lit puddle
+    var i;
+    for(i=0;i<N;i++){
+      var x=Math.random()*W, y=Math.random()*horizon, t=y/horizon;
+      for(var s=0;s<4;s++){
+        var sy=y - s*3.4*DPR;
+        if(sy>0) dot(x,sy,(1.1+(4-s)*0.3)*DPR,DROP[(Math.random()*DROP.length)|0],(0.7-0.14*s)*(0.4+0.6*t));
+      }
+    }
+    // a single dominant reflection on the puddle
+    for(i=0;i<260;i++){
+      var px=W*0.5+(Math.random()-0.5)*W*0.4;
+      var py=horizon+Math.random()*(H-horizon)*0.7;
+      dot(px,py,(1.0+Math.random()*1.6)*DPR,"#f0a830",0.04+Math.random()*0.05);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function start(){ if(running)return; running=true; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size(); buildBg();
+    if(reduce){ drawStatic(); return; }
+    start();
+  }
+
+  var rt;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){
+      var was=running; stop();
+      size(); buildBg();
+      if(reduce){ drawStatic(); return; }
+      ctx.clearRect(0,0,W,H);
+      if(was||true) start();
+    },140);
+  });
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

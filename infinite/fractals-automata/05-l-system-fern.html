@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="An algorithmic fern drawing itself branch by branch via an L-system rule, growing in violet-to-mint then restarting.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>L-System Fern</title>
+<style>
+  html,body{margin:0;height:100%;background:#06070b;overflow:hidden}
+  #fr05-stage{position:fixed;inset:0;display:block;
+    background:
+      radial-gradient(120% 90% at 50% 108%, rgba(155,140,255,.16), transparent 60%),
+      radial-gradient(60% 60% at 50% 40%, rgba(120,200,180,.05), transparent 70%),
+      #06070b;}
+  #fr05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="fr05-stage" role="img" aria-label="An algorithmic fern drawing itself, branch by branch, via an L-system rewriting rule.">
+    <canvas id="fr05-c"></canvas>
+  </div>
+  <div class="cap">L-System Fern</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('fr05-stage');
+  var cv = document.getElementById('fr05-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,DPR=1;
+
+  // --- L-system: a plant grammar. axiom X, rules expand to a fern. ---
+  // X -> F+[[X]-X]-F[-FX]+X ; F -> FF   (classic fractal plant, original layout)
+  var DEPTH = 5;            // recursion depth (capped)
+  function build(){
+    var s = "X";
+    for(var i=0;i<DEPTH;i++){
+      var o="",j;
+      for(j=0;j<s.length;j++){
+        var ch=s[j];
+        if(ch==='X') o+="F+[[X]-X]-F[-FX]+X";
+        else if(ch==='F') o+="FF";
+        else o+=ch;
+      }
+      s=o;
+    }
+    return s;
+  }
+  var SEQ = build();
+
+  // Pre-compute every segment ONCE into typed arrays (x0,y0,x1,y1,gen).
+  // Turtle in normalized space; mapped to canvas at draw time via cached scale.
+  var ANG = 23 * Math.PI/180;
+  var segX0,segY0,segX1,segY1,segGen,SEGN=0;
+  var minx,maxx,miny,maxy;
+  function turtle(){
+    var cap = 9000;                 // hard cap on segment count
+    segX0=new Float32Array(cap); segY0=new Float32Array(cap);
+    segX1=new Float32Array(cap); segY1=new Float32Array(cap);
+    segGen=new Uint8Array(cap);
+    var x=0,y=0,a=Math.PI/2;        // pointing up
+    var step=1, gen=0;
+    var stx=new Float32Array(64),sty=new Float32Array(64),sta=new Float32Array(64),stg=new Uint8Array(64),sp=0;
+    minx=miny=1e9; maxx=maxy=-1e9; SEGN=0;
+    for(var i=0;i<SEQ.length && SEGN<cap;i++){
+      var c=SEQ[i];
+      if(c==='F'){
+        var nx=x+Math.cos(a)*step, ny=y+Math.sin(a)*step;
+        segX0[SEGN]=x;segY0[SEGN]=y;segX1[SEGN]=nx;segY1[SEGN]=ny;segGen[SEGN]=gen>7?7:gen;
+        SEGN++;
+        if(x<minx)minx=x; if(nx<minx)minx=nx; if(x>maxx)maxx=x; if(nx>maxx)maxx=nx;
+        if(y<miny)miny=y; if(ny<miny)miny=ny; if(y>maxy)maxy=y; if(ny>maxy)maxy=ny;
+        x=nx;y=ny;
+      } else if(c==='+'){ a+=ANG; }
+      else if(c==='-'){ a-=ANG; }
+      else if(c==='['){ if(sp<63){stx[sp]=x;sty[sp]=y;sta[sp]=a;stg[sp]=gen;sp++;} gen++; }
+      else if(c===']'){ if(sp>0){sp--;x=stx[sp];y=sty[sp];a=sta[sp];gen=stg[sp];} }
+    }
+  }
+  turtle();
+
+  var scale=1,offx=0,offy=0;        // cached transform, recomputed on resize
+  function fit(){
+    var w=maxx-minx||1, h=maxy-miny||1, pad=0.10;
+    var sx=(W*(1-pad*2))/w, sy=(H*(1-pad*2))/h;
+    scale=Math.min(sx,sy);
+    var cx=(minx+maxx)/2, cy=(miny+maxy)/2;
+    offx=W/2 - cx*scale;
+    offy=H/2 + cy*scale;             // flip Y (turtle up = screen up)
+  }
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.lineCap='round';
+    fit();
+  }
+  resize();
+  window.addEventListener('resize',resize);
+
+  // palette: deep violet -> accent -> mint highlight by generation depth
+  var PAL=['#3b2f7a','#5b4bb8','#7565e0','#9b8cff','#b6abff','#9fe6c8','#c7f3df','#e8eaff'];
+
+  function drawTo(count){
+    ctx.clearRect(0,0,W,H);
+    var n = count|0; if(n>SEGN)n=SEGN;
+    var prevGen=-1;
+    for(var i=0;i<n;i++){
+      var g=segGen[i];
+      if(g!==prevGen){
+        ctx.strokeStyle=PAL[g];
+        ctx.lineWidth = g<2 ? 2.0 : (g<4?1.3:0.85);
+        prevGen=g;
+        ctx.beginPath();
+      }
+      ctx.moveTo(segX0[i]*scale+offx, offy - segY0[i]*scale);
+      ctx.lineTo(segX1[i]*scale+offx, offy - segY1[i]*scale);
+      // stroke per gen-run: flush when next gen differs or at end
+      if(i+1>=n || segGen[i+1]!==g){ ctx.stroke(); }
+    }
+    // growing tip glow (static-radius, opacity-free): a single soft node at the frontier
+    if(n>0 && n<SEGN){
+      var tx=segX1[n-1]*scale+offx, ty=offy-segY1[n-1]*scale;
+      ctx.fillStyle='#e8eaff';
+      ctx.beginPath(); ctx.arc(tx,ty,1.8,0,6.2832); ctx.fill();
+    }
+  }
+
+  if(reduce){ drawTo(SEGN); return; }   // settle to full static fern
+
+  // animation: grow from 0 -> SEGN, hold, fade-restart by redrawing. one rAF.
+  var running=true, raf=0;
+  var grown=0, GROW_PER_SEC=SEGN/3.4;   // full draw in ~3.4s
+  var holdUntil=0, last=0;
+  var PHASE_GROW=0, PHASE_HOLD=1, phase=PHASE_GROW;
+
+  function frame(t){
+    if(!running) return;
+    if(!last) last=t;
+    var dt=(t-last)/1000; if(dt>0.05)dt=0.05; last=t;
+    if(phase===PHASE_GROW){
+      grown+=GROW_PER_SEC*dt;
+      if(grown>=SEGN){ grown=SEGN; phase=PHASE_HOLD; holdUntil=t+2200; }
+      drawTo(grown);
+    } else {
+      if(t>=holdUntil){ phase=PHASE_GROW; grown=0; }
+      else if(grown===SEGN){ drawTo(SEGN); grown=SEGN+1e-3; } // draw final once
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  raf=requestAnimationFrame(frame);
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; last=0; raf=requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Hilbert space-filling curve drawing itself with a glowing teal-to-violet ribbon and leading spark, cycling through orders.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hilbert Weave</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#021016;}
+  #hw-c{display:block;width:100%;height:100%;}
+  .hw-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.16em;color:#23c2c9;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="hw-c"></canvas>
+<div class="hw-cap">Hilbert Weave</div>
+<script>
+(function(){
+  const cv=document.getElementById('hw-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,S,ox,oy;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H)*0.86; ox=(W-S)/2; oy=(H-S)/2;
+  }
+  addEventListener('resize',size);size();
+
+  // d2xy: map distance d along Hilbert curve of order (n=2^order) to grid coords
+  function d2xy(n,d){
+    let rx,ry,t=d,x=0,y=0;
+    for(let s=1;s<n;s*=2){
+      rx=1&(t/2); ry=1&(t^rx);
+      if(ry===0){ if(rx===1){x=s-1-x;y=s-1-y;} const tmp=x;x=y;y=tmp; }
+      x+=s*rx; y+=s*ry; t=Math.floor(t/4);
+    }
+    return [x,y];
+  }
+  // build polyline of cell-centre points for a given order
+  function buildPath(order){
+    const n=1<<order, total=n*n, cell=S/n, pts=new Float32Array(total*2);
+    for(let d=0;d<total;d++){
+      const c=d2xy(n,d);
+      pts[d*2]   = ox + (c[0]+0.5)*cell;
+      pts[d*2+1] = oy + (c[1]+0.5)*cell;
+    }
+    return {pts,total,cell};
+  }
+
+  let order=2, path=buildPath(order), draw=0, hold=0, phase='draw', hueShift=0, nudge=0;
+  const SPEED=0.018; // fraction of curve drawn per frame baseline
+
+  cv.addEventListener('pointermove',()=>{nudge=1;});
+  cv.addEventListener('click',()=>{nudge=1.6;});
+
+  function hsl(h,s,l,a){return 'hsla('+h+','+s+'%,'+l+'%,'+a+')';}
+
+  function render(prog){
+    ctx.fillStyle='#021016';ctx.fillRect(0,0,W,H);
+    const {pts,total}=path;
+    const seg=total-1;
+    const drawn=prog*seg;          // how many segments fully/partly drawn
+    const full=Math.floor(drawn);
+    const lastFrac=drawn-full;
+    // faint full-curve ghost so completed lattice reads as woven cloth
+    ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.lineWidth=Math.max(1, path.cell*0.10);
+    ctx.strokeStyle='rgba(35,194,201,0.07)';
+    ctx.beginPath();ctx.moveTo(pts[0],pts[1]);
+    for(let i=1;i<total;i++)ctx.lineTo(pts[i*2],pts[i*2+1]);
+    ctx.stroke();
+    // active drawn ribbon, hue flowing along arc length
+    const lw=Math.max(1.4, path.cell*0.30);
+    // soft glow underlay: one wide translucent pass instead of a per-segment
+    // shadowBlur (animated shadows repaint the whole element every frame).
+    ctx.lineWidth=lw*2.4;ctx.globalAlpha=0.22;
+    for(let i=0;i<=full && i<seg;i++){
+      const f=(i/seg+hueShift)%1;
+      const h=(168+f*150)%360;
+      const x0=pts[i*2],y0=pts[i*2+1];
+      let x1=pts[(i+1)*2],y1=pts[(i+1)*2+1];
+      let frac=1;
+      if(i===full){frac=lastFrac;}
+      x1=x0+(x1-x0)*frac;y1=y0+(y1-y0)*frac;
+      ctx.beginPath();
+      ctx.strokeStyle=hsl(h.toFixed(0),85,60,1);
+      ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    // crisp core ribbon on top
+    ctx.lineWidth=lw;
+    for(let i=0;i<=full && i<seg;i++){
+      const f=(i/seg+hueShift)%1;
+      const h=(168+f*150)%360;          // teal -> violet -> warm sweep
+      const x0=pts[i*2],y0=pts[i*2+1];
+      let x1=pts[(i+1)*2],y1=pts[(i+1)*2+1];
+      let frac=1;
+      if(i===full){frac=lastFrac;}
+      x1=x0+(x1-x0)*frac;y1=y0+(y1-y0)*frac;
+      ctx.beginPath();
+      ctx.strokeStyle=hsl(h.toFixed(0),70,58,0.95);
+      ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
+    }
+    // leading head spark
+    if(full<seg){
+      const x0=pts[full*2],y0=pts[full*2+1];
+      const x1=pts[(full+1)*2],y1=pts[(full+1)*2+1];
+      const hx=x0+(x1-x0)*lastFrac, hy=y0+(y1-y0)*lastFrac;
+      const g=ctx.createRadialGradient(hx,hy,0,hx,hy,lw*3);
+      g.addColorStop(0,'rgba(220,255,255,0.95)');
+      g.addColorStop(.4,'rgba(35,194,201,0.6)');
+      g.addColorStop(1,'rgba(35,194,201,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(hx,hy,lw*3,0,Math.PI*2);ctx.fill();
+    }
+  }
+
+  function frame(){
+    nudge*=0.92; hueShift=(hueShift+0.0009+nudge*0.004)%1;
+    if(phase==='draw'){
+      draw+=SPEED*(0.5+0.5*(1-draw))*(1+nudge*1.5)+0.002;
+      if(draw>=1){draw=1;phase='hold';hold=0;}
+    }else if(phase==='hold'){
+      hold++;
+      if(hold>90){
+        phase='draw';draw=0;
+        order = order>=5 ? 2 : order+1;   // recurse to next order, loop 2..5
+        path=buildPath(order);
+      }
+    }
+    render(Math.min(draw,1));
+    raf=requestAnimationFrame(frame);
+  }
+
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+
+  if(reduce){ order=4; path=buildPath(order); render(1); }
+  else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A purple gradient media icon smoothly morphing between play, pause and stop shapes while slowly rotating inside a glowing ring.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Icon Morph</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0b0d12;display:grid;place-items:center}
+.ssa05-stage{position:relative;width:min(82vmin,560px);height:min(82vmin,560px)}
+.ssa05-stage svg{width:100%;height:100%;display:block;overflow:visible}
+#ssa05-icon{filter:drop-shadow(0 0 26px rgba(124,92,255,.45))}
+.ssa05-ring{opacity:.5}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#7c5cff;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+@media (prefers-reduced-motion:reduce){.ssa05-spin{animation:none!important}}
+.ssa05-spin{transform-box:fill-box;transform-origin:center;animation:ssa05-rot 24s linear infinite}
+@keyframes ssa05-rot{to{transform:rotate(360deg)}}
+</style></head><body>
+<div class="ssa05-stage" id="ssa05-stage" role="img" aria-label="A media icon smoothly morphing between play, pause and stop">
+<svg viewBox="-150 -150 300 300" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="ssa05-fill" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0%" stop-color="#b9a8ff"/>
+<stop offset="48%" stop-color="#7c5cff"/>
+<stop offset="100%" stop-color="#4a2bb0"/>
+</linearGradient>
+<radialGradient id="ssa05-glow" cx="50%" cy="50%" r="50%">
+<stop offset="0%" stop-color="#7c5cff" stop-opacity=".30"/>
+<stop offset="72%" stop-color="#7c5cff" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<circle class="ssa05-ring" cx="0" cy="0" r="142" fill="url(#ssa05-glow)"/>
+<circle cx="0" cy="0" r="118" fill="none" stroke="#7c5cff" stroke-opacity=".16" stroke-width="3"/>
+<g class="ssa05-spin">
+<path id="ssa05-icon" fill="url(#ssa05-fill)" fill-rule="evenodd"/>
+</g>
+</svg>
+</div>
+<div class="cap">Icon Morph</div>
+<script>(function(){
+  var path=document.getElementById('ssa05-icon');
+  var svg=document.querySelector('#ssa05-stage svg');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // Each icon = 16 points: two 8-point closed loops (sub-shapes A and B).
+  // Shared topology means every vertex maps 1:1 across states, so the morph
+  // is a clean point interpolation. play & stop fold both loops into one
+  // visible mass; pause splits them into two bars (fill-rule keeps both solid).
+  var S=78; // half-extent
+  // Helper: rectangle as 8 points (corners + edge midpoints) for smooth scaling.
+  function rect(x0,y0,x1,y1){
+    var mx=(x0+x1)/2,my=(y0+y1)/2;
+    return [[x0,y0],[mx,y0],[x1,y0],[x1,my],[x1,y1],[mx,y1],[x0,y1],[x0,my]];
+  }
+  // PLAY: a triangle, expressed as a degenerate 8-pt loop per half so the
+  // two halves together read as one arrowhead.
+  var play=[
+    // left half -> upper portion of triangle
+    [-S*0.62,-S],[ -S*0.62,-S*0.5],[-S*0.62,0],[ S*0.10,-S*0.30],
+    [ S,0],[ S*0.10,-S*0.30],[-S*0.62,0],[-S*0.62,-S*0.5],
+    // right/lower half
+    [-S*0.62,0],[-S*0.62,S*0.5],[-S*0.62,S],[ S*0.10,S*0.30],
+    [ S,0],[ S*0.10,S*0.30],[-S*0.62,S],[-S*0.62,S*0.5]
+  ];
+  var pause=rect(-S,-S,-S*0.22,S).concat(rect(S*0.22,-S,S,S));
+  var stop=rect(-S*0.92,-S*0.92,-S*0.02,S*0.92).concat(rect(S*0.02,-S*0.92,S*0.92,S*0.92));
+  var states=[play,pause,stop,pause];
+  var N=16;
+
+  function smoothstep(t){return t*t*(3-2*t);}
+  // smooth closed loop through pts[off..off+7] via Catmull-Rom -> cubic bezier
+  function loop(pts,off,d){
+    var p=function(i){return pts[off+((i%8)+8)%8];};
+    d.push('M',p(0)[0].toFixed(2),p(0)[1].toFixed(2));
+    for(var i=0;i<8;i++){
+      var p0=p(i-1),p1=p(i),p2=p(i+1),p3=p(i+2);
+      var c1x=p1[0]+(p2[0]-p0[0])/6, c1y=p1[1]+(p2[1]-p0[1])/6;
+      var c2x=p2[0]-(p3[0]-p1[0])/6, c2y=p2[1]-(p3[1]-p1[1])/6;
+      d.push('C',c1x.toFixed(2),c1y.toFixed(2),c2x.toFixed(2),c2y.toFixed(2),p2[0].toFixed(2),p2[1].toFixed(2));
+    }
+    d.push('Z');
+  }
+  var cur=new Array(N),d=[];
+  function draw(a,b,k){
+    var s=smoothstep(k);
+    for(var i=0;i<N;i++)cur[i]=[a[i][0]+(b[i][0]-a[i][0])*s, a[i][1]+(b[i][1]-a[i][1])*s];
+    d.length=0; loop(cur,0,d); loop(cur,8,d);
+    path.setAttribute('d',d.join(' '));
+  }
+
+  if(reduce){draw(play,play,0);return;}
+  var raf=0,t0=0,HOLD=900,MORPH=1100,STEP=HOLD+MORPH;
+  function frame(now){
+    if(!t0)t0=now;
+    var el=now-t0, idx=Math.floor(el/STEP)%states.length, nxt=(idx+1)%states.length;
+    var ph=el%STEP, k=ph<HOLD?0:(ph-HOLD)/MORPH; // anticipation hold, then ease
+    draw(states[idx],states[nxt],k);
+    raf=requestAnimationFrame(frame);
+  }
+  raf=requestAnimationFrame(frame);
+  function vis(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0;} if(svg.pauseAnimations)svg.pauseAnimations();}
+    else{if(svg.unpauseAnimations)svg.unpauseAnimations(); if(!raf){t0=0;raf=requestAnimationFrame(frame);}}
+  }
+  document.addEventListener('visibilitychange',vis);
+})();</script>
+</body></html>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Teal particle haze drifts and condenses into the crisp word VAPOR, then dissolves back into a soft glowing cloud on a near-black field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vapor Condense</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0b0f0e;}
+  #vc-c{display:block;width:100%;height:100%;}
+  .vc-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.16em;color:#a8dadc;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="vc-c"></canvas>
+<div class="vc-cap">Vapor Condense</div>
+<script>
+(function(){
+  const cv=document.getElementById('vc-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const WORD="VAPOR", N=300;   // capped particle count (was 900) — keeps the cloud dense but cheap
+  let W,H,DPR,scale,anchors=[],P=[],t=0,nudge=0;
+
+  // sample word pixels from an offscreen canvas -> anchor points
+  function buildAnchors(){
+    const oc=document.createElement('canvas'),octx=oc.getContext('2d');
+    const fs=Math.round(Math.min(W,H)*0.42);
+    oc.width=W; oc.height=H;
+    octx.fillStyle='#fff';
+    octx.font='800 '+fs+'px ui-monospace,"SFMono-Regular",monospace';
+    octx.textAlign='center'; octx.textBaseline='middle';
+    octx.fillText(WORD, W/2, H/2);
+    const img=octx.getImageData(0,0,W,H).data, pts=[];
+    const step=Math.max(3,Math.round(Math.min(W,H)/130));
+    for(let y=0;y<H;y+=step){for(let x=0;x<W;x+=step){
+      if(img[(y*W+x)*4+3]>128) pts.push([x,y]);
+    }}
+    // pick N evenly
+    anchors=[];
+    for(let i=0;i<N;i++) anchors.push(pts.length?pts[(i*pts.length/N)|0]:[W/2,H/2]);
+  }
+
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    scale=Math.min(W,H)/400;
+    buildAnchors();
+    if(!P.length){for(let i=0;i<N;i++)P.push({x:Math.random()*W,y:Math.random()*H,
+      px:Math.random()*W,py:Math.random()*H,ph:Math.random()*6.28,sp:0.6+Math.random()*0.8});}
+  }
+  addEventListener('resize',size);
+
+  cv.addEventListener('pointermove',e=>{nudge=1;});
+  cv.addEventListener('click',()=>{t=0;});
+
+  // cycle: 0..1 scatter-haze, 1..2 condense-sharp hold, then dissolve back
+  function frame(){
+    t+=reduce?0:0.0052;
+    nudge*=0.93;
+    // phase: smooth gather/scatter via cosine; cond=1 fully formed, 0 fully vapor
+    const cyc=t%1;
+    const cond=0.5-0.5*Math.cos(Math.max(0,Math.min(1,(cyc<0.5?cyc/0.5:1-(cyc-0.5)/0.5)))*Math.PI);
+    const sharp=cond*cond; // sharpness lags behind gather
+
+    ctx.fillStyle='rgba(11,15,14,0.28)';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+
+    const tt=t*60, drift=18*scale*(1-cond)+3*scale;
+    for(let i=0;i<N;i++){
+      const p=P[i],a=anchors[i];
+      // haze target: wandering offset from anchor; condense target: the anchor itself
+      const wob=Math.sin(tt*0.02*p.sp+p.ph), wob2=Math.cos(tt*0.017*p.sp+p.ph*1.7);
+      const tx=a[0]+wob*drift*(2-cond)+(1-cond)*(p.px-a[0])*0.0,
+            ty=a[1]+wob2*drift*(2-cond);
+      // also pull from a dispersed cloud when vapor
+      const cloudX=a[0]+(p.ph-3.14)*38*scale*(1-cond),
+            cloudY=a[1]+(Math.sin(p.ph*3)*46*scale)*(1-cond);
+      const gx=tx*cond+cloudX*(1-cond), gy=ty*cond+cloudY*(1-cond);
+      const ease=0.045+0.08*cond + nudge*0.12;
+      p.x+=(gx-p.x)*ease; p.y+=(gy-p.y)*ease;
+
+      const rad=(1.05 + (1-sharp)*3.7 + nudge*1.5)*scale; // blurred big when vapor, tight when sharp (sized up for lower count)
+      const al=(0.05 + sharp*0.5) * (0.4+0.6*Math.abs(wob));
+      // cool teal vapor -> bright accent core
+      const g=Math.round(170+sharp*60), b=Math.round(180+sharp*40), r=Math.round(80+sharp*88);
+      ctx.fillStyle='rgba('+r+','+g+','+b+','+al+')';
+      ctx.beginPath();ctx.arc(p.x,p.y,rad,0,6.283);ctx.fill();
+    }
+    ctx.globalCompositeOperation='source-over';
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+
+  size();
+  if(reduce){
+    // one static resting frame: fully condensed crisp word
+    ctx.fillStyle='#0b0f0e';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<N;i++){const a=anchors[i];
+      ctx.fillStyle='rgba(168,218,220,0.55)';
+      ctx.beginPath();ctx.arc(a[0],a[1],1.15*scale,0,6.283);ctx.fill();}
+    ctx.globalCompositeOperation='source-over';
+  } else start();
+})();
+</script>
+</body>
+</html>

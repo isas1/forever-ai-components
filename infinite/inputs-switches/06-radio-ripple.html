@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Three cyan radio rings where the selected one grows its center dot and emits an expanding ripple pulse.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Radio Ripple</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0b1020;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px}
+  svg{width:100%;height:auto;display:block}
+  .stage{width:min(28vmin,120px)}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#4dd0ff;opacity:.45;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap"></div>
+<div class="cap">Radio Ripple</div>
+<script>
+(function(){
+  const wrap=document.getElementById('wrap');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const NS='http://www.w3.org/2000/svg';
+  const N=3,items=[];
+  for(let i=0;i<N;i++){
+    const d=document.createElement('div');d.className='stage';
+    const s=document.createElementNS(NS,'svg');s.setAttribute('viewBox','0 0 100 100');
+    const ring=document.createElementNS(NS,'circle');ring.setAttribute('cx',50);ring.setAttribute('cy',50);ring.setAttribute('r',38);ring.setAttribute('fill','none');ring.setAttribute('stroke','#2a3550');ring.setAttribute('stroke-width',6);
+    const rip=document.createElementNS(NS,'circle');rip.setAttribute('cx',50);rip.setAttribute('cy',50);rip.setAttribute('fill','none');rip.setAttribute('stroke','#4dd0ff');rip.setAttribute('stroke-width',4);
+    const dot=document.createElementNS(NS,'circle');dot.setAttribute('cx',50);dot.setAttribute('cy',50);dot.setAttribute('r',0);dot.setAttribute('fill','#4dd0ff');
+    s.appendChild(ring);s.appendChild(rip);s.appendChild(dot);d.appendChild(s);wrap.appendChild(d);
+    const o={ring,rip,dot,sel:false,dotR:0,t:0};
+    d.addEventListener('pointerdown',()=>pick(i));
+    items.push(o);
+  }
+  let cur=0,running=true,clock=0;
+  function pick(i){items.forEach((o,j)=>{if(j===i&&!o.sel){o.t=0;}o.sel=(j===i);});cur=i;}
+  function frame(){
+    if(!running)return;
+    clock++;
+    if(clock%70===0)pick((cur+1)%N);
+    items.forEach(o=>{
+      const tgt=o.sel?16:0;o.dotR+=(tgt-o.dotR)*0.2;o.dot.setAttribute('r',o.dotR);
+      o.ring.setAttribute('stroke',o.sel?'#4dd0ff':'#2a3550');
+      if(o.sel){o.t+=1;const p=(o.t%70)/70;const r=38+p*34;o.rip.setAttribute('r',r);o.rip.setAttribute('opacity',(1-p)*0.7);}
+      else{o.rip.setAttribute('opacity',0);}
+    });
+    requestAnimationFrame(frame);
+  }
+  document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
+  if(reduce){items[0].sel=true;items[0].dot.setAttribute('r',16);items[0].ring.setAttribute('stroke','#4dd0ff');}
+  else requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

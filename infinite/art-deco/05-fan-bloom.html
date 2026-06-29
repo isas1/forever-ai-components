@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A peacock fan of fine gold ribs with emerald eye-spots blooms open and closed from a sunburst medallion over a ziggurat base on black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fan Bloom</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0b08}
+  #ad05-stage{position:fixed;inset:0;overflow:hidden;background:
+    radial-gradient(120% 90% at 50% 86%,#161208 0%,#0c0b08 60%);}
+  #ad05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static gold vignette + glow, never repaints */
+  #ad05-glow{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(40% 34% at 50% 60%,rgba(212,175,55,.18),rgba(212,175,55,0) 70%);
+    box-shadow:inset 0 0 120px 30px rgba(0,0,0,.6)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ad05-stage" role="img" aria-label="Art Deco peacock fan blooming open with fine gold radial lines on deep black">
+  <canvas id="ad05-c"></canvas>
+  <div id="ad05-glow"></div>
+</div>
+<div class="cap">Fan Bloom</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("ad05-stage");
+  var cv=document.getElementById("ad05-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  var W=0,H=0,DPR=1,cx=0,cy=0,R=0;
+  var GOLD="#d4af37",GOLD2="#f2d97a",GOLD3="#8a6e22",EMER="#0e5c4a";
+  var RIB=16;            // fan ribs (<=110 elements total)
+  var TAU=Math.PI*2;
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W*0.5; cy=H*0.60;
+    R=Math.min(W,H)*0.46;
+  }
+
+  // smooth ease for bloom open/close
+  function ez(t){ return t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+
+  // draw one rib (a feather/shell blade) at angle a, with open fraction f (0..1)
+  function rib(a,f,phase){
+    var len=R*(0.42+0.58*f);
+    var ex=cx+Math.cos(a)*len, ey=cy+Math.sin(a)*len;
+    // spine
+    ctx.strokeStyle=GOLD3; ctx.lineWidth=Math.max(.6,R*0.006);
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(ex,ey); ctx.stroke();
+    // fine barbs along the spine
+    var n=7, perp=a+Math.PI/2;
+    ctx.strokeStyle=GOLD; ctx.lineWidth=Math.max(.5,R*0.0035);
+    ctx.globalAlpha=0.55*f;
+    for(var i=1;i<=n;i++){
+      var t=i/(n+1);
+      var sx=cx+Math.cos(a)*len*t, sy=cy+Math.sin(a)*len*t;
+      var bl=len*0.10*(1-t*0.4)*f;
+      ctx.beginPath();
+      ctx.moveTo(sx-Math.cos(perp)*bl,sy-Math.sin(perp)*bl);
+      ctx.lineTo(sx+Math.cos(perp)*bl,sy+Math.sin(perp)*bl);
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    // peacock eye near the tip
+    var er=R*(0.05+0.02*Math.sin(phase));
+    var gx=cx+Math.cos(a)*len*0.92, gy=cy+Math.sin(a)*len*0.92;
+    var grd=ctx.createRadialGradient(gx,gy,0,gx,gy,er);
+    grd.addColorStop(0,GOLD2); grd.addColorStop(.45,EMER); grd.addColorStop(1,"rgba(14,92,74,0)");
+    ctx.globalAlpha=f;
+    ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(gx,gy,er,0,TAU); ctx.fill();
+    ctx.strokeStyle=GOLD; ctx.lineWidth=Math.max(.5,R*0.004);
+    ctx.beginPath(); ctx.arc(gx,gy,er*0.55,0,TAU); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+
+  function drawFrame(open,phase){
+    ctx.clearRect(0,0,W,H);
+    // stepped ziggurat base — symmetric, static silhouette
+    ctx.fillStyle="rgba(212,175,55,0.10)";
+    var bw=R*1.05, bh=R*0.16, steps=4;
+    for(var s=0;s<steps;s++){
+      var w=bw*(1-s*0.18), y=cy+R*0.12+s*(bh/steps);
+      ctx.fillRect(cx-w/2,y,w,bh/steps-1);
+    }
+    // hub fountain stem
+    ctx.strokeStyle=GOLD3; ctx.lineWidth=Math.max(1,R*0.012);
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx,cy+R*0.34); ctx.stroke();
+
+    // fan spreads across an arc that widens with `open`
+    var spread=(0.30+0.65*open)*Math.PI;     // total angular width
+    var base=-Math.PI/2;                       // pointing up
+    for(var i=0;i<RIB;i++){
+      var t=RIB>1? i/(RIB-1):0.5;
+      var a=base+(t-0.5)*spread;
+      // per-rib stagger so it blooms outward-in
+      var rf=Math.max(0,Math.min(1,open*1.25 - Math.abs(t-0.5)*0.5));
+      rib(a,ez(rf),phase+t*2.2);
+    }
+
+    // central sunburst medallion (static-feel, sits over hub)
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.strokeStyle=GOLD; ctx.lineWidth=Math.max(.6,R*0.005);
+    var rays=24, ir=R*0.04, or_=R*0.085*(0.9+0.1*open);
+    for(var r=0;r<rays;r++){
+      var aa=r/rays*TAU;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(aa)*ir,Math.sin(aa)*ir);
+      ctx.lineTo(Math.cos(aa)*or_,Math.sin(aa)*or_);
+      ctx.stroke();
+    }
+    var mg=ctx.createRadialGradient(0,0,0,0,0,ir);
+    mg.addColorStop(0,GOLD2); mg.addColorStop(1,GOLD3);
+    ctx.fillStyle=mg; ctx.beginPath(); ctx.arc(0,0,ir,0,TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  // ---- loop ----
+  var running=true,raf=0,t0=0;
+  function frame(ts){
+    if(!running) return;
+    if(!t0) t0=ts;
+    var e=(ts-t0)/1000;
+    // breathing bloom: open and close slowly, never strobes
+    var cycle=(e%9)/9;                 // 9s cycle
+    var open;
+    if(cycle<0.55) open=ez(cycle/0.55);
+    else if(cycle<0.72) open=1;
+    else open=1-ez((cycle-0.72)/0.28);
+    drawFrame(open, e*0.6);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(reduce) return; running=true; t0=0; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden) stop();
+    else if(!reduce){ start(); }
+  });
+  window.addEventListener("resize",function(){
+    size(); if(reduce) drawFrame(0.78,0);
+  });
+
+  size();
+  if(reduce){ drawFrame(0.78,0); return; }
+  start();
+})();
+</script>
+</body>
+</html>

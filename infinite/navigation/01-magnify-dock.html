@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="macOS-style frosted-glass dock of six gradient tiles that magnify and lift under the cursor with an idle auto-sweep.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Magnify Dock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
+    --shadow-lift:0 18px 50px -24px rgba(0,0,0,0.9);
+    --border-soft:rgba(255,255,255,0.07);
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{
+    background:#0d0f16;
+    background-image:
+      radial-gradient(60vw 40vw at 15% -10%,rgba(124,92,255,0.16),transparent 60%),
+      radial-gradient(50vw 40vw at 90% 0%,rgba(34,211,238,0.16),transparent 55%);
+    font-family:"Inter",system-ui,sans-serif;
+    display:grid;place-items:center;
+  }
+  .c01-dock{
+    display:flex;align-items:flex-end;gap:10px;
+    padding:10px 14px;
+    background:rgba(28,32,48,0.55);
+    border:1px solid var(--border-soft);
+    border-radius:14px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.06),var(--shadow-lift);
+    backdrop-filter:blur(8px);
+  }
+  .c01-dock__item{
+    --c01-scale:1;
+    width:40px;height:40px;flex:0 0 auto;
+    border-radius:11px;
+    transform:scale(var(--c01-scale)) translateY(calc((var(--c01-scale) - 1) * -14px));
+    transform-origin:bottom center;
+    transition:transform 120ms var(--ease-out-soft);
+    box-shadow:0 4px 12px -4px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.2);
+    cursor:pointer;will-change:transform;
+  }
+  .c01-dock__item:nth-child(1){background:linear-gradient(150deg,#7c5cff,#4a2fd6)}
+  .c01-dock__item:nth-child(2){background:linear-gradient(150deg,#22d3ee,#0e8aa8)}
+  .c01-dock__item:nth-child(3){background:linear-gradient(150deg,#ff5ca8,#c0246d)}
+  .c01-dock__item:nth-child(4){background:linear-gradient(150deg,#f4f6fb,#9aa1bd)}
+  .c01-dock__item:nth-child(5){background:linear-gradient(150deg,#7c5cff,#22d3ee)}
+  .c01-dock__item:nth-child(6){background:linear-gradient(150deg,#ff9d5c,#d6502f)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+<div class="c01-dock" id="c01-dock">
+  <div class="c01-dock__item"></div>
+  <div class="c01-dock__item"></div>
+  <div class="c01-dock__item"></div>
+  <div class="c01-dock__item"></div>
+  <div class="c01-dock__item"></div>
+  <div class="c01-dock__item"></div>
+</div>
+<div class="cap">Magnify Dock</div>
+<script>
+(function(){
+  var dock=document.getElementById('c01-dock');
+  if(!dock)return;
+  var items=Array.prototype.slice.call(dock.querySelectorAll('.c01-dock__item'));
+  var MAX=1.85,RANGE=80;
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* cache item centers + dock geometry; re-measure only on resize, never per frame */
+  var centers=[],dockLeft=0,dockWidth=0;
+  function measure(){
+    var dr=dock.getBoundingClientRect();
+    dockLeft=dr.left;dockWidth=dr.width;
+    centers=items.map(function(it){
+      var r=it.getBoundingClientRect();
+      return r.left+r.width/2;
+    });
+  }
+  function update(x){
+    items.forEach(function(it,idx){
+      var d=Math.abs(x-centers[idx]);
+      var s=d<RANGE?1+(MAX-1)*(1-d/RANGE):1;
+      it.style.setProperty('--c01-scale',s.toFixed(3));
+    });
+  }
+  measure();
+  window.addEventListener('resize',measure);
+  dock.addEventListener('mousemove',function(e){update(e.clientX);});
+  dock.addEventListener('mouseleave',function(){
+    items.forEach(function(it){it.style.setProperty('--c01-scale',1);});
+  });
+  /* autonomous idle: sweep a virtual cursor across the dock */
+  var raf,t0=null;
+  function loop(ts){
+    if(t0===null)t0=ts;
+    var el=(ts-t0)/1000;
+    var x=dockLeft+dockWidth*(0.5+0.5*Math.sin(el*1.1));
+    update(x);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){if(!reduce&&!raf){t0=null;raf=requestAnimationFrame(loop);}}
+  function stop(){if(raf){cancelAnimationFrame(raf);raf=null;}}
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  start();
+})();
+</script>
+</body>
+</html>

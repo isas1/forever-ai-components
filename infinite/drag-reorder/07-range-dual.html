@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A canvas dual-range slider with two spring-driven thumbs, hatched fill, delta readout and ticks, auto-breathing between bounds.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dual Range</title>
+<style>
+  :root{--dr07-bg:#0c0e13;--dr07-acc:#22d3ee;--dr07-ink:#eef3f6;--dr07-rail:#1b2230;--dr07-warm:#f0b429}
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--dr07-bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+  #dr07-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  #dr07-c{width:100%;height:100%;display:block;touch-action:none;cursor:ew-resize}
+  #dr07-c:focus{outline:none}
+  #dr07-c:focus-visible+#dr07-ring{opacity:1}
+  #dr07-ring{position:fixed;inset:6px;border:2px solid var(--dr07-acc);border-radius:4px;opacity:0;pointer-events:none;transition:opacity .15s}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="dr07-stage">
+  <canvas id="dr07-c" tabindex="0" role="slider" aria-label="Dual range, drag or use arrow keys to set lower and upper bounds" aria-valuemin="0" aria-valuemax="100" aria-valuetext="32 to 68"></canvas>
+  <div id="dr07-ring"></div>
+</div>
+<div class="cap">Dual Range</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("dr07-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var DPR=Math.min(2,window.devicePixelRatio||1);
+  var W=0,H=0,cx=0,cy=0,railLen=0,railX0=0,railY=0;
+
+  // model: two values 0..100, spring-driven displayed positions
+  var lo={v:32,d:32,vel:0}, hi={v:68,d:68,vel:0};
+  var active=null;            // which thumb the user is dragging (lo/hi) or null
+  var hover=null;
+  var idleAt=0;               // timestamp until which user controls
+  var IDLE=2600;
+  var demoT=0;                // demo phase
+
+  function resize(){
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2; cy=H/2;
+    railLen=Math.max(80,Math.min(W*0.74, W-90));
+    railX0=cx-railLen/2;
+    railY=cy+Math.min(34,H*0.07);
+  }
+  resize();
+  window.addEventListener("resize",resize);
+
+  function xOf(val){return railX0+railLen*(val/100);}
+  function valOf(px){return Math.max(0,Math.min(100,(px-railX0)/railLen*100));}
+
+  function fmt(n){return (n<10?"0":"")+Math.round(n);}
+
+  function syncAria(){
+    cv.setAttribute("aria-valuetext",Math.round(lo.d)+" to "+Math.round(hi.d));
+    cv.setAttribute("aria-valuenow",Math.round((lo.d+hi.d)/2));
+  }
+
+  // ---- drawing ----
+  function thumb(x,val,isHi,emph){
+    var r=H<240?13:16;
+    // static contact shadow plate (geometric, no blur)
+    ctx.fillStyle="#05070b";
+    ctx.fillRect(x-r-2,railY-r-2,(r+2)*2,(r+2)*2);
+    // body: bauhaus square rotated for the active grabbed one, else circle
+    if(emph){
+      ctx.save();
+      ctx.translate(x,railY);
+      ctx.rotate(Math.PI/4);
+      ctx.fillStyle=isHi?"#f0b429":"#ffffff";
+      ctx.fillRect(-r*0.78,-r*0.78,r*1.56,r*1.56);
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      ctx.arc(x,railY,r,0,Math.PI*2);
+      ctx.fillStyle=isHi?"#f0b429":"#ffffff";
+      ctx.fill();
+    }
+    // inner ring
+    ctx.beginPath();
+    ctx.arc(x,railY,r*0.42,0,Math.PI*2);
+    ctx.fillStyle="#0c0e13";
+    ctx.fill();
+    // value readout above
+    ctx.fillStyle=isHi?"#f0b429":"#eef3f6";
+    ctx.font="700 "+(H<240?12:15)+"px ui-monospace,Menlo,monospace";
+    ctx.textAlign="center";
+    ctx.fillText(fmt(val),x,railY-r-12);
+  }
+
+  function frame(){
+    ctx.clearRect(0,0,W,H);
+    var xl=xOf(lo.d), xh=xOf(hi.d);
+
+    // ---- ticks (static geometry) ----
+    ctx.strokeStyle="#222b3a";
+    ctx.lineWidth=2;
+    for(var i=0;i<=10;i++){
+      var tx=railX0+railLen*(i/10);
+      var th=(i%5===0)?12:6;
+      ctx.beginPath();
+      ctx.moveTo(tx,railY+22);
+      ctx.lineTo(tx,railY+22+th);
+      ctx.stroke();
+    }
+
+    // ---- base rail ----
+    ctx.lineCap="round";
+    ctx.lineWidth=H<240?6:8;
+    ctx.strokeStyle="#1b2230";
+    ctx.beginPath();
+    ctx.moveTo(railX0,railY);
+    ctx.lineTo(railX0+railLen,railY);
+    ctx.stroke();
+
+    // ---- filled segment between thumbs ----
+    ctx.strokeStyle="#22d3ee";
+    ctx.beginPath();
+    ctx.moveTo(xl,railY);
+    ctx.lineTo(xh,railY);
+    ctx.stroke();
+
+    // hatch accent on fill (constructivist diagonal marks, static count)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(xl,railY-((H<240?6:8)/2),Math.max(0,xh-xl),H<240?6:8);
+    ctx.clip();
+    ctx.strokeStyle="rgba(8,12,18,.55)";
+    ctx.lineWidth=2;
+    var step=12;
+    for(var hx=railX0-H; hx<railX0+railLen+H; hx+=step){
+      ctx.beginPath();
+      ctx.moveTo(hx,railY-12);
+      ctx.lineTo(hx+12,railY+12);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // ---- span bracket + delta readout above fill ----
+    var mid=(xl+xh)/2;
+    ctx.fillStyle="#7d8aa0";
+    ctx.font="700 "+(H<240?10:12)+"px ui-monospace,Menlo,monospace";
+    ctx.textAlign="center";
+    ctx.fillText("Δ "+Math.round(hi.d-lo.d),mid,railY+22+24);
+
+    // ---- thumbs (hi first so lo overlaps when close) ----
+    var aHi=(active===hi)||(hover===hi);
+    var aLo=(active===lo)||(hover===lo);
+    thumb(xh,hi.d,true,aHi);
+    thumb(xl,lo.d,false,aLo);
+
+    syncAria();
+  }
+
+  // ---- spring integration ----
+  function spring(s){
+    var k=0.18, damp=0.74;
+    var f=(s.v-s.d)*k;
+    s.vel=(s.vel+f)*damp;
+    s.d+=s.vel;
+    if(Math.abs(s.v-s.d)<0.04&&Math.abs(s.vel)<0.04){s.d=s.v;s.vel=0;}
+  }
+
+  function clampPair(){
+    var gap=4;
+    if(lo.v>hi.v-gap){
+      if(active===lo) lo.v=hi.v-gap; else hi.v=lo.v+gap;
+    }
+    lo.v=Math.max(0,Math.min(100,lo.v));
+    hi.v=Math.max(0,Math.min(100,hi.v));
+  }
+
+  // ---- self demo: ease targets along a slow choreography ----
+  function demo(dt){
+    demoT+=dt*0.00045;
+    var p=demoT;
+    // breathing span + drifting center
+    var center=50+Math.sin(p*0.7)*22;
+    var span=26+Math.sin(p*1.13+1.2)*16;
+    lo.v=Math.max(0,center-span/2);
+    hi.v=Math.min(100,center+span/2);
+    if(hi.v-lo.v<6){hi.v=lo.v+6;}
+  }
+
+  var running=true,last=0;
+  function loop(t){
+    if(!running)return;
+    var dt=last?t-last:16; last=t;
+    if(dt>60)dt=60;
+    var now=performance.now();
+    if(now>idleAt){ demo(dt); }
+    clampPair();
+    spring(lo); spring(hi);
+    frame();
+    requestAnimationFrame(loop);
+  }
+
+  if(reduce){
+    resize(); clampPair(); lo.d=lo.v; hi.d=hi.v; frame();
+  } else {
+    requestAnimationFrame(loop);
+  }
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden){running=false;}
+    else if(!running){running=true;last=0;requestAnimationFrame(loop);}
+  });
+
+  // ---- pointer interaction ----
+  function pick(px){
+    var dl=Math.abs(px-xOf(lo.d)), dh=Math.abs(px-xOf(hi.d));
+    return dl<=dh?lo:hi;
+  }
+  function localX(e){
+    var r=cv.getBoundingClientRect();
+    return (e.clientX!=null?e.clientX:e.touches[0].clientX)-r.left;
+  }
+  cv.addEventListener("pointerdown",function(e){
+    cv.setPointerCapture&&cv.setPointerCapture(e.pointerId);
+    var px=localX(e);
+    active=pick(px);
+    active.v=valOf(px); active.d=active.v; active.vel=0;
+    idleAt=performance.now()+IDLE;
+    e.preventDefault();
+  });
+  cv.addEventListener("pointermove",function(e){
+    var px=localX(e);
+    hover=pick(px);
+    if(active){ active.v=valOf(px); idleAt=performance.now()+IDLE; }
+  });
+  function release(){ active=null; idleAt=performance.now()+IDLE; }
+  cv.addEventListener("pointerup",release);
+  cv.addEventListener("pointercancel",release);
+  cv.addEventListener("pointerleave",function(){hover=null;});
+
+  // ---- keyboard: arrows move nearest/selected thumb; Tab toggles which ----
+  var kbThumb=lo;
+  cv.addEventListener("keydown",function(e){
+    var step=e.shiftKey?10:1, used=true;
+    switch(e.key){
+      case "ArrowLeft": case "ArrowDown": kbThumb.v-=step; break;
+      case "ArrowRight": case "ArrowUp": kbThumb.v+=step; break;
+      case "Home": kbThumb.v=kbThumb===lo?0:lo.d+4; break;
+      case "End": kbThumb.v=kbThumb===hi?100:hi.d-4; break;
+      case " ": case "Enter": kbThumb=(kbThumb===lo?hi:lo); break;
+      default: used=false;
+    }
+    if(used){
+      active=kbThumb;
+      idleAt=performance.now()+IDLE;
+      e.preventDefault();
+      setTimeout(function(){active=null;},0);
+    }
+  });
+})();
+</script>
+</body>
+</html>

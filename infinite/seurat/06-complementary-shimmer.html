@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Complementary Shimmer — Georges Seurat. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Complementary Shimmer</title>
+<style>
+  html,body{margin:0;height:100%;background:#f1ecdf;overflow:hidden}
+  #seu06-stage{position:fixed;inset:0;width:100%;height:100%}
+  #seu06-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .seu06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2620;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="seu06-stage" role="img" aria-label="A field of orange-and-blue dot pairs set as simultaneous contrast, each pair trembling a hair against its partner so the shimmer lives in the seeing, not the pigment.">
+  <canvas id="seu06-cv"></canvas>
+</div>
+<div class="seu06-cap">Complementary Shimmer</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('seu06-cv'); if(!cv) return;
+  const RGB={green:[111,155,78],sky:[143,184,214],orange:[224,138,46],violet:[107,91,149]};
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function rgba(t,a){return 'rgba('+t[0]+','+t[1]+','+t[2]+','+a+')';}
+  function dot(ctx,x,y,r,col,a){ctx.globalAlpha=a;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.globalAlpha=1;}
+  let S=fitCanvas(cv);
+  const pairs=[[RGB.orange,RGB.sky],[RGB.green,RGB.violet],[RGB.orange,RGB.violet]];
+  let cells=[];
+  function build(){
+    cells=[];
+    const gap=30;
+    const cols=Math.max(4,Math.min(14,Math.floor(S.w/gap)));
+    const rows=Math.max(3,Math.min(14,Math.floor(S.h/gap)));
+    const cw=S.w/cols,ch=S.h/rows;
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      const pr=pairs[(r+c)%pairs.length];
+      const swap=(r+c)%2===0;
+      const cx=c*cw,cy=r*ch;
+      cells.push({
+        ax:cx+cw*0.28,ay:cy+ch*0.38,acol:swap?pr[0]:pr[1],
+        bx:cx+cw*0.58,by:cy+ch*0.54,bcol:swap?pr[1]:pr[0],
+        amp:1.0+Math.random()*1.4,sp:2.6+Math.random()*2.4,ph:Math.random()*6.28
+      });
+    }
+  }
+  build();
+  function draw(t){
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle='#f1ecdf';ctx.fillRect(0,0,W,H);
+    for(const c of cells){
+      const o=REDUCED?0:Math.sin(t*c.sp+c.ph)*c.amp;
+      dot(ctx,c.ax+o,c.ay+o,5.5,rgba(c.acol,1),0.95);
+      dot(ctx,c.bx-o,c.by+o,5.5,rgba(c.bcol,1),0.95);
+    }
+  }
+  let raf=0,running=false,t0=performance.now();
+  function loop(){if(!running)return;draw((performance.now()-t0)/1000);raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);build();if(REDUCED)draw(0);},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else{t0=performance.now();start();}});
+  if(REDUCED)draw(0);else start();
+})();
+</script>
+</body>
+</html>

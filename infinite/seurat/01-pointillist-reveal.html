@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Pointillist Reveal — Georges Seurat. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pointillist Reveal</title>
+<style>
+  html,body{margin:0;height:100%;background:#f1ecdf;overflow:hidden}
+  #seu01-stage{position:fixed;inset:0;width:100%;height:100%}
+  #seu01-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .seu01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2620;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="seu01-stage" role="img" aria-label="A pointillist shore: a sail and a parasol silhouette assemble from thousands of coloured dots, resolve into a calm scene, then dissolve and begin again.">
+  <canvas id="seu01-cv"></canvas>
+</div>
+<div class="seu01-cap">Pointillist Reveal</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('seu01-cv'); if(!cv) return;
+  const RGB={green:[111,155,78],sky:[143,184,214],orange:[224,138,46],violet:[107,91,149],cream:[241,236,223],ink:[42,38,32]};
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function rgba(t,a){return 'rgba('+t[0]+','+t[1]+','+t[2]+','+a+')';}
+  function dot(ctx,x,y,r,col,a){ctx.globalAlpha=a;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.globalAlpha=1;}
+  let S=fitCanvas(cv);
+  const pts=[];
+  function build(){
+    pts.length=0;
+    const W=S.w,H=S.h,horizon=H*0.62;
+    const N=Math.min(900,Math.round(W*H/150));
+    for(let i=0;i<N;i++){
+      const x=Math.random()*W,y=Math.random()*H;
+      let col;
+      if(y<horizon){const f=y/horizon;col=Math.random()<0.18?RGB.cream:(Math.random()<(0.12*(1-f))?RGB.orange:RGB.sky);}
+      else{col=Math.random()<0.5?RGB.green:(Math.random()<0.5?RGB.violet:RGB.sky);}
+      const sx=W*0.34,sy=horizon;
+      const inSail=(y<sy&&y>sy-H*0.30)&&(x>sx-(sy-y)*0.32&&x<sx+(sy-y)*0.10);
+      if(inSail)col=Math.random()<0.5?RGB.cream:RGB.orange;
+      const px=W*0.70,py=horizon-H*0.06,pr=Math.min(W,H)*0.13;
+      const dxp=x-px,dyp=y-py;
+      const inDome=(dyp<0&&dyp>-pr)&&(dxp*dxp/(pr*pr)+(dyp*dyp)/(pr*pr*0.55)<1);
+      const inStick=Math.abs(x-px)<2.4&&y>py&&y<py+pr*0.9;
+      if(inDome)col=(Math.random()<0.5?RGB.orange:RGB.violet);
+      if(inStick)col=RGB.ink;
+      pts.push({hx:x,hy:y,x:Math.random()*W,y:Math.random()*H,r:1.4+Math.random()*1.6,col,ph:Math.random()*Math.PI*2});
+    }
+  }
+  build();
+  function draw(t){
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle='#f1ecdf';ctx.fillRect(0,0,W,H);
+    const period=11;
+    const ph=REDUCED?0.32:((t%period)/period);
+    let res;
+    if(ph<0.42)res=ph/0.42;else if(ph<0.72)res=1;else res=1-(ph-0.72)/0.28;
+    res=res<0?0:res>1?1:res;
+    const ease=res*res*(3-2*res);
+    for(const p of pts){
+      const wob=REDUCED?0:Math.sin(t*0.8+p.ph)*2*(1-ease);
+      const x=p.x+(p.hx-p.x)*ease+wob;
+      const y=p.y+(p.hy-p.y)*ease+wob*0.6;
+      const a=0.55+0.4*ease;
+      dot(ctx,x,y,p.r,rgba(p.col,1),a);
+    }
+  }
+  let raf=0,running=false,t0=performance.now();
+  function loop(){if(!running)return;draw((performance.now()-t0)/1000);raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);build();if(REDUCED)draw(3.5);},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else{t0=performance.now();start();}});
+  if(REDUCED)draw(3.5);else start();
+})();
+</script>
+</body>
+</html>

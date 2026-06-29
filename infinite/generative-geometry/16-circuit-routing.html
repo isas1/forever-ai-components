@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Glowing green circuit traces auto-route between scattered grid pads at 45/90 degrees with travelling pulses on dark green.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Circuit Routing</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#020d08;}
+  #cr-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#5effb8;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="cr-c"></canvas>
+<div class="cap">Circuit Routing</div>
+<script>
+(function(){
+  const cv=document.getElementById('cr-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ACC='#5effb8';
+  let W,H,DPR,cell,cols,rows,ox,oy,occ;
+  let nets=[],pads=[],t=0,boost=0;
+
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cell=Math.max(11,Math.min(W,H)/26);
+    cols=Math.floor(W/cell);rows=Math.floor(H/cell);
+    ox=(W-cols*cell)/2+cell/2;oy=(H-rows*cell)/2+cell/2;
+    occ=new Uint8Array(cols*rows);
+    pads=[];
+    // scatter pads on grid nodes
+    const target=Math.round(cols*rows*0.10);
+    let tries=0;
+    while(pads.length<target&&tries<target*8){
+      tries++;
+      const gx=1+Math.floor(Math.random()*(cols-2)),gy=1+Math.floor(Math.random()*(rows-2));
+      if(occ[gy*cols+gx])continue;
+      occ[gy*cols+gx]=1;pads.push({gx,gy});
+    }
+    nets=[];
+  }
+  const px=g=>ox+g*cell, idx=(x,y)=>y*cols+x;
+
+  // route between two grid pads turning at 90 & 45 deg, greedy maze-ish
+  function route(a,b){
+    let x=a.gx,y=a.gy;const path=[{x,y}];let guard=0,max=cols+rows+40;
+    const free=(nx,ny)=>nx>0&&ny>0&&nx<cols-1&&ny<rows-1&&!occ[idx(nx,ny)];
+    while((x!==b.gx||y!==b.gy)&&guard++<max){
+      const sx=Math.sign(b.gx-x),sy=Math.sign(b.gy-y);
+      let mv=null;
+      // prefer diagonal (45deg) when both axes need movement
+      if(sx&&sy&&free(x+sx,y+sy))mv=[sx,sy];
+      else if(sx&&free(x+sx,y))mv=[sx,0];
+      else if(sy&&free(x,y+sy))mv=[0,sy];
+      else if(free(x+sx,y))mv=[sx,0];
+      else if(free(x,y+sy))mv=[0,sy];
+      else { // try perpendicular detour
+        const opts=[[0,1],[0,-1],[1,0],[-1,0]].filter(d=>free(x+d[0],y+d[1]));
+        if(!opts.length)break;
+        mv=opts[(Math.random()*opts.length)|0];
+      }
+      x+=mv[0];y+=mv[1];occ[idx(x,y)]=1;path.push({x,y});
+    }
+    if(x!==b.gx||y!==b.gy)return null;
+    return path;
+  }
+
+  function spawnNet(){
+    if(pads.length<2)return;
+    const a=pads[(Math.random()*pads.length)|0];
+    // pick a nearish target pad
+    let b=null,bd=1e9;
+    for(let k=0;k<7;k++){const c=pads[(Math.random()*pads.length)|0];
+      const d=Math.abs(c.gx-a.gx)+Math.abs(c.gy-a.gy);
+      if(c!==a&&d>2&&d<bd){bd=d;b=c;}}
+    if(!b)return;
+    const p=route(a,b);
+    if(!p||p.length<3){return;}
+    const len=p.reduce((s,q,i)=>i?s+Math.hypot((q.x-p[i-1].x),(q.y-p[i-1].y)):0,0);
+    nets.push({p,len,grow:0,life:0,hue:Math.random()<0.2?1:0,pulse:Math.random()*len});
+  }
+
+  function clearNet(n){for(const q of n.p)occ[idx(q.x,q.y)]=0;
+    for(const pd of pads)occ[idx(pd.gx,pd.gy)]=1;}
+
+  function drawPath(p,upto,col,wid,alpha){
+    ctx.strokeStyle=col;ctx.lineWidth=wid;ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.globalAlpha=alpha;let acc=0;
+    ctx.beginPath();ctx.moveTo(ox+p[0].x*cell,oy+p[0].y*cell);
+    for(let i=1;i<p.length;i++){
+      const seg=Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y);
+      if(acc+seg<=upto){ctx.lineTo(ox+p[i].x*cell,oy+p[i].y*cell);acc+=seg;}
+      else{const r=(upto-acc)/seg;
+        ctx.lineTo(ox+(p[i-1].x+(p[i].x-p[i-1].x)*r)*cell,oy+(p[i-1].y+(p[i].y-p[i-1].y)*r)*cell);
+        break;}
+    }
+    ctx.stroke();ctx.globalAlpha=1;
+  }
+  function ptAt(p,d){let acc=0;
+    for(let i=1;i<p.length;i++){const seg=Math.hypot(p[i].x-p[i-1].x,p[i].y-p[i-1].y);
+      if(acc+seg>=d){const r=(d-acc)/seg;
+        return[ox+(p[i-1].x+(p[i].x-p[i-1].x)*r)*cell,oy+(p[i-1].y+(p[i].y-p[i-1].y)*r)*cell];}
+      acc+=seg;}
+    const l=p[p.length-1];return[ox+l.x*cell,oy+l.y*cell];}
+
+  cv.addEventListener('pointermove',()=>{boost=Math.min(boost+0.3,2);});
+  cv.addEventListener('click',()=>{for(let i=0;i<3;i++)spawnNet();});
+
+  function render(){
+    ctx.fillStyle='rgba(2,13,8,0.20)';ctx.fillRect(0,0,W,H);
+    // faint grid dots
+    ctx.fillStyle='rgba(94,255,184,0.05)';
+    for(let gy=1;gy<rows-1;gy+=2)for(let gx=1;gx<cols-1;gx+=2){
+      ctx.fillRect(ox+gx*cell-0.5,oy+gy*cell-0.5,1,1);}
+
+    for(const n of nets){
+      const grown=Math.min(n.grow,n.len);
+      const fade=n.life>n.fadeAt?Math.max(0,1-(n.life-n.fadeAt)/55):1;
+      const base=n.hue?'rgba(120,200,255,':'rgba(94,255,184,';
+      // trace glow + core
+      drawPath(n.p,grown,base+(0.12*fade)+')',6,1);
+      drawPath(n.p,grown,base+(0.6*fade)+')',1.6,1);
+      // travelling pulse on completed nets
+      if(n.grow>=n.len&&fade>0.3){
+        const d=n.pulse%n.len;const[x,y]=ptAt(n.p,d);
+        const g=ctx.createRadialGradient(x,y,0,x,y,cell*1.3);
+        g.addColorStop(0,n.hue?'rgba(180,225,255,0.9)':'rgba(180,255,220,0.9)');
+        g.addColorStop(1,'rgba(94,255,184,0)');
+        ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,cell*1.3,0,7);ctx.fill();
+      }
+    }
+    // pads
+    for(const pd of pads){const x=ox+pd.gx*cell,y=oy+pd.gy*cell;
+      ctx.fillStyle='rgba(94,255,184,0.9)';ctx.beginPath();ctx.arc(x,y,2.2,0,7);ctx.fill();
+      ctx.strokeStyle='rgba(94,255,184,0.25)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.arc(x,y,4.5,0,7);ctx.stroke();}
+  }
+
+  function frame(){
+    if(reduce){render();return;}
+    t++;boost*=0.95;
+    const sp=(0.9+boost);
+    for(const n of nets){
+      if(n.grow<n.len){n.grow+=sp*cell*0.16;
+        if(n.grow>=n.len){n.grow=n.len;n.fadeAt=120+Math.random()*160;}}
+      else{n.life++;n.pulse+=sp*cell*0.12;}
+    }
+    // retire faded nets
+    for(let i=nets.length-1;i>=0;i--){
+      if(nets[i].fadeAt&&nets[i].life>nets[i].fadeAt+58){clearNet(nets[i]);nets.splice(i,1);}}
+    // lay new routes
+    if(nets.length<Math.min(16,Math.round(cols*rows*0.012))&&t%4===0)spawnNet();
+    render();
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  addEventListener('resize',()=>{size();});
+  size();
+  if(reduce){for(let i=0;i<10;i++)spawnNet();for(const n of nets)n.grow=n.len;
+    ctx.fillStyle='#020d08';ctx.fillRect(0,0,W,H);render();}
+  else{for(let i=0;i<5;i++)spawnNet();ctx.fillStyle='#020d08';ctx.fillRect(0,0,W,H);start();}
+})();
+</script>
+</body>
+</html>

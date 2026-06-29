@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Golden Tree — Gustav Klimt. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Golden Tree</title>
+<style>
+  html,body{margin:0;height:100%;background:#070502;overflow:hidden}
+  #kli01-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kli01-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kli01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#e6cf86;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kli01-stage" role="img" aria-label="Klimt's Tree of Life: logarithmic gold branches spiral outward and curl into coils against a dark ground, with gold flecks drifting from the canopy.">
+  <canvas id="kli01-cv"></canvas>
+</div>
+<div class="kli01-cap">The Golden Tree</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('kli01-cv'); if(!cv) return;
+  const GOLD='#c8a951', GOLD_HI='#e6cf86';
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  let t=0,last=performance.now();
+  function branch(ctx,x,y,ang,len,depth,grow,curl){
+    if(depth<=0||len<3) return;
+    const seg=10; let cx=x,cy=y,a=ang;
+    ctx.beginPath();ctx.moveTo(cx,cy);
+    for(let i=0;i<seg;i++){
+      const ll=len/seg; a+=curl*0.16;
+      cx+=Math.cos(a)*ll*Math.min(1,grow*depth);
+      cy+=Math.sin(a)*ll*Math.min(1,grow*depth);
+      ctx.lineTo(cx,cy);
+    }
+    ctx.lineWidth=Math.max(0.6,depth*0.8);
+    ctx.strokeStyle=GOLD; ctx.globalAlpha=0.35+depth*0.09; ctx.stroke();
+    if(grow*depth>0.6 && depth<4){
+      ctx.save();ctx.translate(cx,cy);ctx.beginPath();
+      let cr=2+depth*1.2, ca=a;
+      for(let k=0;k<26;k++){ ca+=0.5; cr*=1.06; ctx.lineTo(Math.cos(ca)*cr,Math.sin(ca)*cr); }
+      ctx.strokeStyle=GOLD_HI;ctx.globalAlpha=0.5;ctx.lineWidth=0.8;ctx.stroke();ctx.restore();
+    }
+    ctx.globalAlpha=1;
+    const nb=depth>3?2:1;
+    for(let i=0;i<nb;i++){
+      const da=(i?1:-1)*(0.5+0.2*Math.sin(t*0.4+depth));
+      branch(ctx,cx,cy,a+da,len*0.72,depth-1,grow,-curl*0.7);
+    }
+  }
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.clearRect(0,0,W,H);
+    const bg=ctx.createRadialGradient(W*0.5,H*0.9,10,W*0.5,H*0.9,H*1.1);
+    bg.addColorStop(0,'rgba(154,125,40,.14)');bg.addColorStop(1,'rgba(7,5,2,0)');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    const grow=REDUCED?0.95:(0.55+0.45*Math.sin(t*0.45));
+    branch(ctx,W*0.5,H*0.98,-Math.PI/2,Math.min(W,H)*0.46,6,grow,1);
+    ctx.fillStyle=GOLD_HI;
+    for(let i=0;i<7;i++){
+      const px=W*0.5+Math.sin(t*0.5+i*1.7)*W*0.32;
+      const py=(H*0.2 + ((t*22+i*40)%(H*0.7)));
+      ctx.globalAlpha=0.4*(1-py/H);
+      ctx.beginPath();ctx.arc(px,py,1.6,0,7);ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#070502';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

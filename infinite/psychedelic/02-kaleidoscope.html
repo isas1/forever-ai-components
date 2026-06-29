@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="A slowly rotating 6-fold kaleidoscope mirrors swirling pink, amber and violet liquid blobs into symmetric petals over a deep glowing dark fi">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Kaleidoscope</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0612}
+  #ps02-stage{position:fixed;inset:0;display:grid;place-items:center}
+  /* offscreen petal canvas is never shown directly */
+  #ps02-src{display:none}
+  /* visible canvas carries a STATIC glow only — never animated */
+  #ps02-c{display:block;width:100%;height:100%;
+    box-shadow:inset 0 0 120px 10px rgba(255,61,166,.22)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  /* motion is canvas/rAF and gated in JS via matchMedia; no CSS animations to tame */
+</style>
+</head>
+<body>
+<div id="ps02-stage" role="img" aria-label="A slowly rotating psychedelic kaleidoscope of swirling pink and amber liquid blobs in mirror symmetry">
+  <canvas id="ps02-c"></canvas>
+</div>
+<canvas id="ps02-src"></canvas>
+<div class="cap">Kaleidoscope</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('ps02-c'),
+      src=document.getElementById('ps02-src'),
+      ctx=stage.getContext('2d'), sctx=src.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var W=0,H=0,DPR=1,R=0,SR=0,running=true,raf=0,grad=null;
+  var SEG=12;                 // mirror wedges -> 6-fold symmetry
+  var N=9;                    // liquid blobs in the source wedge (<=110)
+  // Fillmore-poster palette: hot pink -> magenta -> violet -> amber, complementary teal accent
+  var PAL=[[255,61,166],[255,138,90],[120,70,210],[44,214,196],[255,204,82],[214,40,120]];
+  // blob state (allocation-free after init)
+  var br=new Float32Array(N), ba=new Float32Array(N), bs=new Float32Array(N),
+      bvr=new Float32Array(N), bva=new Float32Array(N),
+      bsd=new Int8Array(N), bph=new Float32Array(N);
+  var ci=new Int8Array(N);
+  // cached color strings (built once at seed -> loop stays allocation-free)
+  var fillStr=new Array(N), strokeStr=new Array(N), dotStr=new Array(N);
+  var seeded=false;
+  function rgba(c,a){return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';}
+  function seed(){
+    for(var i=0;i<N;i++){
+      br[i]=0.12+Math.random()*0.78;
+      ba[i]=(Math.random()-0.5)*1.0;          // kept near wedge axis
+      bs[i]=0.05+Math.random()*0.11;
+      bvr[i]=(Math.random()-0.5)*0.00045;
+      bva[i]=(Math.random()-0.5)*0.0016;
+      bsd[i]=3+(Math.random()*4|0);
+      bph[i]=Math.random()*6.283;
+      ci[i]=(Math.random()*PAL.length)|0;
+      var c=PAL[ci[i]], c2=PAL[(ci[i]+2)%PAL.length];
+      fillStr[i]=rgba(c,0.82);                 // blob body
+      strokeStr[i]=rgba(c2,0.9);               // op-art outline
+      dotStr[i]=rgba(c2,0.55);                 // inner bead
+    }
+    seeded=true;
+  }
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    stage.width=W*DPR; stage.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    R=Math.min(W,H)*0.5*1.45;                  // overscan so corners fill
+    // source wedge canvas: square, sized to radius
+    SR=Math.ceil(R);
+    src.width=SR; src.height=SR;
+    // rebuild the static radial wash once per resize (SR changes) -> not per frame
+    grad=sctx.createRadialGradient(0,0,0,0,0,SR);
+    grad.addColorStop(0,'rgba(255,61,166,.16)');
+    grad.addColorStop(.55,'rgba(120,70,210,.10)');
+    grad.addColorStop(1,'rgba(10,6,18,0)');
+    if(!seeded) seed();
+    if(reduce) drawFrame(1200);                // one settled frame
+  }
+  // paint ONE wedge into the offscreen source, origin at (0,0)
+  function paintSource(t){
+    sctx.setTransform(1,0,0,1,0,0);
+    sctx.clearRect(0,0,SR,SR);
+    var ang=Math.PI*2/SEG, i,k;
+    // soft radial wash gives the lava-lamp depth (cached gradient, not built per frame)
+    sctx.beginPath();sctx.moveTo(0,0);
+    sctx.arc(0,0,SR,-ang/2,ang/2);sctx.closePath();
+    sctx.fillStyle=grad;sctx.fill();
+    // clip to wedge
+    sctx.save();
+    sctx.beginPath();sctx.moveTo(0,0);
+    sctx.arc(0,0,SR,-ang*0.62,ang*0.62);sctx.closePath();sctx.clip();
+    for(i=0;i<N;i++){
+      var rr=br[i], aa=ba[i];
+      var x=Math.cos(aa)*rr*SR, y=Math.sin(aa)*rr*SR;
+      var sz=bs[i]*SR;
+      // liquid lobed blob: radius wobbles slowly per vertex (smooth, slow)
+      var sides=bsd[i], step=Math.PI*2/sides;
+      sctx.beginPath();
+      for(k=0;k<=sides;k++){
+        var an=k*step;
+        var wob=1+0.32*Math.sin(t*0.0006+bph[i]+k*2.1);
+        var px=x+Math.cos(an)*sz*wob, py=y+Math.sin(an)*sz*wob;
+        if(k===0)sctx.moveTo(px,py);else sctx.lineTo(px,py);
+      }
+      sctx.closePath();
+      sctx.fillStyle=fillStr[i];
+      sctx.fill();
+      sctx.lineWidth=1.4;
+      sctx.strokeStyle=strokeStr[i];
+      sctx.stroke();
+      // inner dot for that op-art bead-glass feel
+      sctx.beginPath();
+      sctx.arc(x,y,sz*0.34,0,6.283);
+      sctx.fillStyle=dotStr[i];
+      sctx.fill();
+    }
+    sctx.restore();
+  }
+  function drawFrame(t){
+    // advance liquid drift (skipped on reduce -> static)
+    if(!reduce){
+      for(var i=0;i<N;i++){
+        br[i]+=bvr[i]; ba[i]+=bva[i];
+        if(br[i]<0.1){br[i]=0.1;bvr[i]=-bvr[i];}
+        else if(br[i]>0.92){br[i]=0.92;bvr[i]=-bvr[i];}
+        if(ba[i]<-0.5||ba[i]>0.5)bva[i]=-bva[i];
+      }
+    }
+    paintSource(t);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.fillStyle='#0a0612';
+    ctx.fillRect(0,0,W,H);
+    ctx.save();
+    ctx.translate(W/2,H/2);
+    ctx.rotate(t*0.000085);                    // slow global spin, seizure-safe
+    var ang=Math.PI*2/SEG, half=ang/2;
+    for(var s=0;s<SEG;s++){
+      ctx.save();
+      ctx.rotate(s*ang);
+      if(s&1)ctx.scale(1,-1);                  // mirror alternate wedges
+      ctx.beginPath();ctx.moveTo(0,0);
+      ctx.arc(0,0,R,-half,half);ctx.closePath();
+      ctx.clip();
+      ctx.rotate(-half);                        // align source wedge to slice
+      ctx.drawImage(src,0,0,SR,SR);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+  function loop(t){
+    if(!running)return;
+    drawFrame(t);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){if(reduce)return;running=true;cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+  function stop(){running=false;cancelAnimationFrame(raf);}
+  window.addEventListener('resize',resize,{passive:true});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden)stop();else start();
+  });
+  resize();
+  if(reduce){drawFrame(1200);}else{start();}
+})();
+</script>
+</body>
+</html>

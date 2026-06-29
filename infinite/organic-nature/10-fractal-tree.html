@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A recursive branching fractal tree grows from the base, sways in wind with green blossoms at its tips, over a warm brown gradient.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fractal Tree</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#241a10}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
+       letter-spacing:.08em;text-transform:uppercase;color:#ffd9a0;opacity:.34;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Fractal Tree</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,raf,t=0,mw=0;
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',size);size();
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();mw=((e.clientX-r.left)/W-0.5)*2;});
+cv.addEventListener('pointerleave',()=>mw=0);
+function branch(px,py,len,ang,depth,sway,grow){
+  if(depth<=0||len<2)return;
+  const wind=Math.sin(t*1.2+depth*0.5+px*0.01)*0.05*(7-depth)+sway*0.02*(7-depth);
+  const a=ang+wind;
+  const ex=px+Math.cos(a)*len*grow, ey=py+Math.sin(a)*len*grow;
+  x.strokeStyle=`hsl(${28+depth*4},${40+depth*5}%,${18+depth*4}%)`;
+  x.lineWidth=Math.max(0.6,depth*1.05);
+  x.lineCap='round';
+  x.beginPath();x.moveTo(px,py);x.lineTo(ex,ey);x.stroke();
+  if(depth<=2){
+    // leaf/blossom
+    const lg=grow;
+    x.fillStyle=`hsla(${100+Math.sin(px*0.05+t)*30},60%,55%,${0.55*lg})`;
+    x.beginPath();x.arc(ex,ey,2.2+depth,0,7);x.fill();
+  }
+  const spread=0.42+Math.sin(t*0.5)*0.05;
+  branch(ex,ey,len*0.74,a-spread,depth-1,sway,grow);
+  branch(ex,ey,len*0.74,a+spread,depth-1,sway,grow);
+  if(depth%2===0)branch(ex,ey,len*0.55,a+Math.sin(depth)*0.2,depth-1,sway,grow);
+}
+function frame(){
+  t+=reduce?0:0.01;
+  const g=x.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#3a2a18');g.addColorStop(1,'#1c1409');
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  // grow-in loop
+  const cyc=reduce?1:(t*0.25)%6;
+  const grow=reduce?1:Math.min(1,cyc<4?(0.5-0.5*Math.cos(Math.min(1,cyc/3)*Math.PI)):1);
+  const base=Math.min(W,H)*0.21;
+  branch(W/2,H*0.96,base,-Math.PI/2,7,mw,grow);
+  raf=requestAnimationFrame(frame);
+}
+raf=requestAnimationFrame(frame);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>

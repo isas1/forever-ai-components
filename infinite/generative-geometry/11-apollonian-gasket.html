@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Apollonian circle packing of nested tangent rings in gold-to-blue tones, breathing through a slow infinite zoom with vignette.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apollonian Gasket</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d1b2a;}
+  #apg-c{display:block;width:100%;height:100%;}
+  .apg-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.14em;color:#e0a458;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="apg-c"></canvas>
+<div class="apg-cap">Apollonian Gasket</div>
+<script>
+(function(){
+  const cv=document.getElementById('apg-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,R;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;R=Math.min(W,H)*0.46;
+  }
+  addEventListener('resize',size);size();
+
+  // Circle = {b:curvature(1/r), x,y:center(curvature-weighted complex b*z), d:depth}
+  const circles=[];
+  function curv(b,x,y,d){return {b:b,x:x,y:y,d:d};}
+  // Descartes: given three mutually tangent circles, find the 4th (two solutions)
+  function descartes(c1,c2,c3){
+    const b4=c1.b+c2.b+c3.b+2*Math.sqrt(Math.abs(c1.b*c2.b+c2.b*c3.b+c3.b*c1.b));
+    // complex Descartes for center*curvature
+    const z1x=c1.x*c1.b,z1y=c1.y*c1.b,z2x=c2.x*c2.b,z2y=c2.y*c2.b,z3x=c3.x*c3.b,z3y=c3.y*c3.b;
+    const sx=z1x+z2x+z3x,sy=z1y+z2y+z3y;
+    // sqrt of (z1z2+z2z3+z3z1) in complex
+    const px=(z1x*z2x-z1y*z2y)+(z2x*z3x-z2y*z3y)+(z3x*z1x-z3y*z1y);
+    const py=(z1x*z2y+z1y*z2x)+(z2x*z3y+z2y*z3x)+(z3x*z1y+z3y*z1x);
+    const m=Math.sqrt(px*px+py*py),rt=Math.sqrt((m+px)/2),it=(py<0?-1:1)*Math.sqrt((m-px)/2);
+    const z4x=(sx+2*rt)/b4,z4y=(sy+2*it)/b4;
+    return curv(b4,z4x,z4y,0);
+  }
+  function build(c1,c2,c3,depth,maxd){
+    if(depth>maxd)return;
+    const c4=descartes(c1,c2,c3);
+    if(c4.b>900||!isFinite(c4.x))return;
+    c4.d=depth;circles.push(c4);
+    build(c1,c2,c4,depth+1,maxd);
+    build(c1,c3,c4,depth+1,maxd);
+    build(c2,c3,c4,depth+1,maxd);
+  }
+  function gasket(){
+    circles.length=0;
+    // outer bounding circle (negative curvature), two inner kissing circles
+    const b0=-1, b1=2, b2=2;
+    const o=curv(b0,0,0,0), a=curv(b1,-0.5,0,0), b=curv(b2,0.5,0,0);
+    circles.push(o,a,b);
+    const seed=descartes(o,a,b); // bottom triple-tangent (and its mirror via -y)
+    [seed,curv(seed.b,seed.x,-seed.y,0)].forEach(s=>{s.d=1;circles.push(s);});
+    const seeds=[seed,curv(seed.b,seed.x,-seed.y,1)];
+    const MAX=7;
+    seeds.forEach(s=>{
+      build(o,a,s,2,MAX);build(o,b,s,2,MAX);build(a,b,s,2,MAX);
+    });
+  }
+  gasket();
+  let maxDepth=0;circles.forEach(c=>{if(c.d>maxDepth)maxDepth=c.d;});
+
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',()=>{nudge=1;});
+  cv.addEventListener('click',()=>{nudge=1.6;});
+
+  function draw(){
+    ctx.fillStyle='#0d1b2a';ctx.fillRect(0,0,W,H);
+    // slow breathing zoom 1.0 -> ~2.4 then loop, with depth fade-in keyed to zoom
+    const phase=(t*0.0009)%1;
+    const zoom=1+Math.pow(phase,1.3)*2.6+nudge*0.25;
+    const visD=1+phase*maxDepth*1.15; // depth front advances with zoom
+    nudge*=0.93;
+    ctx.save();ctx.translate(cx,cy);
+    // gentle drift toward a packing gap as we zoom in
+    ctx.translate(0,R*0.46*(zoom-1));
+    ctx.scale(zoom,zoom);
+    circles.forEach(c=>{
+      const r=Math.abs(1/c.b)*R;
+      if(r*zoom<0.35)return;
+      const x=c.x*R,y=c.y*R;
+      let a;
+      if(c.b<0){a=0.5;} // outer ring always visible
+      else{
+        const fd=visD-c.d; if(fd<=0)return;
+        a=Math.min(1,fd)*0.92;
+      }
+      const heat=c.b<0?0:Math.min(1,c.d/6);
+      // accent -> cool stroke gradient by depth
+      const cr=Math.round(224-heat*110), cg=Math.round(164-heat*40), cb=Math.round(88+heat*120);
+      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+      ctx.globalAlpha=a;
+      ctx.lineWidth=Math.max(0.4,(0.9-c.d*0.08))/zoom;
+      ctx.strokeStyle='rgb('+cr+','+cg+','+cb+')';
+      // faint fill on shallow circles for body
+      if(c.b>0&&c.d<3){
+        ctx.fillStyle='rgba('+cr+','+cg+','+cb+','+(0.06).toFixed(2)+')';
+        ctx.fill();
+      }
+      ctx.stroke();
+    });
+    ctx.restore();ctx.globalAlpha=1;
+    // vignette to sink edges
+    const g=ctx.createRadialGradient(cx,cy,R*0.5,cx,cy,R*1.5);
+    g.addColorStop(0,'rgba(13,27,42,0)');g.addColorStop(1,'rgba(13,27,42,0.9)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  }
+  function frame(){t+=16;draw();raf=requestAnimationFrame(frame);}
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=300;draw();}else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Glowing green and violet aurora bands ripple and sway above a twinkling starfield on a deep night-sky gradient, steered by pointer.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Aurora Ribbons</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#040814}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
+       letter-spacing:.08em;text-transform:uppercase;color:#aeffdd;opacity:.34;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Aurora Ribbons</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,raf,t=0,stars=[],mx=0.5;
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);
+  stars=Array.from({length:Math.min(70,Math.round(W*H/5000))},()=>({x:Math.random()*W,y:Math.random()*H*0.7,r:Math.random()*1.2,p:Math.random()*7}));}
+addEventListener('resize',size);size();
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();mx=(e.clientX-r.left)/W;});
+const bands=[{hue:[150,170],amp:0.10,off:0,base:0.42,sp:1.0},
+             {hue:[170,200],amp:0.13,off:2,base:0.5,sp:0.7},
+             {hue:[270,300],amp:0.09,off:4,base:0.36,sp:1.3}];
+function frame(){
+  t+=reduce?0:0.01;
+  const g=x.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#05091a');g.addColorStop(1,'#0a1428');
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  // stars
+  for(const s of stars){const tw=0.5+0.5*Math.sin(t*2+s.p);
+    x.fillStyle=`rgba(255,255,255,${0.3+tw*0.5})`;x.beginPath();x.arc(s.x,s.y,s.r+0.3,0,7);x.fill();}
+  x.globalCompositeOperation='lighter';
+  for(let bi=0;bi<bands.length;bi++){
+    const b=bands[bi];
+    const cols=18;
+    for(let i=0;i<=cols;i++){
+      const fx=i/cols;
+      const px=fx*W;
+      const sway=(mx-0.5)*60*(bi+1)*0.3;
+      const yTop=H*b.base + Math.sin(fx*4+t*b.sp+b.off)*H*b.amp
+                 + Math.sin(fx*9-t*b.sp*0.6)*H*b.amp*0.4 + sway;
+      const hh=H*(0.34+0.1*Math.sin(fx*3+t+b.off));
+      const hue=b.hue[0]+(b.hue[1]-b.hue[0])*(0.5+0.5*Math.sin(fx*3+t));
+      const grad=x.createLinearGradient(0,yTop,0,yTop+hh);
+      const al=0.10+0.06*Math.sin(fx*5+t*1.5+bi);
+      grad.addColorStop(0,`hsla(${hue},90%,65%,0)`);
+      grad.addColorStop(0.4,`hsla(${hue},90%,62%,${al})`);
+      grad.addColorStop(1,`hsla(${hue+20},90%,55%,0)`);
+      x.fillStyle=grad;
+      x.fillRect(px-W/cols/2-1,yTop,W/cols+2,hh);
+    }
+  }
+  x.globalCompositeOperation='source-over';
+  raf=requestAnimationFrame(frame);
+}
+raf=requestAnimationFrame(frame);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>

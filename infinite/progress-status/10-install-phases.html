@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Horizontal install conduit with marching diamond data packets, a scan cursor and gated Download/Verify/Install/Done phase labels.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Install Phases</title>
+<style>
+  :root{
+    --pg10-bg:#0b0d12;
+    --pg10-accent:#7c5cff;
+    --pg10-accent2:#22d3a6;
+    --pg10-track:#171b26;
+    --pg10-edge:#2a3042;
+    --pg10-ink:#e8eaf2;
+    --pg10-dim:#5a6075;
+  }
+  html,body{height:100%;margin:0}
+  .pg10-stage{
+    position:fixed;inset:0;background:var(--pg10-bg);
+    display:grid;place-items:center;overflow:hidden;
+    font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  }
+  /* static structural grid — paints once, never repaints */
+  .pg10-grid{
+    position:absolute;inset:0;opacity:.045;
+    background:
+      linear-gradient(var(--pg10-ink) 1px,transparent 1px) 0 0/100% 9%,
+      linear-gradient(90deg,var(--pg10-ink) 1px,transparent 1px) 0 0/9% 100%;
+  }
+  .pg10-wrap{position:relative;width:80%;max-width:540px}
+  /* the conduit: a horizontal track packets travel along */
+  .pg10-pipe{
+    position:relative;height:clamp(34px,9vw,52px);
+    border-radius:10px;background:var(--pg10-track);
+    box-shadow:inset 0 0 0 1px var(--pg10-edge),0 0 0 1px rgba(124,92,255,.05);
+    overflow:hidden;
+  }
+  /* progress fill behind packets — scaleX, compositor only */
+  .pg10-fill{
+    position:absolute;inset:0;transform-origin:left center;transform:scaleX(0);
+    background:linear-gradient(90deg,rgba(124,92,255,.22),rgba(34,211,166,.18));
+    will-change:transform;
+  }
+  /* phase gate dividers — static */
+  .pg10-gate{
+    position:absolute;top:0;bottom:0;width:1px;background:var(--pg10-edge);
+  }
+  /* travelling data packet — only transform/opacity animate */
+  .pg10-pkt{
+    position:absolute;top:50%;left:0;width:clamp(9px,2.4vw,13px);height:clamp(9px,2.4vw,13px);
+    margin:-6px 0 0 -6px;border-radius:3px;
+    background:var(--pg10-accent);
+    box-shadow:0 0 0 1px rgba(124,92,255,.55),0 6px 14px rgba(124,92,255,.28);
+    transform:translate3d(0,0,0) rotate(45deg) scale(.7);
+    will-change:transform,opacity;
+  }
+  /* the moving "scan" cursor at the work front — translateX only */
+  .pg10-head{
+    position:absolute;top:0;bottom:0;width:2px;left:0;
+    background:linear-gradient(180deg,transparent,var(--pg10-accent2),transparent);
+    transform:translate3d(0,0,0);will-change:transform;opacity:.9;
+  }
+  .pg10-labels{display:flex;margin-top:13px}
+  .pg10-lab{
+    flex:1 1 0;text-align:center;
+    font:600 9.5px/1.3 ui-monospace,Menlo,monospace;color:var(--pg10-dim);
+    letter-spacing:.1em;text-transform:uppercase;
+    transition:color .35s,opacity .35s;opacity:.6;
+  }
+  .pg10-lab.pg10-on{color:var(--pg10-ink);opacity:1}
+  .pg10-lab.pg10-done{color:var(--pg10-accent2)}
+  .pg10-meta{
+    margin-top:20px;display:flex;justify-content:space-between;align-items:baseline;
+    font:600 11px/1 ui-monospace,Menlo,monospace;color:var(--pg10-dim);letter-spacing:.06em;
+  }
+  .pg10-phase{color:var(--pg10-ink)}
+  .pg10-phase b{color:var(--pg10-accent);font-weight:700}
+  .pg10-pct{color:var(--pg10-ink);font-size:13px}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+</style>
+</head>
+<body>
+  <div class="pg10-stage">
+    <div class="pg10-grid" aria-hidden="true"></div>
+    <div class="pg10-wrap"
+         id="pg10-root"
+         role="progressbar"
+         aria-label="Install progress: download, verify, install, done"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="pg10-pipe" id="pg10-pipe" aria-hidden="true">
+        <div class="pg10-fill" id="pg10-fill"></div>
+        <div class="pg10-gate" style="left:25%"></div>
+        <div class="pg10-gate" style="left:50%"></div>
+        <div class="pg10-gate" style="left:75%"></div>
+        <div class="pg10-head" id="pg10-head"></div>
+      </div>
+      <div class="pg10-labels" id="pg10-labels" aria-hidden="true"></div>
+      <div class="pg10-meta">
+        <span class="pg10-phase" id="pg10-phase">Download <b>·</b></span>
+        <span class="pg10-pct" id="pg10-pct">0%</span>
+      </div>
+    </div>
+  </div>
+  <div class="cap">Install Phases</div>
+
+<script>
+(function(){
+  var PHASES=['Download','Verify','Install','Done'];
+  var N=PHASES.length;
+  var pipe=document.getElementById('pg10-pipe');
+  var fill=document.getElementById('pg10-fill');
+  var head=document.getElementById('pg10-head');
+  var labelsEl=document.getElementById('pg10-labels');
+  var phaseEl=document.getElementById('pg10-phase');
+  var pctEl=document.getElementById('pg10-pct');
+  var root=document.getElementById('pg10-root');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  var labs=[];
+  for(var i=0;i<N;i++){
+    var l=document.createElement('div');l.className='pg10-lab';l.textContent=PHASES[i];
+    labelsEl.appendChild(l);labs.push(l);
+  }
+
+  // fixed pool of marching packets (well under cap)
+  var POOL=10,pkts=[],ph=[];
+  for(var k=0;k<POOL;k++){
+    var d=document.createElement('div');d.className='pg10-pkt';
+    pipe.appendChild(d);pkts.push(d);
+    ph.push(k/POOL); // staggered phase offset 0..1
+  }
+
+  var W=0; // cached pipe width
+  function measure(){ W=pipe.clientWidth; }
+  measure();
+
+  // p = global progress 0..1
+  function render(p){
+    if(p<0)p=0; if(p>1)p=1;
+    fill.style.transform='scaleX('+p.toFixed(4)+')';
+    var hx=p*W;
+    head.style.transform='translate3d('+hx.toFixed(1)+'px,0,0)';
+    head.style.opacity=p>=1?'0':'.9';
+    // phase index from progress (4 equal phases: last is Done)
+    var seg=Math.min(N-1,Math.floor(p*N+1e-6));
+    for(var i=0;i<N;i++){
+      var done=i<seg||(p>=1);
+      labs[i].classList.toggle('pg10-on',i===seg&&p<1);
+      labs[i].classList.toggle('pg10-done',done);
+    }
+    var pct=Math.round(p*100);
+    pctEl.textContent=pct+'%';
+    root.setAttribute('aria-valuenow',pct);
+    if(p>=1){phaseEl.innerHTML='Done <b>✓</b>';}
+    else{phaseEl.innerHTML=PHASES[seg]+' <b>·</b>';}
+  }
+
+  // packets stream within the COMPLETED region, then fade past the head
+  function flow(p){
+    var headT=p; // normalized work front
+    for(var k=0;k<POOL;k++){
+      var t=ph[k]; // 0..1 position along pipe
+      var x=t*W;
+      // packets ahead of the work front are dim/idle; behind it are bright/active
+      var active=t<=headT;
+      var sc=active?1:0.62;
+      var op=active?(headT-t<0.06?1:0.85):0.18;
+      pkts[k].style.transform='translate3d('+x.toFixed(1)+'px,0,0) rotate(45deg) scale('+sc.toFixed(3)+')';
+      pkts[k].style.opacity=op.toFixed(3);
+    }
+  }
+
+  if(reduce){ measure(); render(0.62); flow(0.62); return; }
+
+  var running=true,raf=0,last=0;
+  var p=0,hold=0,mode='run';
+  // packet march speed (normalized units / s)
+  var SPEED=0.18;
+
+  function tick(now){
+    if(!running)return;
+    if(!last)last=now;
+    var dt=(now-last)/1000;last=now;
+    if(dt>0.05)dt=0.05;
+
+    // advance packet phases (continuous marching) — allocation-free
+    for(var k=0;k<POOL;k++){
+      ph[k]+=dt*SPEED;
+      if(ph[k]>1)ph[k]-=1;
+    }
+
+    if(mode==='run'){
+      // ease progress toward 1 with mild non-linear pacing per phase
+      p+=dt*(0.085+0.05*(1-p));
+      if(p>=1){p=1;mode='hold';hold=now+1300;}
+      render(p);
+      flow(p);
+    } else if(mode==='hold'){
+      flow(1); // keep packets marching while complete
+      if(now>=hold){mode='reset';hold=now+450;}
+    } else if(mode==='reset'){
+      // brief fade then restart
+      if(now>=hold){p=0;mode='run';render(0);}
+    }
+    raf=requestAnimationFrame(tick);
+  }
+
+  render(0);flow(0);
+  raf=requestAnimationFrame(tick);
+
+  addEventListener('resize',function(){ measure(); render(p); flow(p); },{passive:true});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);}
+    else if(!running){running=true;last=0;raf=requestAnimationFrame(tick);}
+  });
+})();
+</script>
+</body>
+</html>

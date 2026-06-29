@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Diffusion-limited aggregation builds a six-fold dendritic snowflake of white-blue crystal that shimmers, then sublimes and refreezes.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diffusion-Limited Frost</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a1620;}
+  #dlf-c{display:block;width:100%;height:100%;}
+  .dlf-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#a8e4ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="dlf-c"></canvas>
+<div class="dlf-cap">Diffusion-Limited Frost</div>
+<script>
+(function(){
+  const cv=document.getElementById('dlf-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,R,grid,gs,gw,gh;
+  let nodes,t=0,walker=null; // nodes: {x,y,gen,b,birth} stuck particles in folded canonical frame
+  // hex grid (six-fold) — diffusing particles stick to a seed; aggregate folded into one wedge
+  // then re-radiated across 6 sectors + mirror for dendritic frost-fern symmetry.
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;R=Math.min(W,H)*0.46;
+    gs=Math.max(2.6,Math.min(W,H)/150); // cell size
+    gw=Math.ceil(W/gs)+2;gh=Math.ceil(H/gs)+2;
+    grid=new Uint8Array(gw*gh);
+    reseed();
+  }
+  function spawnWalker(){
+    const a=Math.random()*Math.PI*2,emitR=R*0.62;
+    walker={x:Math.cos(a)*emitR,y:Math.sin(a)*emitR,life:0};
+  }
+
+  function fold(x,y){
+    // reflect into 0..60deg wedge
+    let a=Math.atan2(y,x),r=Math.hypot(x,y);
+    a=((a%(Math.PI/3))+Math.PI/3)%(Math.PI/3);
+    if(a>Math.PI/6)a=Math.PI/3-a;
+    return {x:Math.cos(a)*r,y:Math.sin(a)*r};
+  }
+  function ckey(x,y){const f=fold(x,y);const gx=Math.round(f.x/gs)+(gw>>2),gy=Math.round(f.y/gs)+(gh>>1);if(gx<0||gy<0||gx>=gw||gy>=gh)return -1;return gy*gw+gx;}
+  function reseed(){nodes=[];grid.fill(0);const k=ckey(0,0);if(k>=0)grid[k]=1;nodes.push({x:0,y:0,gen:0,b:0,birth:t});}
+  size();addEventListener('resize',size);spawnWalker();
+
+  function occupied(x,y){const k=ckey(x,y);return k>=0&&grid[k]===1;}
+
+  function step(){
+    // advance several walkers per frame for speed
+    let iter=reduce?0:42;
+    while(iter-->0){
+      if(!walker)spawnWalker();
+      const w=walker;
+      // random walk, slight inward bias
+      const r=Math.hypot(w.x,w.y);
+      const stepLen=gs*0.9;
+      let ang=Math.random()*Math.PI*2;
+      w.x+=Math.cos(ang)*stepLen - (w.x/r)*0.18*stepLen;
+      w.y+=Math.sin(ang)*stepLen - (w.y/r)*0.18*stepLen;
+      w.life++;
+      const nr=Math.hypot(w.x,w.y);
+      if(nr>R*0.78||w.life>900){walker=null;continue;}
+      // check adjacency to aggregate
+      let hit=false;
+      for(let dx=-1;dx<=1&&!hit;dx++)for(let dy=-1;dy<=1;dy++){
+        if(occupied(w.x+dx*gs,w.y+dy*gs)){hit=true;break;}
+      }
+      if(hit){
+        const k=ckey(w.x,w.y);
+        if(k>=0&&grid[k]===0){
+          grid[k]=1;
+          const gen=Math.round(nr/gs);
+          nodes.push({x:w.x,y:w.y,gen:gen,b:0,birth:t});
+        }
+        walker=null;
+      }
+    }
+  }
+
+  function draw(){
+    // soft frost fade — slow sublimation tint
+    ctx.fillStyle='rgba(10,22,32,0.10)';ctx.fillRect(0,0,W,H);
+    ctx.save();ctx.translate(cx,cy);
+    ctx.globalCompositeOperation='lighter';
+    const pulse=reduce?1:0.5+0.5*Math.sin(t*0.012);
+    for(let i=0;i<nodes.length;i++){
+      const n=nodes[i];
+      if(n.b<1)n.b=Math.min(1,n.b+0.06); // grow-in
+      const shimmer=0.55+0.45*Math.sin(t*0.02+n.gen*0.5);
+      const heat=Math.max(0,1-n.gen/(R/gs)); // brighter near core
+      const size=(0.8+heat*1.4)*n.b;
+      const al=(0.10+heat*0.32)*n.b*(0.6+0.4*shimmer);
+      // crystalline white-blue core to cyan tips
+      const col=heat>0.6?'#dff4ff':heat>0.3?'#a8e4ff':'#5fb6e8';
+      // draw all 6 rotations + mirror for full dendritic snowflake
+      for(let s=0;s<6;s++){
+        const c=Math.cos(s*Math.PI/3),sn=Math.sin(s*Math.PI/3);
+        const x=n.x*c-n.y*sn, y=n.x*sn+n.y*c;
+        const xm=n.x*c+n.y*sn, ym=n.x*sn-n.y*c;
+        ctx.fillStyle=col;ctx.globalAlpha=al;
+        ctx.beginPath();ctx.arc(x,y,size,0,6.283);ctx.fill();
+        ctx.beginPath();ctx.arc(xm,ym,size,0,6.283);ctx.fill();
+      }
+    }
+    // central glint
+    ctx.globalAlpha=0.5+0.3*pulse;ctx.fillStyle='#eaf7ff';
+    ctx.beginPath();ctx.arc(0,0,2.2,0,6.283);ctx.fill();
+    ctx.restore();ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  }
+
+  function frame(){
+    t++;
+    step();
+    draw();
+    // refreeze cycle: when frost grows large, occasionally sublime + reseed
+    if(!reduce && nodes.length>560){ reseed(); spawnWalker(); }
+    raf=requestAnimationFrame(frame);
+  }
+
+  // pointer nudge: drop a fresh walker toward cursor
+  cv.addEventListener('pointermove',e=>{
+    if(reduce)return;
+    const rx=e.clientX-cx, ry=e.clientY-cy;
+    const r=Math.hypot(rx,ry)||1;
+    walker={x:rx/r*R*0.6,y:ry/r*R*0.6,life:0};
+  });
+
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+
+  if(reduce){
+    // grow a static crystal then render one frame
+    ctx.fillStyle='#0a1620';ctx.fillRect(0,0,W,H);
+    for(let i=0;i<3000;i++){
+      if(!walker)spawnWalker();
+      const w=walker,stepLen=gs*0.9,r=Math.hypot(w.x,w.y)||1;
+      const ang=Math.random()*6.283;
+      w.x+=Math.cos(ang)*stepLen-(w.x/r)*0.18*stepLen;
+      w.y+=Math.sin(ang)*stepLen-(w.y/r)*0.18*stepLen;
+      w.life++;const nr=Math.hypot(w.x,w.y);
+      if(nr>R*0.78||w.life>900){walker=null;continue;}
+      let hit=false;
+      for(let dx=-1;dx<=1&&!hit;dx++)for(let dy=-1;dy<=1;dy++)if(occupied(w.x+dx*gs,w.y+dy*gs)){hit=true;break;}
+      if(hit){const k=ckey(w.x,w.y);if(k>=0&&grid[k]===0){grid[k]=1;nodes.push({x:w.x,y:w.y,gen:Math.round(nr/gs),b:1,birth:0});}walker=null;}
+    }
+    nodes.forEach(n=>n.b=1);
+    draw();
+  } else start();
+})();
+</script>
+</body>
+</html>

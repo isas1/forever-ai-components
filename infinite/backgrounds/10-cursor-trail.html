@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Additive glowing particles in iris, cyan and pink trail the pointer on dark canvas, drifting on their own when idle.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cursor Trail</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-900:#08090d;
+  --text-2:#8a91a8; --text-3:#565d73;
+  --font-display:"Space Grotesk",system-ui,sans-serif;
+  --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;overflow:hidden;}
+body{background:var(--bg-900);}
+.frame{position:absolute;inset:0;display:grid;place-items:center;}
+.stage{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-900);}
+.c10-trail{position:absolute;inset:0;cursor:crosshair;}
+.c10-trail canvas{display:block;width:100%;height:100%;}
+.c10-trail__hint{position:absolute;inset:0;display:grid;place-items:center;
+  font-family:var(--font-display);font-size:13px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--text-3);pointer-events:none;transition:opacity 280ms var(--ease-out-soft);}
+.c10-trail--active .c10-trail__hint{opacity:0;}
+.caption{position:absolute;left:12px;bottom:10px;z-index:5;
+  font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-2);opacity:.7;pointer-events:none;}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="stage">
+    <div class="c10-trail" data-c10 aria-hidden="true">
+      <canvas></canvas>
+      <span class="c10-trail__hint">move pointer</span>
+    </div>
+    <span class="caption">Cursor Trail</span>
+  </div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var REDUCED=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function setupCanvas(host,draw){
+    var canvas=host.querySelector("canvas"),ctx=canvas.getContext("2d");
+    var dpr=Math.min(window.devicePixelRatio||1,2),w=0,h=0;
+    function resize(){
+      var r=host.getBoundingClientRect();
+      w=Math.max(1,Math.round(r.width));h=Math.max(1,Math.round(r.height));
+      canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      if(draw.onResize) draw.onResize(w,h);
+    }
+    if(window.ResizeObserver){new ResizeObserver(resize).observe(host);}
+    else{window.addEventListener("resize",resize);}
+    resize();
+    return {ctx:ctx,get w(){return w;},get h(){return h;}};
+  }
+
+  function runLoop(tick){
+    var running=false,id=0;
+    function loop(){tick();id=requestAnimationFrame(loop);}
+    function start(){if(running||document.hidden)return;running=true;id=requestAnimationFrame(loop);}
+    function stop(){running=false;cancelAnimationFrame(id);}
+    document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
+    start();
+  }
+
+  var host=document.querySelector("[data-c10]");
+  if(!host) return;
+  var COLORS=["#7c5cff","#22d3ee","#ff5ca8"];
+  var MAX=120;
+  var particles=[];
+  var pointer={x:0,y:0,active:false};
+  var auto={t:Math.random()*1000}; // idle drift keeps tile alive at rest
+  var cv=setupCanvas(host,{});
+
+  // Precompute one soft radial-gradient sprite per color once; draw scaled per frame
+  // instead of allocating a fresh gradient for every particle every frame.
+  var SPRITE=64; // sprite radius in px (drawn down to particle size)
+  var sprites=COLORS.map(function(c){
+    var s=document.createElement("canvas");s.width=s.height=SPRITE*2;
+    var sc=s.getContext("2d");
+    var g=sc.createRadialGradient(SPRITE,SPRITE,0,SPRITE,SPRITE,SPRITE);
+    g.addColorStop(0,c);g.addColorStop(1,"rgba(0,0,0,0)");
+    sc.fillStyle=g;sc.beginPath();sc.arc(SPRITE,SPRITE,SPRITE,0,Math.PI*2);sc.fill();
+    return s;
+  });
+
+  function emit(x,y,n){
+    for(var i=0;i<n;i++){
+      particles.push({x:x,y:y,
+        vx:(Math.random()-0.5)*1.6,vy:(Math.random()-0.5)*1.6,
+        life:1,decay:0.012+Math.random()*0.02,
+        r:1.5+Math.random()*3.5,ci:(Math.random()*COLORS.length)|0});
+    }
+    if(particles.length>MAX) particles.splice(0,particles.length-MAX);
+  }
+
+  function onMove(e){
+    var r=host.getBoundingClientRect();
+    var pt=e.touches?e.touches[0]:e;
+    pointer.x=pt.clientX-r.left;pointer.y=pt.clientY-r.top;
+    if(!pointer.active){pointer.active=true;host.classList.add("c10-trail--active");}
+    emit(pointer.x,pointer.y,3);
+  }
+  host.addEventListener("mousemove",onMove);
+  host.addEventListener("touchmove",function(e){onMove(e);},{passive:true});
+  host.addEventListener("mouseleave",function(){pointer.active=false;});
+
+  function render(){
+    var ctx=cv.ctx,w=cv.w,h=cv.h;ctx.clearRect(0,0,w,h);
+    if(!pointer.active&&w>0){
+      auto.t+=0.018;
+      var ax=w*(0.5+0.32*Math.cos(auto.t*0.9));
+      var ay=h*(0.5+0.3*Math.sin(auto.t*1.3));
+      emit(ax,ay,2);
+    }
+    ctx.globalCompositeOperation="lighter";
+    for(var i=particles.length-1;i>=0;i--){
+      var p=particles[i];
+      p.x+=p.vx;p.y+=p.vy;p.vx*=0.96;p.vy*=0.96;p.vy+=0.015;
+      p.life-=p.decay;
+      if(p.life<=0){particles.splice(i,1);continue;}
+      ctx.globalAlpha=p.life;
+      var rad=p.r*3,d=rad*2;
+      ctx.drawImage(sprites[p.ci],p.x-rad,p.y-rad,d,d);
+    }
+    ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";
+  }
+
+  if(REDUCED){
+    var ctx=cv.ctx;ctx.clearRect(0,0,cv.w,cv.h);
+    ctx.globalCompositeOperation="lighter";
+    for(var k=0;k<40;k++){
+      var px=cv.w/2+(Math.random()-0.5)*cv.w*0.5;
+      var py=cv.h/2+(Math.random()-0.5)*cv.h*0.5;
+      var rr=4+Math.random()*8;
+      ctx.globalAlpha=0.5;
+      ctx.drawImage(sprites[k%3],px-rr,py-rr,rr*2,rr*2);
+    }
+    ctx.globalCompositeOperation="source-over";
+    return;
+  }
+  runLoop(render);
+})();
+</script>
+</body>
+</html>

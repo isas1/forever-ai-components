@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Tree of Knowledge — Hilma af Klint. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tree of Knowledge</title>
+<style>
+  html,body{margin:0;height:100%;background:#ece4d4;overflow:hidden}
+  #afk07-stage{position:fixed;inset:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+  #afk07-svg{width:100%;height:100%;}
+  #afk07-svg .node{transform-box:fill-box;transform-origin:center;}
+  @keyframes afk07-grow{from{transform:scale(0);}to{transform:scale(1);}}
+  @keyframes afk07-draw{to{stroke-dashoffset:0;}}
+  @keyframes afk07-breathe{0%,100%{opacity:.82;}50%{opacity:1;}}
+  .afk07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2730;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion: reduce){ #afk07-svg .node{animation:none !important;transform:none !important;} }
+</style>
+</head>
+<body>
+<div id="afk07-stage" role="img" aria-label="A symmetric diagrammatic tree of pastel circles and lines grows from the root upward, branch answering branch — a homage to af Klint's botanical-spiritual charts, redrawn line by line on a loop.">
+  <svg id="afk07-svg" viewBox="0 0 600 560" preserveAspectRatio="xMidYMid meet"></svg>
+</div>
+<div class="afk07-cap">Tree of Knowledge</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const svg=document.getElementById('afk07-svg'); if(!svg) return;
+  const NS='http://www.w3.org/2000/svg';
+  const PAL={ink:'#2a2730',rose:'#e3a9bd'};
+  const PASTELS=['#a9c8e0','#e3a9bd','#ecd58a','#c3b3da','#a9c4a0'];
+  function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+  const W=600,H=560;
+  const nodes=[], edges=[];
+  const rootX=W/2, rootY=H-26;
+  (function build(x,y,ang,len,depth){
+    const nx=x+Math.cos(ang)*len, ny=y+Math.sin(ang)*len;
+    edges.push({x1:x,y1:y,x2:nx,y2:ny,depth});
+    nodes.push({x:nx,y:ny,depth,col:PASTELS[(depth+1)%PASTELS.length]});
+    if(depth===0) nodes.push({x:x,y:y,depth:0,col:PAL.rose,root:true});
+    if(depth>=4) return;
+    const spread=0.42-depth*0.03, nlen=len*0.74;
+    build(nx,ny,ang-spread,nlen,depth+1);
+    build(nx,ny,ang+spread,nlen,depth+1);
+  })(rootX,rootY,-Math.PI/2,140,0);
+  function render(){
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    const gl=document.createElementNS(NS,'line');
+    gl.setAttribute('x1',80);gl.setAttribute('y1',H-26);gl.setAttribute('x2',W-80);gl.setAttribute('y2',H-26);
+    gl.setAttribute('stroke',rgba(PAL.ink,0.2));gl.setAttribute('stroke-width','1');
+    svg.appendChild(gl);
+    edges.forEach((e)=>{
+      const ln=document.createElementNS(NS,'line');
+      ln.setAttribute('x1',e.x1);ln.setAttribute('y1',e.y1);
+      ln.setAttribute('x2',e.x2);ln.setAttribute('y2',e.y2);
+      ln.setAttribute('stroke',rgba(PAL.ink,0.55));
+      ln.setAttribute('stroke-width',(3.2-e.depth*0.5).toFixed(1));
+      ln.setAttribute('stroke-linecap','round');
+      const len=Math.hypot(e.x2-e.x1,e.y2-e.y1);
+      ln.setAttribute('stroke-dasharray',len);
+      ln.setAttribute('stroke-dashoffset',REDUCED?0:len);
+      if(!REDUCED){ ln.style.animation='afk07-draw .7s ease forwards'; ln.style.animationDelay=(0.15+e.depth*0.5)+'s'; }
+      svg.appendChild(ln);
+    });
+    nodes.forEach((n)=>{
+      const r=n.root?11:Math.max(3,9-n.depth*1.1);
+      const c=document.createElementNS(NS,'circle');
+      c.setAttribute('class','node');
+      c.setAttribute('cx',n.x);c.setAttribute('cy',n.y);c.setAttribute('r',r);
+      c.setAttribute('fill',n.col);
+      c.setAttribute('stroke',rgba(PAL.ink,0.45));c.setAttribute('stroke-width','1');
+      if(!REDUCED){
+        c.style.animation=`afk07-grow .5s cubic-bezier(.2,1.4,.4,1) forwards, afk07-breathe ${(3+Math.random()*2).toFixed(1)}s ease-in-out infinite`;
+        c.style.animationDelay=`${(0.3+(n.root?0:n.depth)*0.5)}s, ${(1.2+Math.random()).toFixed(2)}s`;
+        c.style.transform='scale(0)';
+      }
+      svg.appendChild(c);
+    });
+  }
+  render();
+  if(!REDUCED){
+    let timer=setInterval(()=>{ if(!document.hidden) render(); },9000);
+    document.addEventListener('visibilitychange',()=>{
+      if(document.hidden){ clearInterval(timer); timer=0; }
+      else if(!timer){ render(); timer=setInterval(()=>{ if(!document.hidden) render(); },9000); }
+    });
+  }
+})();
+</script>
+</body>
+</html>

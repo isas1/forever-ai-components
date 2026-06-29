@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Puffy soft white clouds drift slowly across a bright blue daytime sky gradient with subtle undersides; pointer gently pushes them along.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drifting Clouds</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#7fb6e0}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
+       letter-spacing:.08em;text-transform:uppercase;color:#ffffff;opacity:.45;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Drifting Clouds</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,raf,t=0,clouds=[],push=0;
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);build();}
+function mk(xx){const z=0.4+Math.random()*0.6;
+  return{x:xx,y:H*(0.15+Math.random()*0.6),s:z,sp:(0.12+z*0.25),
+    puffs:Array.from({length:5+((Math.random()*3)|0)},()=>({dx:(Math.random()-0.5)*70,dy:(Math.random()-0.5)*22,r:18+Math.random()*26}))};}
+function build(){clouds=[];const n=Math.min(7,Math.max(3,Math.round(W/120)));
+  for(let i=0;i<n;i++)clouds.push(mk(Math.random()*W));
+  clouds.sort((a,b)=>a.s-b.s);}
+addEventListener('resize',size);size();
+cv.addEventListener('pointermove',()=>push=Math.min(2,push+0.3));
+function cloud(c){
+  x.save();x.translate(c.x,c.y);x.scale(c.s,c.s);
+  for(const p of c.puffs){
+    const g=x.createRadialGradient(p.dx-p.r*0.3,p.dy-p.r*0.4,0,p.dx,p.dy,p.r);
+    g.addColorStop(0,'rgba(255,255,255,0.95)');
+    g.addColorStop(0.7,`rgba(240,248,255,0.85)`);
+    g.addColorStop(1,'rgba(210,228,245,0)');
+    x.fillStyle=g;x.beginPath();x.arc(p.dx,p.dy,p.r,0,7);x.fill();
+  }
+  // soft shadow underside
+  x.fillStyle='rgba(150,180,210,0.18)';
+  for(const p of c.puffs){x.beginPath();x.ellipse(p.dx,p.dy+p.r*0.4,p.r*0.8,p.r*0.4,0,0,7);x.fill();}
+  x.restore();
+}
+function frame(){
+  t+=0.005;
+  if(push>0)push*=0.96;
+  // sky
+  const g=x.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#5d9fd6');g.addColorStop(0.6,'#9cc8ea');g.addColorStop(1,'#cfe6f5');
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  for(const c of clouds){
+    if(!reduce)c.x+=(c.sp+push*c.s);
+    if(c.x-130*c.s>W){c.x=-130*c.s;c.y=H*(0.15+Math.random()*0.6);}
+    cloud(c);
+  }
+  raf=requestAnimationFrame(frame);
+}
+raf=requestAnimationFrame(frame);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>

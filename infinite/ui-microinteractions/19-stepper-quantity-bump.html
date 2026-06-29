@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A lime quantity stepper with skeuomorphic plus/minus keys rolls digits on a spring with motion-blur as the count bumps up and down.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stepper Quantity Bump</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1C1917;}
+  body{display:flex;align-items:center;justify-content:center;
+       font-family:ui-monospace,"SFMono-Regular","Courier New",monospace;}
+  .sqb-wrap{display:flex;align-items:center;
+       gap:clamp(10px,4vw,26px);
+       --acc:#A3E635;}
+  .sqb-btn{
+    position:relative;width:clamp(46px,17vw,96px);height:clamp(46px,17vw,96px);
+    border-radius:26%;
+    background:#2A2724;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 6px 0 #181513,0 10px 16px rgba(0,0,0,.4);
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;user-select:none;
+    transition:transform .07s ease;
+    will-change:transform;
+  }
+  .sqb-btn::before,.sqb-btn::after{
+    content:"";position:absolute;background:var(--acc);border-radius:2px;
+    box-shadow:0 0 10px rgba(163,230,53,.5);
+  }
+  .sqb-btn::before{width:42%;height:11%;}
+  .sqb-btn.sqb-plus::after{width:11%;height:42%;}
+  .sqb-num{
+    position:relative;width:clamp(64px,24vw,150px);height:clamp(82px,30vw,190px);
+    overflow:hidden;
+    -webkit-mask-image:linear-gradient(180deg,transparent,#000 22%,#000 78%,transparent);
+            mask-image:linear-gradient(180deg,transparent,#000 22%,#000 78%,transparent);
+  }
+  .sqb-roll{position:absolute;left:0;width:100%;will-change:transform;}
+  .sqb-cell{height:clamp(82px,30vw,190px);display:flex;align-items:center;justify-content:center;
+    color:var(--acc);font-weight:700;font-size:clamp(58px,21vw,140px);
+    line-height:1;letter-spacing:.02em;
+    text-shadow:0 0 24px rgba(163,230,53,.35);}
+  .sqb-base{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;}
+  .sqb-cap{position:fixed;right:10px;bottom:8px;font-size:11px;letter-spacing:.08em;
+       color:#A3E635;opacity:.34;text-transform:uppercase;
+       font-family:monospace;pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+  <div class="sqb-wrap">
+    <div class="sqb-btn sqb-minus" id="sqbMinus" aria-label="decrease"></div>
+    <div class="sqb-num"><div class="sqb-roll" id="sqbRoll"></div></div>
+    <div class="sqb-btn sqb-plus" id="sqbPlus" aria-label="increase"></div>
+  </div>
+  <div class="sqb-cap">Stepper Quantity Bump</div>
+<script>
+(function(){
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var roll=document.getElementById('sqbRoll');
+  var plus=document.getElementById('sqbPlus'), minus=document.getElementById('sqbMinus');
+  var val=4, prev=4, raf=0;
+  // three cells: out / current / next. roll Y in cell-units.
+  var cellH=0, cells=[];
+  function build(){
+    roll.innerHTML='';
+    cells=[];
+    for(var i=0;i<3;i++){
+      var c=document.createElement('div');
+      c.className='sqb-cell';
+      roll.appendChild(c); cells.push(c);
+    }
+    cellH=cells[0].getBoundingClientRect().height||120;
+    render();
+  }
+  function setStatic(){
+    cells[0].textContent=((val+9)%10);
+    cells[1].textContent=val%10;
+    cells[2].textContent=((val+1)%10);
+    roll.style.transform='translateY('+(-cellH)+'px)';
+  }
+  // animation state
+  var anim=null; // {dir, t, dur, from(px), squashBtn}
+  function trigger(dir){
+    if(anim) finish();
+    prev=val;
+    val=(val+dir+1000)%1000;
+    // populate roll so motion goes from current -> new
+    if(dir>0){
+      cells[0].textContent=prev%10;
+      cells[1].textContent=val%10;       // landing
+      cells[2].textContent=(val+1)%10;
+    }else{
+      cells[0].textContent=(prev)%10;
+      cells[1].textContent=val%10;
+      cells[2].textContent=(val+9)%10;
+    }
+    // start position: show prev (index for dir>0 is cell0 at top, dir<0 cell0 also prev top)
+    var startUnit = dir>0 ? 0 : 0;
+    anim={dir:dir,t:0,dur:reduce?0:520,from:-startUnit*cellH,blurEl:null};
+    // squash pressed button
+    var b=dir>0?plus:minus;
+    b.style.transition='transform .08s cubic-bezier(.3,.7,.3,1)';
+    b.style.transform='scale(.82,.82)';
+    setTimeout(function(){ b.style.transition='transform .34s cubic-bezier(.2,1.5,.35,1)'; b.style.transform=''; },90);
+  }
+  function render(){
+    if(!anim){ setStatic(); return; }
+  }
+  // spring overshoot easing
+  function easeSpring(p){
+    if(p>=1) return 1;
+    var w=10, z=0.42; // freq, damping
+    return 1 - Math.exp(-z*w*p)*Math.cos(w*Math.sqrt(1-z*z)*p);
+  }
+  function finish(){
+    anim=null;
+    // normalize: landing digit centered
+    cells[0].textContent=(val+9)%10;
+    cells[1].textContent=val%10;
+    cells[2].textContent=(val+1)%10;
+    roll.style.filter='';
+    cells[0].style.filter=cells[1].style.filter=cells[2].style.filter='';
+    roll.style.transform='translateY('+(-cellH)+'px)';
+  }
+  var autoT=0, autoDir=1, autoCount=0;
+  function tick(ts){
+    if(!last) last=ts;
+    var dt=ts-last; last=ts;
+    if(anim){
+      anim.t+=dt;
+      var p=Math.min(anim.t/anim.dur,1);
+      var e=easeSpring(p);
+      // landing digit (val) lives in cell1; rest position = -cellH (cell1 centered).
+      // dir>0: prev in cell0, start y=0 (cell0 centered) -> roll up to -cellH.
+      // dir<0: prev in cell2, start y=-2*cellH (cell2 centered) -> roll down to -cellH.
+      var from = anim.dir>0 ? 0 : -2*cellH;
+      var to = -cellH;
+      var y = from + (to-from)*e;
+      roll.style.transform='translateY('+y+'px)';
+      // motion blur on the outgoing digit + spin
+      var speed=Math.max(0,Math.cos(p*Math.PI/2));
+      var bl=(p<0.55?(6*(1-p/0.55)):0);
+      var outIdx=anim.dir>0?0:2, inIdx=1;
+      cells[outIdx].style.filter='blur('+bl+'px)';
+      cells[outIdx].style.opacity=String(0.35+0.65*(1-Math.min(p/0.6,1)));
+      cells[inIdx].style.filter='blur('+(p<0.4?2*(1-p/0.4):0)+'px)';
+      cells[inIdx].style.opacity='1';
+      if(p>=1) finish();
+    }
+    // auto loop
+    autoT+=dt;
+    if(!anim && autoT>900){
+      autoT=0;
+      trigger(autoDir);
+      autoCount++;
+      if(autoDir>0 && val>=9) autoDir=-1;
+      if(autoDir<0 && val<=1) autoDir=1;
+    }
+    raf=requestAnimationFrame(tick);
+  }
+  var last=0;
+  function press(dir){ if(!reduce){ autoT=-600; trigger(dir); } }
+  plus.addEventListener('pointerdown',function(){press(1);});
+  minus.addEventListener('pointerdown',function(){press(-1);});
+  function start(){ if(!raf&&!reduce){ last=0; raf=requestAnimationFrame(tick);} }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  addEventListener('resize',function(){ var keep=anim; build(); if(keep){anim=null;} });
+  build();
+  if(reduce){ setStatic(); } else start();
+})();
+</script>
+</body>
+</html>

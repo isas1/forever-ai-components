@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Fine gold diamond lattice with a travelling diagonal sheen lighting node glints in a wavefront over deep black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lattice Shimmer</title>
+<style>
+  :root{
+    --ad11-bg:#0c0b08;
+    --ad11-gold:#d4af37;
+    --ad11-gold-hi:#f4e3a1;
+    --ad11-gold-lo:#8a6d1f;
+    --ad11-emerald:#0f3a31;
+  }
+  html,body{margin:0;height:100%;background:var(--ad11-bg);overflow:hidden}
+  #ad11-stage{
+    position:fixed;inset:0;display:grid;place-items:center;
+    background:
+      radial-gradient(120% 90% at 50% 0%, #14130d 0%, var(--ad11-bg) 62%),
+      var(--ad11-bg);
+  }
+  #ad11-svg{width:100%;height:100%;display:block}
+
+  /* travelling sheen band: transform-only translate, looped */
+  #ad11-sheen{
+    transform:translateX(-60%);
+    animation:ad11-travel 5.4s linear infinite;
+    mix-blend-mode:screen;
+  }
+  @keyframes ad11-travel{
+    0%   {transform:translateX(-60%)}
+    100% {transform:translateX(160%)}
+  }
+  /* lattice nodes pulse via opacity only */
+  .ad11-node{animation:ad11-glint 5.4s ease-in-out infinite}
+  @keyframes ad11-glint{
+    0%,100%{opacity:.28}
+    46%{opacity:.28}
+    52%{opacity:1}
+    58%{opacity:.28}
+  }
+
+  .ad11-cap{
+    position:fixed;left:8px;bottom:7px;
+    font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;
+    letter-spacing:.08em;text-transform:uppercase;user-select:none;
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    #ad11-sheen{transform:translateX(50%);opacity:.55}
+    .ad11-node{opacity:.62}
+  }
+</style>
+</head>
+<body>
+<div id="ad11-stage">
+  <svg id="ad11-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid slice"
+       role="img" aria-label="Art Deco gold diamond lattice with a travelling sheen of light over a deep black field.">
+    <defs>
+      <!-- static gold stroke gradient (top-lit) -->
+      <linearGradient id="ad11-stroke" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#f4e3a1"/>
+        <stop offset=".5" stop-color="#d4af37"/>
+        <stop offset="1" stop-color="#8a6d1f"/>
+      </linearGradient>
+      <!-- static emerald vignette -->
+      <radialGradient id="ad11-field" cx="50%" cy="34%" r="78%">
+        <stop offset="0" stop-color="#0f3a31" stop-opacity=".5"/>
+        <stop offset=".55" stop-color="#0a1714" stop-opacity=".35"/>
+        <stop offset="1" stop-color="#0c0b08" stop-opacity="0"/>
+      </radialGradient>
+      <!-- the moving sheen: a soft diagonal gold band, static gradient, moved by transform -->
+      <linearGradient id="ad11-band" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0"   stop-color="#fff" stop-opacity="0"/>
+        <stop offset=".42" stop-color="#f4e3a1" stop-opacity="0"/>
+        <stop offset=".5"  stop-color="#fff" stop-opacity=".9"/>
+        <stop offset=".58" stop-color="#f4e3a1" stop-opacity="0"/>
+        <stop offset="1"   stop-color="#fff" stop-opacity="0"/>
+      </linearGradient>
+      <!-- only the lattice strokes receive the sheen -->
+      <mask id="ad11-latmask">
+        <rect x="0" y="0" width="400" height="400" fill="black"/>
+        <g id="ad11-maskpaths" stroke="#fff" stroke-width="2.2" fill="none"></g>
+      </mask>
+    </defs>
+
+    <rect x="0" y="0" width="400" height="400" fill="url(#ad11-field)"/>
+
+    <!-- fine gold diamond lattice -->
+    <g id="ad11-lattice" stroke="url(#ad11-stroke)" stroke-width="1.1"
+       fill="none" opacity=".82"></g>
+    <!-- glinting nodes at lattice crossings -->
+    <g id="ad11-nodes" fill="#f4e3a1"></g>
+
+    <!-- travelling sheen, clipped to the lattice via mask -->
+    <g mask="url(#ad11-latmask)">
+      <rect id="ad11-sheen" x="-200" y="-40" width="200" height="480"
+            fill="url(#ad11-band)" transform-origin="200 200"
+            transform="rotate(18 200 200)"/>
+    </g>
+
+    <!-- deco corner fans for framing (static) -->
+    <g id="ad11-frame" stroke="url(#ad11-stroke)" stroke-width="1.2" fill="none" opacity=".7"></g>
+  </svg>
+</div>
+<div class="ad11-cap">Lattice Shimmer</div>
+
+<script>
+(function(){
+  "use strict";
+  var svg=document.getElementById('ad11-svg');
+  var lattice=document.getElementById('ad11-lattice');
+  var nodes=document.getElementById('ad11-nodes');
+  var maskg=document.getElementById('ad11-maskpaths');
+  var frame=document.getElementById('ad11-frame');
+  var NS='http://www.w3.org/2000/svg';
+
+  var W=400,H=400;
+  var step=28;            // lattice cell pitch
+  var cols=Math.ceil(W/step)+2;
+  var rows=Math.ceil(H/step)+2;
+
+  function line(p,x1,y1,x2,y2){
+    var l=document.createElementNS(NS,'line');
+    l.setAttribute('x1',x1.toFixed(1));l.setAttribute('y1',y1.toFixed(1));
+    l.setAttribute('x2',x2.toFixed(1));l.setAttribute('y2',y2.toFixed(1));
+    p.appendChild(l);
+  }
+
+  // Diagonal lattice: two families of parallel lines forming diamonds.
+  // Draw across an extended range so it fully covers the slice frame.
+  var i, span=cols+rows;
+  for(i=-rows;i<=cols;i++){
+    // family A: slope +1
+    var ax1=i*step, ay1=0, ax2=i*step+H, ay2=H;
+    line(lattice,ax1,ay1,ax2,ay2); line(maskg,ax1,ay1,ax2,ay2);
+    // family B: slope -1
+    var bx1=i*step, by1=0, bx2=i*step-H, by2=H;
+    line(lattice,bx1,by1,bx2,by2); line(maskg,bx1,by1,bx2,by2);
+  }
+
+  // Nodes at diamond crossings (a capped subset, staggered glint timing).
+  // Place on the integer grid of crossings; keep count <= 110.
+  var placed=0, MAXN=110;
+  var gx=step, half=step/2;
+  for(var ry=0; ry<=rows && placed<MAXN; ry++){
+    var cy=ry*step;
+    // crossings alternate offset per row (diamond centres)
+    var off=(ry%2)?half:0;
+    for(var cx=off; cx<=W && placed<MAXN; cx+=gx){
+      var c=document.createElementNS(NS,'circle');
+      c.setAttribute('cx',cx.toFixed(1));
+      c.setAttribute('cy',cy.toFixed(1));
+      c.setAttribute('r','1.6');
+      c.setAttribute('class','ad11-node');
+      // stagger glint so the sheen "lights" a diagonal wavefront
+      var delay=(-(cx+cy)/(W+H)*5.4).toFixed(2);
+      c.style.animationDelay=delay+'s';
+      nodes.appendChild(c);
+      placed++;
+    }
+  }
+
+  // Corner sunburst fans — Art Deco framing, static.
+  function fan(cx,cy,rot){
+    var n=7, r=46;
+    for(var k=0;k<=n;k++){
+      var a=(rot + (k/n)*Math.PI/2);
+      line(frame,cx,cy,cx+Math.cos(a)*r,cy+Math.sin(a)*r);
+    }
+    var arc=document.createElementNS(NS,'circle');
+    arc.setAttribute('cx',cx);arc.setAttribute('cy',cy);
+    arc.setAttribute('r',r*0.62);
+    arc.setAttribute('opacity','.5');
+    frame.appendChild(arc);
+  }
+  fan(0,0,0);
+  fan(W,0,Math.PI/2);
+  fan(W,H,Math.PI);
+  fan(0,H,-Math.PI/2);
+
+  // Sync the moving sheen <-> node glint by sharing one animation clock.
+  // CSS handles the loop; we only need to honour reduced motion + visibility.
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  if(reduce) return; // CSS already settled to a static frame
+
+  function setPlay(state){
+    var s=document.getElementById('ad11-sheen');
+    if(s) s.style.animationPlayState=state;
+    var ns=nodes.children, j;
+    for(j=0;j<ns.length;j++) ns[j].style.animationPlayState=state;
+  }
+  document.addEventListener('visibilitychange',function(){
+    setPlay(document.hidden?'paused':'running');
+  });
+})();
+</script>
+</body>
+</html>

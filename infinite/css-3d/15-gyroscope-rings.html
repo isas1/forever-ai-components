@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Three golden gimbal rings spin on independent axes around a glowing core, slowly precessing like a gyroscope on a dark brown ground.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gyroscope Rings</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1410;}
+  .gyr-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    perspective:760px;perspective-origin:50% 44%;}
+  .gyr-scene{position:relative;width:clamp(150px,62vmin,460px);height:clamp(150px,62vmin,460px);
+    transform-style:preserve-3d;transform:rotateX(-24deg) rotateY(0deg);}
+  /* precession: whole assembly slowly tips/wobbles */
+  .gyr-precess{position:absolute;inset:0;transform-style:preserve-3d;
+    animation:gyr-prec 14s linear infinite;}
+  /* the three gimbal rings */
+  .gyr-ring{position:absolute;inset:0;transform-style:preserve-3d;border-radius:50%;}
+  .gyr-r1{animation:gyr-spin1 3.6s linear infinite;}
+  .gyr-r2{animation:gyr-spin2 5.9s linear infinite;}
+  .gyr-r3{animation:gyr-spin3 8.7s linear infinite;}
+  /* each ring built from segment divs bent into a circle */
+  .gyr-seg{position:absolute;left:50%;top:50%;width:7%;height:14%;margin:-7% 0 0 -3.5%;
+    border-radius:2px;transform-style:preserve-3d;
+    background:linear-gradient(180deg,#f0b429,#a8731a);}
+  .gyr-r2 .gyr-seg{background:linear-gradient(180deg,#f6cf6e,#8a5e16);}
+  .gyr-r3 .gyr-seg{background:linear-gradient(180deg,#caa03e,#6e4d12);}
+  /* gyro core */
+  .gyr-core{position:absolute;left:50%;top:50%;width:11%;height:11%;margin:-5.5% 0 0 -5.5%;
+    border-radius:50%;background:radial-gradient(circle at 38% 34%,#fff3d0,#f0b429 42%,#7a4f10 100%);
+    box-shadow:0 0 20px rgba(240,180,41,.8),0 0 40px rgba(240,180,41,.32);}
+  /* compositor-only pulsing glow: animates opacity+scale, never box-shadow */
+  .gyr-core::before{content:"";position:absolute;left:50%;top:50%;width:300%;height:300%;
+    margin:-150% 0 0 -150%;border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle,rgba(240,180,41,.5) 0%,rgba(240,180,41,.18) 38%,rgba(240,180,41,0) 70%);
+    animation:gyr-pulse 2.4s ease-in-out infinite;}
+  .gyr-axis{position:absolute;left:50%;top:50%;width:2px;height:128%;margin:-64% 0 0 -1px;
+    background:linear-gradient(180deg,rgba(240,180,41,0) 0%,rgba(240,180,41,.5) 50%,rgba(240,180,41,0) 100%);
+    transform-style:preserve-3d;}
+  @keyframes gyr-prec{
+    0%{transform:rotateX(0deg) rotateY(0deg) rotateZ(0deg);}
+    50%{transform:rotateX(14deg) rotateY(180deg) rotateZ(-8deg);}
+    100%{transform:rotateX(0deg) rotateY(360deg) rotateZ(0deg);}
+  }
+  @keyframes gyr-spin1{from{transform:rotateY(0deg);}to{transform:rotateY(360deg);}}
+  @keyframes gyr-spin2{from{transform:rotateX(90deg) rotateZ(0deg);}to{transform:rotateX(90deg) rotateZ(360deg);}}
+  @keyframes gyr-spin3{from{transform:rotateZ(0deg) rotateX(0deg);}to{transform:rotateZ(360deg) rotateX(360deg);}}
+  @keyframes gyr-pulse{0%,100%{opacity:.7;transform:scale(.9);}
+    50%{opacity:1;transform:scale(1.12);}}
+  .gyr-paused *{animation-play-state:paused!important;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+    letter-spacing:.13em;color:#f0b429;opacity:.35;text-transform:uppercase;
+    pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<div class="gyr-stage">
+  <div class="gyr-scene" id="gyr-scene">
+    <div class="gyr-precess">
+      <div class="gyr-ring gyr-r1" id="gyr-r1"></div>
+      <div class="gyr-ring gyr-r2" id="gyr-r2"></div>
+      <div class="gyr-ring gyr-r3" id="gyr-r3"></div>
+      <div class="gyr-axis"></div>
+      <div class="gyr-core"></div>
+    </div>
+  </div>
+</div>
+<div class="cap">Gyroscope Rings</div>
+<script>
+(function(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const scene = document.getElementById('gyr-scene');
+  const SEGS = 40;               // segments per ring -> smooth bent circle
+  const RAD = 0.46;              // ring radius as fraction of box (translateZ-style via translate)
+  // Build each ring: place segments around a circle, each tangent-rotated.
+  ['gyr-r1','gyr-r2','gyr-r3'].forEach(function(id){
+    const ring = document.getElementById(id);
+    for(let i=0;i<SEGS;i++){
+      const a = (i/SEGS)*360;
+      const s = document.createElement('div');
+      s.className = 'gyr-seg';
+      // rotate to angle, push outward, then tangent-tilt so segment lies along the ring
+      s.style.transform =
+        'rotateZ('+a+'deg) translateY(-'+(RAD*100)+'%) rotateX(72deg)';
+      ring.appendChild(s);
+    }
+  });
+
+  // Pointer nudge: tip the whole scene toward the cursor.
+  let nudgeX=0, nudgeY=0, baseX=-24;
+  function applyBase(){ scene.style.transform = 'rotateX('+(baseX+nudgeY)+'deg) rotateY('+nudgeX+'deg)'; }
+  applyBase();
+  if(!reduce){
+    addEventListener('pointermove',function(e){
+      const w=innerWidth||1, h=innerHeight||1;
+      nudgeX = (e.clientX/w - .5)*34;
+      nudgeY = (e.clientY/h - .5)*-22;
+      applyBase();
+    });
+  }
+
+  // Pause / resume via play-state class (CSS animations) on hide.
+  function stop(){ document.body.classList.add('gyr-paused'); }
+  function start(){ document.body.classList.remove('gyr-paused'); }
+  document.addEventListener('visibilitychange',function(){ document.hidden?stop():start(); });
+
+  if(reduce){
+    // static resting frame: kill animations, set a clean orientation.
+    document.body.classList.add('gyr-paused');
+    document.querySelector('.gyr-precess').style.transform='rotateY(28deg) rotateX(8deg)';
+    document.getElementById('gyr-r2').style.transform='rotateX(90deg)';
+    scene.style.transform='rotateX(-22deg)';
+  }
+})();
+</script>
+</body>
+</html>

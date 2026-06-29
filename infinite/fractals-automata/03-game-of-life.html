@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Conway's Game of Life: glowing violet cells flicker, drift and die across a dark pixel grid, reseeding when the field thins.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Game of Life</title>
+<style>
+  html,body{margin:0;height:100%;background:#06070b}
+  #fr03-stage{position:fixed;inset:0;overflow:hidden;background:#06070b}
+  #fr03-c{position:absolute;inset:0;width:100%;height:100%;display:block;
+    image-rendering:pixelated;
+    box-shadow:inset 0 0 120px 30px rgba(6,7,11,.92),inset 0 0 30px 6px rgba(155,140,255,.10)}
+  .fr03-vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 120% at 50% 42%,transparent 52%,rgba(6,7,11,.78) 100%)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fr03-stage" role="img" aria-label="Conway's Game of Life: glowing violet cells flicker, drift and die across a dark grid, reseeding when the field thins.">
+  <canvas id="fr03-c"></canvas>
+  <div class="fr03-vig"></div>
+</div>
+<div class="cap">Game of Life</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('fr03-stage');
+  var cv = document.getElementById('fr03-c');
+  var ctx = cv.getContext('2d', { alpha:false });
+
+  // Palette around #9b8cff over #06070b — three age tiers (premultiplied RGBA in a LUT).
+  // Tier by neighbours/age: born=cool violet, settled=accent, old=warm lilac. Dead fades to bg.
+  var BG=[6,7,11];
+  var TIERS=[[120,108,210],[155,140,255],[200,180,255]];
+
+  // Capped logical grid. Cell pixels chosen so total cells stay modest (<~9000).
+  var COLS=0, ROWS=0, CELL=0, PW=0, PH=0;
+  var a=null, b=null, img=null, buf=null, buf32=null, age=null;
+  var deadLUT=null; // 8-level fade-to-bg lookup (packed 0xAABBGGRR)
+
+  function packLUT(){
+    deadLUT=new Uint32Array(8);
+    for(var i=0;i<8;i++){
+      var t=i/7, k=0.30*(1-t); // dim afterglow trail toward bg
+      var r=Math.round(BG[0]+(TIERS[0][0]-BG[0])*k);
+      var g=Math.round(BG[1]+(TIERS[0][1]-BG[1])*k);
+      var bl=Math.round(BG[2]+(TIERS[0][2]-BG[2])*k);
+      deadLUT[i]=(255<<24)|(bl<<16)|(g<<8)|r;
+    }
+  }
+  var liveLUT=new Uint32Array(3);
+  (function(){for(var i=0;i<3;i++){var c=TIERS[i];liveLUT[i]=(255<<24)|(c[2]<<16)|(c[1]<<8)|c[0];}})();
+  packLUT();
+
+  function seed(){
+    for(var i=0;i<a.length;i++){a[i]=Math.random()<0.30?1:0; age[i]=0;}
+  }
+
+  function resize(){
+    var w=stage.clientWidth||300, h=stage.clientHeight||300;
+    var dpr=Math.min(2,window.devicePixelRatio||1);
+    // pick a cell size that yields a crisp, capped grid regardless of frame size
+    CELL=Math.max(3,Math.round(Math.min(w,h)/96));
+    COLS=Math.min(180,Math.max(24,Math.ceil(w/CELL)));
+    ROWS=Math.min(180,Math.max(24,Math.ceil(h/CELL)));
+    PW=COLS; PH=ROWS;
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    a=new Uint8Array(COLS*ROWS); b=new Uint8Array(COLS*ROWS); age=new Uint8Array(COLS*ROWS);
+    img=ctx.createImageData(PW,PH); buf=img.data; buf32=new Uint32Array(buf.buffer);
+    seed();
+    ctx.imageSmoothingEnabled=false;
+  }
+
+  function step(){
+    var c=COLS, r=ROWS, live=0;
+    for(var y=0;y<r;y++){
+      var yp=((y-1+r)%r)*c, yc=y*c, yn=((y+1)%r)*c;
+      for(var x=0;x<c;x++){
+        var xp=(x-1+c)%c, xn=(x+1)%c;
+        var n=a[yp+xp]+a[yp+x]+a[yp+xn]+a[yc+xp]+a[yc+xn]+a[yn+xp]+a[yn+x]+a[yn+xn];
+        var cur=a[yc+x], nv=cur?(n===2||n===3?1:0):(n===3?1:0);
+        b[yc+x]=nv;
+        if(nv){ live++; var ag=age[yc+x]; if(ag<200) age[yc+x]=ag+(cur?2:0)|0; if(!cur)age[yc+x]=0; }
+        else age[yc+x]=0;
+      }
+    }
+    var t=a; a=b; b=t;
+    // reseed when the field collapses to near-stasis (sparse) — keep it alive
+    if(live < (c*r)*0.018){
+      for(var i=0;i<a.length;i++){ if(Math.random()<0.16){a[i]=1;age[i]=0;} }
+    }
+  }
+
+  function render(){
+    var len=a.length;
+    for(var i=0;i<len;i++){
+      if(a[i]){
+        var ag=age[i];
+        buf32[i]= ag>40?liveLUT[2] : ag>12?liveLUT[1] : liveLUT[0];
+      } else {
+        buf32[i]=deadLUT[0];
+      }
+    }
+    ctx.putImageData(img,0,0);
+    // stretch the small ImageData across the full canvas via the smoothing-disabled draw
+    ctx.drawImage(cv,0,0,PW,PH,0,0,cv.width,cv.height);
+  }
+
+  var running=true, raf=0, last=0, STEP_MS=110, acc=0;
+  function loop(ts){
+    if(!running)return;
+    raf=requestAnimationFrame(loop);
+    var dt=ts-last; last=ts; if(dt>250)dt=250; acc+=dt;
+    if(acc>=STEP_MS){ acc-=STEP_MS; if(acc>STEP_MS)acc=0; step(); render(); }
+  }
+
+  resize();
+  // For the initial blit we must render once so the canvas isn't blank.
+  render();
+
+  if(reduce){
+    // settle a few generations to a legible, on-brand still frame, then stop.
+    for(var s=0;s<6;s++) step();
+    render();
+    return;
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(function(){resize();render();},160)});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; last=performance.now(); acc=0; raf=requestAnimationFrame(loop); }
+  });
+  last=performance.now();
+  raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

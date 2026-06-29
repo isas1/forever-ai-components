@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Purple-to-pink neon-glow range slider with a glowing knob and a floating value bubble that tracks the handle.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Glow Slider</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#120a1f;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .wrap{height:100%;display:flex;align-items:center;justify-content:center}
+  .stage{width:min(74vmin,340px)}
+  svg{width:100%;height:auto;overflow:visible}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#ff5cc8;opacity:.4;text-transform:uppercase}
+  .bub{font:700 16px ui-sans-serif,system-ui,sans-serif;fill:#fff}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="stage">
+<svg viewBox="0 0 200 120" role="img" aria-label="Glowing slider">
+  <defs>
+    <linearGradient id="fill" x1="0" x2="1"><stop offset="0" stop-color="#7a3cff"/><stop offset="1" stop-color="#ff5cc8"/></linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <rect x="20" y="78" width="160" height="8" rx="4" fill="#2a2140"/>
+  <rect id="prog" x="20" y="78" width="40" height="8" rx="4" fill="url(#fill)" filter="url(#glow)"/>
+  <g id="bubg" filter="url(#glow)">
+    <path id="bubp" d="" fill="url(#fill)"/>
+    <text id="bubt" class="bub" x="60" y="40" text-anchor="middle">40</text>
+  </g>
+  <circle id="knob" cx="60" cy="82" r="9" fill="#fff" filter="url(#glow)"/>
+</svg>
+</div></div>
+<div class="cap">Glow Slider</div>
+<script>
+(function(){
+  const prog=document.getElementById('prog'),knob=document.getElementById('knob'),bubg=document.getElementById('bubg'),bubt=document.getElementById('bubt'),bubp=document.getElementById('bubp');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const X0=20,X1=180;let t=0,running=true,manual=false,target=.4,val=.4;
+  function bubblePath(cx){return 'M'+(cx-15)+' 30 q0 -14 15 -14 q15 0 15 14 q0 12 -10 16 l-5 9 l-5 -9 q-10 -4 -10 -16 z';}
+  function frame(){
+    if(!running)return;
+    t++;
+    if(!manual){target=.5+0.42*Math.sin(t*0.018);}
+    val+=(target-val)*0.12;
+    const x=X0+(X1-X0)*val;
+    prog.setAttribute('width',Math.max(8,x-X0));
+    knob.setAttribute('cx',x);
+    bubg.setAttribute('transform','translate('+(x-Math.min(Math.max(x,X0+15),X1-15))+',0)');
+    // keep bubble centered on knob but clamped
+    const bx=Math.min(Math.max(x,X0+16),X1-16);
+    bubp.setAttribute('d',bubblePath(bx));
+    bubt.setAttribute('x',bx);
+    bubt.textContent=Math.round(val*100);
+    requestAnimationFrame(frame);
+  }
+  const svg=document.querySelector('svg');
+  function set(e){const r=svg.getBoundingClientRect();const px=(e.clientX-r.left)/r.width*200;target=Math.min(1,Math.max(0,(px-X0)/(X1-X0)));}
+  svg.addEventListener('pointerdown',e=>{manual=true;set(e);});
+  svg.addEventListener('pointermove',e=>{if(manual&&e.buttons)set(e);});
+  window.addEventListener('pointerup',()=>{setTimeout(()=>manual=false,1400);});
+  document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
+  bubp.setAttribute('d',bubblePath(60));
+  if(!reduce)requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

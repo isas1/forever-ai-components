@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Green-on-dark Bayer ordered-dither field of chunky pixels rippling and breathing in and out, pointer-reactive.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bayer Dither Dissolve</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#101820;}
+  #bdd{display:block;width:100%;height:100%;}
+  .bdd-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.16em;color:#7CFC9A;opacity:.36;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="bdd"></canvas>
+<div class="bdd-cap">Bayer Dither Dissolve</div>
+<script>
+(function(){
+  const cv=document.getElementById('bdd'),ctx=cv.getContext('2d',{alpha:false});
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG=[16,24,32], FG=[124,252,154];
+  // 4x4 Bayer ordered-dither matrix, normalised to 0..1 thresholds
+  const B=[0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5].map(v=>(v+0.5)/16);
+  const off=document.createElement('canvas'),octx=off.getContext('2d');
+  let W,H,DPR,img,gw,gh,cell,ox,oy,t=0,px=0.5,py=0.5;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.imageSmoothingEnabled=false;
+    // pixel grid: keep dots chunky + readable from 180px to 640px
+    cell=Math.max(4,Math.round(Math.min(W,H)/64));
+    gw=Math.ceil(W/cell);gh=Math.ceil(H/cell);
+    ox=(W-gw*cell)/2;oy=(H-gh*cell)/2;
+    off.width=gw;off.height=gh;
+    img=octx.createImageData(gw,gh);
+  }
+  addEventListener('resize',size);size();
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+    px=(e.clientX-r.left)/W;py=(e.clientY-r.top)/H;});
+  // source shape: smooth signed field — concentric ripple ring + drifting blobs.
+  function field(u,v,tt){
+    const x=(u-0.5)*2, y=(v-0.5)*2;
+    const r=Math.sqrt(x*x+y*y);
+    let f=0.62-r*0.78;                                  // soft radial disc
+    f+=0.30*Math.sin(r*9.0-tt*2.2);                     // crawling concentric rings
+    f+=0.16*Math.sin((x-px+0.5)*7.0+tt*1.3)*Math.cos((y-py+0.5)*7.0-tt*1.1); // interference
+    return f;
+  }
+  function frame(){
+    if(!reduce)t+=0.012;
+    const breathe=0.5+0.5*Math.sin(t*1.6);              // slow dissolve in/out
+    const lvl=0.30+breathe*1.05;                        // global threshold sweep
+    const d=img.data;
+    for(let gy=0,i=0;gy<gh;gy++){
+      const v=gy/gh, by=gy&3;
+      for(let gx=0;gx<gw;gx++,i+=4){
+        const u=gx/gw;
+        const f=field(u,v,t)*lvl + (lvl-0.5)*0.6;       // shape modulated by breath
+        const thr=B[(by<<2)|(gx&3)];                    // Bayer ordered threshold
+        const on=f>thr;
+        const c=on?FG:BG;
+        d[i]=c[0];d[i+1]=c[1];d[i+2]=c[2];d[i+3]=255;
+      }
+    }
+    // upscale the dither grid into chunky square cells (nearest-neighbour)
+    octx.putImageData(img,0,0);
+    ctx.fillStyle='#101820';ctx.fillRect(0,0,W,H);
+    ctx.imageSmoothingEnabled=false;
+    ctx.drawImage(off,0,0,gw,gh,ox,oy,gw*cell,gh*cell);
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=1.1;frame();}else start();
+})();
+</script>
+</body>
+</html>

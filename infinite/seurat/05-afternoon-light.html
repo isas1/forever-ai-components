@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Afternoon Light — Georges Seurat. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Afternoon Light</title>
+<style>
+  html,body{margin:0;height:100%;background:#1a1f27;overflow:hidden}
+  #seu05-stage{position:fixed;inset:0;width:100%;height:100%}
+  #seu05-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .seu05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="seu05-stage" role="img" aria-label="A band of sunlight sweeps a dotted park at dusk: dots warm to orange and green in its path, then settle back into violet and blue shade as the light moves on.">
+  <canvas id="seu05-cv"></canvas>
+</div>
+<div class="seu05-cap">Afternoon Light</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('seu05-cv'); if(!cv) return;
+  const RGB={green:[111,155,78],sky:[143,184,214],orange:[224,138,46],violet:[107,91,149]};
+  const NIGHT='#1a1f27';
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function rgba(t,a){return 'rgba('+t[0]+','+t[1]+','+t[2]+','+a+')';}
+  function dot(ctx,x,y,r,col,a){ctx.globalAlpha=a;ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();ctx.globalAlpha=1;}
+  let S=fitCanvas(cv);
+  let grid=[];
+  function build(){
+    grid=[];
+    const gap=14;
+    for(let y=gap/2,row=0;y<S.h;y+=gap,row++){
+      for(let x=gap/2+(row%2)*gap/2;x<S.w;x+=gap){
+        grid.push({x,y,base:Math.random()<0.5?RGB.violet:RGB.sky,warm:Math.random()<0.5?RGB.orange:RGB.green,r:1.6+Math.random()*1.4});
+      }
+    }
+  }
+  build();
+  function draw(t){
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle=NIGHT;ctx.fillRect(0,0,W,H);
+    const sweep=REDUCED?0.5:((t*0.10)%1);
+    const bandPos=sweep*(W+H)-H*0.3;
+    const bw=W*0.30;
+    for(const d of grid){
+      const proj=d.x+d.y*0.6;
+      const dist=Math.abs(proj-bandPos);
+      const lit=Math.max(0,1-dist/bw);
+      const e=lit*lit*(3-2*lit);
+      const c=[d.base[0]+(d.warm[0]-d.base[0])*e|0,d.base[1]+(d.warm[1]-d.base[1])*e|0,d.base[2]+(d.warm[2]-d.base[2])*e|0];
+      const a=0.4+0.6*Math.max(0.15,e);
+      const r=d.r*(0.9+0.5*e);
+      dot(ctx,d.x,d.y,r,rgba(c,1),a);
+    }
+  }
+  let raf=0,running=false,t0=performance.now();
+  function loop(){if(!running)return;draw((performance.now()-t0)/1000);raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);build();if(REDUCED)draw(0);},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else{t0=performance.now();start();}});
+  if(REDUCED)draw(0);else start();
+})();
+</script>
+</body>
+</html>

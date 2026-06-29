@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Soft warm and grey motes drift sideways on a cream paper field with random Brownian jitter, leaving faint fading trails; cursor stirs gusts.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pollen Brownian Drift</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#f2efe6;}
+  #pbd-c{display:block;width:100%;height:100%;}
+  .pbd-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#c0563c;opacity:.36;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="pbd-c"></canvas>
+<div class="pbd-cap">Pollen Brownian Drift</div>
+<script>
+(function(){
+  const cv=document.getElementById('pbd-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,S,N,parts,drift;
+  function rnd(){return Math.random()*2-1;}
+  function seed(p,fresh){
+    p.x=fresh?Math.random()*W:p.x; p.y=Math.random()*H;
+    if(fresh)p.y=Math.random()*H;
+    p.r=(0.7+Math.random()*2.4)*S;        // mote radius
+    p.j=(0.5+Math.random()*1.3);          // jitter scale (mass inverse-ish)
+    p.h=12+Math.random()*16;              // hue spread toward accent
+    p.a=0.18+Math.random()*0.5;           // alpha
+  }
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H)/360;
+    drift=Math.min(W,H)*0.0006+0.18;       // slow laminar sideways pull
+    N=Math.min(260,Math.round(Math.min(W,H)*0.55)+70);
+    parts=[];for(let i=0;i<N;i++){const p={};seed(p,true);parts.push(p);}
+    ctx.fillStyle='#f2efe6';ctx.fillRect(0,0,W,H);
+  }
+  addEventListener('resize',size);size();
+  let gust=0;
+  cv.addEventListener('pointermove',e=>{gust=Math.min(gust+0.4,3);});
+  cv.addEventListener('click',()=>{gust=Math.min(gust+1.6,4);});
+  function frame(){
+    // faint diffusion smear: translucent wash leaves fading trails
+    ctx.fillStyle='rgba(242,239,230,0.14)';ctx.fillRect(0,0,W,H);
+    gust*=0.95;
+    const dx=(drift+gust*0.6);
+    for(let i=0;i<N;i++){
+      const p=parts[i];
+      // Brownian: independent gaussian-ish kicks each axis
+      p.x+=dx + rnd()*p.j*S*1.6;
+      p.y+=rnd()*p.j*S*1.6 - 0.04*S;       // tiny upward bias, mostly chaos
+      // wrap the cloud as the laminar flow carries it off-frame
+      if(p.x>W+4){p.x=-4;p.y=Math.random()*H;}
+      else if(p.x<-4){p.x=W+4;}
+      if(p.y>H+4){p.y=-4;} else if(p.y<-4){p.y=H+4;}
+      const warm=p.h/28;                    // 0..~1 toward accent
+      const R=Math.round(192*warm+150*(1-warm));
+      const G=Math.round(86*warm+148*(1-warm));
+      const B=Math.round(60*warm+138*(1-warm));
+      ctx.fillStyle='rgba('+R+','+G+','+B+','+p.a+')';
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.2832);ctx.fill();
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  function rest(){
+    ctx.fillStyle='#f2efe6';ctx.fillRect(0,0,W,H);
+    for(let i=0;i<N;i++){const p=parts[i];
+      const warm=p.h/28;
+      const R=Math.round(192*warm+150*(1-warm)),G=Math.round(86*warm+148*(1-warm)),B=Math.round(60*warm+138*(1-warm));
+      ctx.fillStyle='rgba('+R+','+G+','+B+','+p.a+')';
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.2832);ctx.fill();}
+  }
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{if(reduce)return;document.hidden?stop():start();});
+  if(reduce){rest();}else start();
+})();
+</script>
+</body>
+</html>

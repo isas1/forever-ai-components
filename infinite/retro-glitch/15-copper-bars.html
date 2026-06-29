@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Glossy multicolor copper raster bars bob up and down over a twinkling starfield with specular sheen and scanlines.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Copper Bars</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000016;}
+  #cb-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#ff7b00;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="cb-c"></canvas>
+<div class="cap">Copper Bars</div>
+<script>
+(function(){
+  const cv=document.getElementById('cb-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,stars=[];
+  // copper bar palettes: each is [hueBase] driving a glossy band gradient
+  const BARS=[
+    {hue:28, sat:100, off:0.00, amp:0.30, spd:0.55}, // amber/accent
+    {hue:200,sat:90,  off:1.10, amp:0.24, spd:0.42}, // cyan
+    {hue:300,sat:80,  off:2.30, amp:0.34, spd:0.63}, // magenta
+    {hue:120,sat:75,  off:3.40, amp:0.20, spd:0.48}, // green
+    {hue:48, sat:100, off:4.50, amp:0.28, spd:0.58}, // gold
+    {hue:340,sat:85,  off:5.60, amp:0.32, spd:0.50}  // red-pink
+  ];
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    stars=[];const n=Math.round(W*H/2600);
+    for(let i=0;i<n;i++)stars.push({x:Math.random()*W,y:Math.random()*H,
+      z:Math.random(),tw:Math.random()*6.28});
+  }
+  addEventListener('resize',size);size();
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',()=>{nudge=1;});
+  cv.addEventListener('click',()=>{nudge=1.6;});
+  function band(cx,cy,bh,b){
+    // glossy banded gradient: dark edges -> saturated mid -> bright specular core
+    const g=ctx.createLinearGradient(0,cy-bh/2,0,cy+bh/2);
+    const h=b.hue,s=b.sat;
+    g.addColorStop(0.00,`hsl(${h} ${s}% 4%)`);
+    g.addColorStop(0.18,`hsl(${h} ${s}% 16%)`);
+    g.addColorStop(0.42,`hsl(${h} ${s}% 40%)`);
+    g.addColorStop(0.50,`hsl(${h} ${s}% 60%)`);
+    g.addColorStop(0.58,`hsl(${h} ${s}% 42%)`);
+    g.addColorStop(0.82,`hsl(${h} ${s}% 18%)`);
+    g.addColorStop(1.00,`hsl(${h} ${s}% 4%)`);
+    ctx.fillStyle=g;ctx.fillRect(0,cy-bh/2,W,bh);
+    // specular highlight line (the hardware-raster sheen)
+    const sy=cy-bh*0.16;
+    ctx.fillStyle='rgba(255,255,255,0.85)';ctx.fillRect(0,sy,W,Math.max(1,bh*0.045));
+    ctx.fillStyle='rgba(255,255,255,0.30)';ctx.fillRect(0,sy-bh*0.05,W,Math.max(1,bh*0.05));
+  }
+  function frame(){
+    if(!reduce)t+=0.016;
+    nudge*=0.93;
+    // starfield
+    ctx.fillStyle='#000016';ctx.fillRect(0,0,W,H);
+    for(const st of stars){
+      const tw=reduce?0.6:0.5+0.5*Math.sin(t*2+st.tw);
+      ctx.globalAlpha=(0.25+st.z*0.55)*tw;
+      ctx.fillStyle=st.z>0.85?'#ff7b00':'#cfe2ff';
+      const r=st.z*1.5;ctx.fillRect(st.x,st.y,r,r);
+    }
+    ctx.globalAlpha=1;
+    // copper bars
+    const bh=Math.min(H*0.16,76);
+    const span=H*0.30; // vertical travel range
+    BARS.forEach((b,i)=>{
+      const base=H*(0.5);
+      const phase=t*b.spd*(1+nudge*0.6)+b.off;
+      const cy=base+Math.sin(phase)*span*b.amp + (i-(BARS.length-1)/2)*bh*0.62;
+      band(0,cy,bh,b);
+    });
+    // subtle scanline overlay
+    ctx.globalAlpha=0.06;ctx.fillStyle='#000016';
+    for(let y=0;y<H;y+=3)ctx.fillRect(0,y,W,1);
+    ctx.globalAlpha=1;
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce)frame();else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Layered pine-covered ridges recede into drifting mist bands under a cream-indigo sky with passing cranes in woodblock style.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pine Mist</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  #uk10-stage{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #uk10-c{position:absolute;inset:0;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="uk10-stage" role="img" aria-label="Layered silhouettes of pine-covered ridges receding into bands of slowly drifting mist beneath a cream and indigo woodblock sky, with cranes passing, in the Japanese ukiyo-e style.">
+  <canvas id="uk10-c"></canvas>
+</div>
+<div class="cap">Pine Mist</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("uk10-c"),ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,DPR=1,running=true,raf=0,t0=0;
+
+  // palette
+  var SKY_TOP=[26,41,64], SKY_BOT=[232,213,176];   // indigo -> cream bokashi
+  var GLOW=[244,228,196];                           // hazy sun band
+  // ridge tints, far (mistier/lighter) to near (deep indigo)
+  var RIDGES=[
+    {col:[120,140,170], y:0.50, amp:0.030, pines:7,  spd:0.011, fog:0.55},
+    {col:[ 84,108,148], y:0.60, amp:0.040, pines:9,  spd:0.016, fog:0.40},
+    {col:[ 52, 76,116], y:0.71, amp:0.052, pines:11, spd:0.022, fog:0.26},
+    {col:[ 30, 48, 80], y:0.84, amp:0.066, pines:13, spd:0.030, fog:0.12}
+  ];
+  var CORAL=[217,107,84];
+
+  // cranes — small typed pool (well under cap)
+  var NB=5, bx=new Float32Array(NB), by=new Float32Array(NB), bs=new Float32Array(NB), bp=new Float32Array(NB);
+  for(var i=0;i<NB;i++){bx[i]=Math.random();by[i]=0.10+Math.random()*0.22;bs[i]=0.55+Math.random()*0.6;bp[i]=Math.random()*6.28;}
+
+  function lerp(a,b,k){return a+(b-a)*k;}
+  function rgb(c){return "rgb("+(c[0]|0)+","+(c[1]|0)+","+(c[2]|0)+")";}
+  function mix(c1,c2,k){return rgb([lerp(c1[0],c2[0],k),lerp(c1[1],c2[1],k),lerp(c1[2],c2[2],k)]);}
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  // a single pine: tapered triangular tiers on a short trunk, flat woodblock plane
+  function pine(x,base,h,col){
+    var w=h*0.42;
+    ctx.fillStyle=col;
+    ctx.beginPath();
+    ctx.moveTo(x,base-h);
+    ctx.lineTo(x+w*0.55,base-h*0.55);
+    ctx.lineTo(x+w*0.30,base-h*0.55);
+    ctx.lineTo(x+w,base-h*0.06);
+    ctx.lineTo(x-w,base-h*0.06);
+    ctx.lineTo(x-w*0.30,base-h*0.55);
+    ctx.lineTo(x-w*0.55,base-h*0.55);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function ridge(time,R,depth){
+    var k=R.y;
+    var baseY=H*k;
+    var col=R.col;
+    // ridge silhouette: flat plane with a gentle wave crest
+    var amp=H*R.amp;
+    var ph=time*R.spd;
+    ctx.fillStyle=rgb(col);
+    ctx.beginPath();
+    ctx.moveTo(0,H);
+    ctx.lineTo(0,baseY);
+    var seg=10, n=W/seg;
+    for(var sx=0;sx<=W+seg;sx+=seg){
+      var u=sx/W;
+      var y=baseY + Math.sin(u*5.0 + ph + depth)*amp*0.45
+                  + Math.sin(u*2.2 - ph*0.6 + depth)*amp*0.55;
+      ctx.lineTo(sx,y);
+    }
+    ctx.lineTo(W,H);
+    ctx.closePath();
+    ctx.fill();
+
+    // pines marching along this ridge crest
+    var pineCol=mix(col,[12,18,30],0.30);
+    var pn=R.pines, ph2=ph;
+    for(var p=0;p<pn;p++){
+      var u2=(p+0.5)/pn;
+      var px=((u2 + ph*0.02) % 1)*W;
+      var cy=baseY + Math.sin(u2*5.0 + ph + depth)*amp*0.45
+                   + Math.sin(u2*2.2 - ph*0.6 + depth)*amp*0.55;
+      var ph_=H*(0.045+0.018*depth);
+      pine(px,cy+2,ph_,pineCol);
+    }
+
+    // bold key-block edge stroke on the crest
+    ctx.strokeStyle="rgba(14,22,34,0.5)";
+    ctx.lineWidth=Math.max(1,Math.min(W,H)*0.0035);
+    ctx.lineJoin="round";
+    ctx.beginPath();
+    for(var ex=0;ex<=W+seg;ex+=seg){
+      var ue=ex/W;
+      var ey=baseY + Math.sin(ue*5.0 + ph + depth)*amp*0.45
+                   + Math.sin(ue*2.2 - ph*0.6 + depth)*amp*0.55;
+      if(ex===0)ctx.moveTo(ex,ey); else ctx.lineTo(ex,ey);
+    }
+    ctx.stroke();
+  }
+
+  // drifting mist band: soft horizontal lozenge, translucent cream
+  function fogBand(time,y,h,alpha,spd,off){
+    var drift=((time*spd+off)%1.4)-0.2;
+    var cx=drift*W, w=W*0.55;
+    var g=ctx.createLinearGradient(0,y-h,0,y+h);
+    g.addColorStop(0,"rgba(232,213,176,0)");
+    g.addColorStop(0.5,"rgba(232,213,176,"+alpha+")");
+    g.addColorStop(1,"rgba(232,213,176,0)");
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    ctx.moveTo(cx-w,y);
+    ctx.quadraticCurveTo(cx-w*0.4,y-h,cx,y-h);
+    ctx.quadraticCurveTo(cx+w*0.4,y-h,cx+w,y);
+    ctx.quadraticCurveTo(cx+w*0.4,y+h,cx,y+h);
+    ctx.quadraticCurveTo(cx-w*0.4,y+h,cx-w,y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function draw(time){
+    // --- bokashi sky ---
+    var sky=ctx.createLinearGradient(0,0,0,H*0.62);
+    sky.addColorStop(0,rgb(SKY_TOP));
+    sky.addColorStop(0.55,mix(SKY_TOP,SKY_BOT,0.55));
+    sky.addColorStop(1,rgb(SKY_BOT));
+    ctx.fillStyle=sky;
+    ctx.fillRect(0,0,W,H);
+
+    // hazy low sun glow — static radial, never repaints expensively
+    var sunX=W*0.70, sunY=H*0.34, sr=Math.min(W,H)*0.30;
+    var disc=ctx.createRadialGradient(sunX,sunY,1,sunX,sunY,sr);
+    disc.addColorStop(0,"rgba(244,228,196,0.85)");
+    disc.addColorStop(0.4,"rgba(244,228,196,0.30)");
+    disc.addColorStop(1,"rgba(244,228,196,0)");
+    ctx.fillStyle=disc;
+    ctx.beginPath();ctx.arc(sunX,sunY,sr,0,6.2832);ctx.fill();
+    // coral disc body
+    ctx.fillStyle="rgba(217,107,84,0.42)";
+    ctx.beginPath();ctx.arc(sunX,sunY,Math.min(W,H)*0.052,0,6.2832);ctx.fill();
+
+    // upper-air cranes (drawn before ridges so they sit in the sky)
+    ctx.strokeStyle="rgba(20,26,40,0.7)";
+    ctx.lineWidth=Math.max(1,Math.min(W,H)*0.004);
+    ctx.lineCap="round";
+    for(var b=0;b<NB;b++){
+      bx[b]+=0.00016*bs[b]; if(bx[b]>1.15)bx[b]=-0.15;
+      var X=bx[b]*W, Y=by[b]*H;
+      var flap=Math.sin(time*2.0*bs[b]+bp[b])*0.5;
+      var ws=Math.min(W,H)*0.020*bs[b];
+      ctx.beginPath();
+      ctx.moveTo(X-ws,Y+flap*ws);
+      ctx.quadraticCurveTo(X,Y-ws*0.5,X,Y);
+      ctx.quadraticCurveTo(X,Y-ws*0.5,X+ws,Y+flap*ws);
+      ctx.stroke();
+    }
+    ctx.lineCap="butt";
+
+    // --- ridges far -> near, with mist between each ---
+    for(var r=0;r<RIDGES.length;r++){
+      var R=RIDGES[r];
+      ridge(time,R,r*1.7);
+      // mist sitting in the valley in front of each ridge
+      fogBand(time, H*R.y - H*0.01, H*(0.05+r*0.012), R.fog*0.5, R.spd*0.5, r*0.37);
+    }
+
+    // foreground low fog sweep
+    fogBand(time, H*0.78, H*0.07, 0.30, 0.010, 0.9);
+    fogBand(time, H*0.90, H*0.06, 0.22, 0.014, 0.2);
+
+    // vignette
+    var vg=ctx.createRadialGradient(W*0.5,H*0.42,Math.min(W,H)*0.28,W*0.5,H*0.55,Math.max(W,H)*0.72);
+    vg.addColorStop(0,"rgba(15,24,34,0)");
+    vg.addColorStop(1,"rgba(15,24,34,0.40)");
+    ctx.fillStyle=vg;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function frame(ts){
+    if(!running)return;
+    if(!t0)t0=ts;
+    var time=(ts-t0)/1000;
+    draw(time);
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){running=true;t0=0;raf=requestAnimationFrame(frame);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  window.addEventListener("resize",function(){resize();if(reduce)draw(6);});
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){stop();}
+    else if(!reduce){start();}
+  });
+
+  resize();
+  if(reduce){draw(6);return;}  // settle on one calm framed mist
+  start();
+})();
+</script>
+</body>
+</html>

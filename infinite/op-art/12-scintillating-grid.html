@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Soft grey lattice on black with white disks at the crossings that slowly twinkle, evoking the scintillating-grid illusion.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scintillating Grid</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a}
+  #op12-stage{position:fixed;inset:0;background:#0a0a0a;overflow:hidden}
+  #op12-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="op12-stage" role="img" aria-label="Scintillating grid: a soft white lattice on black whose intersections seem to twinkle, an Op Art illusion.">
+  <canvas id="op12-c"></canvas>
+</div>
+<div class="cap">Scintillating Grid</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('op12-stage');
+  var cv=document.getElementById('op12-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // layout cache (recomputed only on resize)
+  var W=0,H=0,DPR=1,gap=0,cols=0,rows=0,ox=0,oy=0,bar=0,disk=0;
+
+  function layout(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    var m=Math.min(W,H);
+    // soft grid: aim for a calm, legible spacing across sizes
+    gap=Math.max(26,Math.round(m/8.5));
+    bar=Math.max(1.4,gap*0.085);        // thin grey bars between cells
+    disk=Math.max(3.2,gap*0.18);        // intersection disk radius
+    cols=Math.ceil(W/gap)+2;
+    rows=Math.ceil(H/gap)+2;
+    // centre the lattice
+    ox=(W-(cols-2)*gap)/2;
+    oy=(H-(rows-2)*gap)/2;
+  }
+
+  // Draw the static op-art field (grey channels) + twinkling intersection disks.
+  // phase param drives the scintillation; pass a fixed value for the still frame.
+  function draw(t){
+    var w=cv.width,h=cv.height;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    // solid background
+    ctx.fillStyle='#0a0a0a';
+    ctx.fillRect(0,0,W,H);
+
+    // --- the channels: dark-grey lattice creating the bright "streets" illusion ---
+    // We paint grey squares leaving thin gaps; the gaps read as a white-ish grid.
+    ctx.fillStyle='#171717';
+    var i,j,x,y;
+    var step=gap;
+    for(i=0;i<rows;i++){
+      y=oy+(i-1)*step+bar*0.5;
+      for(j=0;j<cols;j++){
+        x=ox+(j-1)*step+bar*0.5;
+        ctx.fillRect(x,y,step-bar,step-bar);
+      }
+    }
+    // brighten the channels themselves with a faint stroke grid (static)
+    ctx.strokeStyle='rgba(235,235,235,0.16)';
+    ctx.lineWidth=bar;
+    ctx.beginPath();
+    for(j=0;j<=cols;j++){ x=ox+(j-1)*step; ctx.moveTo(x,0); ctx.lineTo(x,H); }
+    for(i=0;i<=rows;i++){ y=oy+(i-1)*step; ctx.moveTo(0,y); ctx.lineTo(W,y); }
+    ctx.stroke();
+
+    // --- intersections: white disks that scintillate ---
+    // Classic scintillating-grid: disks at crossings; brightness drifts so they
+    // appear to twinkle without any single one flashing fast.
+    ctx.fillStyle='#0a0a0a';
+    var r=disk;
+    for(i=0;i<=rows;i++){
+      y=oy+(i-1)*step;
+      if(y< -r||y>H+r) continue;
+      for(j=0;j<=cols;j++){
+        x=ox+(j-1)*step;
+        if(x< -r||x>W+r) continue;
+        // a smooth, slow per-node phase from a spatial hash — no per-frame alloc
+        var ph=(i*1.7+j*2.3);
+        // value in [0,1]; combine two slow sines for organic, non-strobing shimmer
+        var v=0.5+0.5*Math.sin(t*0.9+ph)*Math.cos(t*0.37+ph*0.6);
+        // keep contrast gentle: disks range from soft grey to bright white
+        var a=0.30+0.62*v*v;            // ease toward bright, floor stays visible
+        // outer dark dot keeps the crossing from being a hard white blob
+        ctx.fillStyle='#0a0a0a';
+        ctx.beginPath(); ctx.arc(x,y,r+bar*0.6,0,6.2832); ctx.fill();
+        ctx.fillStyle='rgba(255,255,255,'+a.toFixed(3)+')';
+        ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill();
+      }
+    }
+  }
+
+  var running=true,raf=0,t0=0;
+  function loop(ts){
+    if(!running) return;
+    if(!t0) t0=ts;
+    draw((ts-t0)*0.001);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){
+    if(reduce){ draw(1.2); return; }   // one calm static frame
+    running=true; t0=0;
+    raf=requestAnimationFrame(loop);
+  }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  function onResize(){ layout(); if(reduce){ draw(1.2); } }
+  layout();
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce) return;
+    if(document.hidden){ stop(); }
+    else if(!running){ start(); }
+  });
+  var rt=0;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt); rt=setTimeout(onResize,120);
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>

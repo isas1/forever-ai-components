@@ -1,0 +1,88 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Resource Monitor — Terminal. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Resource Monitor</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0a0a0a;color:#ffa500;font:13px/1.7 ui-monospace,Menlo,"Courier New",monospace}
+.trm-wrap{padding:12px 14px;height:100%;overflow:hidden}
+.trm-header{color:#ffcc44;margin-bottom:8px;border-bottom:1px solid #2a1f00;padding-bottom:4px}
+.trm-row{display:flex;align-items:baseline;gap:6px;margin-bottom:2px}
+.trm-label{color:#ff8800;min-width:56px;flex-shrink:0}
+.trm-bar{flex:1;min-width:0;overflow:hidden;color:#ffa500;letter-spacing:0}
+.trm-pct{min-width:36px;text-align:right;flex-shrink:0;color:#ffcc44}
+.trm-hi{color:#ff4444}
+.trm-med{color:#ffaa00}
+.trm-lo{color:#44cc44}
+.trm-section{color:#884400;margin-top:8px;margin-bottom:2px;font-size:11px}
+.trm-sep{border:none;border-top:1px solid #1a1000;margin:6px 0}
+.trm-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#ffa500;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+</style></head><body>
+<div class="trm-wrap">
+  <div class="trm-header">&#x25a0; SYSTEM MONITOR — bbs-1992</div>
+  <div class="trm-section">── CPU ──────────────────</div>
+  <div id="trm-cores"></div>
+  <hr class="trm-sep">
+  <div class="trm-section">── MEMORY ───────────────</div>
+  <div id="trm-mem"></div>
+</div>
+<div class="trm-cap">resource monitor</div>
+<script>(()=>{
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const coresEl=document.getElementById('trm-cores');
+  const memEl=document.getElementById('trm-mem');
+  const BARS=10;
+
+  const cores=[
+    {label:'CPU0',val:42,drift:0},
+    {label:'CPU1',val:78,drift:0},
+    {label:'CPU2',val:23,drift:0},
+    {label:'CPU3',val:61,drift:0},
+    {label:'CPU4',val:55,drift:0},
+    {label:'CPU5',val:33,drift:0},
+  ];
+  const mems=[
+    {label:'MEM ',val:67,max:100,unit:'%'},
+    {label:'SWAP',val:12,max:100,unit:'%'},
+    {label:'BUF ',val:28,max:100,unit:'%'},
+  ];
+
+  function bar(pct){
+    const filled=Math.round(pct/100*BARS);
+    return '['+'█'.repeat(filled)+'░'.repeat(BARS-filled)+']';
+  }
+  function cls(pct){return pct>75?'trm-hi':pct>50?'trm-med':'trm-lo';}
+
+  function buildRows(container,items){
+    container.innerHTML='';
+    items.forEach((item,i)=>{
+      const row=document.createElement('div');row.className='trm-row';
+      const lbl=document.createElement('span');lbl.className='trm-label';lbl.textContent=item.label;
+      const b=document.createElement('span');b.className='trm-bar '+cls(item.val);b.textContent=bar(item.val);
+      const p=document.createElement('span');p.className='trm-pct '+cls(item.val);p.textContent=item.val+'%';
+      row.appendChild(lbl);row.appendChild(b);row.appendChild(p);
+      container.appendChild(row);
+    });
+  }
+
+  function drift(v){
+    const d=(Math.random()-0.48)*8;
+    return Math.min(99,Math.max(1,Math.round(v+d)));
+  }
+
+  let timer=null;
+  function stop(){clearInterval(timer);}
+  function play(){
+    buildRows(coresEl,cores);buildRows(memEl,mems);
+    if(reduce)return;
+    timer=setInterval(()=>{
+      cores.forEach(c=>c.val=drift(c.val));
+      mems.forEach(m=>m.val=drift(m.val));
+      buildRows(coresEl,cores);buildRows(memEl,mems);
+    },420);
+  }
+
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  play();
+})();</script>
+</body></html>

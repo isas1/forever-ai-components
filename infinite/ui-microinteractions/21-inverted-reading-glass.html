@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+<meta name="description" content="Inverted Reading Glass — UI Micro-interactions. A self-contained, zero-dependency animated web component.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Inverted Reading Glass</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #000000;
+      font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+      cursor: none; /* Hide default cursor */
+    }
+
+    .glass-cap {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 12px;
+      font-family: system-ui, sans-serif;
+      pointer-events: none;
+      letter-spacing: 0.5px;
+      z-index: 10;
+    }
+
+    .container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .text-content {
+      color: #ffffff;
+      font-size: clamp(2rem, 6vw, 5rem);
+      font-weight: 400;
+      text-align: center;
+      max-width: 80%;
+      line-height: 1.2;
+      z-index: 1;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .text-content span {
+      display: block;
+      color: #333333; /* Dark gray, barely visible against black */
+      transition: color 0.5s ease;
+    }
+
+    /* The reading glass */
+    .lens {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: clamp(150px, 20vw, 250px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #ffffff;
+      mix-blend-mode: difference;
+      pointer-events: none;
+      z-index: 5;
+      transform: translate(calc(var(--x, 50vw) - 50%), calc(var(--y, 50vh) - 50%));
+      will-change: transform;
+      /* Soft edge */
+      box-shadow: 0 0 20px 10px rgba(255,255,255,0.1);
+    }
+
+    /* Inner ring to look like a glass */
+    .lens::after {
+      content: "";
+      position: absolute;
+      inset: 4px;
+      border-radius: 50%;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    /* Little instruction that fades out */
+    .instruction {
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #ffffff;
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0.5;
+      animation: pulse 2s infinite, fadeOut 5s forwards 3s;
+      pointer-events: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.7; }
+    }
+
+    @keyframes fadeOut {
+      to { opacity: 0; visibility: hidden; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .instruction {
+        animation: none;
+        opacity: 0;
+      }
+      .lens {
+        transform: translate(calc(50vw - 50%), calc(50vh - 50%));
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container" id="container">
+    <div class="instruction">Seek to Reveal</div>
+    <div class="text-content">
+      <span>The essential things</span>
+      <span>are invisible</span>
+      <span>to the eyes.</span>
+    </div>
+    <div class="lens" id="lens"></div>
+  </div>
+
+  <div class="glass-cap">Inverted Reading Glass</div>
+
+  <script>
+    (() => {
+      const lens = document.getElementById('lens');
+      const container = document.getElementById('container');
+      const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      
+      let isRunning = true;
+      let targetX = window.innerWidth / 2;
+      let targetY = window.innerHeight / 2;
+      let currentX = window.innerWidth / 2;
+      let currentY = window.innerHeight / 2;
+      let animationFrame;
+
+      const lerp = (start, end, factor) => start + (end - start) * factor;
+
+      const handleMove = (e) => {
+        if (!isRunning || prefersReducedMotion) return;
+        targetX = e.clientX ?? e.touches[0].clientX;
+        targetY = e.clientY ?? e.touches[0].clientY;
+      };
+
+      const animate = () => {
+        if (!isRunning || prefersReducedMotion) return;
+        
+        currentX = lerp(currentX, targetX, 0.15);
+        currentY = lerp(currentY, targetY, 0.15);
+        
+        lens.style.setProperty('--x', `${currentX}px`);
+        lens.style.setProperty('--y', `${currentY}px`);
+        
+        animationFrame = requestAnimationFrame(animate);
+      };
+
+      const start = () => {
+        if (!isRunning && !prefersReducedMotion) {
+          isRunning = true;
+          animate();
+        }
+      };
+
+      const stop = () => {
+        isRunning = false;
+        cancelAnimationFrame(animationFrame);
+      };
+
+      document.addEventListener('visibilitychange', () => {
+        document.hidden ? stop() : start();
+      });
+
+      window.addEventListener('mousemove', handleMove);
+      window.addEventListener('touchmove', handleMove);
+      
+      // Auto-move slightly for preview if not interacted
+      let interactionStarted = false;
+      window.addEventListener('mousemove', () => interactionStarted = true, { once: true });
+      window.addEventListener('touchstart', () => interactionStarted = true, { once: true });
+
+      const autoMove = (timestamp) => {
+        if (!interactionStarted && !prefersReducedMotion && isRunning) {
+          const radius = Math.min(window.innerWidth, window.innerHeight) * 0.1;
+          targetX = window.innerWidth / 2 + Math.cos(timestamp * 0.001) * radius;
+          targetY = window.innerHeight / 2 + Math.sin(timestamp * 0.0015) * radius * 0.5;
+        }
+        if (isRunning) {
+          requestAnimationFrame(autoMove);
+        }
+      };
+
+      if (!prefersReducedMotion) {
+        animate();
+        requestAnimationFrame(autoMove);
+      }
+      
+      window.start = start;
+      window.stop = stop;
+    })();
+  </script>
+</body>
+</html>

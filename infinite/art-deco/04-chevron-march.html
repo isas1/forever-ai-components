@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Interlocking gold and ink chevron bands march in alternating directions with a gold diamond convoy down a central seam on black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chevron March</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0b08;overflow:hidden}
+  #ad04-stage{position:fixed;inset:0;display:block}
+  #ad04-c{position:absolute;inset:0;width:100%;height:100%;
+    box-shadow:inset 0 0 90px 18px rgba(0,0,0,.72)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ad04-stage" role="img" aria-label="Art Deco animation: interlocking gold and black chevrons marching in symmetrical bands across a deep black field.">
+  <canvas id="ad04-c"></canvas>
+</div>
+<div class="cap">Chevron March</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('ad04-c');
+  var ctx = cv.getContext('2d');
+
+  // Palette
+  var BG='#0c0b08', GOLD='#d4af37', GOLDHI='#f3dd92', GOLDLO='#8a6d1f', INK='#08070500';
+
+  var W=0,H=0,DPR=1, cx=0, bandH=0, rows=0, period=0;
+  function size(){
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.max(1,Math.round(W*DPR));
+    cv.height= Math.max(1,Math.round(H*DPR));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx = W/2;
+    // band geometry: symmetric horizontal bands of chevrons
+    bandH = Math.max(26, Math.round(H/9));
+    rows = Math.ceil(H/bandH)+2;
+    period = bandH*2; // one full gold+ink cycle
+  }
+
+  // Draw a single chevron-band row. amp = peak height of the V (downward).
+  function chevronBand(yTop, off, amp, fill, lineGold){
+    var step = Math.max(38, bandH*1.55); // horizontal width of each V repeat
+    var half = step/2;
+    var thick = bandH*0.62;
+    // marching offset wraps within step
+    var ox = ((off % step)+step) % step;
+    ctx.beginPath();
+    var startX = -step + ox;
+    // top edge: zigzag
+    ctx.moveTo(startX, yTop);
+    var x = startX;
+    while(x <= W+step){
+      ctx.lineTo(x+half, yTop+amp);
+      ctx.lineTo(x+step, yTop);
+      x += step;
+    }
+    // down to bottom edge then back (the band thickness)
+    x -= step;
+    ctx.lineTo(x+step, yTop+thick);
+    while(x >= startX-step){
+      ctx.lineTo(x+half, yTop+amp+thick);
+      ctx.lineTo(x, yTop+thick);
+      x -= step;
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if(lineGold){
+      ctx.lineWidth = Math.max(1, bandH*0.05);
+      ctx.strokeStyle = GOLDHI;
+      ctx.globalAlpha = 0.55;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Vertical gold gradient cached per-size for the gold bands (static look)
+  var goldGrad=null, inkGrad=null;
+  function buildGrads(){
+    goldGrad = ctx.createLinearGradient(0,0,0,bandH*1.6);
+    goldGrad.addColorStop(0, GOLDHI);
+    goldGrad.addColorStop(0.45, GOLD);
+    goldGrad.addColorStop(1, GOLDLO);
+    inkGrad = ctx.createLinearGradient(0,0,0,bandH*1.6);
+    inkGrad.addColorStop(0, '#14110a');
+    inkGrad.addColorStop(1, '#070603');
+  }
+
+  var t0=0;
+  function frame(now){
+    if(!running) return;
+    if(!t0) t0=now;
+    var t=(now-t0)/1000;
+    draw(t);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function draw(t){
+    ctx.fillStyle = BG;
+    ctx.fillRect(0,0,W,H);
+
+    var amp = bandH*0.85;
+    var thick = bandH*0.62;
+    var rowGap = bandH*1.05;
+    // central sunburst-free; the march: alternate band direction & speed for interlock
+    var baseSpeed = Math.max(34, W*0.10);
+    var startY = -bandH;
+    var i=0, y=startY;
+    while(y < H+bandH){
+      var dir = (i & 1) ? -1 : 1;
+      // depth: bands nearer center move slightly slower, creating a marching pulse
+      var depth = 1 - Math.abs((y+thick/2 - H/2)/(H/2));
+      var spd = baseSpeed*(0.7 + 0.5*Math.abs(depth));
+      var off = dir * t * spd;
+      var isGold = (i & 1)===0;
+      ctx.save();
+      ctx.translate(0,y);
+      chevronBand(0, off, amp, isGold?goldGrad:inkGrad, isGold);
+      ctx.restore();
+      y += rowGap; i++;
+    }
+
+    // central vertical symmetry seam: fine gold double-line
+    ctx.strokeStyle = GOLDHI;
+    ctx.globalAlpha = 0.18;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx-2.5,0); ctx.lineTo(cx-2.5,H);
+    ctx.moveTo(cx+2.5,0); ctx.lineTo(cx+2.5,H);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // a slim marching diamond convoy along the seam (count capped)
+    var dn = 7;
+    var dsz = bandH*0.30;
+    var travel = ((t*baseSpeed*0.6) % rowGap);
+    for(var k=-1;k<dn;k++){
+      var dy = startY + k*rowGap + rowGap*0.5 + travel;
+      if(dy< -dsz || dy>H+dsz) continue;
+      ctx.beginPath();
+      ctx.moveTo(cx, dy-dsz);
+      ctx.lineTo(cx+dsz*0.62, dy);
+      ctx.lineTo(cx, dy+dsz);
+      ctx.lineTo(cx-dsz*0.62, dy);
+      ctx.closePath();
+      ctx.fillStyle = GOLDHI;
+      ctx.globalAlpha = 0.9;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ---- lifecycle ----
+  var raf=0, running=false;
+  function start(){
+    if(running) return;
+    running=true; t0=0;
+    raf=requestAnimationFrame(frame);
+  }
+  function stop(){
+    running=false;
+    if(raf) cancelAnimationFrame(raf), raf=0;
+  }
+  function init(){
+    size(); buildGrads();
+  }
+
+  window.addEventListener('resize', function(){
+    init();
+    if(reduce) draw(2.2);
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) stop();
+    else if(!reduce) start();
+  });
+
+  init();
+  if(reduce){
+    draw(2.2); // one composed, legible, on-brand frame
+    return;
+  }
+  start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Cyan Matrix-style columns of katakana and hex glyphs fall and trail down a dark canvas with occasional bright white leading characters.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Digital Rain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-900:#08090d;
+  --text-2:#8a91a8;
+  --font-display:"Space Grotesk",system-ui,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;overflow:hidden;}
+body{background:var(--bg-900);}
+.frame{position:absolute;inset:0;display:grid;place-items:center;}
+.stage{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-900);}
+.c06-rain{position:absolute;inset:0;}
+.c06-rain canvas{display:block;width:100%;height:100%;}
+.caption{position:absolute;left:12px;bottom:10px;z-index:5;
+  font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-2);opacity:.7;pointer-events:none;}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="stage">
+    <div class="c06-rain" data-c06 aria-hidden="true"><canvas></canvas></div>
+    <span class="caption">Digital Rain</span>
+  </div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var REDUCED=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function setupCanvas(host,draw){
+    var canvas=host.querySelector("canvas"),ctx=canvas.getContext("2d");
+    var dpr=Math.min(window.devicePixelRatio||1,2),w=0,h=0;
+    function resize(){
+      var r=host.getBoundingClientRect();
+      w=Math.max(1,Math.round(r.width));h=Math.max(1,Math.round(r.height));
+      canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      if(draw.onResize) draw.onResize(w,h);
+    }
+    if(window.ResizeObserver){new ResizeObserver(resize).observe(host);}
+    else{window.addEventListener("resize",resize);}
+    resize();
+    return {ctx:ctx,get w(){return w;},get h(){return h;}};
+  }
+
+  function runLoop(tick){
+    var running=false,id=0;
+    function loop(){tick();id=requestAnimationFrame(loop);}
+    function start(){if(running||document.hidden)return;running=true;id=requestAnimationFrame(loop);}
+    function stop(){running=false;cancelAnimationFrame(id);}
+    document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
+    start();
+  }
+
+  var host=document.querySelector("[data-c06]");
+  if(!host) return;
+  var GLYPHS="アイウエオカキクケコｱｲｳ0123456789ABCDEF<>/\\=+*".split("");
+  var cols=[],fontSize=14,columns=0,frame=0;
+  var cv=setupCanvas(host,{onResize:build});
+
+  function build(w,h){
+    fontSize=Math.max(12,Math.round(w/26));
+    columns=Math.ceil(w/fontSize);cols=[];
+    for(var i=0;i<columns;i++) cols.push(Math.random()*(h/fontSize));
+  }
+
+  function render(){
+    frame++;
+    var ctx=cv.ctx,w=cv.w,h=cv.h;
+    ctx.fillStyle="rgba(8,9,13,0.18)";ctx.fillRect(0,0,w,h);
+    ctx.font=fontSize+"px 'Space Grotesk', monospace";
+    if(frame%2===0){
+      for(var i=0;i<cols.length;i++){
+        var ch=GLYPHS[(Math.random()*GLYPHS.length)|0];
+        var x=i*fontSize,y=cols[i]*fontSize;
+        ctx.fillStyle=Math.random()>0.92?"#aef6ff":"#22d3ee";
+        ctx.fillText(ch,x,y);
+        if(y>h&&Math.random()>0.975) cols[i]=0;
+        cols[i]+=1;
+      }
+    }
+  }
+
+  if(REDUCED){
+    build(cv.w,cv.h);
+    var ctx=cv.ctx;
+    ctx.fillStyle="#0d0f16";ctx.fillRect(0,0,cv.w,cv.h);
+    ctx.font=fontSize+"px 'Space Grotesk', monospace";
+    ctx.fillStyle="rgba(34,211,238,0.55)";
+    for(var i=0;i<cols.length;i+=2){
+      ctx.fillText(GLYPHS[(Math.random()*GLYPHS.length)|0],i*fontSize,(i%6+2)*fontSize);
+    }
+    return;
+  }
+  runLoop(render);
+})();
+</script>
+</body>
+</html>

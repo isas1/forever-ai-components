@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Symmetrical golden fountain arcs well up from a central jet with chevron crown and cascade outward over a black field, breathing slowly.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fountain Arcs</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0b08;overflow:hidden}
+  #ad03-stage{position:fixed;inset:0;display:block}
+  #ad03-c{position:absolute;inset:0;width:100%;height:100%;
+    background:
+      radial-gradient(120% 80% at 50% 16%, rgba(212,175,55,.10), rgba(212,175,55,0) 55%),
+      #0c0b08}
+  .ad03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ad03-stage" role="img" aria-label="Art Deco fountain of symmetrical golden arcs rising from a central jet and cascading outward over a deep black field.">
+  <canvas id="ad03-c"></canvas>
+</div>
+<div class="ad03-cap">Fountain Arcs</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('ad03-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,DPR=1,cx=0,baseY=0,running=true,raf=0,t0=0;
+  var gradL=null, gradR=null;   // cached per-side stroke gradients (rebuilt on resize)
+
+  // Palette around #d4af37 on #0c0b08
+  var GOLD='#d4af37', PALE='#f3e2a3', AMBER='#c8922a', DEEP='#7c5c14';
+  var ARCS = 9;          // arcs per side  (<<110 elements)
+  var DOTS = 7;          // droplets per arc
+
+  function size(){
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.max(1,(W*DPR)|0); cv.height = Math.max(1,(H*DPR)|0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx = W*0.5; baseY = H*0.80;
+    var unit = Math.min(W,H);
+    var spread = W*0.46;
+    var lift = unit*0.46;
+    // Cache per-side stroke gradients: constant given geometry, so rebuild only here.
+    gradL = ctx.createLinearGradient(cx, baseY-lift, cx-spread, baseY);
+    gradR = ctx.createLinearGradient(cx, baseY-lift, cx+spread, baseY);
+    [gradL,gradR].forEach(function(g){
+      g.addColorStop(0, PALE); g.addColorStop(0.5, GOLD); g.addColorStop(1, AMBER);
+    });
+  }
+
+  // One arc: parabola from (cx, baseY) launched at angle, reflected by side.
+  // Returns point at parametric u in [0,1].
+  function arcPoint(side, idx, u, spread, lift, out){
+    var f = (idx+1)/(ARCS+1);                 // 0..1 fan position
+    var ang = 0.10 + f*1.18;                   // launch steepness
+    var reach = spread * (0.30 + 0.70*f);      // horizontal reach
+    var x = cx + side * reach * u;
+    // parabola: rise then fall, peak height scales with lift & angle
+    var peak = lift * (0.55 + 0.55*Math.sin(ang));
+    var y = baseY - peak * (4*u*(1-u));        // 4u(1-u): 0 at ends, 1 at u=.5 mapped
+    // skew so the descending limb falls further (fountain look)
+    y = baseY - peak * Math.sin(Math.PI*u) - (u>0.5 ? (u-0.5)*lift*0.18 : 0);
+    out[0]=x; out[1]=y;
+  }
+
+  var p=[0,0], q=[0,0];
+
+  function drawFan(side, phase, spread, lift, alpha){
+    ctx.strokeStyle = (side<0) ? gradL : gradR;   // cached gradient, no per-frame allocation
+    for(var i=0;i<ARCS;i++){
+      // staggered draw progress per arc for a "filling" feel
+      var prog = Math.min(1, Math.max(0, phase - i*0.035));
+      if(prog<=0) continue;
+      ctx.globalAlpha = alpha*(0.45+0.55*((i+1)/ARCS));
+      ctx.lineWidth = 1.1 + 1.0*((ARCS-i)/ARCS);
+      ctx.beginPath();
+      var steps=26, started=false;
+      for(var s=0;s<=steps;s++){
+        var u=(s/steps)*prog;
+        arcPoint(side,i,u,spread,lift,p);
+        if(!started){ctx.moveTo(p[0],p[1]);started=true;} else ctx.lineTo(p[0],p[1]);
+      }
+      ctx.stroke();
+      // terminal droplet
+      arcPoint(side,i,prog,spread,lift,q);
+      ctx.globalAlpha = alpha*0.9;
+      ctx.fillStyle = PALE;
+      ctx.beginPath();
+      ctx.arc(q[0],q[1], 1.4 + 1.2*((i+1)/ARCS), 0, 6.2832);
+      ctx.fill();
+    }
+  }
+
+  // central vertical jet with chevron crown
+  function drawSpine(phase, lift, alpha){
+    ctx.globalAlpha=alpha;
+    ctx.strokeStyle=GOLD; ctx.lineWidth=2.2;
+    var topY = baseY - lift*1.18*Math.min(1,phase*1.2);
+    ctx.beginPath(); ctx.moveTo(cx, baseY); ctx.lineTo(cx, topY); ctx.stroke();
+    // chevron crown stack (ziggurat)
+    var ch = Math.min(1, Math.max(0,(phase-0.4)/0.6));
+    if(ch>0){
+      ctx.strokeStyle=PALE; ctx.lineWidth=1.6; ctx.globalAlpha=alpha*ch;
+      for(var k=0;k<3;k++){
+        var yy=topY + k*9, w=6+k*5;
+        ctx.beginPath();
+        ctx.moveTo(cx-w, yy+5); ctx.lineTo(cx, yy); ctx.lineTo(cx+w, yy+5);
+        ctx.stroke();
+      }
+      // crowning droplet
+      ctx.fillStyle=PALE; ctx.globalAlpha=alpha*ch;
+      ctx.beginPath(); ctx.arc(cx, topY-3, 2.6, 0, 6.2832); ctx.fill();
+    }
+  }
+
+  // basin: stepped deco arcs at the foot
+  function drawBasin(alpha){
+    ctx.globalAlpha=alpha; ctx.strokeStyle=DEEP; ctx.lineWidth=1;
+    for(var r=0;r<3;r++){
+      var rad = (Math.min(W,H))*(0.14+r*0.07);
+      ctx.beginPath();
+      ctx.ellipse(cx, baseY+r*5, rad, rad*0.16, 0, Math.PI*0.04, Math.PI*0.96);
+      ctx.stroke();
+    }
+    // base medallion line
+    ctx.strokeStyle=AMBER; ctx.lineWidth=1.4; ctx.globalAlpha=alpha*0.8;
+    ctx.beginPath(); ctx.moveTo(cx-W*0.20, baseY); ctx.lineTo(cx+W*0.20, baseY); ctx.stroke();
+  }
+
+  function frame(now){
+    if(!running) return;
+    if(!t0) t0=now;
+    var el=(now-t0)/1000;
+    render(el);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function render(el){
+    ctx.clearRect(0,0,W,H);
+    var unit = Math.min(W,H);
+    var spread = W*0.46;
+    var lift = unit*0.46;
+
+    // breathing cycle: 0 -> rises -> sustains -> recedes
+    var cycle = 7.2;
+    var ph = (el % cycle)/cycle;            // 0..1
+    // ease: quick rise (welling up), gentle fall (cascade)
+    var phase;
+    if(ph<0.45){ var a=ph/0.45; phase=a*a*(3-2*a); }      // smoothstep up
+    else { var b=(ph-0.45)/0.55; phase=1-(b*b); }          // ease down
+    phase = Math.max(0.05, Math.min(1, phase));
+
+    // slow shimmer on overall alpha (small, seizure-safe)
+    var sh = 0.86 + 0.14*Math.sin(el*0.9);
+
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    drawBasin(0.55);
+    drawFan(-1, phase, spread, lift, sh);
+    drawFan( 1, phase, spread, lift, sh);
+    drawSpine(phase, lift, sh);
+    ctx.globalAlpha=1;
+  }
+
+  function start(){
+    cancelAnimationFrame(raf); running=true; t0=0;
+    raf=requestAnimationFrame(frame);
+  }
+
+  function init(){
+    size();
+    if(reduce){ render(2.6); return; }   // one settled, on-brand frame near peak
+    start();
+  }
+
+  window.addEventListener('resize', function(){ size(); if(reduce) render(2.6); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){
+    if(reduce) return;
+    if(document.hidden){ running=false; cancelAnimationFrame(raf); }
+    else if(!running){ start(); }
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

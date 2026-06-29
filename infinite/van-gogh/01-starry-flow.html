@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Starry Flow — Vincent van Gogh. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Starry Flow</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a1628;overflow:hidden}
+  #vg01-stage{position:fixed;inset:0;width:100%;height:100%}
+  #vg01-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .vg01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe6cf;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="vg01-stage" role="img" aria-label="A turbulent Van Gogh night sky: a curl-noise flow-field streams cream and cobalt swirls past glowing stars and a cadmium moon.">
+  <canvas id="vg01-cv"></canvas>
+</div>
+<div class="vg01-cap">Starry Flow</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('vg01-cv'); if(!cv) return;
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function makeNoise(seed){
+    const g=[]; let s=seed||1234;
+    const rnd=()=>{ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; };
+    for(let i=0;i<256;i++) g.push(rnd());
+    const p=[]; for(let i=0;i<256;i++) p.push(i);
+    for(let i=255;i>0;i--){ const j=(rnd()*(i+1))|0; const t=p[i];p[i]=p[j];p[j]=t; }
+    function fade(t){return t*t*t*(t*(t*6-15)+10);}
+    function at(x,y){ return g[(p[(x&255)] + (y&255))&255]; }
+    return function(x,y){
+      const xi=Math.floor(x), yi=Math.floor(y);
+      const xf=x-xi, yf=y-yi;
+      const u=fade(xf), v=fade(yf);
+      const a=at(xi,yi), b=at(xi+1,yi), c=at(xi,yi+1), d=at(xi+1,yi+1);
+      const top=a+u*(b-a), bot=c+u*(d-c);
+      return top+v*(bot-top);
+    };
+  }
+
+  let S=fitCanvas(cv);
+  const noise=makeNoise(7);
+  let parts=[], stars=[], moon, t=0, last=performance.now();
+  function build(){
+    parts=[];
+    const N=Math.min(420, Math.round(S.w*S.h/900));
+    for(let i=0;i<N;i++){
+      const q={x:Math.random()*S.w, y:Math.random()*S.h, px:0, py:0,
+        sp:0.5+Math.random()*1.2,
+        c: Math.random()<0.62? 'rgba(173,196,235,' : (Math.random()<0.5?'rgba(247,227,154,':'rgba(28,63,124,'),
+        a:0.05+Math.random()*0.16, life:Math.random()*200};
+      q.px=q.x; q.py=q.y; parts.push(q);
+    }
+    stars=[];
+    const SN=7+((S.w/120)|0);
+    for(let i=0;i<SN;i++){
+      stars.push({x:Math.random()*S.w, y:Math.random()*S.h*0.78,
+        r:3+Math.random()*7, ph:Math.random()*6.28, sp:0.6+Math.random()*1.4});
+    }
+    moon={x:S.w*0.80, y:S.h*0.22, r:Math.min(S.w,S.h)*0.10};
+  }
+  build();
+  const SCALE=0.0042;
+  function flow(x,y,tt){
+    const n=noise(x*SCALE, y*SCALE + tt*0.15);
+    return n*Math.PI*4 + tt*0.18;
+  }
+  function star(ctx,sx,sy,r,glow){
+    const g=ctx.createRadialGradient(sx,sy,0,sx,sy,r*2.4);
+    g.addColorStop(0,'rgba(247,227,154,'+(0.95*glow)+')');
+    g.addColorStop(0.35,'rgba(242,193,11,'+(0.55*glow)+')');
+    g.addColorStop(1,'rgba(242,193,11,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(sx,sy,r*2.4,0,7);ctx.fill();
+    ctx.fillStyle='rgba(247,231,176,'+glow+')';ctx.beginPath();ctx.arc(sx,sy,r*0.5,0,7);ctx.fill();
+  }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx, W=S.w, H=S.h;
+    ctx.fillStyle='rgba(10,22,40,'+(REDUCED?1:0.16)+')';
+    ctx.fillRect(0,0,W,H);
+    const mg=ctx.createRadialGradient(moon.x,moon.y,0,moon.x,moon.y,moon.r*2.6);
+    mg.addColorStop(0,'rgba(247,227,154,.5)');
+    mg.addColorStop(0.4,'rgba(242,193,11,.18)');
+    mg.addColorStop(1,'rgba(242,193,11,0)');
+    ctx.fillStyle=mg;ctx.beginPath();ctx.arc(moon.x,moon.y,moon.r*2.6,0,7);ctx.fill();
+    ctx.fillStyle='#f7e39a';ctx.beginPath();ctx.arc(moon.x,moon.y,moon.r,0,7);ctx.fill();
+    ctx.fillStyle='rgba(201,138,43,.5)';ctx.beginPath();ctx.arc(moon.x+moon.r*0.34,moon.y-moon.r*0.2,moon.r*0.82,0,7);ctx.fill();
+    ctx.lineWidth=1.4;
+    for(const q of parts){
+      const a=flow(q.x,q.y,t);
+      q.px=q.x; q.py=q.y;
+      q.x+=Math.cos(a)*q.sp*(REDUCED?0:1.4);
+      q.y+=Math.sin(a)*q.sp*(REDUCED?0:1.4);
+      q.life-=1;
+      if(q.x<0||q.x>W||q.y<0||q.y>H||q.life<0){
+        q.x=Math.random()*W; q.y=Math.random()*H; q.px=q.x; q.py=q.y; q.life=120+Math.random()*180;
+        continue;
+      }
+      ctx.strokeStyle=q.c+q.a+')';
+      ctx.beginPath();ctx.moveTo(q.px,q.py);ctx.lineTo(q.x,q.y);ctx.stroke();
+    }
+    for(const s of stars){
+      const glow=0.6+0.4*Math.sin(t*s.sp+s.ph);
+      star(ctx,s.x,s.y,s.r,glow);
+    }
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  S.ctx.fillStyle='#0a1628';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); build(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ for(let i=0;i<60;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

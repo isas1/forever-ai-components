@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Endless Net — Infinitude. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Endless Net</title>
+<style>
+  html,body{margin:0;height:100%;background:#9c0d20;overflow:hidden}
+  #dot04-stage{position:fixed;inset:0;width:100%;height:100%}
+  #dot04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .dot04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fbf6ef;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="dot04-stage" role="img" aria-label="A living mesh of hand-painted white scalloped loops over deep red, each cell pulsing on its own slow heartbeat.">
+  <canvas id="dot04-cv"></canvas>
+</div>
+<div class="dot04-cap">The Endless Net</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('dot04-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), cells=[], gap=26, last=performance.now(), t=0;
+  function build(){
+    cells=[];
+    const cols=Math.ceil(S.w/gap)+1, rows=Math.ceil(S.h/gap)+1;
+    for(let ry=0;ry<rows;ry++)
+      for(let cxn=0;cxn<cols;cxn++)
+        cells.push({x:cxn*gap, y:ry*gap, ph:(cxn*0.6+ry*0.8),
+          jx:(Math.random()-0.5)*4, jy:(Math.random()-0.5)*4});
+  }
+  build();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx;
+    ctx.fillStyle='#9c0d20'; ctx.fillRect(0,0,S.w,S.h);
+    ctx.lineWidth=2.2; ctx.lineCap='round';
+    for(let i=0;i<cells.length;i++){
+      const c=cells[i];
+      const b=REDUCED?0.6:(0.45+0.45*Math.sin(t*1.3+c.ph));
+      const r=gap*(0.42+b*0.34);
+      ctx.strokeStyle='rgba(251,246,239,'+(0.55+b*0.4)+')';
+      ctx.beginPath(); ctx.arc(c.x+c.jx, c.y+c.jy, r, Math.PI*0.15, Math.PI*1.05); ctx.stroke();
+      ctx.beginPath(); ctx.arc(c.x+c.jx, c.y+c.jy, r, Math.PI*1.15, Math.PI*2.05); ctx.stroke();
+    }
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#9c0d20'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); build(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ for(let i=0;i<3;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

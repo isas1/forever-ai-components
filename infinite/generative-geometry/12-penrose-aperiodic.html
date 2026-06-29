@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Penrose rhombus tiling with a fivefold center, recoloured by a wave radiating outward in gold, rose and plum hues.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Penrose Aperiodic</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1423;}
+  #pen-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#d4af6a;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="pen-c"></canvas>
+<div class="cap">Penrose Aperiodic</div>
+<script>
+(function(){
+  const cv=document.getElementById('pen-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PHI=(1+Math.sqrt(5))/2, IPHI=1/PHI;
+  let W,H,DPR,cx,cy,R,tris=[],maxR=1;
+
+  // Robinson half-triangles. type 0 = fat ('A'), type 1 = thin ('B').
+  // Vertices a,b,c are complex {x,y}. Deflation splits each into smaller halves.
+  function cpx(x,y){return {x:x,y:y};}
+  function lerp(p,q,t){return cpx(p.x+(q.x-p.x)*t, p.y+(q.y-p.y)*t);}
+
+  function subdivide(list){
+    const out=[];
+    for(const t of list){
+      const {tp,a,b,c}=t;
+      if(tp===0){ // fat half
+        const p=lerp(a,b,IPHI);
+        out.push({tp:0,a:c,b:p,c:b});
+        out.push({tp:1,a:p,b:c,c:a});
+      }else{ // thin half
+        const q=lerp(b,a,IPHI);
+        const r=lerp(b,c,IPHI);
+        out.push({tp:1,a:r,b:c,c:a});
+        out.push({tp:1,a:q,b:r,c:b});
+        out.push({tp:0,a:r,b:q,c:a});
+      }
+    }
+    return out;
+  }
+
+  function build(depth){
+    let seed=[];
+    // wheel of 10 fat half-triangles around the fivefold centre
+    for(let i=0;i<10;i++){
+      let a0=cpx(0,0);
+      let ang1=(2*i-1)*Math.PI/10, ang2=(2*i+1)*Math.PI/10;
+      let b=cpx(Math.cos(ang1),Math.sin(ang1));
+      let c=cpx(Math.cos(ang2),Math.sin(ang2));
+      if(i%2===0){const tmp=b;b=c;c=tmp;}
+      seed.push({tp:0,a:a0,b:b,c:c});
+    }
+    let list=seed;
+    for(let d=0;d<depth;d++) list=subdivide(list);
+    return list;
+  }
+
+  // Merge half-triangles into rhombi keyed by the shared long edge so each
+  // rhombus flips/colours as one unit. We just tag each half with a centroid
+  // distance from centre (the wave radiates from there).
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;R=Math.max(W,H)*0.62;
+    const depth = Math.min(W,H)<260?5:6;
+    tris=build(depth);
+    maxR=0;
+    for(const t of tris){
+      const mx=(t.a.x+t.b.x+t.c.x)/3, my=(t.a.y+t.b.y+t.c.y)/3;
+      t.d=Math.hypot(mx,my);
+      t.ang=Math.atan2(my,mx);
+      if(t.d>maxR)maxR=t.d;
+    }
+  }
+  addEventListener('resize',size);size();
+
+  // colour ramps anchored on bg #1a1423 + accent #d4af6a
+  function mix(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];}
+  const C_BG=[26,20,35], C_ACC=[212,175,106], C_DEEP=[58,40,82], C_ROSE=[150,78,96], C_PALE=[233,221,201];
+  function rgb(c){return 'rgb('+(c[0]|0)+','+(c[1]|0)+','+(c[2]|0)+')';}
+
+  let t=0,pulse=0,pmx=0,pmy=0;
+  cv.addEventListener('pointermove',e=>{
+    const r=cv.getBoundingClientRect();
+    pmx=e.clientX-r.left-cx; pmy=e.clientY-r.top-cy; pulse=1;
+  });
+  cv.addEventListener('click',()=>{pulse=1.6;});
+
+  function draw(){
+    ctx.fillStyle='#1a1423';ctx.fillRect(0,0,W,H);
+    const tt=t*0.012;
+    pulse*=0.95;
+    // extra wave centre nudged toward pointer
+    const pd=Math.hypot(pmx,pmy)/R;
+    ctx.lineJoin='round';
+    for(const tr of tris){
+      const nd=tr.d/maxR;                 // 0..1 radial
+      // travelling wave from centre + slow rotational shimmer
+      const wave=Math.sin(nd*7.0 - tt*2.2 + tr.ang*0.0);
+      const spin=Math.sin(tr.ang*2.5 - tt*1.3 + nd*2.0);
+      let m=(wave*0.5+0.5);
+      m=m*0.7+0.3*(spin*0.5+0.5);
+      m+=pulse*0.35*Math.cos((nd-pd)*9.0);
+      m=Math.max(0,Math.min(1,m));
+
+      // flip: thin rhombi recolour on a different phase
+      let base, edge;
+      if(tr.tp===0){ // fat
+        if(m<0.5) base=mix(C_BG,C_DEEP,m*2);
+        else      base=mix(C_DEEP,C_ACC,(m-0.5)*2);
+        edge=mix(base,C_PALE,0.25+m*0.25);
+      }else{ // thin
+        if(m<0.5) base=mix(C_BG,C_ROSE,m*2);
+        else      base=mix(C_ROSE,C_ACC,(m-0.5)*2);
+        edge=mix(base,C_PALE,0.15+m*0.3);
+      }
+      const sc=R/Math.max(maxR,1);
+      const ax=cx+tr.a.x*sc, ay=cy+tr.a.y*sc;
+      const bx=cx+tr.b.x*sc, by=cy+tr.b.y*sc;
+      const cxp=cx+tr.c.x*sc, cyp=cy+tr.c.y*sc;
+      ctx.beginPath();
+      ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.lineTo(cxp,cyp);ctx.closePath();
+      ctx.fillStyle=rgb(base);ctx.fill();
+      // draw only the two rhombus edges (a-b, b-c) to suppress the diagonal
+      ctx.strokeStyle=rgb(edge);
+      ctx.globalAlpha=0.5+m*0.45;
+      ctx.lineWidth=0.6;
+      ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.lineTo(cxp,cyp);ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+    // central glow at the fivefold point
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*0.16);
+    g.addColorStop(0,'rgba(212,175,106,0.30)');
+    g.addColorStop(1,'rgba(212,175,106,0)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  }
+
+  let raf=0;
+  function frame(){ if(!reduce)t++; draw(); raf=requestAnimationFrame(frame); }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=40;draw();}else start();
+})();
+</script>
+</body>
+</html>

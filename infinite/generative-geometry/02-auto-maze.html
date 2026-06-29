@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Neon green depth-first maze that draws itself wall by wall on a dark grid, then resets with a new hue.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auto Maze</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#101013}
+  #c{display:block;width:100%;height:100%}
+  #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
+       color:#6affc0;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">auto-maze</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  let W,H,DPR,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let cols,rows,cell,grid,stack,cur,ox,oy,done,doneT=0,hue=150;
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);build();}
+  function idx(x,y){return (x<0||y<0||x>=cols||y>=rows)?-1:y*cols+x}
+  function build(){
+    const s=Math.min(W,H)*0.86;cell=Math.max(10,Math.round(s/16));
+    cols=Math.floor(s/cell);rows=cols;
+    ox=(W-cols*cell)/2;oy=(H-rows*cell)/2;
+    grid=[];for(let y=0;y<rows;y++)for(let x=0;x<cols;x++)grid.push({x,y,w:[1,1,1,1],v:false});
+    cur=grid[0];cur.v=true;stack=[];done=false;hue=(hue+47)%360;
+  }
+  function neighbors(c){
+    const r=[],d=[[0,-1,0,2],[1,0,1,3],[0,1,2,0],[-1,0,3,1]];
+    for(const[dx,dy,wa,wb]of d){const i=idx(c.x+dx,c.y+dy);if(i>=0&&!grid[i].v)r.push([grid[i],wa,wb]);}
+    return r;
+  }
+  function carve(){
+    if(done)return;
+    const n=neighbors(cur);
+    if(n.length){const[nx,wa,wb]=n[(Math.random()*n.length)|0];
+      cur.w[wa]=0;nx.w[wb]=0;nx.v=true;stack.push(cur);cur=nx;
+    } else if(stack.length){cur=stack.pop();} else {done=true;doneT=0;}
+  }
+  function draw(){
+    ctx.fillStyle='#101013';ctx.fillRect(0,0,W,H);
+    ctx.lineWidth=Math.max(1.5,cell*0.13);ctx.lineCap='round';
+    for(const c of grid){
+      if(!c.v)continue;
+      const X=ox+c.x*cell,Y=oy+c.y*cell;
+      ctx.strokeStyle='hsl('+((hue+c.x*3+c.y*3)%360)+',70%,'+(done?60:52)+'%)';
+      ctx.beginPath();
+      if(c.w[0]){ctx.moveTo(X,Y);ctx.lineTo(X+cell,Y);}
+      if(c.w[1]){ctx.moveTo(X+cell,Y);ctx.lineTo(X+cell,Y+cell);}
+      if(c.w[2]){ctx.moveTo(X,Y+cell);ctx.lineTo(X+cell,Y+cell);}
+      if(c.w[3]){ctx.moveTo(X,Y);ctx.lineTo(X,Y+cell);}
+      ctx.stroke();
+    }
+    if(!done){ctx.fillStyle='hsl('+hue+',90%,70%)';
+      ctx.fillRect(ox+cur.x*cell+cell*0.3,oy+cur.y*cell+cell*0.3,cell*0.4,cell*0.4);}
+  }
+  let raf,acc=0,last=0;
+  function loop(t){
+    const dt=t-last;last=t;
+    if(!reduce){
+      acc+=dt;const stepT=28;
+      while(acc>=stepT){carve();acc-=stepT;}
+      if(done){doneT+=dt;if(doneT>1400)build();}
+      draw();
+    }
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){cancelAnimationFrame(raf);last=performance.now();raf=requestAnimationFrame(loop);}
+  addEventListener('resize',resize);
+  cv.addEventListener('pointerdown',build);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
+  resize();if(reduce){for(let i=0;i<cols*rows*4;i++)carve();draw();}else start();
+})();
+</script>
+</body>
+</html>

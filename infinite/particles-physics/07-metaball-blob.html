@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Hot-pink gooey metaball blobs drift and merge fluidly via high-contrast threshold, with the cursor adding an extra attracting blob.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Metaball Fluid</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#120016}
+  #c{display:block;width:100%;height:100%;filter:contrast(18) blur(0.4px)}
+  .wrap{position:relative;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#ff5ea8;opacity:.6;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
+</style>
+</head>
+<body>
+<div class="wrap"><canvas id="c"></canvas></div>
+<div class="cap">Metaball Fluid</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,blobs=[],t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+// low-res offscreen for cheap metaballs
+const off=document.createElement('canvas'),ox=off.getContext('2d');
+let LW,LH,imgData;
+function size(){DPR=1;W=cv.clientWidth;H=cv.clientHeight;cv.width=W;cv.height=H;
+  LW=Math.max(40,Math.round(W/4));LH=Math.max(40,Math.round(H/4));off.width=LW;off.height=LH;
+  imgData=ox.createImageData(LW,LH);init();}
+function init(){blobs=[];const n=7;for(let i=0;i<n;i++)
+  blobs.push({x:Math.random()*LW,y:Math.random()*LH,
+    ph:Math.random()*6.28,sp:0.4+Math.random()*0.6,
+    ax:LW*(0.2+Math.random()*0.25),ay:LH*(0.2+Math.random()*0.25),
+    r:(7+Math.random()*7)});}
+addEventListener('resize',size);size();
+let pointer={x:-999,y:-999};
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+  pointer.x=(e.clientX-r.left)/4;pointer.y=(e.clientY-r.top)/4;});
+cv.addEventListener('pointerleave',()=>{pointer.x=-999;pointer.y=-999;});
+function step(){
+  t+=0.012;
+  const img=imgData,d=img.data;
+  for(const b of blobs){b.cx=LW/2+Math.cos(t*b.sp+b.ph)*b.ax;b.cy=LH/2+Math.sin(t*b.sp*1.3+b.ph)*b.ay;}
+  const px=pointer.x,py=pointer.y,hasP=px>-50;
+  for(let yy=0;yy<LH;yy++)for(let xx=0;xx<LW;xx++){
+    let s=0;
+    for(const b of blobs){const dx=xx-b.cx,dy=yy-b.cy;s+=b.r*b.r/(dx*dx+dy*dy+1);}
+    if(hasP){const dx=xx-px,dy=yy-py;s+=120/(dx*dx+dy*dy+1);}
+    const i=(yy*LW+xx)*4;
+    if(s>1){const hue=300-Math.min(120,s*40);
+      d[i]=255;d[i+1]=Math.min(255,40+s*30);d[i+2]=Math.min(255,120+s*20);d[i+3]=255;}
+    else{d[i+3]=0;}
+  }
+  ox.putImageData(img,0,0);
+  x.clearRect(0,0,W,H);x.imageSmoothingEnabled=true;
+  x.drawImage(off,0,0,W,H);
+}
+let raf;function loop(){step();raf=requestAnimationFrame(loop);}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+function stop(){cancelAnimationFrame(raf);raf=0;}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+play();
+</script>
+</body>
+</html>

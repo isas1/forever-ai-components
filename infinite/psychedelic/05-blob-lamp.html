@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A lava-lamp field of glowing metaball blobs slowly rising, merging and splitting through violet-magenta-amber gradients.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blob Lamp</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  #ps05-stage{position:fixed;inset:0;background:
+    radial-gradient(120% 90% at 50% 112%, #2a0a3e 0%, #150726 38%, #0a0612 72%);
+    /* static glow gradient frame — never repaints */
+    box-shadow:inset 0 0 90px 10px rgba(255,61,166,.10), inset 0 -60px 120px -30px rgba(124,58,237,.28);}
+  #ps05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .ps05-vig{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(130% 80% at 50% 50%, transparent 52%, rgba(10,6,18,.62) 100%)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ps05-stage" role="img" aria-label="Psychedelic lava-lamp scene: glowing blobs slowly rise, merge and split in swirling pink and violet hues">
+  <canvas id="ps05-c"></canvas>
+  <div class="ps05-vig"></div>
+</div>
+<div class="cap">Blob Lamp</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv=document.getElementById('ps05-c'),ctx=cv.getContext('2d',{alpha:false});
+  var W=0,H=0,DPR=1,GW=0,GH=0,SC=4; // SC: pixel block size for metaball field
+  var field=null,gx=0,gy=0; // grid dims
+
+  // ---- blobs (metaball sources) capped well under 110 ----
+  var N=9, bx=new Float32Array(N), by=new Float32Array(N),
+      br=new Float32Array(N), bv=new Float32Array(N), bp=new Float32Array(N);
+  (function seed(){
+    for(var i=0;i<N;i++){
+      bx[i]=.12+.76*Math.random();
+      by[i]=Math.random();
+      br[i]=.045+.055*Math.random();
+      bv[i]=.018+.03*Math.random();     // rise speed (normalized/s)
+      bp[i]=Math.random()*6.283;        // sway phase
+    }
+  })();
+
+  // psychedelic complementary ramp: deep violet -> magenta -> hot pink -> amber core
+  // precomputed 256-entry RGB lookup, built once
+  var ramp=new Uint8Array(256*3);
+  (function buildRamp(){
+    var stops=[
+      [0.00, 10,  6, 18],
+      [0.42, 60, 18, 92],
+      [0.60,124, 58,237],
+      [0.74,255, 61,166],
+      [0.86,255,120,120],
+      [1.00,255,214,120]
+    ];
+    for(var i=0;i<256;i++){
+      var t=i/255,a=stops[0],b=stops[stops.length-1];
+      for(var s=0;s<stops.length-1;s++){ if(t>=stops[s][0]&&t<=stops[s+1][0]){a=stops[s];b=stops[s+1];break;} }
+      var f=(t-a[0])/((b[0]-a[0])||1);
+      ramp[i*3]  =(a[1]+(b[1]-a[1])*f)|0;
+      ramp[i*3+1]=(a[2]+(b[2]-a[2])*f)|0;
+      ramp[i*3+2]=(a[3]+(b[3]-a[3])*f)|0;
+    }
+  })();
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    // low-res metaball grid (capped cells): one ImageData blit, scaled up by canvas
+    gx=Math.max(40,Math.min(150,(W/SC)|0));
+    gy=Math.max(40,Math.min(220,(H/SC)|0));
+    field=ctx.createImageData(gx,gy);
+    GW=gx; GH=gy;
+    ctx.imageSmoothingEnabled=true;
+  }
+
+  // offscreen for the small field, scaled to full canvas
+  var off=document.createElement('canvas'),octx=off.getContext('2d');
+  function ensureOff(){ if(off.width!==GW||off.height!==GH){off.width=GW;off.height=GH;} }
+
+  var swirl=0;
+  function render(dt){
+    var i,x,y;
+    // advance blobs
+    for(i=0;i<N;i++){
+      by[i]-=bv[i]*dt;                       // rise
+      bp[i]+=dt*(.4+bv[i]*6);
+      bx[i]+=Math.sin(bp[i])*0.018*dt;       // gentle sway
+      if(by[i]<-0.18){ by[i]=1.18; bx[i]=.12+.76*Math.random(); br[i]=.045+.055*Math.random(); }
+      if(bx[i]<.08){bx[i]=.08;} else if(bx[i]>.92){bx[i]=.92;}
+    }
+    swirl+=dt*0.15;
+    var sw=Math.sin(swirl)*0.06;
+
+    ensureOff();
+    var d=field.data, p=0;
+    var inv=1/(GW-1), invy=1/(GH-1);
+    for(y=0;y<GH;y++){
+      var ny=y*invy;
+      for(x=0;x<GW;x++){
+        var nx=x*inv + sw*(ny-0.5);          // swirl warp, allocation-free
+        var sum=0;
+        for(i=0;i<N;i++){
+          var ddx=nx-bx[i], ddy=ny-by[i];
+          var dd=ddx*ddx+ddy*ddy+0.0006;
+          sum+=br[i]*br[i]/dd;               // metaball potential
+        }
+        // cap + shape into color index
+        var v=sum>2.4?2.4:sum;
+        var idx=(v*106)|0; if(idx>255)idx=255;
+        var ci=idx*3;
+        d[p]=ramp[ci]; d[p+1]=ramp[ci+1]; d[p+2]=ramp[ci+2]; d[p+3]=255;
+        p+=4;
+      }
+    }
+    octx.putImageData(field,0,0);
+    ctx.drawImage(off,0,0,cv.width,cv.height);
+  }
+
+  // ---- one rAF loop, hidden-pause, reduced-motion one-shot ----
+  var running=false,raf=0,last=0;
+  function frame(t){
+    if(!running)return;
+    var dt=(t-last)/1000; last=t;
+    if(dt>0.05)dt=0.05; if(dt<0)dt=0;
+    render(dt);
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){ if(running)return; running=true; last=performance.now(); raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size();
+    if(reduce){ render(0); return; }   // settle one calm static frame
+    start();
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){ clearTimeout(rt); rt=setTimeout(function(){ size(); if(reduce){render(0);} else if(!running){ /* keep paused if hidden */ } },120); });
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden)stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cherry-blossom petals flutter and drift down over an indigo-to-coral dawn sky above a stylised woodblock mountain.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blossom Fall</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  #uk04-stage{position:fixed;inset:0;background:#0f1822}
+  #uk04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="uk04-stage" role="img" aria-label="Cherry blossom petals drifting over an indigo to coral dawn sky above a stylised mountain, in Japanese woodblock style">
+  <canvas id="uk04-c"></canvas>
+</div>
+<div class="cap">Blossom Fall</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("uk04-stage");
+  var cv=document.getElementById("uk04-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // palette — bokashi dawn: indigo -> coral -> cream
+  var SKY_TOP="#1a2c46", SKY_MID="#5a4a6a", SKY_LOW="#c97a6d", SKY_HORIZON="#e8d5b0";
+  var FUJI="#2a3d5c", FUJI_SNOW="#e8d5b0", PETAL_A="#f3c9cf", PETAL_B="#e89aa6", PETAL_C="#f6e4d6";
+
+  var W=0,H=0,dpr=1,running=true,raf=0,t=0;
+
+  var N=reduce?64:110;
+  var px=new Float32Array(N), py=new Float32Array(N), pr=new Float32Array(N);
+  var pph=new Float32Array(N), psp=new Float32Array(N), pdr=new Float32Array(N);
+  var pcol=new Uint8Array(N), pfl=new Float32Array(N);
+
+  function rnd(a,b){return a+Math.random()*(b-a);}
+
+  function seed(i,fromTop){
+    px[i]=rnd(-0.05,1.05)*W;
+    py[i]=fromTop?rnd(-0.25,-0.02)*H:rnd(0,1)*H;
+    pr[i]=rnd(3.5,9.0)*(W/520);
+    pph[i]=rnd(0,Math.PI*2);
+    psp[i]=rnd(0.18,0.55)*(H/520);     // fall speed
+    pdr[i]=rnd(0.25,0.85)*(W/520);     // drift amplitude
+    pfl[i]=rnd(0.6,1);                 // flutter rate
+    pcol[i]=(Math.random()*3)|0;
+  }
+
+  function resize(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,W*dpr); cv.height=Math.max(1,H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    for(var i=0;i<N;i++) seed(i,false);
+  }
+
+  // ---- static scene (sky gradient, mist bokashi bands, mountain) ----
+  function drawScene(){
+    var g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,SKY_TOP);
+    g.addColorStop(0.42,SKY_MID);
+    g.addColorStop(0.74,SKY_LOW);
+    g.addColorStop(1,SKY_HORIZON);
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+    // bokashi mist bands — flat woodblock striations
+    ctx.save();
+    ctx.globalAlpha=0.10; ctx.fillStyle=SKY_HORIZON;
+    for(var b=0;b<4;b++){
+      var yy=H*(0.58+b*0.085);
+      ctx.fillRect(0,yy,W,H*0.03);
+    }
+    ctx.restore();
+
+    // mountain cone — flat plane with bold base, off-centre
+    var bx=W*0.62, peakY=H*0.30, baseY=H*0.80, halfW=W*0.40;
+    ctx.beginPath();
+    ctx.moveTo(bx,peakY);
+    ctx.lineTo(bx+halfW,baseY);
+    ctx.lineTo(bx-halfW,baseY);
+    ctx.closePath();
+    ctx.fillStyle=FUJI; ctx.fill();
+    // snow cap — jagged woodblock edge
+    var sw=halfW*0.30, sy=peakY+(baseY-peakY)*0.30;
+    ctx.beginPath();
+    ctx.moveTo(bx,peakY);
+    ctx.lineTo(bx+sw,sy);
+    ctx.lineTo(bx+sw*0.45,sy-(baseY-peakY)*0.06);
+    ctx.lineTo(bx+sw*0.72,sy);
+    ctx.lineTo(bx-sw*0.3,sy);
+    ctx.lineTo(bx-sw*0.62,sy-(baseY-peakY)*0.05);
+    ctx.lineTo(bx-sw,sy);
+    ctx.closePath();
+    ctx.fillStyle=FUJI_SNOW; ctx.fill();
+
+    // pale sun disc — static, low coral, behind petals
+    ctx.beginPath();
+    ctx.arc(W*0.28,H*0.34,Math.min(W,H)*0.11,0,Math.PI*2);
+    ctx.fillStyle="rgba(243,201,207,0.16)"; ctx.fill();
+
+    // distant blossom branch — bold outline, top-left, original silhouette
+    ctx.save();
+    ctx.strokeStyle="#13202f"; ctx.lineWidth=Math.max(2,W/220); ctx.lineCap="round";
+    ctx.beginPath();
+    ctx.moveTo(-4,H*0.02);
+    ctx.bezierCurveTo(W*0.10,H*0.05,W*0.16,H*0.14,W*0.30,H*0.12);
+    ctx.moveTo(W*0.14,H*0.085);
+    ctx.bezierCurveTo(W*0.18,H*0.02,W*0.22,H*0.01,W*0.27,H*0.0);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function petal(x,y,r,rot,col){
+    var c = col===0?PETAL_A:col===1?PETAL_B:PETAL_C;
+    ctx.save();
+    ctx.translate(x,y); ctx.rotate(rot);
+    // five-lobe sakura silhouette, flat fill + thin outline
+    ctx.beginPath();
+    for(var k=0;k<5;k++){
+      var a=k*(Math.PI*2/5)-Math.PI/2;
+      var ox=Math.cos(a)*r, oy=Math.sin(a)*r;
+      var na=a+Math.PI*2/5;
+      var nx=Math.cos(na)*r, ny=Math.sin(na)*r;
+      if(k===0) ctx.moveTo(ox*0.18,oy*0.18);
+      // notch tip
+      ctx.quadraticCurveTo(ox*1.15,oy*1.15,(ox+ (Math.cos(a+Math.PI/5)*r*0.18))*0.7,(oy+(Math.sin(a+Math.PI/5)*r*0.18))*0.7);
+      ctx.quadraticCurveTo(nx*1.15,ny*1.15,nx*0.18,ny*0.18);
+    }
+    ctx.closePath();
+    ctx.fillStyle=c; ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPetals(){
+    for(var i=0;i<N;i++){
+      var fl=Math.sin(t*pfl[i]+pph[i]);
+      var rot=pph[i]+t*pfl[i]*0.6;
+      var sx=px[i]+Math.sin(t*0.6+pph[i])*pdr[i]*6;
+      // squash on flutter -> spin illusion via rotation only (compositor-safe canvas)
+      petal(sx,py[i],pr[i]*(0.7+0.3*Math.abs(fl)),rot,pcol[i]);
+    }
+  }
+
+  function step(){
+    for(var i=0;i<N;i++){
+      py[i]+=psp[i];
+      px[i]+=Math.cos(t*0.5+pph[i])*0.4;
+      pph[i]+=0.01*pfl[i];
+      if(py[i]>H+12){ seed(i,true); }
+      else if(px[i]<-20){ px[i]=W+10; }
+      else if(px[i]>W+20){ px[i]=-10; }
+    }
+  }
+
+  function frame(){
+    if(!running) return;
+    t+=0.016;
+    drawScene();
+    step();
+    drawPetals();
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(!running){running=true; raf=requestAnimationFrame(frame);} }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+  window.addEventListener("resize",function(){ resize(); if(reduce){drawScene();drawPetals();} });
+
+  resize();
+  if(reduce){ // one calm static frame
+    for(var i=0;i<N;i++){ py[i]=rnd(0,1)*H; }
+    drawScene(); drawPetals(); running=false; return;
+  }
+  raf=requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

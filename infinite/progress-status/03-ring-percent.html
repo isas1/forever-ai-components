@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A purple circular progress ring sweeps to a percentage with a tick head marker, large numeric center readout and a pulsing status dot.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Percent Ring</title>
+<style>
+  :root{
+    --pg03-bg:#0b0d12;
+    --pg03-accent:#7c5cff;
+    --pg03-accent-2:#b9a8ff;
+    --pg03-track:#1b2030;
+    --pg03-ink:#e9ecf6;
+    --pg03-mute:#7f8aa3;
+  }
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:var(--pg03-bg);
+    color:var(--pg03-ink);
+    font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+    overflow:hidden;
+  }
+  .pg03-stage{
+    position:fixed;inset:0;
+    display:grid;place-items:center;
+    container-type:size;
+  }
+  .pg03-wrap{
+    position:relative;
+    width:min(72cqmin,640px);
+    height:min(72cqmin,640px);
+    display:grid;place-items:center;
+  }
+  .pg03-svg{width:100%;height:100%;display:block;overflow:visible}
+  .pg03-ring{
+    transform:rotate(-90deg);
+    transform-origin:50% 50%;
+    transform-box:fill-box;
+  }
+  /* static glow — never repaints */
+  .pg03-glow{filter:drop-shadow(0 0 10px rgba(124,92,255,.55))}
+  .pg03-arc{
+    transition:none;
+    will-change:stroke-dashoffset;
+  }
+  .pg03-tick{stroke:var(--pg03-mute);stroke-width:2}
+  .pg03-readout{
+    position:absolute;
+    display:flex;align-items:baseline;gap:.04em;
+    font-weight:600;letter-spacing:-.02em;
+    line-height:1;
+    color:var(--pg03-ink);
+  }
+  .pg03-num{font-size:clamp(28px,20cqmin,140px);font-variant-numeric:tabular-nums}
+  .pg03-pct{font-size:clamp(13px,7cqmin,46px);color:var(--pg03-accent-2);font-weight:600}
+  .pg03-label{
+    position:absolute;left:50%;transform:translateX(-50%);
+    bottom:18%;
+    font-size:clamp(8px,2.6cqmin,15px);
+    letter-spacing:.34em;text-transform:uppercase;
+    color:var(--pg03-mute);
+    white-space:nowrap;
+  }
+  .pg03-status{
+    position:absolute;left:50%;transform:translateX(-50%);
+    top:18%;
+    width:7px;height:7px;border-radius:50%;
+    background:var(--pg03-accent);
+    box-shadow:0 0 8px rgba(124,92,255,.8);
+  }
+  .pg03-status.is-pulse{animation:pg03-blink 1.6s steps(1,end) infinite}
+  @keyframes pg03-blink{0%,55%{opacity:1}56%,100%{opacity:.18}}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    .pg03-status.is-pulse{animation:none;opacity:1}
+  }
+</style>
+</head>
+<body>
+  <div class="pg03-stage">
+    <div class="pg03-wrap"
+         id="pg03-bar"
+         role="progressbar"
+         aria-label="Percent ring, determinate progress"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <svg class="pg03-svg" viewBox="0 0 200 200" aria-hidden="true">
+        <g class="pg03-ring">
+          <circle cx="100" cy="100" r="84" fill="none"
+                  stroke="var(--pg03-track)" stroke-width="9"/>
+          <g class="pg03-glow">
+            <circle id="pg03-arc" class="pg03-arc" cx="100" cy="100" r="84" fill="none"
+                    stroke="var(--pg03-accent)" stroke-width="9" stroke-linecap="round"
+                    stroke-dasharray="527.79" stroke-dashoffset="527.79"/>
+          </g>
+        </g>
+        <line class="pg03-tick" id="pg03-head" x1="100" y1="6" x2="100" y2="20"/>
+      </svg>
+      <div class="pg03-status is-pulse" id="pg03-dot"></div>
+      <div class="pg03-readout">
+        <span class="pg03-num" id="pg03-num">0</span><span class="pg03-pct">%</span>
+      </div>
+      <div class="pg03-label">Percent Ring</div>
+    </div>
+  </div>
+  <div class="cap">Percent Ring</div>
+
+  <script>
+  (function(){
+    "use strict";
+    var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+    var arc  = document.getElementById('pg03-arc');
+    var num  = document.getElementById('pg03-num');
+    var head = document.getElementById('pg03-head');
+    var dot  = document.getElementById('pg03-dot');
+    var bar  = document.getElementById('pg03-bar');
+
+    var R = 84, CIRC = 2 * Math.PI * R;        // 527.79
+    var TARGET = 73;                            // determinate destination
+    var cur = 0, raf = 0, running = false, t0 = 0;
+
+    // single render fn — touches only transform/stroke-dashoffset + text
+    function paint(p){
+      var frac = p / 100;
+      arc.setAttribute('stroke-dashoffset', (CIRC * (1 - frac)).toFixed(2));
+      var deg = -90 + frac * 360;               // head marker angle
+      head.style.transform = 'rotate(' + deg.toFixed(2) + 'deg)';
+      head.style.transformOrigin = '100px 100px';
+      var iv = Math.round(p);
+      num.textContent = iv;
+      bar.setAttribute('aria-valuenow', iv);
+    }
+
+    if (reduce){
+      cur = TARGET;
+      paint(TARGET);
+      dot.classList.remove('is-pulse');
+      return;                                   // ONE static frame, no loop
+    }
+
+    // ease toward TARGET, hold, then drift to a new target — honest, calm
+    var from = 0, to = TARGET, dur = 1900, holding = false, holdUntil = 0;
+    function tick(ts){
+      if(!t0) t0 = ts;
+      var now = ts;
+      if(holding){
+        if(now >= holdUntil){
+          holding = false; t0 = now; from = cur;
+          to = (to === TARGET) ? 100 : (to === 100 ? 41 : TARGET);
+        } else { raf = requestAnimationFrame(tick); return; }
+      }
+      var k = (now - t0) / dur;
+      if(k >= 1){
+        cur = to; paint(cur);
+        holding = true; holdUntil = now + 1400;
+        if(to === 100) dot.classList.remove('is-pulse');
+        else dot.classList.add('is-pulse');
+        raf = requestAnimationFrame(tick); return;
+      }
+      // easeOutCubic
+      var e = 1 - Math.pow(1 - k, 3);
+      cur = from + (to - from) * e;
+      paint(cur);
+      raf = requestAnimationFrame(tick);
+    }
+    function start(){ if(running) return; running = true; t0 = 0; raf = requestAnimationFrame(tick); }
+    function stop(){ running = false; if(raf) cancelAnimationFrame(raf); raf = 0; }
+
+    document.addEventListener('visibilitychange', function(){
+      if(document.hidden) stop(); else start();
+    });
+    start();
+  })();
+  </script>
+</body>
+</html>

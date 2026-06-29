@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Small primary-color blocks blink and travel like traffic along a black grid of avenues over De Stijl color plaques.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boogie Pulse</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0e10;overflow:hidden}
+  #ds02-stage{position:fixed;inset:0;display:block}
+  #ds02-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ds02-stage" role="img" aria-label="De Stijl neoplastic composition: small primary-color blocks pulsing along a black grid like traffic on white avenues.">
+  <canvas id="ds02-c"></canvas>
+</div>
+<div class="cap">Boogie Pulse</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('ds02-stage');
+  var cv = document.getElementById('ds02-c');
+  var ctx = cv.getContext('2d');
+
+  // De Stijl palette
+  var WHITE='#efe9da', BLACK='#0e0e10', BLUE='#1b5fc4', RED='#cf2f2a', YELLOW='#ecc015', GREY='#c8c2b3';
+
+  // Grid lines as fractions of canvas (asymmetric — dynamic equilibrium, no centred symmetry)
+  var VX=[0.0,0.22,0.40,0.63,0.81,1.0];      // vertical line positions
+  var HY=[0.0,0.17,0.46,0.70,1.0];           // horizontal line positions
+  // Static colour-field plaques (col i..i+1, row j..j+1, colour)
+  var PLAQUES=[
+    [0,0,1,0,YELLOW],[4,0,5,1,RED],[3,1,4,2,BLUE],
+    [0,2,1,3,RED],[2,2,3,4,YELLOW],[4,3,5,4,BLUE]
+  ];
+
+  var W=0,H=0,DPR=1,LW=0;
+  var vx=new Float32Array(VX.length), hy=new Float32Array(HY.length);
+
+  // Travelling blocks ("boogie" cells). axis:0 horizontal lane, 1 vertical lane.
+  var N=26;
+  var axis=new Uint8Array(N), lane=new Float32Array(N), pos=new Float32Array(N),
+      spd=new Float32Array(N), len=new Float32Array(N), col=new Uint8Array(N),
+      phase=new Float32Array(N);
+  var COLS=[BLUE,RED,YELLOW];
+  (function seed(){
+    for(var i=0;i<N;i++){
+      axis[i]= (Math.random()<0.5)?0:1;
+      lane[i]= (axis[i]? HY[1+((Math.random()*(HY.length-2))|0)] : VX[1+((Math.random()*(VX.length-2))|0)]);
+      pos[i]=Math.random();
+      spd[i]=(0.05+Math.random()*0.10)*(Math.random()<0.5?1:-1);
+      len[i]=0.045+Math.random()*0.05;
+      col[i]= i%4===0?2 : (i%2===0?0:1); // bias toward blue accent
+      phase[i]=Math.random()*6.283;
+    }
+  })();
+
+  function size(){
+    var r=stage.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,r.width); H=Math.max(1,r.height);
+    cv.width=(W*DPR)|0; cv.height=(H*DPR)|0;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    LW=Math.max(3,Math.min(W,H)*0.022);
+    for(var i=0;i<VX.length;i++) vx[i]=VX[i]*W;
+    for(var j=0;j<HY.length;j++) hy[j]=HY[j]*H;
+  }
+
+  function plaques(){
+    for(var p=0;p<PLAQUES.length;p++){
+      var q=PLAQUES[p];
+      var x=vx[q[0]], y=hy[q[1]], x2=vx[q[2]], y2=hy[q[3]];
+      ctx.fillStyle=q[4];
+      ctx.fillRect(x,y,x2-x,y2-y);
+    }
+  }
+  function grid(){
+    ctx.fillStyle=BLACK;
+    var i;
+    for(i=0;i<vx.length;i++) ctx.fillRect(vx[i]-LW/2,0,LW,H);
+    for(i=0;i<hy.length;i++) ctx.fillRect(0,hy[i]-LW/2,W,LW);
+  }
+
+  // travelling block: a fat coloured stub riding inside a black lane
+  function cells(t){
+    var bw=LW*0.62; // block thickness, sits within the line
+    for(var i=0;i<N;i++){
+      // pulse = boogie-woogie syncopation: discrete stutter via stepped position
+      var pp=pos[i]+ (0.5+0.5*Math.sin(t*1.7+phase[i]))*0.0; // keep smooth; syncopation via length blink
+      var bl=len[i]*(axis[i]?H:W);
+      var blink= (Math.sin(t*4.0+phase[i])>0.35)?1:0.0; // on/off stutter < 3Hz fullscreen, tiny element
+      if(reduce) blink=1;
+      ctx.fillStyle=COLS[col[i]];
+      if(axis[i]===0){ // horizontal lane at y=lane
+        var y=lane[i]*H, x=pp*W;
+        if(blink) ctx.fillRect(x-bl/2,y-bw/2,bl,bw);
+        // wrap
+        if(x-bl/2<0) ctx.fillRect(x-bl/2+W,y-bw/2,bl,bw);
+        if(x+bl/2>W) ctx.fillRect(x-bl/2-W,y-bw/2,bl,bw);
+      } else {
+        var X=lane[i]*W, Y=pp*H;
+        if(blink) ctx.fillRect(X-bw/2,Y-bl/2,bw,bl);
+        if(Y-bl/2<0) ctx.fillRect(X-bw/2,Y-bl/2+H,bw,bl);
+        if(Y+bl/2>H) ctx.fillRect(X-bw/2,Y-bl/2-H,bw,bl);
+      }
+    }
+  }
+
+  function frame(t){
+    ctx.fillStyle=WHITE; ctx.fillRect(0,0,W,H);
+    plaques();
+    cells(t);
+    grid(); // grid on top so blocks read as "inside" the avenues
+  }
+
+  var running=true, raf=0, t0=0;
+  function loop(ts){
+    if(!running) return;
+    if(!t0) t0=ts;
+    var t=(ts-t0)/1000;
+    // advance positions (allocation-free)
+    for(var i=0;i<N;i++){ pos[i]+=spd[i]*0.0166; if(pos[i]>1)pos[i]-=1; else if(pos[i]<0)pos[i]+=1; }
+    frame(t);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){ if(!running){running=true; t0=0; raf=requestAnimationFrame(loop);} }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) stop(); else if(!reduce) start();
+  });
+  window.addEventListener('resize',function(){ size(); if(reduce) frame(0); });
+
+  size();
+  if(reduce){ running=false; frame(0); return; }
+  raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

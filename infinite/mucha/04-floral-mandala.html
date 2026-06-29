@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Floral Mandala — Alphonse Mucha. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Floral Mandala</title>
+<style>
+  html,body{margin:0;height:100%;background:#231a12;overflow:hidden}
+  #muc04-stage{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 40%,#2f2418,#231a12)}
+  #muc04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .muc04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f4ecd8;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="muc04-stage" role="img" aria-label="A radial-symmetric Mucha rose window: twelve mirrored sectors of sage stems, leaves and gold-cored flowers breathe and slowly rotate on a dark ground around a turning rosette.">
+  <canvas id="muc04-cv"></canvas>
+</div>
+<div class="muc04-cap">Floral Mandala</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={cream:'#f4ecd8',sage:'#8a9a5b',sageDeep:'#6c7a44',peach:'#e7b98f',gold:'#c4a14e',rose:'#c98c8c',teal:'#2c5d63'};
+  const cv=document.getElementById('muc04-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function petal(ctx,len,wid){
+    ctx.beginPath();ctx.moveTo(0,0);
+    ctx.bezierCurveTo(wid,-len*0.4,wid,-len*0.8,0,-len);
+    ctx.bezierCurveTo(-wid,-len*0.8,-wid,-len*0.4,0,0);
+    ctx.closePath();
+  }
+  let S=fitCanvas(cv);
+  const SECT=12;
+  const cols=[PAL.sage,PAL.peach,PAL.gold,PAL.rose,PAL.teal];
+  let t=0,last=performance.now();
+  function paintBg(){const g=S.ctx.createRadialGradient(S.w/2,S.h*0.4,0,S.w/2,S.h*0.4,Math.max(S.w,S.h));g.addColorStop(0,'#2f2418');g.addColorStop(1,'#231a12');S.ctx.fillStyle=g;S.ctx.fillRect(0,0,S.w,S.h);}
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    if(!REDUCED) t+=dt*0.4;
+    const ctx=S.ctx,W=S.w,H=S.h,cx=W/2,cy=H/2;
+    const R=Math.min(W,H)*0.46;
+    paintBg();
+    ctx.strokeStyle='rgba(196,161,78,0.10)';ctx.lineWidth=1;
+    for(let i=1;i<=4;i++){ctx.beginPath();ctx.arc(cx,cy,R*i/4,0,7);ctx.stroke();}
+    const breathe=1+0.06*Math.sin(t*1.3);
+    for(let s=0;s<SECT;s++){
+      ctx.save();ctx.translate(cx,cy);
+      ctx.rotate((s/SECT)*Math.PI*2+t*0.15);
+      ctx.scale(breathe,breathe);
+      const sway=Math.sin(t*0.9+s)*0.18;
+      ctx.strokeStyle=PAL.sage;ctx.lineWidth=1.6;ctx.globalAlpha=0.8;
+      ctx.beginPath();ctx.moveTo(0,0);
+      ctx.quadraticCurveTo(R*0.18*sway*4,-R*0.4,0,-R*0.78);ctx.stroke();
+      for(let l=0;l<3;l++){
+        const ly=-R*(0.28+l*0.2);
+        ctx.save();ctx.translate(0,ly);ctx.rotate((l%2?1:-1)*(0.8+0.2*Math.sin(t+l)));
+        ctx.fillStyle=PAL.sageDeep;ctx.globalAlpha=0.7;
+        ctx.beginPath();ctx.ellipse(7,0,9,3.2,0,0,7);ctx.fill();ctx.restore();
+      }
+      ctx.save();ctx.translate(0,-R*0.78);
+      const fc=cols[s%cols.length];
+      const np=6;
+      const fs=R*0.13*(0.9+0.2*Math.sin(t*1.6+s));
+      ctx.globalAlpha=0.92;
+      for(let p=0;p<np;p++){
+        ctx.save();ctx.rotate((p/np)*Math.PI*2+t*0.3);
+        ctx.fillStyle=fc;ctx.strokeStyle='rgba(244,236,216,0.5)';ctx.lineWidth=0.8;
+        petal(ctx,fs*1.5,fs*0.6);ctx.fill();ctx.stroke();ctx.restore();
+      }
+      ctx.fillStyle=PAL.gold;ctx.beginPath();ctx.arc(0,0,fs*0.42,0,7);ctx.fill();
+      ctx.restore();
+      ctx.restore();
+    }
+    ctx.save();ctx.translate(cx,cy);ctx.globalAlpha=1;
+    for(let p=0;p<8;p++){
+      ctx.save();ctx.rotate((p/8)*Math.PI*2-t*0.5);
+      ctx.fillStyle=p%2?PAL.peach:PAL.rose;
+      petal(ctx,R*0.16,R*0.06);ctx.fill();ctx.restore();
+    }
+    ctx.fillStyle=PAL.gold;ctx.beginPath();ctx.arc(0,0,R*0.06,0,7);ctx.fill();
+    ctx.fillStyle=PAL.cream;ctx.beginPath();ctx.arc(0,0,R*0.025,0,7);ctx.fill();
+    ctx.restore();
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  paintBg();
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED) draw(performance.now());},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

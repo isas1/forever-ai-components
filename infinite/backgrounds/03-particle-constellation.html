@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Canvas particles in iris-cyan-magenta drift and connect with fading lines when near, forming a shifting constellation network on dark.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Particle Constellation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-900:#08090d;
+  --text-2:#8a91a8;
+  --font-display:"Space Grotesk",system-ui,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;overflow:hidden;}
+body{background:var(--bg-900);}
+.frame{position:absolute;inset:0;display:grid;place-items:center;}
+.stage{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-900);}
+.c03-const{position:absolute;inset:0;}
+.c03-const canvas{display:block;width:100%;height:100%;}
+.caption{position:absolute;left:12px;bottom:10px;z-index:5;
+  font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-2);opacity:.7;pointer-events:none;}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="stage">
+    <div class="c03-const" data-c03 aria-hidden="true"><canvas></canvas></div>
+    <span class="caption">Particle Constellation</span>
+  </div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var REDUCED=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function setupCanvas(host,draw){
+    var canvas=host.querySelector("canvas"),ctx=canvas.getContext("2d");
+    var dpr=Math.min(window.devicePixelRatio||1,2),w=0,h=0;
+    function resize(){
+      var r=host.getBoundingClientRect();
+      w=Math.max(1,Math.round(r.width));h=Math.max(1,Math.round(r.height));
+      canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      if(draw.onResize) draw.onResize(w,h);
+    }
+    if(window.ResizeObserver){new ResizeObserver(resize).observe(host);}
+    else{window.addEventListener("resize",resize);}
+    resize();
+    return {ctx:ctx,get w(){return w;},get h(){return h;}};
+  }
+
+  function runLoop(tick){
+    var running=false,id=0;
+    function loop(){tick();id=requestAnimationFrame(loop);}
+    function start(){if(running||document.hidden)return;running=true;id=requestAnimationFrame(loop);}
+    function stop(){running=false;cancelAnimationFrame(id);}
+    document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
+    start();
+  }
+
+  var host=document.querySelector("[data-c03]");
+  if(!host) return;
+  var COLORS=["#7c5cff","#22d3ee","#ff5ca8"],particles=[];
+  var cv=setupCanvas(host,{onResize:build});
+
+  function build(w,h){
+    var count=Math.round((w*h)/9000);count=Math.max(18,Math.min(60,count));
+    particles=[];
+    for(var i=0;i<count;i++){
+      particles.push({x:Math.random()*w,y:Math.random()*h,
+        vx:(Math.random()-0.5)*0.35,vy:(Math.random()-0.5)*0.35,
+        r:1+Math.random()*1.6,c:COLORS[(Math.random()*COLORS.length)|0]});
+    }
+  }
+
+  function render(){
+    var ctx=cv.ctx,w=cv.w,h=cv.h;ctx.clearRect(0,0,w,h);
+    var i,j,p,q,dx,dy,dist,LINK=96;
+    for(i=0;i<particles.length;i++){
+      p=particles[i];p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0||p.x>w)p.vx*=-1;if(p.y<0||p.y>h)p.vy*=-1;
+      p.x=Math.max(0,Math.min(w,p.x));p.y=Math.max(0,Math.min(h,p.y));
+    }
+    for(i=0;i<particles.length;i++){
+      p=particles[i];
+      for(j=i+1;j<particles.length;j++){
+        q=particles[j];dx=p.x-q.x;dy=p.y-q.y;dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<LINK){
+          ctx.globalAlpha=(1-dist/LINK)*0.5;ctx.strokeStyle=p.c;ctx.lineWidth=0.7;
+          ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
+        }
+      }
+    }
+    ctx.globalAlpha=1;
+    for(i=0;i<particles.length;i++){
+      p=particles[i];ctx.fillStyle=p.c;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
+    }
+  }
+
+  if(REDUCED){render();return;}
+  runLoop(render);
+})();
+</script>
+</body>
+</html>

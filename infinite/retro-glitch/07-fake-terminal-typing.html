@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Green CRT terminal auto-typing a boot sequence with blinking cursor and scanline overlay, looping.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fake terminal typing</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#05080a}
+  #term{position:fixed;inset:0;padding:5% 6%;box-sizing:border-box;
+    font:600 clamp(11px,3.3vw,18px)/1.55 ui-monospace,"SF Mono",Menlo,monospace;
+    color:#7dffb0;text-shadow:0 0 4px rgba(125,255,176,.5);overflow:hidden}
+  .p{color:#46c8ff}.w{color:#ffe26b}.d{color:#5a8a72}
+  #cur{display:inline-block;width:.6em;height:1.05em;background:#7dffb0;
+    vertical-align:-2px;animation:bl 1s steps(1) infinite;box-shadow:0 0 6px #7dffb0}
+  @keyframes bl{50%{opacity:0}}
+  .scan{position:fixed;inset:0;pointer-events:none;opacity:.5;
+    background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.22) 3px)}
+  .cap{position:fixed;right:8px;bottom:7px;font:600 10px ui-monospace,monospace;
+    color:#7dffb0;opacity:.35;letter-spacing:.5px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="term"></div>
+<div class="scan"></div>
+<div class="cap">TERMINAL</div>
+<script>
+const term=document.getElementById('term');
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const lines=[
+ {t:'guest@retro:~$ ',c:'p'},{t:'./boot.sh --demo',c:''},{nl:1},
+ {t:'[ok] ',c:'d'},{t:'loading kernel modules',c:''},{nl:1},
+ {t:'[ok] ',c:'d'},{t:'mounting /dev/floppy0',c:''},{nl:1},
+ {t:'[warn] ',c:'w'},{t:'CRT phosphor warm',c:''},{nl:1},
+ {t:'guest@retro:~$ ',c:'p'},{t:'echo "HELLO WORLD"',c:''},{nl:1},
+ {t:'HELLO WORLD',c:''},{nl:2},
+ {t:'guest@retro:~$ ',c:'p'},{t:'_',c:'',cur:1},{nl:1}
+];
+let li=0,ci=0,buf='',raf,delay=0;
+function render(){term.innerHTML=buf+'<span id="cur"></span>';}
+function tick(){
+  if(reduce){ // show full immediately, just blink cursor
+    buf=lines.map(l=>l.nl?'<br>'.repeat(l.nl):(l.c?'<span class="'+l.c+'">'+l.t+'</span>':l.t)).join('');
+    render();return;
+  }
+  if(li<lines.length){
+    const l=lines[li];
+    if(l.nl){buf+='<br>'.repeat(l.nl);li++;ci=0;render();delay=4;}
+    else{
+      if(ci===0&&l.c)buf+='<span class="'+l.c+'">';
+      buf+=l.t[ci];if(l.c&&ci===l.t.length-1)buf+='</span>';
+      ci++;render();
+      if(ci>=l.t.length){li++;ci=0;delay=l.cur?0:3;}
+    }
+  }else{ // pause then restart
+    delay--;if(delay<-80){li=0;ci=0;buf='';}
+  }
+  if(delay>0){delay--;raf=requestAnimationFrame(tick);return;}
+  setTimeout(()=>{raf=requestAnimationFrame(tick);}, li>=lines.length?20:32+Math.random()*40);
+}
+function play(){cancelAnimationFrame(raf);tick();}
+document.addEventListener('visibilitychange',()=>document.hidden?cancelAnimationFrame(raf):play());
+play();
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A teal neon floor-and-ceiling grid tunnel rushing toward a glowing vanishing-point core with horizon haze and vignette on near-black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vanishing Point Grid</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#070b14;}
+  #vpg{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#2dd4bf;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="vpg"></canvas>
+<div class="cap">Vanishing Point Grid</div>
+<script>
+(function(){
+  const cv=document.getElementById('vpg'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,unit;
+  // size-dependent gradients are rebuilt only on resize, never per frame.
+  let hazeGrad,coreGrad,vignGrad,coreR;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;unit=Math.min(W,H)/9;   // grid cell size at the near edge
+
+    hazeGrad=ctx.createLinearGradient(0,cy-unit,0,cy+unit);
+    hazeGrad.addColorStop(0,'rgba(7,11,20,0)');
+    hazeGrad.addColorStop(.5,'rgba(7,11,20,0.85)');
+    hazeGrad.addColorStop(1,'rgba(7,11,20,0)');
+
+    coreR=unit*1.7;
+    coreGrad=ctx.createRadialGradient(cx,cy,0,cx,cy,coreR);
+    coreGrad.addColorStop(0,'rgba(125,255,239,0.9)');
+    coreGrad.addColorStop(.25,'rgba(45,212,191,0.55)');
+    coreGrad.addColorStop(1,'rgba(45,212,191,0)');
+
+    vignGrad=ctx.createRadialGradient(cx,cy,Math.min(W,H)*0.3,cx,cy,Math.max(W,H)*0.7);
+    vignGrad.addColorStop(0,'rgba(7,11,20,0)');
+    vignGrad.addColorStop(1,'rgba(7,11,20,0.7)');
+  }
+  addEventListener('resize',size);size();
+
+  // Perspective projection: a point on the ground plane at (gx, depth) maps to screen.
+  // depth>0 recedes toward the horizon (vanishing point at cx,cy). 'side' = +1 floor, -1 ceiling.
+  const FOV=0.9;                       // controls horizon sharpness
+  function proj(gx,depth,side){
+    const p=FOV/(depth+FOV);           // perspective foreshortening 1->0
+    return {x:cx+gx*p, y:cy+side*(H*0.5)*p, p:p};
+  }
+
+  let z=0, speed=0.022, boost=0;
+  cv.addEventListener('pointermove',e=>{ boost=1; });
+  cv.addEventListener('click',()=>{ boost=2; });
+
+  function gridSide(side){
+    const COLS=14, ROWS=26, span=W*1.15;
+    // longitudinal lines (rails running to the vanishing point)
+    for(let i=-COLS;i<=COLS;i++){
+      const gx=(i/COLS)*span;
+      const a=proj(gx,0.02,side), b=proj(gx,1,side);
+      const fade=0.04+Math.abs(i)/COLS*0.0;
+      ctx.strokeStyle='rgba(45,212,191,'+(0.30-Math.abs(i)/COLS*0.16)+')';
+      ctx.lineWidth=Math.max(.5,(1.6-Math.abs(i)/COLS)*1.1);
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    }
+    // transverse lines (the floor scrolling toward you)
+    for(let r=0;r<ROWS;r++){
+      let depth=((r+ (z%1))/ROWS);            // 0..1, animated scroll
+      depth=depth*depth;                        // bunch lines near horizon
+      const near=proj(-span,depth,side), far=proj(span,depth,side);
+      const glow=Math.pow(1-depth,1.4);
+      ctx.strokeStyle='rgba(45,212,191,'+(0.05+glow*0.42)+')';
+      ctx.lineWidth=Math.max(.4,glow*2.2);
+      ctx.beginPath();ctx.moveTo(near.x,near.y);ctx.lineTo(far.x,far.y);ctx.stroke();
+    }
+  }
+
+  function frame(){
+    if(!reduce){ boost*=0.93; z+=speed*(1+boost*2.2); }
+    // trail fade -> motion blur down the tunnel
+    ctx.fillStyle='rgba(7,11,20,0.34)';ctx.fillRect(0,0,W,H);
+
+    gridSide(1);   // floor
+    gridSide(-1);  // ceiling
+
+    // horizon haze band (gradient cached in size())
+    ctx.fillStyle=hazeGrad;ctx.fillRect(0,cy-unit,W,unit*2);
+
+    // vanishing-point core glow (gradient cached in size())
+    ctx.fillStyle=coreGrad;ctx.beginPath();ctx.arc(cx,cy,coreR,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#cffff6';ctx.beginPath();ctx.arc(cx,cy,Math.max(1.2,unit*0.05),0,Math.PI*2);ctx.fill();
+
+    // edge vignette to seat the tunnel (gradient cached in size())
+    ctx.fillStyle=vignGrad;ctx.fillRect(0,0,W,H);
+
+    if(!reduce) raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ ctx.fillStyle='#070b14';ctx.fillRect(0,0,W,H);frame(); }else start();
+})();
+</script>
+</body>
+</html>

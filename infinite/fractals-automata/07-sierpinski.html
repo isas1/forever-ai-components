@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A Sierpinski triangle accreting from thousands of chaos-game points, glowing violet on near-black with three anchor pips.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sierpinski</title>
+<style>
+  html,body{margin:0;height:100%;background:#06070b}
+  #fr07-stage{position:fixed;inset:0;background:#06070b;overflow:hidden}
+  #fr07-c{position:absolute;inset:0;width:100%;height:100%;display:block;
+    /* static glow, never repainted */
+    box-shadow:inset 0 0 120px 8px rgba(13,16,28,.9)}
+  /* three anchor pips, pure CSS, static */
+  .fr07-pip{position:absolute;width:7px;height:7px;margin:-3.5px;border-radius:50%;
+    background:#c8beff;box-shadow:0 0 10px 2px rgba(155,140,255,.55);opacity:.9}
+  #fr07-p0{left:50%;top:8%}
+  #fr07-p1{left:8%;top:92%}
+  #fr07-p2{left:92%;top:92%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fr07-stage" role="img" aria-label="A Sierpinski triangle forming from thousands of accreting points in the chaos game, glowing violet on near-black.">
+  <canvas id="fr07-c"></canvas>
+  <span class="fr07-pip" id="fr07-p0"></span>
+  <span class="fr07-pip" id="fr07-p1"></span>
+  <span class="fr07-pip" id="fr07-p2"></span>
+  <div class="cap">Sierpinski</div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("fr07-stage");
+  var c=document.getElementById("fr07-c");
+  var ctx=c.getContext("2d",{alpha:false});
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  var W=0,H=0,dpr=1;
+  var ax=[0,0,0],ay=[0,0,0];     // triangle vertices in device px
+  var px=0,py=0;                  // chaos-game cursor
+  var img=null,buf=null;         // ImageData + Uint32 view
+  var raf=0,running=false;
+
+  // movement palette: violet -> indigo accents over near-black
+  // gradient ramp by recency, written straight into Uint32 (ABGR, little-endian)
+  function abgr(r,g,b,a){return (a<<24)|(b<<16)|(g<<8)|r;}
+  var COLD=abgr(120,104,210,255), WARM=abgr(208,196,255,255), HOT=abgr(236,232,255,255);
+
+  function resize(){
+    var r=stage.getBoundingClientRect();
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(2,(r.width*dpr)|0); H=Math.max(2,(r.height*dpr)|0);
+    c.width=W; c.height=H;
+    // vertices match the CSS pip positions: apex 50%/8%, base 8%/92% & 92%/92%
+    ax[0]=W*0.50; ay[0]=H*0.08;
+    ax[1]=W*0.08; ay[1]=H*0.92;
+    ax[2]=W*0.92; ay[2]=H*0.92;
+    px=W*0.5; py=H*0.5;
+    img=ctx.createImageData(W,H);
+    buf=new Uint32Array(img.data.buffer);
+    // paint background once into the buffer
+    var bg=abgr(6,7,11,255);
+    for(var i=0,n=buf.length;i<n;i++) buf[i]=bg;
+    ctx.putImageData(img,0,0);
+  }
+
+  // plot one point (and a faint cross so it reads at small sizes)
+  function plot(x,y,col){
+    var ix=x|0, iy=y|0;
+    if(ix<0||iy<0||ix>=W||iy>=H) return;
+    buf[iy*W+ix]=col;
+  }
+
+  // STEP_RATE capped: fixed points per frame, allocation-free loop
+  var PER_FRAME=260, MAXPTS=26000, count=0, t=0;
+
+  function step(){
+    var added=PER_FRAME;
+    if(count+added>MAXPTS) added=MAXPTS-count;
+    for(var k=0;k<added;k++){
+      var v=(Math.random()*3)|0;
+      px=(px+ax[v])*0.5;
+      py=(py+ay[v])*0.5;
+      // recent points hottest -> creates an advancing accretion shimmer
+      var col = (k>added-40)?HOT : ((v===0)?WARM:COLD);
+      plot(px,py,col);
+    }
+    count+=added;
+    ctx.putImageData(img,0,0);
+  }
+
+  function frame(){
+    if(!running) return;
+    t++;
+    step();
+    if(count>=MAXPTS){ running=false; return; } // settle when filled
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(running||count>=MAXPTS) return; running=true; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden) stop();
+    else if(!reduce && count<MAXPTS) start();
+  });
+
+  window.addEventListener("resize",function(){
+    stop(); resize(); count=0;
+    if(reduce) drawStatic(); else start();
+  });
+
+  // reduced-motion: deterministic dense single frame, no loop
+  function drawStatic(){
+    px=W*0.5; py=H*0.5; count=0;
+    var seed=20240601;
+    function rnd(){ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; }
+    for(var k=0;k<MAXPTS;k++){
+      var v=(rnd()*3)|0;
+      px=(px+ax[v])*0.5; py=(py+ay[v])*0.5;
+      plot(px,py,(v===0)?WARM:COLD);
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  resize();
+  if(reduce){ drawStatic(); }
+  else { start(); }
+})();
+</script>
+</body>
+</html>

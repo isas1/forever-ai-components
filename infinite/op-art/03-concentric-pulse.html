@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric black-and-white rings expand outward from the center implying infinite depth with subtle moire shimmer.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Concentric Pulse</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
+  #op03-stage{position:fixed;inset:0;display:block;background:#0a0a0a}
+  #op03-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static radial vignette + faint core glow — never repaints */
+  #op03-stage::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(255,255,255,.10) 0%, rgba(255,255,255,0) 22%),
+      radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,.62) 100%);
+  }
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="op03-stage" role="img" aria-label="Op art animation: concentric black-and-white rings expanding outward to imply infinite depth, with a subtle moire shimmer.">
+    <canvas id="op03-c"></canvas>
+  </div>
+  <div class="cap">Concentric Pulse</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var stage = document.getElementById("op03-stage");
+  var cvs = document.getElementById("op03-c");
+  var ctx = cvs.getContext("2d");
+
+  var W=0,H=0,cx=0,cy=0,maxR=0,dpr=1;
+  // ring field constants
+  var RINGS = 26;          // capped element count, well under 110
+  var GAP = 1;             // recomputed on resize (px between ring centers)
+  var TWO_PI = Math.PI*2;
+
+  function resize(){
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    var w = stage.clientWidth || window.innerWidth;
+    var h = stage.clientHeight || window.innerHeight;
+    W = Math.max(1, w); H = Math.max(1, h);
+    cvs.width = Math.round(W*dpr);
+    cvs.height = Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    cx = W*0.5; cy = H*0.5;
+    maxR = Math.hypot(W,H)*0.5 + 4;
+    GAP = maxR / RINGS;
+  }
+
+  // Draw the full ring field for a given phase (0..1 continuous).
+  // Rings march outward; line weight breathes with radius to make the
+  // illusory depth read as a pulse. A second, slightly scaled field
+  // creates the moire interference.
+  function drawField(phase){
+    ctx.clearRect(0,0,W,H);
+    // base black already from bg; paint white rings
+    ctx.lineCap = "round";
+    var i, r, t, w, a;
+    // primary field
+    for(i=0;i<RINGS;i++){
+      // fractional offset makes rings appear to emanate from center
+      t = (i + phase) ; // marching value
+      r = (t % RINGS) * GAP;
+      if(r < 0.5 || r > maxR) continue;
+      // normalized radius 0..1 for weight + opacity shaping
+      a = r / maxR;
+      // breathing stroke: thin at core, fuller mid, fading at rim
+      w = (0.6 + 2.4*Math.sin(a*Math.PI)) ;
+      // opacity: fade newest (center) in, oldest (rim) out -> infinite feel
+      var op = Math.sin(a*Math.PI);
+      ctx.strokeStyle = "rgba(255,255,255," + (0.10 + 0.82*op).toFixed(3) + ")";
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.arc(cx,cy,r,0,TWO_PI);
+      ctx.stroke();
+    }
+    // moire field: same rings scaled ~1.06 and counter-marching slowly.
+    // The near-but-not-equal spacing produces slow interference fringes.
+    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.lineWidth = 1;
+    var GAP2 = GAP*1.058;
+    var ph2 = phase*0.62;
+    for(i=0;i<RINGS;i++){
+      t = (i - ph2);
+      r = (((t % RINGS)+RINGS) % RINGS) * GAP2;
+      if(r < 0.5 || r > maxR) continue;
+      ctx.beginPath();
+      ctx.arc(cx,cy,r,0,TWO_PI);
+      ctx.stroke();
+    }
+  }
+
+  function drawOneFrame(){
+    // a composed, legible still: mid-march phase
+    resize();
+    drawField(0.0);
+  }
+
+  if(reduce){
+    drawOneFrame();
+    return;
+  }
+
+  var running = true, rafId = 0, start = 0;
+  // slow, smooth: one full ring-emergence cycle ~ 6.2s. Seizure-safe.
+  var PERIOD = 6200;
+
+  function loop(now){
+    if(!running) return;
+    if(!start) start = now;
+    var elapsed = (now - start) % PERIOD;
+    var phase = elapsed / PERIOD; // 0..1 marches exactly one ring outward
+    drawField(phase);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function startLoop(){
+    if(rafId) return;
+    running = true; start = 0;
+    rafId = requestAnimationFrame(loop);
+  }
+  function stopLoop(){
+    running = false;
+    if(rafId){ cancelAnimationFrame(rafId); rafId = 0; }
+  }
+
+  window.addEventListener("resize", resize, {passive:true});
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden){ stopLoop(); }
+    else { startLoop(); }
+  });
+
+  resize();
+  startLoop();
+})();
+</script>
+</body>
+</html>

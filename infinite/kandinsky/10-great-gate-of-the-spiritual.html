@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Great Gate of the Spiritual — Wassily Kandinsky. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Great Gate of the Spiritual</title>
+<style>
+  html,body{margin:0;height:100%;background:#17151a;overflow:hidden}
+  #kan10-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kan10-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kan10-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f4efe2;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kan10-stage" role="img" aria-label="A closing chord: concentric coloured arcs breathe outward from a single point while radiating yellow bell-rays beat, a stacked circle, triangle and square pulsing at the gate.">
+  <canvas id="kan10-cv"></canvas>
+</div>
+<div class="kan10-cap">The Great Gate of the Spiritual</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={paper:'#f4efe2',blue:'#1438a8',yellow:'#f7c80b',red:'#d8321b',green:'#1f7a4d',violet:'#5a2d82'};
+  const cv=document.getElementById('kan10-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const cols=[PAL.blue,PAL.yellow,PAL.red,PAL.violet,PAL.green];
+  let t=0,last=performance.now();
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h, cx=W*0.5, cy=H*0.62, R=Math.min(W,H)*0.62;
+    ctx.fillStyle='rgba(23,21,26,0.28)';ctx.fillRect(0,0,W,H);
+    const rays=36;
+    for(let i=0;i<rays;i++){
+      const a=(i/rays)*Math.PI*2;
+      const beat=0.6+0.4*Math.sin(t*2 + i*0.4);
+      const len=R*0.5*beat;
+      ctx.strokeStyle=i%3? 'rgba(244,239,226,.18)':PAL.yellow;
+      ctx.globalAlpha=i%3?0.5:0.35;
+      ctx.lineWidth=i%6===0?2.5:1;
+      ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*22,cy+Math.sin(a)*22);
+      ctx.lineTo(cx+Math.cos(a)*(22+len),cy+Math.sin(a)*(22+len));ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    const N=7;
+    for(let i=0;i<N;i++){
+      const phase=t*1.2 - i*0.5;
+      const breath=(Math.sin(phase)*0.5+0.5);
+      const r=18 + i*(R/N)*0.9 + breath*16;
+      ctx.strokeStyle=cols[i%cols.length];
+      ctx.lineWidth=3+(i%2?0:2);
+      ctx.globalAlpha=0.55+0.4*breath;
+      ctx.beginPath();
+      const s=-Math.PI*0.95 + Math.sin(t*0.5+i)*0.2;
+      const e= Math.PI*0.95 + Math.sin(t*0.4+i)*0.2;
+      ctx.arc(cx,cy,r, s, e);
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    ctx.fillStyle=PAL.blue;ctx.beginPath();ctx.arc(cx,cy,15+3*Math.sin(t*3),0,7);ctx.fill();
+    ctx.fillStyle=PAL.yellow;ctx.beginPath();
+    const ts=10+2*Math.sin(t*3+1);ctx.moveTo(cx,cy-ts-8);ctx.lineTo(cx+ts,cy-8+ts*.4);ctx.lineTo(cx-ts,cy-8+ts*.4);ctx.closePath();ctx.fill();
+    ctx.strokeStyle=PAL.paper;ctx.lineWidth=2;ctx.beginPath();ctx.arc(cx,cy,15+3*Math.sin(t*3),0,7);ctx.stroke();
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

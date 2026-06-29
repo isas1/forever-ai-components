@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cream segmented control where an orange pill liquid-stretches between Daily, Weekly and Monthly tabs with cross-dissolving labels.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Segmented Pill Slide</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#FFFBF0;}
+  #sps-c{display:block;width:100%;height:100%;cursor:pointer;}
+  .sps-cap{position:fixed;left:10px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#F97316;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="sps-c"></canvas>
+<div class="sps-cap">Segmented Pill Slide</div>
+<script>
+(function(){
+  const cv=document.getElementById('sps-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const labels=["Daily","Weekly","Monthly"];
+  const BG="#FFFBF0",ACC="#F97316",INK="#9A8B70";
+  let W,H,DPR,scale,track;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    scale=Math.min(W,H)/360;
+    const tw=Math.min(W*0.82,H*1.55), th=Math.min(H*0.30,tw*0.30);
+    track={w:tw,h:th,x:(W-tw)/2,y:(H-th)/2,r:th/2,seg:tw/3};
+  }
+  addEventListener('resize',size);size();
+
+  // easeOutBack
+  function easeOutBack(t){const c=2.2,s=c+1;t-=1;return 1+s*t*t*t+c*t*t;}
+  function rr(x,y,w,h,r){r=Math.min(r,h/2,w/2);ctx.beginPath();
+    ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+  let from=0,to=1,phase=0,hold=0,raf=0,t=0;
+  const HOLD=58; // frames paused on a segment
+  function advance(){from=to;to=(to+1)%3;phase=0;}
+  cv.addEventListener('click',()=>{if(reduce)return;if(phase>=1){hold=HOLD;}else{phase=1.0001;}});
+
+  function lerp(a,b,k){return a+(b-a)*k;}
+
+  function draw(p){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    const {w,h,x,y,r,seg}=track;
+
+    // subtle track recess
+    ctx.save();
+    rr(x,y,w,h,r);ctx.fillStyle="#F4ECD9";ctx.fill();
+    rr(x+1.5,y+1.5,w-3,h-3,r);ctx.fillStyle="#FBF4E3";ctx.fill();
+    ctx.restore();
+
+    // divider hairlines (fade where pill sits)
+    for(let i=1;i<3;i++){
+      ctx.beginPath();ctx.moveTo(x+seg*i,y+h*0.26);ctx.lineTo(x+seg*i,y+h*0.74);
+      ctx.strokeStyle="rgba(154,139,112,.22)";ctx.lineWidth=1;ctx.stroke();
+    }
+
+    // pill geometry: stretch toward travel direction
+    const ease=easeOutBack(Math.max(0,Math.min(1,p)));
+    const fx=x+seg*from, tx=x+seg*to;
+    const cxNow=lerp(fx,tx,ease);                 // left edge of (unstretched) cell
+    const vel=Math.abs(ease-p)*6 + (p>0&&p<1?1:0);// motion magnitude
+    const dir=tx>fx?1:-1;
+    // liquid stretch: width grows mid-travel, leading edge reaches ahead
+    const stretch=Math.sin(Math.min(1,p)*Math.PI)*seg*0.34;
+    const pad=seg*0.085;
+    let pw=seg-pad*2+stretch;
+    let px=cxNow+pad;
+    if(dir>0)px-=stretch*0.18; else px-=stretch*0.82;
+    const py=y+pad, ph=h-pad*2;
+    // squash vertically a touch while moving (liquid volume)
+    const squash=Math.sin(Math.min(1,p)*Math.PI)*ph*0.07;
+    const pyy=py+squash/2, phh=ph-squash;
+
+    // pill soft shadow (gradient halo instead of per-frame shadowBlur)
+    const shB=14*scale, shOy=3*scale;
+    const shx=px-shB, shy=pyy-shB+shOy, shw=pw+shB*2, shh=phh+shB*2;
+    const sgrad=ctx.createLinearGradient(0,shy,0,shy+shh);
+    sgrad.addColorStop(0,"rgba(249,115,22,0)");
+    sgrad.addColorStop(0.5,"rgba(249,115,22,.30)");
+    sgrad.addColorStop(1,"rgba(249,115,22,0)");
+    ctx.fillStyle=sgrad;
+    rr(shx,shy,shw,shh,(phh+shB*2)/2);ctx.fill();
+    // pill body
+    rr(px,pyy,pw,phh,phh/2);
+    const g=ctx.createLinearGradient(px,pyy,px,pyy+phh);
+    g.addColorStop(0,"#FB8B3C");g.addColorStop(1,ACC);
+    ctx.fillStyle=g;ctx.fill();
+    // gloss
+    rr(px+pw*0.06,pyy+phh*0.12,pw*0.88,phh*0.34,phh*0.2);
+    ctx.fillStyle="rgba(255,255,255,.20)";ctx.fill();
+
+    // labels with cross-dissolve based on pill overlap
+    const fs=Math.max(11,h*0.34);
+    ctx.font="700 "+fs+"px ui-monospace,'SFMono-Regular',monospace";
+    ctx.textAlign="center";ctx.textBaseline="middle";
+    const pillMid=px+pw/2, pillHalf=pw/2;
+    for(let i=0;i<3;i++){
+      const lx=x+seg*i+seg/2, ly=y+h/2;
+      // coverage: how much pill center sits over this segment
+      const d=Math.abs(lx-pillMid);
+      const cover=Math.max(0,Math.min(1,1-(d-pillHalf*0.35)/(seg*0.6)));
+      ctx.fillStyle=blend(INK,"#FFFFFF",cover);
+      ctx.fillText(labels[i],lx,ly+fs*0.04);
+    }
+  }
+  function hx(c){return [parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];}
+  function blend(a,b,k){const A=hx(a),B=hx(b);
+    return "rgb("+Math.round(lerp(A[0],B[0],k))+","+Math.round(lerp(A[1],B[1],k))+","+Math.round(lerp(A[2],B[2],k))+")";}
+
+  function frame(){
+    if(phase<1){phase+=0.024;}
+    else{hold++;if(hold>HOLD){hold=0;advance();}}
+    draw(phase);
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){from=0;to=0;draw(1);}else{start();}
+})();
+</script>
+</body>
+</html>

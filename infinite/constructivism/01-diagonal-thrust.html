@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Red and black arrow-tipped slabs sweep along an aggressive diagonal axis across black with a red disc and propaganda type bar.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diagonal Thrust</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0c0d;overflow:hidden}
+  #cv01-stage{position:fixed;inset:0;background:#0c0c0d}
+  #cv01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="cv01-stage" role="img" aria-label="Constructivist composition: red and black slabs thrusting on aggressive diagonals against black">
+  <canvas id="cv01-c"></canvas>
+</div>
+<div class="cap">Diagonal Thrust</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('cv01-stage');
+  var cv = document.getElementById('cv01-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,S=0,dpr=1;
+  // Constructivist palette around #d11f1f / #0c0c0d
+  var RED='#d11f1f', RED2='#a3151a', BLACK='#0c0c0d', INK='#141416', PAPER='#ece6da', CREAM='#d8cfbc';
+  var ANG = -28*Math.PI/180;        // shared aggressive diagonal axis
+  var COS=Math.cos(ANG), SIN=Math.sin(ANG);
+
+  // Slabs travel along the diagonal axis. Each: along-offset, perp-offset, length, thick, color, speed, phase.
+  var SLAB=[
+    [-1.30,-0.34,1.55,0.150,RED ,1.00,0.00],
+    [-1.55,-0.10,1.95,0.235,BLACK,0.74,0.18],
+    [-1.10, 0.12,1.30,0.120,RED2,1.34,0.42],
+    [-1.45, 0.30,1.70,0.190,INK ,0.90,0.62],
+    [-1.20,-0.50,1.05,0.085,PAPER,1.62,0.30],
+    [-1.60, 0.50,1.45,0.165,RED ,0.82,0.85]
+  ];
+  var N=SLAB.length;
+
+  function resize(){
+    S = Math.max(1, Math.min(stage.clientWidth, stage.clientHeight));
+    W = stage.clientWidth; H = stage.clientHeight;
+    dpr = Math.min(2, window.devicePixelRatio||1);
+    cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  var cx,cy,U;
+  function slab(a,p,len,th,col){
+    // rectangle along axis: from a to a+len, half-thickness th
+    var hw=th*0.5;
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(ANG);
+    ctx.fillStyle=col;
+    ctx.fillRect(a*U, (p-hw)*U, len*U, th*U);
+    ctx.restore();
+  }
+
+  function tip(a,p,len,th,col){
+    // arrow wedge at the leading tip to read as "thrust"
+    var hw=th*0.5;
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(ANG);
+    var e=(a+len)*U, t=(p)*U, w=hw*U*1.9, d=th*U*1.15;
+    ctx.beginPath();
+    ctx.moveTo(e, t-w);
+    ctx.lineTo(e+d, t);
+    ctx.lineTo(e, t+w);
+    ctx.closePath();
+    ctx.fillStyle=col;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function frame(tsec){
+    cx=W*0.5; cy=H*0.5; U=S;
+    ctx.fillStyle=BLACK;
+    ctx.fillRect(0,0,W,H);
+
+    // static perpendicular tension bar (cream) — never moves, anchors the diagonal
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(ANG+Math.PI/2);
+    ctx.fillStyle=CREAM;
+    ctx.globalAlpha=0.92;
+    ctx.fillRect(-0.012*U, -0.62*U, 0.024*U, 1.24*U);
+    ctx.globalAlpha=1;
+    ctx.restore();
+
+    // thrusting slabs: travel along axis, wrap, leading tips
+    for(var i=0;i<N;i++){
+      var s=SLAB[i];
+      var t=((tsec*s[5]+s[6])% 2.6)/2.6;     // 0..1 cyclic
+      var a = s[0] + t*(2.85);                // sweep across the field
+      var p = s[1];
+      var len=s[2], th=s[3], col=s[4];
+      slab(a,p,len,th,col);
+      // accent tip only on red slabs
+      if(col===RED||col===RED2) tip(a,p,len,th,col);
+    }
+
+    // circle disc (Suprematist) anchored on the axis, static
+    ctx.beginPath();
+    ctx.fillStyle=RED2;
+    ctx.arc(cx + (-0.66)*S*COS, cy + (-0.66)*S*SIN, 0.072*S, 0, 6.2832);
+    ctx.fill();
+
+    // type slab: bold black band with a cream stripe lower-right, propaganda energy
+    ctx.save();
+    ctx.fillStyle=INK;
+    ctx.fillRect(W*0.0, H*0.86, W*0.62, H*0.14);
+    ctx.fillStyle=RED;
+    ctx.fillRect(W*0.0, H*0.86, W*0.62, H*0.018);
+    ctx.restore();
+  }
+
+  // single rAF loop, allocation-free; elapsed accumulates across pauses (no time jump)
+  var running=false, raf=0, last=0, elapsed=0;
+  function loop(now){
+    if(!running) return;
+    elapsed += (now - last)/1000;
+    last = now;
+    frame(elapsed);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){
+    if(running) return;
+    running=true; last=performance.now();
+    raf=requestAnimationFrame(loop);
+  }
+  function stop(){
+    running=false;
+    if(raf){ cancelAnimationFrame(raf); raf=0; }
+  }
+
+  function init(){
+    resize();
+    if(reduce){ frame(0.42); return; }   // one calm, legible, on-brand frame
+    start();
+  }
+
+  window.addEventListener('resize', function(){
+    resize();
+    if(reduce) frame(0.42);
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if(reduce) return;
+    if(document.hidden) stop();
+    else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

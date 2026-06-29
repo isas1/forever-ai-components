@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Blue-noise Poisson-disk points bloom outward connected by a gold Gabriel graph, each vertex flashing as it settles on dark olive.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Poisson Disk Bloom</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#14110a;}
+  #pdb-c{display:block;width:100%;height:100%;}
+  .pdb-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.16em;color:#c9b458;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="pdb-c"></canvas>
+<div class="pdb-cap">Poisson Disk Bloom</div>
+<script>
+(function(){
+  const cv=document.getElementById('pdb-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ACC=[201,180,88];
+  // cap total points so the per-frame edge+vertex draw stays bounded on big tiles
+  const CAP=1100;
+  let W,H,DPR,cx,cy,R,cell,gw,gh,grid,pts,active,seed,t,raf=0;
+
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;
+    R=Math.max(15,Math.min(W,H)/13);    // min spacing radius — blue noise
+    reset();
+  }
+  function reset(){
+    cell=R/Math.SQRT2;
+    gw=Math.ceil(W/cell)+1;gh=Math.ceil(H/cell)+1;
+    grid=new Int32Array(gw*gh).fill(-1);
+    pts=[];active=[];t=0;
+    seed=addPt(cx,cy,0);active.push(seed);
+  }
+  function gi(x,y){return ((y/cell)|0)*gw+((x/cell)|0);}
+  function addPt(x,y,gen){
+    const p={x,y,gen,born:t,nb:[]};pts.push(p);grid[gi(x,y)]=pts.length-1;return p;
+  }
+  function ok(x,y){
+    if(x<0||y<0||x>=W||y>=H)return false;
+    const gx=(x/cell)|0,gy=(y/cell)|0;
+    for(let yy=Math.max(0,gy-2);yy<=Math.min(gh-1,gy+2);yy++)
+      for(let xx=Math.max(0,gx-2);xx<=Math.min(gw-1,gx+2);xx++){
+        const idx=grid[yy*gw+xx];
+        if(idx>=0){const q=pts[idx],dx=q.x-x,dy=q.y-y;if(dx*dx+dy*dy<R*R)return false;}
+      }
+    return true;
+  }
+  // Gabriel edge: keep if no third point lies in the circle on segment p-q as diameter
+  function gabriel(p,q){
+    const mx=(p.x+q.x)/2,my=(p.y+q.y)/2,r2=((p.x-q.x)**2+(p.y-q.y)**2)/4;
+    const gx=(mx/cell)|0,gy=(my/cell)|0;
+    for(let yy=Math.max(0,gy-2);yy<=Math.min(gh-1,gy+2);yy++)
+      for(let xx=Math.max(0,gx-2);xx<=Math.min(gw-1,gx+2);xx++){
+        const idx=grid[yy*gw+xx];if(idx<0)continue;
+        const o=pts[idx];if(o===p||o===q)continue;
+        if((o.x-mx)**2+(o.y-my)**2<r2-0.5)return false;
+      }
+    return true;
+  }
+  function grow(n){
+    const K=14;
+    for(let s=0;s<n&&active.length;s++){
+      const ai=(Math.random()*active.length)|0,p=active[ai];
+      let placed=false;
+      for(let k=0;k<K;k++){
+        const ang=Math.random()*Math.PI*2,rad=R*(1+Math.random());
+        const x=p.x+Math.cos(ang)*rad,y=p.y+Math.sin(ang)*rad;
+        if(ok(x,y)){
+          const q=addPt(x,y,p.gen+1);active.push(q);
+          // connect q to nearby points via Gabriel test
+          const gx=(x/cell)|0,gy=(y/cell)|0;
+          for(let yy=Math.max(0,gy-2);yy<=Math.min(gh-1,gy+2);yy++)
+            for(let xx=Math.max(0,gx-2);xx<=Math.min(gw-1,gx+2);xx++){
+              const idx=grid[yy*gw+xx];if(idx<0)continue;
+              const o=pts[idx];if(o===q)continue;
+              const d2=(o.x-x)**2+(o.y-y)**2;
+              if(d2<(2.05*R)**2&&gabriel(q,o)){q.nb.push(o);o.nb.push(q);}
+            }
+          placed=true;break;
+        }
+      }
+      if(!placed){active[ai]=active[active.length-1];active.pop();}
+    }
+  }
+
+  function frame(){
+    t++;
+    if(!reduce&&pts.length<CAP)grow(active.length>40?5:2);
+    ctx.fillStyle='rgba(20,17,10,0.13)';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    // edges — Gabriel graph
+    for(let i=0;i<pts.length;i++){
+      const p=pts[i];const ap=Math.min(1,(t-p.born)/26);
+      for(const q of p.nb){
+        if(q.born>p.born)continue;
+        const aq=Math.min(1,(t-q.born)/26),a=Math.min(ap,aq);
+        if(a<=0)continue;
+        ctx.strokeStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+(0.16*a)+')';
+        ctx.lineWidth=0.7;
+        ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
+      }
+    }
+    // vertices — ease up in scale as they settle
+    for(let i=0;i<pts.length;i++){
+      const p=pts[i],age=t-p.born,e=Math.min(1,age/30);
+      const s=e*(2-e);                         // ease-out
+      const pulse=age<46?(1-age/46)*1.6:0;     // bloom flash on arrival
+      const r=1.1+s*1.9+pulse;
+      const heat=Math.max(0,1-age/90);
+      ctx.fillStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+(0.45+0.55*s)+')';
+      ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();
+      if(heat>0){
+        ctx.fillStyle='rgba(255,240,200,'+(0.5*heat)+')';
+        ctx.beginPath();ctx.arc(p.x,p.y,r*0.5,0,Math.PI*2);ctx.fill();
+      }
+    }
+    ctx.globalCompositeOperation='source-over';
+    if(!reduce&&pts.length>=CAP&&active.length===0){
+      // gently re-seed a new bloom when settled
+      if(t%140===0){reset();}
+    }
+    raf=requestAnimationFrame(frame);
+  }
+
+  function staticFrame(){
+    grow.length;for(let i=0;i<700&&active.length;i++)grow(active.length);
+    t=400;
+    ctx.fillStyle='#14110a';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    for(const p of pts)for(const q of p.nb){if(q.born>p.born)continue;
+      ctx.strokeStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+',0.16)';ctx.lineWidth=0.7;
+      ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();}
+    for(const p of pts){const d=Math.hypot(p.x-cx,p.y-cy),e=1-Math.min(1,d/(Math.min(W,H)*0.55));
+      ctx.fillStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+(0.5+0.5*e)+')';
+      ctx.beginPath();ctx.arc(p.x,p.y,1.4+2*e,0,Math.PI*2);ctx.fill();}
+    ctx.globalCompositeOperation='source-over';
+  }
+
+  cv.addEventListener('pointermove',e=>{
+    if(reduce)return;const r=cv.getBoundingClientRect();
+    const x=e.clientX-r.left,y=e.clientY-r.top;
+    if(active.length<160&&ok(x,y)){const p=addPt(x,y,0);active.push(p);}
+  });
+  cv.addEventListener('click',e=>{if(reduce)return;
+    const r=cv.getBoundingClientRect();cx=e.clientX-r.left;cy=e.clientY-r.top;reset();});
+
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  addEventListener('resize',()=>{size();if(reduce)staticFrame();});
+  size();
+  if(reduce)staticFrame();else start();
+})();
+</script>
+</body>
+</html>

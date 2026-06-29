@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Extruded chrome 3D lettering reading CHROME rotates via horizontal squash with a diagonal sheen above a neon perspective grid and sun.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chrome Type</title>
+<style>
+  html,body{margin:0;height:100%;background:#160a2a;overflow:hidden}
+  #vw02-stage{position:fixed;inset:0;display:grid;place-items:center}
+  #vw02-c{width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="vw02-stage" role="img" aria-label="Chrome 3D lettering reading CHROME rotating slowly above a neon perspective grid with a fixed mirror sheen.">
+  <canvas id="vw02-c"></canvas>
+</div>
+<div class="cap">Chrome Type</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('vw02-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,DPR=1,CX=0,CY=0,S=0;
+
+  function resize(){
+    var r = cv.getBoundingClientRect();
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = Math.max(1,(r.width|0)); H = Math.max(1,(r.height|0));
+    cv.width = (W*DPR)|0; cv.height = (H*DPR)|0;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    CX = W/2; CY = H/2;
+    S = Math.min(W,H);
+  }
+
+  var TEXT = "CHROME";
+  function letterFont(){ return Math.round(S*0.205); }
+
+  // Gradient + buffer caches. All of these depend only on geometry (W/H/S/fs),
+  // so they are rebuilt ONLY on resize — never per frame.
+  var skyG, faceG, sheenG;          // cached gradients
+  var bg, bgctx;                    // offscreen static background (sky+sun+grid)
+  var FS=0;                         // cached font size for the chrome face
+
+  function buildGrads(){
+    FS = letterFont();
+
+    // sky ramp (full-height vertical)
+    skyG = ctx.createLinearGradient(0,0,0,H);
+    skyG.addColorStop(0,'#160a2a');
+    skyG.addColorStop(0.52,'#2a0f3e');
+    skyG.addColorStop(0.62,'#6d1f6a');
+    skyG.addColorStop(0.74,'#d6356f');
+    skyG.addColorStop(0.86,'#ff7a3c');
+    skyG.addColorStop(1,'#160a2a');
+
+    // chrome face: vertical metal ramp (local to the letter, depends on FS only)
+    faceG = ctx.createLinearGradient(0,-FS*0.55,0,FS*0.55);
+    faceG.addColorStop(0,'#bfeaff');
+    faceG.addColorStop(0.34,'#3aa6c9');
+    faceG.addColorStop(0.46,'#0d2740');
+    faceG.addColorStop(0.5,'#091a2c');
+    faceG.addColorStop(0.56,'#e85aa6');
+    faceG.addColorStop(0.62,'#ffd0e8');
+    faceG.addColorStop(0.78,'#ff9d52');
+    faceG.addColorStop(1,'#ffe7b0');
+
+    // static specular sheen band — fixed diagonal highlight (depends on FS only)
+    sheenG = ctx.createLinearGradient(-FS*1.4,-FS*0.5, FS*1.4, FS*0.5);
+    sheenG.addColorStop(0.40,'rgba(255,255,255,0)');
+    sheenG.addColorStop(0.50,'rgba(255,255,255,0.85)');
+    sheenG.addColorStop(0.60,'rgba(255,255,255,0)');
+  }
+
+  // Render the static layers (sky fill + sun + perspective grid) once into an
+  // offscreen buffer. Nothing here changes between frames, so the rAF loop just
+  // blits this buffer instead of re-filling/re-stroking it every frame.
+  function buildBackground(){
+    if(!bg){ bg = document.createElement('canvas'); bgctx = bg.getContext('2d'); }
+    bg.width = (W*DPR)|0; bg.height = (H*DPR)|0;
+    var b = bgctx;
+    b.setTransform(DPR,0,0,DPR,0,0);
+    b.clearRect(0,0,W,H);
+
+    // sky
+    b.fillStyle = skyG;
+    b.fillRect(0,0,W,H);
+
+    var hz = CY + S*0.06;
+
+    // sun (clipped to above-horizon band)
+    var r = S*0.20;
+    b.save();
+    b.beginPath(); b.rect(0,0,W,hz); b.clip();
+    var sun = b.createLinearGradient(0,hz-r,0,hz+r*0.2);
+    sun.addColorStop(0,'#ffd36e'); sun.addColorStop(0.5,'#ff7a3c'); sun.addColorStop(1,'#d6356f');
+    b.fillStyle=sun;
+    b.beginPath(); b.arc(CX,hz,r,Math.PI,0,false); b.lineTo(CX+r,hz); b.lineTo(CX-r,hz); b.fill();
+    b.restore();
+
+    // perspective grid (clipped to below horizon)
+    b.save();
+    b.beginPath(); b.rect(0,hz,W,H-hz); b.clip();
+    b.lineWidth = Math.max(1,S*0.004);
+    b.strokeStyle = 'rgba(34,211,238,0.55)';
+    var n=11;
+    for(var i=0;i<=n;i++){
+      var fx = (i/n)*2-1;
+      b.beginPath();
+      b.moveTo(CX, hz);
+      b.lineTo(CX + fx*W*1.4, H);
+      b.stroke();
+    }
+    b.strokeStyle = 'rgba(214,53,111,0.5)';
+    for(var j=1;j<=9;j++){
+      var t=j/9; var p=t*t;
+      var y = hz + p*(H-hz);
+      b.beginPath(); b.moveTo(0,y); b.lineTo(W,y); b.stroke();
+    }
+    b.restore();
+  }
+
+  function rebuild(){ resize(); buildGrads(); buildBackground(); }
+  rebuild();
+  window.addEventListener('resize', rebuild);
+
+  // chrome letters: cached face gradient + cached static sheen band.
+  function drawChrome(scaleX){
+    var fs = FS;
+    ctx.font = '800 '+fs+'px Arial Black, Impact, system-ui, sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    var ty = CY - S*0.10;
+
+    ctx.save();
+    ctx.translate(CX,ty);
+    ctx.scale(scaleX,1); // rotation illusion via horizontal squash
+
+    // extrusion / depth (cyan-magenta side)
+    var depth = Math.max(2, S*0.018);
+    for(var d=depth; d>=1; d--){
+      var k = d/depth;
+      ctx.fillStyle = 'rgba('+(20+60*k)+','+(20+40*k)+','+(60+80*k)+',1)';
+      ctx.fillText(TEXT, d*0.5, d*0.8);
+    }
+
+    // chrome face: cached vertical metal ramp
+    ctx.fillStyle = faceG;
+    ctx.fillText(TEXT,0,0);
+
+    // static specular sheen band — cached gradient, fixed diagonal highlight
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle=sheenG;
+    ctx.fillText(TEXT,0,0);
+    ctx.restore();
+
+    // crisp rim
+    ctx.lineWidth=Math.max(1,S*0.003);
+    ctx.strokeStyle='rgba(190,234,255,0.7)';
+    ctx.strokeText(TEXT,0,0);
+
+    ctx.restore();
+  }
+
+  function scene(scaleX){
+    // blit cached static background, then draw only the moving chrome
+    ctx.drawImage(bg,0,0,W,H);
+    drawChrome(scaleX);
+  }
+
+  var running=false, raf=0, t0=0;
+  function frame(now){
+    if(!running) return;
+    if(!t0) t0=now;
+    var e=(now-t0)/1000;
+    // rotation illusion: scaleX oscillates; clamp so glyphs never invert to a sliver
+    var sx = 0.42 + 0.58*(0.5+0.5*Math.cos(e*0.9));
+    scene(sx);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(running||reduce) return; running=true; t0=0; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) stop(); else start();
+  });
+
+  if(reduce){ scene(1); return; }
+  start();
+})();
+</script>
+</body>
+</html>

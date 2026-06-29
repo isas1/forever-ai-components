@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Blocky gradient field that randomly smears and chroma-splits into magenta/cyan datamosh tiles, click to burst.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Datamosh blocks</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d0d12}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;
+    color:#ff4fa0;opacity:.42;letter-spacing:.5px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div class="cap">DATAMOSH</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+let W,H,t=0,raf,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+let cols,rows,cell;
+function size(){
+  W=c.width=Math.floor(innerWidth*.6);H=c.height=Math.floor(innerHeight*.6);
+  cell=Math.max(14,Math.min(W,H)/14);cols=Math.ceil(W/cell);rows=Math.ceil(H/cell);
+}
+addEventListener('resize',size);size();
+// base "image": a smooth gradient blocky field we then smear
+function baseColor(q,r){
+  const u=q/cols,v=r/rows;
+  const R=Math.floor(120+120*Math.sin(u*3+t*0.3));
+  const G=Math.floor(60+90*Math.sin(v*4+t*0.4+1));
+  const B=Math.floor(160+90*Math.sin((u+v)*2-t*0.2));
+  return [R,G,B];
+}
+// motion vectors per block, occasionally reseeded (the "mosh")
+let vec=[];
+function reseed(){vec=[];for(let i=0;i<cols*rows;i++)vec.push({dx:0,dy:0,life:0});}
+reseed();addEventListener('resize',reseed);
+function draw(){
+  x.fillStyle='#0d0d12';x.fillRect(0,0,W,H);
+  for(let r=0;r<rows;r++)for(let q=0;q<cols;q++){
+    const idx=r*cols+q,m=vec[idx];
+    if(!reduce&&m.life<=0&&Math.random()<0.02){
+      m.dx=(Math.random()*2-1)*cell*2.2;m.dy=(Math.random()*2-1)*cell*1.2;m.life=8+Math.random()*30;
+    }
+    if(m.life>0)m.life--;else{m.dx*=0.85;m.dy*=0.85;}
+    const sq=q+Math.round(m.dx/cell),sr=r+Math.round(m.dy/cell);
+    const col=baseColor((sq+cols)%cols,(sr+rows)%rows);
+    const smear=m.life>0?1:0;
+    x.fillStyle='rgb('+col[0]+','+col[1]+','+col[2]+')';
+    x.fillRect(q*cell,r*cell,cell+smear,cell+smear);
+    if(m.life>0){ // chroma split on moshing blocks
+      x.globalAlpha=.5;x.fillStyle='rgba(255,40,160,1)';
+      x.fillRect(q*cell+3,r*cell,cell,cell);
+      x.fillStyle='rgba(40,220,255,1)';x.fillRect(q*cell-3,r*cell,cell,cell);
+      x.globalAlpha=1;
+    }
+  }
+  t+=reduce?0:0.04;
+  raf=requestAnimationFrame(draw);
+}
+function play(){cancelAnimationFrame(raf);draw();}
+document.addEventListener('visibilitychange',()=>document.hidden?cancelAnimationFrame(raf):play());
+addEventListener('pointerdown',()=>{for(const m of vec){m.dx=(Math.random()*2-1)*cell*3;m.dy=(Math.random()*2-1)*cell*2;m.life=20+Math.random()*20;}});
+play();
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A vertical battery breathes from amber to lime-mint as a wobbling liquid level rises past segment ticks with bubbles and a pulsing bolt.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Battery Charge Fill</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#06140C;}
+  #bcf-c{display:block;width:100%;height:100%;}
+  .bcf-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#22C55E;opacity:.35;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="bcf-c"></canvas>
+<div class="bcf-cap">Battery Charge Fill</div>
+<script>
+(function(){
+  const cv=document.getElementById('bcf-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG='#06140C';
+  let W,H,DPR,cx,cy,u; // u = unit scale
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;u=Math.min(W,H)/100;
+  }
+  addEventListener('resize',size);size();
+
+  const TICKS=6;
+  let t=0,charge=0,phase=0,nudge=0; // charge 0..1, phase tracks breathing
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.12,1);});
+  cv.addEventListener('click',()=>{nudge=1;});
+
+  // smooth roundrect path
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+
+  function lerp(a,b,k){return a+(b-a)*k;}
+  function mix(c1,c2,k){return [lerp(c1[0],c2[0],k),lerp(c1[1],c2[1],k),lerp(c1[2],c2[2],k)];}
+  const AMBER=[245,158,11],LIME=[34,197,94],MINT=[110,231,183];
+
+  function draw(){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    // ambient breathing charge: ease in to full, hold, drain
+    if(!reduce){phase+=0.0042+nudge*0.004;nudge*=0.95;}
+    const cyc=(Math.sin(phase)*0.5+0.5); // 0..1
+    charge=reduce?0.62:Math.pow(cyc,0.85);
+    t+=reduce?0:1;
+
+    const bw=58*u,bh=92*u,bx=cx-bw/2,by=cy-bh/2,rad=11*u;
+    // warm color near full
+    const warm=Math.max(0,(charge-0.55)/0.45);
+    const col=warm<1?mix(AMBER,LIME,Math.min(charge/0.7,1)):mix(LIME,MINT,(charge-0.78)/0.22);
+    const rgb=`${col[0]|0},${col[1]|0},${col[2]|0}`;
+
+    // outer glow
+    const glow=ctx.createRadialGradient(cx,cy,bw*0.2,cx,cy,bh*0.95);
+    glow.addColorStop(0,`rgba(${rgb},${0.13+charge*0.14})`);
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow;ctx.fillRect(0,0,W,H);
+
+    // terminal nub
+    const nw=22*u,nh=9*u;
+    rr(cx-nw/2,by-nh+1.5*u,nw,nh,4*u);
+    ctx.fillStyle=`rgba(${rgb},0.85)`;ctx.fill();
+
+    // shell
+    ctx.save();
+    rr(bx,by,bw,bh,rad);ctx.clip();
+
+    // liquid fill with wobble
+    const innerTop=by+5*u,innerBot=by+bh-5*u,innerH=innerBot-innerTop;
+    const level=innerBot-innerH*charge;
+    const amp=(1.6+charge*1.4+nudge*3)*u*(reduce?0:1);
+    const k=0.05/u, sp=t*0.05;
+    ctx.beginPath();
+    ctx.moveTo(bx-2,innerBot+4*u);
+    let first=true;
+    for(let x=bx-2;x<=bx+bw+2;x+=3){
+      const w1=Math.sin(x*k+sp)*amp;
+      const w2=Math.sin(x*k*2.3-sp*1.7)*amp*0.45;
+      const y=level+w1+w2;
+      if(first){ctx.lineTo(x,y);first=false;}else ctx.lineTo(x,y);
+    }
+    ctx.lineTo(bx+bw+2,innerBot+4*u);ctx.closePath();
+    const lg=ctx.createLinearGradient(0,level-10*u,0,innerBot);
+    lg.addColorStop(0,`rgba(${rgb},0.95)`);
+    lg.addColorStop(1,`rgba(${col[0]*0.45|0},${col[1]*0.5|0},${col[2]*0.5|0},0.95)`);
+    ctx.fillStyle=lg;ctx.fill();
+
+    // surface tension highlight line
+    ctx.beginPath();first=true;
+    for(let x=bx-2;x<=bx+bw+2;x+=3){
+      const y=level+Math.sin(x*k+sp)*amp+Math.sin(x*k*2.3-sp*1.7)*amp*0.45;
+      if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle=`rgba(255,255,255,${0.18+charge*0.12})`;
+    ctx.lineWidth=1.4*u;ctx.stroke();
+
+    // rising bubbles
+    if(!reduce){
+      for(let i=0;i<5;i++){
+        const seed=i*97.3;
+        const bp=((t*0.6+seed*7)%(innerH+20*u));
+        const by2=innerBot-bp;
+        if(by2>level+2*u){
+          const bxp=bx+8*u+((Math.sin(seed)*0.5+0.5)*(bw-16*u));
+          const br=(0.7+Math.sin(seed*3)*0.4+0.6)*u;
+          ctx.fillStyle=`rgba(255,255,255,0.16)`;
+          ctx.beginPath();ctx.arc(bxp,by2,br,0,Math.PI*2);ctx.fill();
+        }
+      }
+    }
+    ctx.restore();
+
+    // segment ticks lighting in sequence
+    const tickAreaT=by+9*u,tickAreaB=by+bh-9*u,th=(tickAreaB-tickAreaT)/TICKS;
+    for(let i=0;i<TICKS;i++){
+      const segFill=(charge*TICKS)-(TICKS-1-i); // bottom-up
+      const lit=Math.max(0,Math.min(1,segFill));
+      const ty=tickAreaT+i*th+th*0.5;
+      ctx.strokeStyle=`rgba(${rgb},${0.1+lit*0.55})`;
+      ctx.lineWidth=(0.8+lit*0.7)*u;
+      ctx.beginPath();ctx.moveTo(bx+12*u,ty);ctx.lineTo(bx+bw-12*u,ty);ctx.stroke();
+    }
+
+    // shell stroke (drawn over)
+    rr(bx,by,bw,bh,rad);
+    ctx.strokeStyle=`rgba(${rgb},${0.5+charge*0.3})`;
+    ctx.lineWidth=2.6*u;ctx.stroke();
+    // inner faint inset
+    rr(bx+2.6*u,by+2.6*u,bw-5.2*u,bh-5.2*u,rad-2.6*u);
+    ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=1*u;ctx.stroke();
+
+    // lightning bolt, pulsing
+    const pulse=reduce?0.8:(0.55+0.45*Math.sin(t*0.12));
+    const sc=u*0.62, lx=cx, ly=cy;
+    const pts=[[0,-22],[-9,4],[-1,4],[-6,22],[10,-3],[2,-3],[7,-22]];
+    // soft pulsing glow behind the bolt (radial gradient instead of per-frame shadowBlur)
+    const boltR=24*u;
+    const bg=ctx.createRadialGradient(lx,ly,2*u,lx,ly,boltR);
+    bg.addColorStop(0,`rgba(255,255,255,${0.32*pulse})`);
+    bg.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=bg;ctx.beginPath();ctx.arc(lx,ly,boltR,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();
+    pts.forEach((p,i)=>{const X=lx+p[0]*sc,Y=ly+p[1]*sc;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);});
+    ctx.closePath();
+    ctx.fillStyle=`rgba(255,255,255,${0.55+0.4*pulse})`;
+    ctx.fill();
+
+    if(!reduce)raf=requestAnimationFrame(draw);
+  }
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(draw);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){draw();}else start();
+})();
+</script>
+</body>
+</html>

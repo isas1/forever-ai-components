@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="De Stijl Marquee — Piet Mondrian. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>De Stijl Marquee</title>
+<style>
+  html,body{margin:0;height:100%;background:#f7f4ec;overflow:hidden}
+  #mon08-root{position:fixed;inset:0;width:100%;height:100%;overflow:hidden}
+  .mon08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#15110d;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:10}
+</style>
+</head>
+<body>
+<div id="mon08-root" role="img" aria-label="A typographic frieze of De Stijl manifesto words in pure primary blocks, two tracks scrolling in opposite directions across the wall.">
+</div>
+<div class="mon08-cap">De Stijl Marquee</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const root=document.getElementById('mon08-root'); if(!root) return;
+  const C={white:'#f7f4ec',black:'#15110d',red:'#d6191e',blue:'#1d3bd1',yellow:'#f6c700'};
+  const PRIMARIES=[C.red,C.blue,C.yellow];
+  const choice=a=>a[(Math.random()*a.length)|0];
+  const WORDS=['STRAIGHT','LINE','RED','BLUE','YELLOW','BLACK','NO·CURVE','NO·GREEN','BALANCE','RHYTHM','GRID','PRIMARY','DE·STIJL','NEO·PLASTIC','EQUILIBRIUM','PURE'];
+
+  const lane=document.createElement('div');
+  Object.assign(lane.style,{position:'absolute',inset:'0',background:C.white,overflow:'hidden'});
+  root.appendChild(lane);
+  function tileWord(w){
+    const t=document.createElement('div'),isPrim=Math.random()<.55;
+    const bg=isPrim?choice(PRIMARIES):(Math.random()<.5?C.black:C.white);
+    const fg=(bg===C.white)?C.black:(bg===C.yellow?C.black:C.white);
+    Object.assign(t.style,{background:bg,color:fg,fontFamily:'"Archivo Black",system-ui,sans-serif',
+      fontWeight:'800',fontSize:'clamp(16px,5vw,34px)',display:'flex',alignItems:'center',
+      padding:'0 18px',borderRight:'7px solid '+C.black,letterSpacing:'.02em'});
+    t.textContent=w;return t;
+  }
+  function makeTrack(top,height){
+    const track=document.createElement('div');
+    Object.assign(track.style,{position:'absolute',left:'0',top:top,height:height,display:'flex',alignItems:'stretch',whiteSpace:'nowrap'});
+    let pool=[];for(let i=0;i<2;i++)WORDS.forEach(w=>pool.push(w));
+    pool.forEach(w=>track.appendChild(tileWord(w)));
+    lane.appendChild(track);return track;
+  }
+  const t1=makeTrack('7px','calc(50% - 7px)'),t2=makeTrack('50%','calc(50% - 7px)');
+  function bar(top){const d=document.createElement('div');
+    Object.assign(d.style,{position:'absolute',left:0,right:0,top:top,height:'7px',background:C.black,zIndex:5});lane.appendChild(d);}
+  bar('0');bar('calc(50% - 3.5px)');
+  const frame=document.createElement('div');
+  Object.assign(frame.style,{position:'absolute',inset:0,border:'9px solid '+C.black,boxSizing:'border-box',pointerEvents:'none',zIndex:6});
+  lane.appendChild(frame);
+  function duplicate(track){[...track.children].forEach(k=>track.appendChild(k.cloneNode(true)));}
+  duplicate(t1);duplicate(t2);
+
+  let x1=0,x2=0,w1=0,w2=0,last=performance.now();
+  function measure(){w1=t1.scrollWidth/2;w2=t2.scrollWidth/2;}
+  function draw(now){
+    const dt=now-last;last=now;const sp=REDUCED?0.01:0.05;
+    x1-=sp*dt;x2+=sp*dt;
+    if(w1&&x1<=-w1)x1+=w1;
+    if(w2&&x2>=0)x2-=w2;
+    t1.style.transform='translateX('+x1+'px)';
+    t2.style.transform='translateX('+x2+'px)';
+  }
+
+  let raf=0,running=false;
+  function loop(){if(!running)return;draw(performance.now());raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;last=performance.now();raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  requestAnimationFrame(()=>{
+    measure();x2=0;
+    window.addEventListener('resize',()=>{measure();},{passive:true});
+    document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else start();});
+    if(REDUCED){draw(performance.now());}else start();
+  });
+})();
+</script>
+</body>
+</html>

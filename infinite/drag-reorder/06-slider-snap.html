@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A cyan-gradient slider whose round thumb flicks with momentum and snaps to nine detents along a tick-marked track.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Snap Slider</title>
+<style>
+  :root{--bg:#0c0e13;--ac:#22d3ee;--mut:#3a6df0}
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+  #dr06-stage{position:fixed;inset:0;display:grid;place-items:center}
+  #dr06-slider{position:relative;outline:none}
+  #dr06-track{position:absolute;left:0;top:50%;width:100%;height:6px;transform:translateY(-50%);
+    border-radius:6px;background:rgba(255,255,255,.10)}
+  #dr06-fill{position:absolute;left:0;top:0;height:100%;width:100%;border-radius:6px;
+    transform-origin:left center;will-change:transform;
+    background:linear-gradient(90deg,var(--mut),var(--ac))}
+  .dr06-det{position:absolute;top:50%;width:2px;height:14px;transform:translate(-50%,-50%);
+    border-radius:2px;background:rgba(255,255,255,.22)}
+  #dr06-thumb{position:absolute;top:50%;left:0;width:34px;height:34px;border-radius:50%;
+    will-change:transform;background:#0c0e13;display:grid;place-items:center;
+    box-shadow:0 8px 22px rgba(0,0,0,.55),inset 0 0 0 2px var(--ac),0 0 0 7px rgba(34,211,238,.10)}
+  #dr06-thumb::after{content:"";width:9px;height:9px;border-radius:50%;background:var(--ac)}
+  #dr06-thumb.lift{box-shadow:0 16px 38px rgba(0,0,0,.6),inset 0 0 0 2px #fff,0 0 0 9px rgba(34,211,238,.16)}
+  #dr06-slider.foc #dr06-thumb{outline:2px solid #fff;outline-offset:4px}
+  #dr06-val{position:absolute;left:0;top:0;color:#fff;font:700 13px/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.06em;will-change:transform,opacity;opacity:.9;white-space:nowrap}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="dr06-stage">
+  <div id="dr06-slider" tabindex="0" role="slider" aria-valuemin="0" aria-valuemax="8"
+       aria-valuenow="0" aria-label="Snap slider. Drag the handle or use arrow keys; it snaps to detents.">
+    <div id="dr06-track"></div>
+    <div id="dr06-fill"></div>
+    <div id="dr06-val">0</div>
+    <div id="dr06-thumb"></div>
+  </div>
+</div>
+<div class="cap">Snap Slider</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var slider=document.getElementById("dr06-slider"),
+      thumb=document.getElementById("dr06-thumb"),
+      fill=document.getElementById("dr06-fill"),
+      val=document.getElementById("dr06-val"),
+      track=document.getElementById("dr06-track");
+
+  var STEPS=8;                  // 9 detents, 0..8
+  var W=0,PAD=0,R=17;           // usable width, edge pad, thumb radius
+  var dets=[];                  // detent elements (built once)
+  for(var d=0;d<=STEPS;d++){var e=document.createElement("div");e.className="dr06-det";track.appendChild(e);dets.push(e);}
+
+  // physics state (px along usable span)
+  var pos=0, vel=0, target=0;   // target = snap position
+  var idx=0;                    // current detent index
+  function snapX(i){return (i/STEPS)*W;}
+
+  function layout(){
+    var pw=slider.parentElement.clientWidth, ph=slider.parentElement.clientHeight;
+    var sw=Math.min(pw,ph*1.6)*0.78; sw=Math.max(150,Math.min(sw,560));
+    PAD=R+4; W=sw-PAD*2;
+    slider.style.width=sw+"px"; slider.style.height="64px";
+    track.style.left=PAD+"px"; track.style.width=W+"px";
+    fill.style.left=PAD+"px";
+    for(var i=0;i<=STEPS;i++)dets[i].style.left=(PAD+snapX(i))+"px";
+    target=snapX(idx); pos=target; vel=0;
+    paint();
+  }
+
+  function paint(){
+    var x=PAD+pos;
+    thumb.style.transform="translate3d("+(x-R)+"px,-50%,0)";
+    var f=W>0?(pos/W):0; if(f<0)f=0; if(f>1)f=1;
+    fill.style.transform="scaleX("+f+")";
+    val.style.transform="translate3d("+(x-7)+"px,7px,0)";
+  }
+
+  function setVal(i){idx=i;slider.setAttribute("aria-valuenow",i);val.textContent=i;}
+
+  // ---- spring loop: critically-ish damped with a touch of overshoot ----
+  var running=true,raf=0,K=0.22,DMP=0.66;
+  function frame(){
+    if(!running)return;
+    if(!drag){
+      var a=(target-pos)*K;
+      vel=(vel+a)*DMP;
+      pos+=vel;
+      if(Math.abs(target-pos)<0.15 && Math.abs(vel)<0.15){pos=target;vel=0;}
+    }
+    paint();
+    raf=requestAnimationFrame(frame);
+  }
+
+  function nearestIdx(x){var i=Math.round((x/W)*STEPS);return i<0?0:i>STEPS?STEPS:i;}
+
+  // ---- pointer drag with momentum flick + snap ----
+  var drag=null;
+  function ptDown(e){
+    e.preventDefault();userActive();
+    drag={ox:e.clientX,base:pos,vt:0,lx:e.clientX};
+    vel=0;thumb.classList.add("lift");
+    slider.setPointerCapture&&slider.setPointerCapture(e.pointerId);
+    slider.classList.add("foc");
+  }
+  function ptMove(e){
+    if(!drag)return;userActive();
+    var nx=drag.base+(e.clientX-drag.ox);
+    if(nx<0)nx=nx*0.35; if(nx>W)nx=W+(nx-W)*0.35;  // rubber-band at ends
+    drag.vt=e.clientX-drag.lx; drag.lx=e.clientX;
+    pos=nx; paint();
+    var li=nearestIdx(pos<0?0:pos>W?W:pos);
+    if(li!==idx)setVal(li);
+  }
+  function ptUp(){
+    if(!drag)return;
+    var proj=pos+drag.vt*4;            // momentum projection
+    var i=nearestIdx(proj<0?0:proj>W?W:proj);
+    vel=drag.vt*0.4;                   // carry flick velocity into spring
+    setVal(i);target=snapX(i);
+    thumb.classList.remove("lift");drag=null;
+  }
+
+  // ---- keyboard ----
+  function key(e){
+    var k=e.key,step=0;
+    if(k==="ArrowRight"||k==="ArrowUp")step=1;
+    else if(k==="ArrowLeft"||k==="ArrowDown")step=-1;
+    else if(k==="Home")step=-STEPS;
+    else if(k==="End")step=STEPS;
+    else return;
+    e.preventDefault();userActive();
+    var ni=idx+step; if(ni<0)ni=0; if(ni>STEPS)ni=STEPS;
+    setVal(ni);target=snapX(ni);
+  }
+
+  // ---- self-demo: flick the thumb between detents on a gentle timer ----
+  var demoOn=true,idleTO=0,demoTO=0,dir=1;
+  function userActive(){
+    demoOn=false;clearTimeout(idleTO);clearTimeout(demoTO);
+    idleTO=setTimeout(function(){demoOn=true;demoStep();},3800);
+  }
+  function demoStep(){
+    if(!demoOn||reduce||document.hidden||drag)return;
+    var ni=idx+dir*(1+((Math.random()*2)|0));
+    if(ni>=STEPS){ni=STEPS;dir=-1;} else if(ni<=0){ni=0;dir=1;}
+    else if(Math.random()<0.28)dir=-dir;
+    setVal(ni);target=snapX(ni);
+    vel+=(target>pos?1:-1)*(1.2+Math.random()*1.6);   // simulated flick energy
+    demoTO=setTimeout(demoStep,1400+Math.random()*700);
+  }
+
+  // ---- lifecycle ----
+  function startLoop(){running=true;if(!raf)raf=requestAnimationFrame(frame);}
+  function stopLoop(){running=false;if(raf){cancelAnimationFrame(raf);raf=0;}}
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){stopLoop();clearTimeout(demoTO);}
+    else{startLoop();if(demoOn)demoTO=setTimeout(demoStep,600);}
+  });
+  var rTO=0;addEventListener("resize",function(){clearTimeout(rTO);rTO=setTimeout(layout,120);});
+
+  slider.addEventListener("pointerdown",ptDown);
+  addEventListener("pointermove",ptMove);
+  addEventListener("pointerup",ptUp);addEventListener("pointercancel",ptUp);
+  slider.addEventListener("keydown",key);
+  slider.addEventListener("focus",function(){slider.classList.add("foc");userActive();});
+  slider.addEventListener("blur",function(){slider.classList.remove("foc");});
+
+  layout();
+  if(reduce){setVal(3);target=snapX(3);pos=target;paint();return;}  // static legible frame
+  startLoop();
+  demoTO=setTimeout(demoStep,1000);
+})();
+</script>
+</body>
+</html>

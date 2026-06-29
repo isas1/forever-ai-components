@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Green-phosphor CRT terminal with rolling scanlines, vignette, oscilloscope wave, blinking boot-text rows and random glitch flashes.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CRT scanline screen</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#06120a}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
+  .vignette{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 78% 78% at 50% 50%,transparent 55%,rgba(0,0,0,.7) 100%);
+    border-radius:14% / 9%;box-shadow:inset 0 0 60px rgba(0,0,0,.8)}
+  .scan{position:fixed;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.28) 3px,rgba(0,0,0,0) 4px);
+    animation:roll 6s linear infinite}
+  @keyframes roll{from{background-position:0 0}to{background-position:0 100px}}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,Menlo,monospace;
+    color:#54f08a;opacity:.34;letter-spacing:.5px;pointer-events:none}
+  @media(prefers-reduced-motion:reduce){.scan{animation:none}}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div class="scan"></div><div class="vignette"></div>
+<div class="cap">CRT SCANLINE</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+let W,H,t=0,raf,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){const r=window.devicePixelRatio||1;W=c.width=Math.floor(innerWidth*.5);H=c.height=Math.floor(innerHeight*.5);}
+addEventListener('resize',size);size();
+const cols='> SYS BOOT OK|MEM 64K READY|LOAD KERNEL..|SIGNAL LOCKED|> RUN DEMO_'.split('|');
+function draw(){
+  x.fillStyle='#06140b';x.fillRect(0,0,W,H);
+  // glowing oscilloscope wave
+  x.lineWidth=2;x.strokeStyle='#3ef08a';x.beginPath();
+  for(let i=0;i<=W;i+=2){
+    const y=H*0.62+Math.sin(i*0.05+t*2)*H*0.11+Math.sin(i*0.013+t)*H*0.05;
+    i?x.lineTo(i,y):x.moveTo(i,y);
+  }
+  x.stroke();
+  x.strokeStyle='rgba(62,240,138,.25)';x.lineWidth=6;x.stroke();
+  // green text rows
+  x.font='bold '+Math.round(H*0.055)+'px ui-monospace,monospace';x.textBaseline='top';
+  for(let r=0;r<cols.length;r++){
+    const yy=H*0.07+r*H*0.085;
+    x.fillStyle='rgba(80,240,138,'+(0.45+0.4*Math.sin(t*1.5+r))+')';
+    let s=cols[r];
+    if(r===cols.length-1&&Math.floor(t*2)%2)s+='█';
+    x.fillText(s,W*0.07,yy);
+  }
+  // random glitch flash
+  if(!reduce&&Math.random()<0.03){
+    x.fillStyle='rgba(180,255,200,.18)';
+    const gy=Math.random()*H;x.fillRect(0,gy,W,2+Math.random()*8);
+  }
+  t+=reduce?0:0.025;
+  raf=requestAnimationFrame(draw);
+}
+function play(){cancelAnimationFrame(raf);draw();}
+function stop(){cancelAnimationFrame(raf);}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+play();
+</script>
+</body>
+</html>

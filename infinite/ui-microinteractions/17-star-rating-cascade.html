@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Five gold stars fill left-to-right in a staggered cascade with squash-pop scaling and sparkle flicks, then drain and repeat.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Star Rating Cascade</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#241A07;}
+  #src-c{display:block;width:100%;height:100%;cursor:pointer;}
+  .src-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.12em;color:#FBBF24;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="src-c"></canvas>
+<div class="src-cap">Star Rating Cascade</div>
+<script>
+(function(){
+  const cv=document.getElementById('src-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const GOLD='#FBBF24',EMPTY='#5C4A22',BG='#241A07';
+  let W,H,DPR,gap,R;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    const span=Math.min(W*0.86,H*1.7);
+    gap=span/5; R=gap*0.40;
+  }
+  addEventListener('resize',size);size();
+
+  // build a 5-point star path centered at 0,0, radius 1
+  function starPath(p,r,sx,sy,rot){
+    p.beginPath();
+    for(let i=0;i<10;i++){
+      const rad=(i%2?0.42:1)*r;
+      const a=-Math.PI/2+rot+i*Math.PI/5;
+      const x=Math.cos(a)*rad*sx, y=Math.sin(a)*rad*sy;
+      i?p.lineTo(x,y):p.moveTo(x,y);
+    }
+    p.closePath();
+  }
+  const eo=t=>1-Math.pow(1-t,3);            // ease-out cubic
+  const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+
+  // each star: phase timeline. fillT 0..1 drives squash->pop->fill
+  const stars=[{} ,{},{},{},{}].map(()=>({f:0,prev:0,sparkle:0}));
+  let t=0,STAGGER=12,FILL=26,HOLD=130,dir=1,phase=0,nudge=0;
+  // phase: 0 filling, 1 holding full, 2 draining, 3 holding empty
+  let phaseT=0;
+
+  function draw(){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    const cy=H/2, x0=W/2-gap*2;
+    for(let i=0;i<5;i++){
+      const s=stars[i], cx=x0+i*gap;
+      const f=s.f;                       // 0..1 fill amount this star
+      // anticipatory squash then stretch-pop derived from fill velocity
+      const v=f-s.prev; s.prev=f;
+      let sx=1,sy=1;
+      if(f>0&&f<1){
+        // mid-fill: squash low then stretch tall
+        const k=f;
+        sx=1-0.18*Math.sin(k*Math.PI)+0.10*Math.sin(k*Math.PI*2);
+        sy=1+0.26*Math.sin(k*Math.PI)-0.06*Math.sin(k*Math.PI*2);
+      }
+      const popped=clamp(f,0,1);
+      const scale=R*(0.82+0.18*popped+Math.abs(v)*2.2);
+
+      ctx.save();ctx.translate(cx,cy);ctx.scale(scale,scale);
+      starPath(ctx,1,sx,sy,0);
+      ctx.lineWidth=Math.max(1.6,R*0.085)/scale;
+      ctx.lineJoin='round';
+      ctx.strokeStyle=EMPTY;ctx.stroke();
+
+      // gold fill, clipped to a left-to-right wipe matching fill amount
+      if(f>0){
+        ctx.save();
+        ctx.clip();
+        const wipe=eo(clamp(f*1.12,0,1));
+        const gx=(-1.25+2.5*wipe);
+        const grd=ctx.createLinearGradient(-1.25,0,1.25,0);
+        grd.addColorStop(clamp(gx-0.10,0,1),GOLD);
+        grd.addColorStop(clamp(gx,0,1),GOLD);
+        grd.addColorStop(clamp(gx+0.001,0,1),'rgba(251,191,36,0)');
+        ctx.fillStyle=grd;
+        ctx.fillRect(-1.4,-1.4,2.8,2.8);
+        // warm core glow when nearly full
+        if(f>0.7){
+          ctx.globalAlpha=(f-0.7)/0.3*0.5;
+          const g2=ctx.createRadialGradient(0,0,0,0,0,1);
+          g2.addColorStop(0,'#FFE9A8');g2.addColorStop(1,'rgba(255,233,168,0)');
+          ctx.fillStyle=g2;ctx.fillRect(-1.4,-1.4,2.8,2.8);
+          ctx.globalAlpha=1;
+        }
+        ctx.restore();
+        // re-stroke gold rim over filled region
+        ctx.globalAlpha=clamp(f,0,1);
+        ctx.strokeStyle=GOLD;ctx.lineWidth=Math.max(1.6,R*0.085)/scale;
+        ctx.stroke();ctx.globalAlpha=1;
+      }
+      ctx.restore();
+
+      // sparkle flick off the top point as the star completes
+      if(s.sparkle>0){
+        const sp=s.sparkle;                 // 1->0
+        const topY=cy-scale*1.02;
+        const len=R*(0.55+0.8*(1-sp))*sp;
+        ctx.save();
+        ctx.translate(cx,topY);
+        ctx.globalAlpha=sp;
+        ctx.strokeStyle='#FFF4D2';ctx.lineWidth=Math.max(1.2,R*0.05);
+        ctx.lineCap='round';
+        for(let a=0;a<4;a++){
+          const ang=-Math.PI/2 + (a-1.5)*0.5;
+          ctx.beginPath();ctx.moveTo(0,0);
+          ctx.lineTo(Math.cos(ang)*len,Math.sin(ang)*len-R*0.2);
+          ctx.stroke();
+        }
+        ctx.fillStyle='#FFF4D2';
+        ctx.beginPath();ctx.arc(0,-R*0.1,R*0.10*sp+1,0,Math.PI*2);ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+
+  function step(){
+    t++;
+    phaseT++;
+    const eff=STAGGER, total=eff*4+FILL+8;
+    if(phase===0){ // filling
+      for(let i=0;i<5;i++){
+        const local=(phaseT-i*eff)/FILL;
+        const nf=clamp(local,0,1);
+        if(stars[i].f<1 && nf>=1) stars[i].sparkle=1; // just completed
+        stars[i].f=nf;
+      }
+      if(phaseT>=total){phase=1;phaseT=0;}
+    } else if(phase===1){ // hold full
+      if(phaseT>=HOLD){phase=2;phaseT=0;}
+    } else if(phase===2){ // drain reverse
+      for(let i=0;i<5;i++){
+        const ri=4-i;
+        const local=(phaseT-i*eff)/FILL;
+        stars[ri].f=clamp(1-local,0,1);
+      }
+      if(phaseT>=eff*4+FILL+8){phase=3;phaseT=0;}
+    } else { // hold empty
+      if(phaseT>=Math.floor(HOLD*0.45)){phase=0;phaseT=0;}
+    }
+    // sparkle decay
+    for(let i=0;i<5;i++) if(stars[i].sparkle>0) stars[i].sparkle=Math.max(0,stars[i].sparkle-0.045);
+    draw();
+    raf=requestAnimationFrame(step);
+  }
+
+  cv.addEventListener('pointerdown',()=>{ // nudge: restart cascade from empty
+    phase=0;phaseT=0;for(let i=0;i<5;i++){stars[i].f=0;stars[i].sparkle=0;}
+  });
+
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(step);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){for(let i=0;i<5;i++)stars[i].f=1;draw();}else start();
+})();
+</script>
+</body>
+</html>

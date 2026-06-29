@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="A flickering cyan hologram bar with magenta-cyan chromatic edges, scanlines and a mirror reflection rises over a neon grid and stars.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hologram Flux</title>
+<style>
+  html,body{margin:0;height:100%;background:#160a2a;overflow:hidden}
+  #vw08-stage{position:fixed;inset:0;background:
+    radial-gradient(120% 90% at 50% 18%, #2a1150 0%, #160a2a 60%, #0c0518 100%);
+    display:block}
+  #vw08-c{position:absolute;inset:0;width:100%;height:100%}
+  /* static glow plate — never repaints in the loop */
+  #vw08-glow{position:absolute;left:50%;top:46%;width:46%;height:54%;
+    transform:translate(-50%,-50%);
+    background:radial-gradient(50% 50% at 50% 50%,
+      rgba(34,211,238,.34) 0%, rgba(217,70,239,.16) 45%, rgba(34,211,238,0) 72%);
+    pointer-events:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="vw08-stage" role="img" aria-label="A flickering cyan hologram bar with magenta and cyan chromatic edges, rising over a neon perspective grid and starfield in a vaporwave sunset.">
+  <div id="vw08-glow"></div>
+  <canvas id="vw08-c"></canvas>
+</div>
+<div class="cap">Hologram Flux</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('vw08-stage');
+  var cv = document.getElementById('vw08-c');
+  var ctx = cv.getContext('2d');
+
+  var W=0,H=0,DPR=1;
+  // starfield (capped, fixed buffers)
+  var NS=90, sx=new Float32Array(NS), sy=new Float32Array(NS), sr=new Float32Array(NS), sp=new Float32Array(NS);
+  for(var i=0;i<NS;i++){sx[i]=Math.random();sy[i]=Math.random()*0.62;sr[i]=0.4+Math.random()*1.1;sp[i]=Math.random()*6.283;}
+
+  // mirror-reflection gradient — rebuilt only on resize (bar height depends on W/H)
+  var mirrorGrad=null, barBh=0;
+  function buildMirror(){
+    barBh=Math.min(H*0.48, W*0.52);
+    mirrorGrad=ctx.createLinearGradient(0,-barBh/2,0,barBh/2);
+    mirrorGrad.addColorStop(0,'rgba(34,211,238,.20)');
+    mirrorGrad.addColorStop(1,'rgba(34,211,238,0)');
+  }
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    buildMirror();
+  }
+  resize();
+  window.addEventListener('resize',resize);
+
+  // perspective grid — static geometry, cheap stroke
+  function grid(t){
+    var hy=H*0.60;                  // horizon
+    var cx=W*0.5;
+    ctx.lineWidth=1;
+    // verticals converging to horizon
+    ctx.strokeStyle='rgba(217,70,239,.30)';
+    ctx.beginPath();
+    for(var k=-7;k<=7;k++){
+      var bx=cx+k*(W*0.5/7);
+      ctx.moveTo(cx + k*6, hy);
+      ctx.lineTo(bx, H);
+    }
+    ctx.stroke();
+    // horizontals scrolling toward viewer
+    var off=(t*0.00009)%1;
+    ctx.strokeStyle='rgba(34,211,238,.34)';
+    ctx.beginPath();
+    for(var r=0;r<9;r++){
+      var f=(r+off)/9; f=f*f;       // perspective compression
+      var yy=hy+f*(H-hy);
+      ctx.moveTo(0,yy); ctx.lineTo(W,yy);
+    }
+    ctx.stroke();
+    // horizon line bright
+    ctx.strokeStyle='rgba(255,240,255,.55)';
+    ctx.beginPath(); ctx.moveTo(0,hy); ctx.lineTo(W,hy); ctx.stroke();
+  }
+
+  function stars(t){
+    for(var i=0;i<NS;i++){
+      var a=0.30+0.55*(0.5+0.5*Math.sin(t*0.0016+sp[i]));
+      ctx.globalAlpha=a;
+      ctx.fillStyle = (i&3)? '#bdf5ff' : '#f6c6ff';
+      var px=sx[i]*W, py=sy[i]*H;
+      ctx.fillRect(px,py,sr[i],sr[i]);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // one chromatic slab — module-level so no closure is allocated per frame
+  function slab(col,dx,al,bw,bh,fl){
+    ctx.fillStyle=col;
+    ctx.globalAlpha=al*fl;
+    ctx.fillRect(-bw/2+dx,-bh/2,bw,bh);
+  }
+
+  // hologram bar: chromatic offset slabs + scanlines, slow safe flicker
+  function bar(t){
+    var bw=Math.min(W*0.34, H*0.30);
+    var bh=Math.min(H*0.48, W*0.52);
+    var cx=W*0.5, cy=H*0.455;
+    // slow flicker: stays in 0.62..1.0 (no strobe), ~1.5 cycles/sec capped
+    var fl=0.81+0.19*Math.sin(t*0.0042)+0.06*Math.sin(t*0.011);
+    if(fl>1)fl=1; if(fl<0.6)fl=0.6;
+    var sh=Math.sin(t*0.0021)*bw*0.06;   // slow chroma drift
+
+    ctx.save();
+    ctx.translate(cx,cy);
+    // reflection (mirror, fading) — drawn first, behind
+    ctx.globalCompositeOperation='lighter';
+
+    // chromatic edges
+    slab('#d946ef', -sh-bw*0.045, 0.22, bw, bh, fl);  // magenta
+    slab('#22d3ee',  sh+bw*0.045, 0.22, bw, bh, fl);  // cyan
+    slab('#9af7ff', 0, 0.30, bw, bh, fl);             // core
+    // bright vertical core seam
+    ctx.globalAlpha=0.5*fl; ctx.fillStyle='#eaffff';
+    ctx.fillRect(-bw*0.06,-bh/2,bw*0.12,bh);
+
+    // scanlines
+    ctx.globalAlpha=0.5;
+    ctx.fillStyle='rgba(12,5,24,.55)';
+    var step=6, scroll=(t*0.02)%step;
+    for(var y=-bh/2 - step + scroll; y<bh/2; y+=step){
+      ctx.fillRect(-bw/2-bw*0.05, y, bw*1.1, 2);
+    }
+    // crisp framing edges
+    ctx.globalAlpha=0.85*fl;
+    ctx.strokeStyle='#bff7ff'; ctx.lineWidth=1.5;
+    ctx.strokeRect(-bw/2,-bh/2,bw,bh);
+
+    // mirror reflection below
+    ctx.globalAlpha=1;
+    ctx.scale(1,-1);
+    ctx.translate(0,-bh-6);
+    ctx.fillStyle=mirrorGrad; ctx.globalAlpha=0.6*fl;
+    ctx.fillRect(-bw/2,-bh/2,bw,bh);
+
+    ctx.restore();
+    ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha=1;
+  }
+
+  function frame(t){
+    ctx.clearRect(0,0,W,H);
+    grid(t);
+    stars(t);
+    bar(t);
+  }
+
+  var running=true, raf=0;
+  function loop(t){ if(!running)return; frame(t); raf=requestAnimationFrame(loop); }
+
+  if(reduce){ frame(2400); return; }   // one calm static frame, no loop
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; raf=requestAnimationFrame(loop); }
+  });
+  raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

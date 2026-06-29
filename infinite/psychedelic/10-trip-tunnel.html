@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric lobed color rings melting inward through a perspective tunnel toward a glowing vanishing point.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trip Tunnel</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  #ps10-stage{position:fixed;inset:0;width:100%;height:100%;background:#0a0612}
+  #ps10-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static glow vignette — painted once by gradient, never animated */
+  #ps10-glow{position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(closest-side at 50% 50%, rgba(255,61,166,.20), rgba(255,61,166,0) 48%),
+      radial-gradient(closest-side at 50% 50%, rgba(20,8,30,0) 58%, rgba(6,3,11,.82) 100%);
+    mix-blend-mode:screen}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ps10-stage" role="img" aria-label="A slow psychedelic tunnel of concentric color rings melting inward toward a glowing vanishing point.">
+  <canvas id="ps10-c"></canvas>
+  <div id="ps10-glow"></div>
+</div>
+<div class="cap">Trip Tunnel</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('ps10-stage');
+  var cv=document.getElementById('ps10-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var dpr=Math.min(2,window.devicePixelRatio||1);
+
+  var W=0,H=0,cx=0,cy=0,maxR=0;
+
+  // Tunnel = concentric lobed rings receding to a vanishing point.
+  // Each ring lives at a depth z in [0,1); as time flows every ring's z
+  // decreases (pulled inward), wrapping back to the rim → endless inward draw.
+  // Radius = maxR * z^EXP gives the perspective bunching toward center.
+  var RINGS=26;                 // well under cap
+  var LOBES=7;                  // wavy Fillmore-poster ring edge
+  var EXP=2.05;                 // perspective compression
+  var TWO=Math.PI*2;
+  // Fillmore palette: hot magenta, tangerine, acid lime, cyan, violet — complementary clash.
+  var PAL=[[255,61,166],[255,150,40],[150,235,60],[40,210,235],[150,70,255]];
+
+  // per-ring static seeds (no per-frame alloc)
+  var seedZ=new Float64Array(RINGS), seedPhase=new Float64Array(RINGS);
+  // cached cos/sin around one ring (LOBES sampling), reused every ring/frame
+  var SAMP=LOBES*8;             // points per ring outline
+  var unitC=new Float64Array(SAMP+1), unitS=new Float64Array(SAMP+1);
+
+  function buildUnit(){
+    for(var i=0;i<=SAMP;i++){ var a=i/SAMP*TWO; unitC[i]=Math.cos(a); unitS[i]=Math.sin(a); }
+  }
+  function buildSeeds(){
+    for(var i=0;i<RINGS;i++){ seedZ[i]=i/RINGS; seedPhase[i]=i*0.9; }
+  }
+
+  function size(){
+    var r=stage.getBoundingClientRect();
+    W=Math.max(1,r.width); H=Math.max(1,r.height);
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    cx=W/2; cy=H/2; maxR=Math.hypot(W,H)*0.60;
+  }
+
+  function col(idx,z,phase){
+    // blend two palette stops by depth so hue sweeps along the tunnel
+    var f=(z*PAL.length + idx)%PAL.length, k=(f|0), t=f-k;
+    var a=PAL[k], b=PAL[(k+1)%PAL.length];
+    var rr=(a[0]+(b[0]-a[0])*t)|0, gg=(a[1]+(b[1]-a[1])*t)|0, bb=(a[2]+(b[2]-a[2])*t)|0;
+    // fade in from vanishing point, fade out at rim → no hard pop, seizure-safe
+    var al=(z<0.10? z/0.10 : z>0.90? (1-z)/0.10 : 1)*0.85;
+    return 'rgba('+rr+','+gg+','+bb+','+al.toFixed(3)+')';
+  }
+
+  // draw one tunnel frame. flow = inward progress; warp = lobe breathing; roll = global spin
+  function frame(flow,warp,roll){
+    // opaque wipe (no trail — keeps rings crisp & avoids accumulating bright flashes)
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#0a0612'; ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    ctx.lineJoin='round';
+
+    var i,j;
+    for(i=0;i<RINGS;i++){
+      // depth wraps in (0,1]; far rings (z~1) at rim, near (z~0) at center
+      var z=seedZ[i]-flow; z=z-Math.floor(z);
+      if(z<0.012) continue;                 // skip the singular vanishing point
+      var R=maxR*Math.pow(z,EXP);
+      var ph=seedPhase[i];
+      // lobe amplitude grows toward the rim → melt is gentle at center
+      var amp=R*(0.16*z);
+      var lobePh=warp+ph;
+      var rot=roll*(0.6+z*0.8)+ph*0.3;      // parallax: outer rings roll more
+      var cr=Math.cos(rot), sr=Math.sin(rot);
+      ctx.beginPath();
+      for(j=0;j<=SAMP;j++){
+        var uc=unitC[j], us=unitS[j];
+        // angle of this sample for the lobe wave
+        var rr=R+amp*Math.sin(LOBES*(j/SAMP*TWO)+lobePh);
+        var px=uc*rr, py=us*rr;
+        // apply ring roll
+        var x=cx+px*cr-py*sr, y=cy+px*sr+py*cr;
+        if(j===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      ctx.lineWidth=Math.max(1.2, R*0.045*z+1);
+      ctx.strokeStyle=col(i,z,ph);
+      ctx.stroke();
+    }
+
+    // calm glowing vanishing point — small static-feeling pip, never strobes
+    var gr=maxR*0.045;
+    var g=ctx.createRadialGradient(cx,cy,0,cx,cy,gr);
+    g.addColorStop(0,'rgba(255,228,246,0.95)');
+    g.addColorStop(0.5,'rgba(255,61,166,0.55)');
+    g.addColorStop(1,'rgba(255,61,166,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,gr,0,TWO); ctx.fill();
+  }
+
+  function staticFrame(){
+    frame(0.34,1.1,0.4);
+  }
+
+  var raf=0, running=false, t0=0;
+  function loop(now){
+    if(!running)return;
+    if(!t0)t0=now;
+    var s=(now-t0)/1000;
+    // SLOW: tunnel fully recycles ~ every 22s; lobe breath ~ 13s; roll ~ 60s. Seizure-safe.
+    var flow=(s/22)%1;
+    var warp=s*(TWO/13);
+    var roll=s*(TWO/60);
+    frame(flow,warp,roll);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){ if(running)return; running=true; t0=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    buildUnit(); buildSeeds(); size();
+    if(reduce){ staticFrame(); return; }
+    start();
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ size(); if(reduce) staticFrame(); },120);
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

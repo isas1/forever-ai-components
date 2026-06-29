@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A Swiss typographic layout whose margin frame, red gutter rule and measure bars breathe and skew in proportional rhythm.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Margin Dance</title>
+<style>
+  :root{
+    --sw10-bg:#0f0f10;
+    --sw10-red:#e8482b;
+    --sw10-ink:#f4f1ea;
+    --sw10-dim:#56565a;
+  }
+  html,body{margin:0;height:100%;background:var(--sw10-bg)}
+  #sw10-stage{
+    position:fixed;inset:0;overflow:hidden;
+    background:var(--sw10-bg);
+    font-family:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+  }
+  /* full-bleed layout block — FIXED geometry. Nothing here animates; the
+     "dance" is performed by overlay elements driven purely by transform. */
+  #sw10-field{
+    position:absolute;inset:0;
+    padding:12% 9% 12% 9%;
+    box-sizing:border-box;
+    display:grid;
+    grid-template-columns:2fr 6% 3fr;
+    grid-template-rows:auto 1fr;
+    column-gap:0;row-gap:6%;
+  }
+  /* baseline rhythm: faint horizontal grid lines, static (no repaint) */
+  #sw10-baselines{
+    position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent calc(8.333% - 1px),
+      rgba(244,241,234,.045) calc(8.333% - 1px),
+      rgba(244,241,234,.045) 8.333%
+    );
+  }
+  /* the moving margin frame: a stroked rectangle laid out at the resting
+     margins, then *scaled and nudged via transform only* to breathe. */
+  #sw10-frame{
+    position:absolute;
+    left:9%;right:9%;top:12%;bottom:12%;
+    border:1px solid var(--sw10-dim);
+    transform-origin:center center;
+    will-change:transform;
+  }
+  /* gutter rule: a single red hairline column divider, parked at the resting
+     split. It dances left/right with translateX (compositor only). */
+  #sw10-gutterline{
+    position:absolute;top:0;bottom:0;width:2px;
+    background:var(--sw10-red);
+    left:42.6%;            /* resting split of the 2fr | 6% | 3fr grid */
+    transform:translateX(-1px);
+    transform-origin:center center;
+    will-change:transform;
+  }
+  .sw10-col{min-width:0;overflow:hidden}
+  #sw10-head{
+    grid-column:1 / -1;
+    border-bottom:2px solid var(--sw10-ink);
+    padding-bottom:.4em;
+    display:flex;align-items:baseline;justify-content:space-between;gap:1em;
+  }
+  #sw10-num{
+    color:var(--sw10-red);
+    font-weight:700;
+    font-size:clamp(11px,3.4vw,22px);
+    letter-spacing:.02em;
+  }
+  #sw10-kicker{
+    color:var(--sw10-ink);
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:.18em;
+    font-size:clamp(8px,1.7vw,12px);
+  }
+  /* big display word, left column — leans into the dance via skew/translate */
+  #sw10-word{
+    align-self:end;
+    color:var(--sw10-ink);
+    font-weight:700;
+    line-height:.86;
+    letter-spacing:-.02em;
+    font-size:clamp(34px,15.5vw,108px);
+    transform-origin:left bottom;
+    will-change:transform;
+  }
+  #sw10-word b{display:block;color:var(--sw10-red);font-weight:700}
+  /* right column body: justified-feel measure bars (typographic rhythm, abstract) */
+  #sw10-body{align-self:end;display:flex;flex-direction:column;gap:9%;width:100%}
+  .sw10-bar{height:clamp(3px,.9vw,6px);background:var(--sw10-ink);opacity:.8;will-change:transform;transform-origin:left center}
+  .sw10-bar:nth-child(2){opacity:.55}
+  .sw10-bar:nth-child(3){opacity:.7}
+  .sw10-bar:nth-child(4){opacity:.4;background:var(--sw10-red);opacity:.85}
+  .sw10-bar:nth-child(5){opacity:.5}
+
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="sw10-stage" role="img" aria-label="Margin Dance: a Swiss typographic grid whose margin frame and gutter expand and contract in proportion.">
+  <div id="sw10-baselines"></div>
+  <div id="sw10-frame"></div>
+  <div id="sw10-field">
+    <div id="sw10-head">
+      <span id="sw10-num">10</span>
+      <span id="sw10-kicker">Grid &middot; Rhythm</span>
+    </div>
+    <div id="sw10-word" class="sw10-col">Mar&shy;gin<b>Dance</b></div>
+    <div id="sw10-body" class="sw10-col">
+      <span class="sw10-bar"></span>
+      <span class="sw10-bar"></span>
+      <span class="sw10-bar"></span>
+      <span class="sw10-bar"></span>
+      <span class="sw10-bar"></span>
+    </div>
+  </div>
+  <div id="sw10-gutterline"></div>
+</div>
+<div class="cap">Margin Dance</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var word  = document.getElementById('sw10-word');
+  var frame = document.getElementById('sw10-frame');
+  var gut   = document.getElementById('sw10-gutterline');
+  var bars  = document.querySelectorAll('.sw10-bar');
+  var nbars = bars.length;
+
+  // cached bar phase offsets (allocation-free loop)
+  var phase = new Float32Array(nbars);
+  for (var i=0;i<nbars;i++) phase[i] = i*0.7;
+
+  // Proportional "margin dance" — one driver `t` breathes the whole composition.
+  // CRITICAL: every animated property below is transform-only (compositor),
+  // so no layout/paint runs per frame. The margin frame is laid out once at
+  // its resting margins (9% / 12%) and then *scaled* to simulate margins
+  // widening and narrowing; the red gutter rule *translates* to ride the
+  // proportional column split; the word skews/lifts; the bars scaleX.
+  function apply(t){
+    var b = Math.sin(t);              // -1..1 breathing
+
+    // Frame breathing: positive b => wider margins => smaller frame.
+    // Resting frame spans 82% x 76% of the stage. Map margin swing to a scale
+    // factor around that resting box. Asymmetric X vs Y keeps the Swiss tension.
+    var sx = 1 - b*0.11;             // horizontal squeeze/stretch
+    var sy = 1 - b*0.07;             // vertical, gentler
+    // slight directional nudge so the frame isn't a pure symmetric pulse
+    var fx = b*0.9;                  // % of stage
+    var fy = b*0.5;
+    frame.style.transform =
+      'translate('+fx.toFixed(2)+'%,'+fy.toFixed(2)+'%) scale('+sx.toFixed(4)+','+sy.toFixed(4)+')';
+
+    // Gutter rule rides the split: as margins widen (b>0) the usable measure
+    // shrinks and the proportional split drifts left. translateX in vw moves
+    // the rule across the stage with no layout — it stays compositor-only.
+    var gxShift = b * -3.6;          // vw units of horizontal drift
+    gut.style.transform = 'translateX(-1px) translateX('+gxShift.toFixed(2)+'vw)';
+
+    // display word leans into the motion: subtle skew + lift (compositor only)
+    word.style.transform = 'translateY('+(-b*1.4).toFixed(2)+'%) skewX('+(b*2.0).toFixed(2)+'deg)';
+
+    // measure bars scaleX in staggered rhythm — typographic "justification" pulse
+    for (var k=0;k<nbars;k++){
+      var s = 0.78 + 0.22*Math.sin(t*1.35 + phase[k]);
+      bars[k].style.transform = 'scaleX('+s.toFixed(3)+')';
+    }
+  }
+
+  if (reduce){ apply(0.6); return; }
+
+  var running = true, raf = 0, t0 = 0;
+  function frame_(ts){
+    if (!running) return;
+    if (!t0) t0 = ts;
+    apply((ts - t0)*0.00042);   // ~slow, deliberate breath
+    raf = requestAnimationFrame(frame_);
+  }
+  function start(){ if(!running){running=true; t0=0; raf=requestAnimationFrame(frame_);} }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) stop(); else start();
+  });
+  raf = requestAnimationFrame(frame_);
+})();
+</script>
+</body>
+</html>

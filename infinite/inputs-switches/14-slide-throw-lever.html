@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Draggable orange throw lever on a coil spring that snaps home with motion-blur ghosts and a ringing track wobble on impact.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slide Throw Lever</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#2a0a18;}
+  #stl-c{display:block;width:100%;height:100%;cursor:grab;touch-action:none;}
+  #stl-c.stl-drag{cursor:grabbing;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
+       letter-spacing:.14em;color:#ff9e2c;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="stl-c"></canvas>
+<div class="cap">Slide Throw Lever</div>
+<script>
+(function(){
+  const cv=document.getElementById('stl-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG='#2a0a18',AC='#ff9e2c';
+  let W,H,DPR,S,trackX,topY,botY;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);trackX=W*0.5;
+    topY=H*0.24;botY=H*0.80;
+  }
+  addEventListener('resize',size);size();
+
+  // state: pos 0=rest(top), 1=fully pulled(bottom). spring flings back to 0.
+  let pos=0,vel=0,prev=0,ghost=[],ring=0,ringV=0,dragging=false,grabOff=0;
+  const STIFF=0.10,DAMP=0.62; // rubber-band: stiff pull-home, light damping = snap
+  function yFor(p){return topY+(botY-topY)*p;}
+  function handleR(){return S*0.085;}
+
+  function pointer(e){
+    const r=cv.getBoundingClientRect();
+    const t=e.touches?e.touches[0]:e;
+    return{x:t.clientX-r.left,y:t.clientY-r.top};
+  }
+  function down(e){
+    const p=pointer(e),hy=yFor(pos);
+    if(Math.abs(p.x-trackX)<S*0.18&&Math.abs(p.y-hy)<handleR()*1.8){
+      dragging=true;grabOff=p.y-hy;cv.classList.add('stl-drag');e.preventDefault();
+    }
+  }
+  function move(e){
+    if(!dragging)return;
+    const p=pointer(e);
+    pos=Math.max(0,Math.min(1,(p.y-grabOff-topY)/(botY-topY)));
+    vel=0;e.preventDefault();
+  }
+  function up(){if(dragging){dragging=false;cv.classList.remove('stl-drag');}}
+  cv.addEventListener('pointerdown',down);
+  addEventListener('pointermove',move);
+  addEventListener('pointerup',up);
+  // auto-pluck on plain click/tap with no drag (nudge)
+  cv.addEventListener('click',()=>{if(!reduce&&pos<0.05&&Math.abs(vel)<0.01){pos=0.55+Math.random()*0.35;vel=0;setTimeout(up,40);}});
+
+  function physics(){
+    if(!dragging){
+      const a=-STIFF*pos;        // pull toward rest
+      vel=(vel+a)*DAMP;
+      prev=pos;pos+=vel;
+      if(pos<0){                 // slam into seat -> excite ringdown
+        const impact=Math.min(Math.abs(vel),0.9);
+        ringV+=impact*1.4;pos=0;vel*=-0.18;
+        if(Math.abs(vel)<0.004)vel=0;
+      }
+    }else{prev=pos;}
+    // damped sine ringdown of the track
+    ring+=ringV;ringV+=-ring*0.22;ringV*=0.90;
+    if(Math.abs(ring)<0.0004&&Math.abs(ringV)<0.0004){ring=0;ringV=0;}
+    // motion-blur ghost: record fast-moving handle samples
+    const speed=Math.abs(pos-prev);
+    if(speed>0.012)ghost.unshift({y:yFor(pos),s:speed,a:1});
+    for(let i=ghost.length-1;i>=0;i--){ghost[i].a*=0.84;if(ghost[i].a<0.04)ghost.splice(i,1);}
+    if(ghost.length>22)ghost.length=22;
+  }
+
+  function draw(){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    const r=handleR(),hw=r*0.62; // half track width
+    const wob=ring*r*0.55;        // ringdown lateral shimmer at top seat
+
+    // ---- track channel (with ringdown wobble bending the rails near the seat) ----
+    ctx.lineCap='round';
+    for(let side=-1;side<=1;side+=2){
+      ctx.beginPath();
+      for(let s=0;s<=1.001;s+=0.05){
+        const y=topY-r*1.4+(botY+r*1.6-(topY-r*1.4))*s;
+        const seat=Math.max(0,1-(y-topY)/(botY-topY)*1.3);
+        const x=trackX+side*hw+wob*seat*seat;
+        s===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      }
+      ctx.strokeStyle='rgba(255,158,44,0.20)';ctx.lineWidth=S*0.012;ctx.stroke();
+      ctx.strokeStyle='rgba(255,158,44,0.55)';ctx.lineWidth=S*0.004;ctx.stroke();
+    }
+    // seat cap (where handle slams home) — glows on impact
+    const glow=Math.min(1,Math.abs(ring)*3);
+    ctx.beginPath();ctx.moveTo(trackX-hw*1.5,topY-r*1.3);ctx.lineTo(trackX+hw*1.5,topY-r*1.3);
+    ctx.strokeStyle=`rgba(255,158,44,${0.30+glow*0.6})`;ctx.lineWidth=S*0.018;ctx.stroke();
+
+    const hy=yFor(pos);
+    // ---- coil spring below the handle (compresses as pulled) ----
+    const coilTop=hy+r*0.7,coilBot=botY+r*1.4,coils=9;
+    const compress=1-pos*0.55;
+    ctx.beginPath();
+    for(let i=0;i<=coils*2;i++){
+      const t=i/(coils*2),cy=coilTop+(coilBot-coilTop)*t;
+      const cx=trackX+Math.sin(t*coils*Math.PI*2)*hw*compress;
+      i===0?ctx.moveTo(cx,cy):ctx.lineTo(cx,cy);
+    }
+    ctx.strokeStyle=`rgba(255,158,44,${0.34+pos*0.4})`;
+    ctx.lineWidth=S*0.009*(0.7+pos*0.6);ctx.stroke();
+
+    // ---- motion-blur ghosts: trailing afterimages confessing velocity ----
+    ghost.forEach(g=>{
+      const stretch=1+g.s*9;
+      ctx.beginPath();
+      ctx.ellipse(trackX,g.y,r*0.92,r*0.92*stretch,0,0,Math.PI*2);
+      ctx.fillStyle=`rgba(255,158,44,${g.a*0.22})`;ctx.fill();
+    });
+
+    // ---- handle (the throw lever) ----
+    const liveSpeed=Math.abs(pos-prev),st=1+liveSpeed*9;
+    const rad=ctx.createRadialGradient(trackX-r*0.3,hy-r*0.3,r*0.1,trackX,hy,r*1.1);
+    rad.addColorStop(0,'#ffd9a0');rad.addColorStop(0.45,AC);rad.addColorStop(1,'#7a3206');
+    ctx.beginPath();ctx.ellipse(trackX,hy,r,r*st,0,0,Math.PI*2);
+    ctx.fillStyle=rad;ctx.fill();
+    ctx.lineWidth=S*0.004;ctx.strokeStyle='rgba(42,10,24,0.55)';ctx.stroke();
+    // knurled grip lines
+    ctx.save();ctx.beginPath();ctx.ellipse(trackX,hy,r,r*st,0,0,Math.PI*2);ctx.clip();
+    ctx.strokeStyle='rgba(42,10,24,0.30)';ctx.lineWidth=1.2;
+    for(let i=-3;i<=3;i++){const gx=trackX+i*r*0.28;
+      ctx.beginPath();ctx.moveTo(gx,hy-r*st);ctx.lineTo(gx,hy+r*st);ctx.stroke();}
+    ctx.restore();
+    // specular highlight
+    ctx.beginPath();ctx.ellipse(trackX-r*0.32,hy-r*0.34,r*0.22,r*0.16,0,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,245,225,0.7)';ctx.fill();
+  }
+
+  function frame(){physics();draw();raf=requestAnimationFrame(frame);}
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){pos=0.32;draw();}else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A fanned stack of paper Tinder-style cards throws the top card off-screen with velocity and rotation, springing it back to the deck.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swipe Deck</title>
+<style>
+  :root{--dr03-bg:#0c0e13;--dr03-cy:#22d3ee;--dr03-rd:#e23b50;--dr03-pa:#f4f1e8;--dr03-ink:#0a0b10}
+  html,body{margin:0;height:100%}
+  #dr03-stage{position:fixed;inset:0;background:var(--dr03-bg);overflow:hidden;
+    font-family:"Helvetica Neue",Arial,system-ui,sans-serif;touch-action:none;outline:none;cursor:grab}
+  #dr03-stage:active{cursor:grabbing}
+  #dr03-stage:focus-visible{box-shadow:inset 0 0 0 2px var(--dr03-cy)}
+  /* static decor — never repaints */
+  #dr03-stage::before{content:"";position:absolute;left:-12%;top:-18%;width:62%;height:62%;
+    background:var(--dr03-rd);transform:rotate(28deg);opacity:.12}
+  #dr03-stage::after{content:"";position:absolute;right:-20%;bottom:-24%;width:70%;height:8px;
+    background:var(--dr03-cy);transform:rotate(-24deg);opacity:.5;box-shadow:0 22px 0 -2px rgba(34,211,238,.18)}
+  .dr03-card{position:absolute;left:50%;top:50%;width:42%;max-width:190px;aspect-ratio:5/7;
+    margin:0;border-radius:3px;will-change:transform;transform:translate(-50%,-50%);
+    box-shadow:0 18px 40px -12px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.04);
+    background:var(--dr03-pa);color:var(--dr03-ink);overflow:hidden;contain:layout paint}
+  .dr03-card b{position:absolute;left:9%;top:7%;font-size:clamp(20px,7vw,42px);font-weight:800;
+    letter-spacing:-.04em;line-height:.8}
+  .dr03-card i{position:absolute;right:8%;bottom:6%;font-style:normal;font-weight:800;
+    font-size:clamp(10px,2.4vw,15px);transform:rotate(180deg);letter-spacing:-.03em}
+  .dr03-bar{position:absolute;left:0;right:0;height:34%;background:var(--dr03-rd)}
+  .dr03-c0 .dr03-bar{top:0;background:var(--dr03-rd)}
+  .dr03-c1 .dr03-bar{bottom:0;background:var(--dr03-ink)}
+  .dr03-c2 .dr03-bar{top:33%;height:24%;background:var(--dr03-cy)}
+  .dr03-c3 .dr03-bar{top:0;width:46%;height:100%;background:var(--dr03-ink)}
+  .dr03-c4 .dr03-bar{bottom:0;height:50%;background:var(--dr03-rd);transform:skewY(-9deg) translateY(20%)}
+  .dr03-dot{position:absolute;width:18%;aspect-ratio:1;border-radius:50%;
+    right:10%;top:46%;background:var(--dr03-cy);box-shadow:0 0 0 4px var(--dr03-pa)}
+  .dr03-c1 .dr03-dot,.dr03-c3 .dr03-dot{background:var(--dr03-rd)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="dr03-stage" role="application" tabindex="0"
+     aria-label="Swipe Deck. Press arrow keys or space to throw the top card to the back of the deck.">
+  <div class="dr03-card dr03-c0"><span class="dr03-bar"></span><b>01</b><span class="dr03-dot"></span><i>SWIPE</i></div>
+  <div class="dr03-card dr03-c1"><span class="dr03-bar"></span><b>02</b><span class="dr03-dot"></span><i>SWIPE</i></div>
+  <div class="dr03-card dr03-c2"><span class="dr03-bar"></span><b>03</b><span class="dr03-dot"></span><i>SWIPE</i></div>
+  <div class="dr03-card dr03-c3"><span class="dr03-bar"></span><b>04</b><span class="dr03-dot"></span><i>SWIPE</i></div>
+  <div class="dr03-card dr03-c4"><span class="dr03-bar"></span><b>05</b><span class="dr03-dot"></span><i>SWIPE</i></div>
+</div>
+<div class="cap">Swipe Deck</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("dr03-stage");
+  var cards=Array.prototype.slice.call(stage.querySelectorAll(".dr03-card"));
+  var N=cards.length;
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  // order[k] = index into cards[] for stack position k (0 = top)
+  var order=cards.map(function(_,i){return i;});
+  // per-card physics state
+  var px=new Float32Array(N), py=new Float32Array(N), pr=new Float32Array(N); // current
+  var vx=new Float32Array(N), vy=new Float32Array(N), vr=new Float32Array(N); // velocity
+  var tx=new Float32Array(N), ty=new Float32Array(N), trr=new Float32Array(N);// target (rest)
+  var fly=new Uint8Array(N); // 1 = in free flight (thrown)
+
+  function restPose(){
+    for(var k=0;k<N;k++){
+      var c=order[k], depth=k;
+      tx[c]=depth*7-((N-1)*3.5);
+      ty[c]=depth*5;
+      trr[c]=(depth-((N-1)/2))*3.2;
+    }
+  }
+  restPose();
+  for(var i=0;i<N;i++){px[i]=tx[i];py[i]=ty[i];pr[i]=trr[i];}
+
+  function applyZ(){ for(var k=0;k<N;k++){ cards[order[k]].style.zIndex=k+1; } }
+  function writeTransforms(){
+    for(var i=0;i<N;i++){
+      cards[i].style.transform="translate(-50%,-50%) translate3d("+px[i].toFixed(2)+"px,"+py[i].toFixed(2)+"px,0) rotate("+pr[i].toFixed(2)+"deg)";
+    }
+  }
+
+  // Throw the current top card to a screen-edge with velocity, then it springs to back.
+  function throwTop2(dirx){
+    var c=order[0];
+    fly[c]=1;
+    vx[c]=dirx*W*0.030;
+    vy[c]=-H*0.004;
+    vr[c]=dirx*1.6;
+    // reorder: top goes to back
+    order.push(order.shift());
+    applyZ();
+    restPose(); // recompute rest targets for the shuffled stack
+  }
+
+  var W=0,H=0;
+  function resize(){ W=stage.clientWidth; H=stage.clientHeight; }
+  resize();
+  addEventListener("resize",resize);
+  applyZ();
+
+  // ---- pointer (real interaction on top card) ----
+  var drag=false, dcard=-1, lastX=0, lastY=0, dvx=0, dvy=0, idle=0, manual=false;
+  function down(e){
+    if(reduce)return;
+    drag=true; manual=true; idle=0; dcard=order[0]; fly[dcard]=0;
+    lastX=e.clientX; lastY=e.clientY; dvx=dvy=0;
+    stage.setPointerCapture&&stage.setPointerCapture(e.pointerId);
+  }
+  function move(e){
+    if(!drag)return;
+    var dx=e.clientX-lastX, dy=e.clientY-lastY;
+    lastX=e.clientX; lastY=e.clientY;
+    dvx=dx; dvy=dy;
+    px[dcard]+=dx; py[dcard]+=dy;
+    pr[dcard]=px[dcard]*0.05;
+  }
+  function up(){
+    if(!drag)return; drag=false;
+    var c=dcard, dist=Math.abs(px[c]), speed=Math.abs(dvx);
+    if(dist>W*0.18||speed>9){
+      fly[c]=1;
+      vx[c]=dvx*1.4||(px[c]>0?12:-12);
+      vy[c]=dvy*1.4; vr[c]=dvx*0.18;
+      order.push(order.shift()); applyZ(); restPose();
+    } // else springs back to rest (target already set)
+  }
+  stage.addEventListener("pointerdown",down);
+  stage.addEventListener("pointermove",move);
+  stage.addEventListener("pointerup",up);
+  stage.addEventListener("pointercancel",up);
+  stage.addEventListener("lostpointercapture",up);
+
+  // ---- keyboard ----
+  stage.addEventListener("keydown",function(e){
+    if(reduce)return;
+    var k=e.key;
+    if(k==="ArrowLeft"){manual=true;idle=0;throwTop2(-1);e.preventDefault();}
+    else if(k==="ArrowRight"||k===" "||k==="Enter"){manual=true;idle=0;throwTop2(1);e.preventDefault();}
+  });
+
+  // ---- self-demo timer ----
+  var demoT=0;
+  // ---- one rAF loop, spring integration ----
+  var running=true, raf=0;
+  function frame(){
+    if(!running)return;
+    // self-demo: throw a card every ~150 frames when idle
+    if(!manual && !drag){
+      demoT++;
+      if(demoT>140){ demoT=0; throwTop2(demoT&1?1:1); }
+    } else {
+      idle++;
+      if(idle>200){ manual=false; demoT=120; } // hand back to demo after idle
+    }
+    var stillFlying=false;
+    for(var i=0;i<N;i++){
+      if(drag&&i===dcard)continue; // user owns this one
+      if(fly[i]){
+        // free flight with light drag + gravity-ish pull
+        px[i]+=vx[i]; py[i]+=vy[i]; pr[i]+=vr[i];
+        vx[i]*=0.985; vy[i]=vy[i]*0.985+0.25; vr[i]*=0.99;
+        // once off-screen, snap behind and let spring reel it to rest
+        if(Math.abs(px[i])>W*0.85+200||py[i]>H*0.85+200){
+          fly[i]=0;
+          px[i]=(px[i]>0?1:-1)*(W*0.6+120); py[i]=-H*0.5-80; // re-enter from edge
+        } else stillFlying=true;
+      } else {
+        // critically-damped spring toward rest target
+        var ax=(tx[i]-px[i])*0.12 - vx[i]*0.42;
+        var ay=(ty[i]-py[i])*0.12 - vy[i]*0.42;
+        var ar=(trr[i]-pr[i])*0.12 - vr[i]*0.42;
+        vx[i]+=ax; vy[i]+=ay; vr[i]+=ar;
+        px[i]+=vx[i]; py[i]+=vy[i]; pr[i]+=vr[i];
+        if(Math.abs(tx[i]-px[i])>0.4||Math.abs(vx[i])>0.4)stillFlying=true;
+      }
+    }
+    writeTransforms();
+    raf=requestAnimationFrame(frame);
+  }
+
+  if(reduce){ writeTransforms(); applyZ(); }
+  else { raf=requestAnimationFrame(frame); }
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ running=false; cancelAnimationFrame(raf); }
+    else if(!reduce && !running){ running=true; raf=requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

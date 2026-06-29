@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Two counter-rotating black-and-white Archimedean spirals with a faint off-pitch overlay breeding moire fringes and illusory depth pull.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spiral Vertigo</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
+  #op07-stage{position:fixed;inset:0;display:block;background:#0a0a0a}
+  #op07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static core glow + rim vignette — painted once, never repaints */
+  #op07-stage::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(circle at 50% 50%, rgba(255,255,255,.12) 0%, rgba(255,255,255,0) 18%),
+      radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 54%, rgba(0,0,0,.66) 100%);
+  }
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="op07-stage" role="img" aria-label="Op art animation: two interlocking black-and-white Archimedean spirals turning slowly in opposite directions, their near-equal pitch breeding shifting moire fringes that pull the eye into illusory depth.">
+    <canvas id="op07-c"></canvas>
+  </div>
+  <div class="cap">Spiral Vertigo</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var stage = document.getElementById("op07-stage");
+  var cvs = document.getElementById("op07-c");
+  var ctx = cvs.getContext("2d");
+
+  var W=0,H=0,cx=0,cy=0,maxR=0,dpr=1,pitch=1;
+  // An Archimedean spiral drawn as a single polyline of many short
+  // segments. r = pitch * theta. We trace ~7 turns. Counting "elements"
+  // by spiral arms: 2 (well under 110). Step count is a fixed sample
+  // budget, not per-arc objects.
+  var TURNS = 7;
+  var STEPS = 220;              // samples per spiral, fixed
+  var ANGSTEP = (TURNS*Math.PI*2)/STEPS;
+  // pre-allocated cos/sin tables so the loop allocates nothing
+  var COS = new Float32Array(STEPS+1);
+  var SIN = new Float32Array(STEPS+1);
+  var RAD = new Float32Array(STEPS+1);
+  (function buildTables(){
+    for(var i=0;i<=STEPS;i++){
+      var th = i*ANGSTEP;
+      COS[i]=Math.cos(th); SIN[i]=Math.sin(th); RAD[i]=th; // RAD holds theta; scaled by pitch at draw
+    }
+  })();
+
+  function resize(){
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    var w = stage.clientWidth || window.innerWidth;
+    var h = stage.clientHeight || window.innerHeight;
+    W = Math.max(1,w); H = Math.max(1,h);
+    cvs.width = Math.round(W*dpr);
+    cvs.height = Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    ctx.lineJoin = "round"; ctx.lineCap = "round";
+    cx = W*0.5; cy = H*0.5;
+    maxR = Math.hypot(W,H)*0.5 + 6;
+    // pitch maps the outermost theta to maxR so the spiral always fills frame
+    pitch = maxR / (TURNS*Math.PI*2);
+  }
+
+  // Draw one spiral. rot = base rotation (rad). dir = +1/-1 winding.
+  // wobble adds a gentle breathing to the pitch so depth pulses subtly.
+  function drawSpiral(rot, dir, wob, baseAlpha, weight){
+    var c = Math.cos(rot), s = Math.sin(rot);
+    var p = pitch * wob;
+    ctx.lineWidth = weight;
+    ctx.beginPath();
+    var i, r, bx, by, x, y;
+    for(i=0;i<=STEPS;i++){
+      r = RAD[i]*p;
+      // rotate the spiral sample by rot, flipping angle for direction
+      bx = COS[i]; by = dir*SIN[i];
+      x = cx + r*(bx*c - by*s);
+      y = cy + r*(bx*s + by*c);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = "rgba(255,255,255,"+baseAlpha+")";
+    ctx.stroke();
+  }
+
+  // The vertigo: two thick spirals counter-rotate. Their winding is
+  // identical pitch but mirrored direction, so the crossing points
+  // sweep inward/outward — the classic illusory depth pull. A third,
+  // faint, slightly off-pitch spiral lays the moire fringe over it.
+  function render(t){
+    ctx.clearRect(0,0,W,H);
+    var breathe = 1 + 0.05*Math.sin(t*0.7);       // slow pitch breath
+    drawSpiral( t*0.18, +1, breathe, 0.88, 2.4);  // primary arm, clockwise drift
+    drawSpiral(-t*0.18, -1, breathe, 0.88, 2.4);  // mirror arm, counter drift
+    // moire overlay: near-equal pitch (×1.045), gentle independent turn
+    drawSpiral( t*0.11 + 0.6, +1, breathe*1.045, 0.22, 1.2);
+    drawSpiral(-t*0.11 - 0.6, -1, breathe*1.045, 0.22, 1.2);
+  }
+
+  function drawOneFrame(){
+    resize();
+    render(1.1); // a composed, legible still
+  }
+
+  if(reduce){ drawOneFrame(); return; }
+
+  var running=true, rafId=0, start=0;
+  function loop(now){
+    if(!running) return;
+    if(!start) start = now;
+    var t = (now - start)/1000; // seconds; rotations are slow (~0.18 rad/s)
+    render(t);
+    rafId = requestAnimationFrame(loop);
+  }
+  function startLoop(){ if(rafId) return; running=true; start=0; rafId=requestAnimationFrame(loop); }
+  function stopLoop(){ running=false; if(rafId){ cancelAnimationFrame(rafId); rafId=0; } }
+
+  window.addEventListener("resize", resize, {passive:true});
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden) stopLoop(); else startLoop();
+  });
+
+  resize();
+  startLoop();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Clashing 80s-colored terrazzo chips breathe apart and resettle into a tilted slab card on a dark plum ground.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terrazzo Scatter</title>
+<style>
+  html,body{margin:0;height:100%;background:#141019;overflow:hidden}
+  #mp02-stage{position:fixed;inset:0;background:#141019}
+  #mp02-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="mp02-stage" role="img" aria-label="Memphis-style terrazzo chips scattering apart and resettling into a slab, in clashing 1980s colors on a dark ground">
+  <canvas id="mp02-c"></canvas>
+</div>
+<div class="cap">Terrazzo Scatter</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("mp02-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  // Memphis palette around accent #36d6c3
+  var PAL=["#36d6c3","#ff5a8a","#ffd23f","#5b8cff","#ff7a3d","#f4f0e6","#9b59ff","#2bb89f"];
+  var BG="#141019";
+  var W=0,H=0,S=1,DPR=Math.min(2,window.devicePixelRatio||1);
+  var N=96; // chip count (<=110)
+  // typed-array chip state
+  var hx=new Float32Array(N),hy=new Float32Array(N); // home (slab) pos, normalized 0..1
+  var ox=new Float32Array(N),oy=new Float32Array(N); // scatter offset target (normalized)
+  var rot=new Float32Array(N),rsp=new Float32Array(N); // base rot, scatter spin
+  var sz=new Float32Array(N),shp=new Uint8Array(N),col=new Uint8Array(N);
+  var seed=1234567;
+  function rnd(){seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return((seed>>>0)/4294967296);}
+  // lay chips in a jittered slab grid
+  (function init(){
+    var cols=12,rows=8,i=0;
+    for(var r=0;r<rows;r++)for(var c=0;c<cols;c++){
+      if(i>=N)break;
+      hx[i]=(c+0.5)/cols + (rnd()-0.5)*0.045;
+      hy[i]=(r+0.5)/rows + (rnd()-0.5)*0.06;
+      var a=rnd()*6.283;var dist=0.35+rnd()*0.55;
+      ox[i]=Math.cos(a)*dist; oy[i]=Math.sin(a)*dist*0.8;
+      rot[i]=rnd()*6.283; rsp[i]=(rnd()-0.5)*7;
+      sz[i]=0.42+rnd()*0.9;
+      shp[i]=(rnd()*4)|0;
+      col[i]=(rnd()*PAL.length)|0;
+      i++;
+    }
+  })();
+
+  function resize(){
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);
+  }
+
+  // draw one chip given screen center, scale factor, rotation
+  function chip(cx,cy,s,a,shape,colr){
+    ctx.save();
+    ctx.translate(cx,cy);ctx.rotate(a);
+    ctx.fillStyle=colr;
+    ctx.beginPath();
+    if(shape===0){ // rounded rect chunk
+      var w=s*1.6,h=s*1.1,rr=s*0.28;
+      ctx.moveTo(-w+rr,-h);
+      ctx.arcTo(w,-h,w,h,rr);ctx.arcTo(w,h,-w,h,rr);
+      ctx.arcTo(-w,h,-w,-h,rr);ctx.arcTo(-w,-h,w,-h,rr);
+    }else if(shape===1){ // triangle shard
+      ctx.moveTo(0,-s*1.3);ctx.lineTo(s*1.2,s);ctx.lineTo(-s*1.1,s*0.7);
+    }else if(shape===2){ // pentagon-ish pebble
+      var k=5;for(var p=0;p<k;p++){var pa=p/k*6.283;var rad=s*(1.0+(p&1)*0.18);ctx.lineTo(Math.cos(pa)*rad*1.2,Math.sin(pa)*rad);}
+    }else{ // circle dot
+      ctx.arc(0,0,s*0.95,0,6.283);
+    }
+    ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+
+  // ease the breath so chips slow as they return home
+  function settleEase(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+  var raf=0,t0=0;
+  var CYCLE=5200; // ms full scatter-and-resettle breath
+
+  function drawFrame(now){
+    var elapsed=(now-t0)%CYCLE;
+    var phase=elapsed/CYCLE; // 0..1
+    // scatter amount: rest as slab, breathe out, return. Use a smooth bell.
+    // s = 0 at phase 0 and 1 (slab), peak ~1 mid.
+    var bell=0.5-0.5*Math.cos(phase*6.283); // 0..1..0
+    var scatter=settleEase(bell);
+    // global slow drift of whole slab
+    var driftA=phase*6.283;
+    var slabDx=Math.cos(driftA*1.0)*0.012;
+    var slabDy=Math.sin(driftA*0.7)*0.010;
+
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+
+    // static framing slab outline (Memphis card) — drawn flat, not animated
+    var slabW=S*0.82,slabH=S*0.62;
+    var sx=(W-slabW)/2, sy=(H-slabH)/2;
+    ctx.save();
+    ctx.translate(W/2,H/2);
+    ctx.rotate(-0.04);
+    ctx.fillStyle="#1c1726";
+    ctx.fillRect(-slabW/2,-slabH/2,slabW,slabH);
+    // subtle inner border line
+    ctx.strokeStyle="rgba(54,214,195,0.20)";
+    ctx.lineWidth=Math.max(1.5,S*0.006);
+    ctx.strokeRect(-slabW/2,-slabH/2,slabW,slabH);
+    ctx.restore();
+
+    var baseSize=S*0.022;
+    for(var i=0;i<N;i++){
+      // chip home position inside slab area
+      var inx=sx + hx[i]*slabW;
+      var iny=sy + hy[i]*slabH;
+      // scatter target relative to center, in screen units
+      var dx=ox[i]*S*0.55*scatter;
+      var dy=oy[i]*S*0.55*scatter;
+      var cx=inx+dx + slabDx*S;
+      var cy=iny+dy + slabDy*S;
+      var a=rot[i] + rsp[i]*scatter;
+      // chips shrink slightly mid-scatter for depth feel
+      var s=baseSize*sz[i]*(1-0.18*scatter);
+      chip(cx,cy,s,a,shp[i],PAL[col[i]]);
+    }
+    raf=requestAnimationFrame(drawFrame);
+  }
+
+  function startLoop(now){t0=now;raf=requestAnimationFrame(drawFrame);}
+
+  function drawStatic(){
+    // one resolved slab frame: chips settled, no scatter
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    var slabW=S*0.82,slabH=S*0.62;
+    var sx=(W-slabW)/2, sy=(H-slabH)/2;
+    ctx.save();ctx.translate(W/2,H/2);ctx.rotate(-0.04);
+    ctx.fillStyle="#1c1726";ctx.fillRect(-slabW/2,-slabH/2,slabW,slabH);
+    ctx.strokeStyle="rgba(54,214,195,0.20)";ctx.lineWidth=Math.max(1.5,S*0.006);
+    ctx.strokeRect(-slabW/2,-slabH/2,slabW,slabH);ctx.restore();
+    var baseSize=S*0.022;
+    for(var i=0;i<N;i++){
+      var cx=sx+hx[i]*slabW, cy=sy+hy[i]*slabH;
+      chip(cx,cy,baseSize*sz[i],rot[i],shp[i],PAL[col[i]]);
+    }
+  }
+
+  function boot(){
+    resize();
+    if(reduce){drawStatic();return;}
+    requestAnimationFrame(startLoop);
+  }
+
+  window.addEventListener("resize",function(){
+    resize();
+    if(reduce){drawStatic();}
+  });
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){
+      if(raf){cancelAnimationFrame(raf);raf=0;}
+    }else if(!reduce){
+      if(!raf){requestAnimationFrame(startLoop);}
+    }
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>

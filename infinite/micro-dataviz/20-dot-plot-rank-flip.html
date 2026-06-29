@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cyan dot plot of seven labeled rows whose values animate and rows reorder by rank, dots sliding to new positions each round.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dot Plot Rank Flip</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a1f24;}
+  #dprf{display:block;width:100%;height:100%;}
+  .dprf-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
+       letter-spacing:.14em;color:#26c6da;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="dprf"></canvas>
+<div class="dprf-cap">Dot Plot Rank Flip</div>
+<script>
+(function(){
+  const cv=document.getElementById('dprf'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG='#0a1f24',AC='#26c6da',GRID='rgba(38,198,218,0.12)',
+        DIM='rgba(173,210,216,0.55)',INK='#cfe9ee';
+  const labels=['NORTH','EMBER','CASCADE','VERMILLION','SOLSTICE','HALCYON','MERIDIAN'];
+  const N=labels.length;
+  let W,H,DPR,L,R,top,rowH,dotR;
+  // each row: current value (cur), source/target for the active transition
+  const rows=labels.map((name,i)=>({name,val:0.12+Math.random()*0.76,cur:0,from:0,to:0,
+                                    y:0,fy:0,ty:0}));
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    const pad=Math.max(14,Math.min(W,H)*0.07);
+    const labW=Math.min(W*0.30,clampPx(54,118));
+    L=pad+labW; R=W-pad-clampPx(8,16);
+    rowH=(H-pad*1.9)/N; top=pad*0.95+rowH*0.5;
+    dotR=Math.max(3.2,Math.min(rowH*0.20,clampPx(4,8)));
+  }
+  function clampPx(a,b){const s=Math.min(W,H)/420;return a+(b-a)*Math.max(0,Math.min(1,s));}
+  addEventListener('resize',size);size();
+
+  // ---- ranking & transition state ----
+  function ranked(){return rows.map((r,i)=>i).sort((a,b)=>rows[b].val-rows[a].val);}
+  let order=ranked();
+  function applyRanks(){ order.forEach((idx,rank)=>{ rows[idx].ty=top+rank*rowH; }); }
+  rows.forEach(r=>{r.cur=r.val;r.from=r.val;r.to=r.val;});
+  applyRanks(); rows.forEach(r=>{r.y=r.ty;r.fy=r.ty;});
+
+  let t=0,dur=92,phase=0,hold=46,nudge=0;
+  function newRound(){
+    rows.forEach(r=>{ r.from=r.val; let d=(Math.random()-0.5)*0.5; r.to=Math.max(0.06,Math.min(0.96,r.val+d)); });
+    order=rows.map((r,i)=>i).sort((a,b)=>rows[b].to-rows[a].to);
+    order.forEach((idx,rank)=>{ rows[idx].fy=rows[idx].y; rows[idx].ty=top+rank*rowH; });
+    t=0;phase=0;
+  }
+  const ease=x=>x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+
+  function frame(){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    if(!reduce){
+      if(phase===0){ t++; const p=Math.min(1,t/dur),e=ease(p);
+        rows.forEach(r=>{ r.val=r.from+(r.to-r.from)*e; r.cur=r.val; r.y=r.fy+(r.ty-r.fy)*e; });
+        if(p>=1){phase=1;t=0;} }
+      else { t++; if(t>hold+ (nudge>0?0:0)){ newRound(); } }
+    }
+    nudge*=0.9;
+
+    // axis grid: 4 verticals, max data-ink economy
+    ctx.lineWidth=1; ctx.font='600 '+clampPx(8,10).toFixed(1)+'px ui-monospace,Menlo,monospace';
+    ctx.textBaseline='middle';
+    for(let g=0;g<=4;g++){
+      const gx=L+(R-L)*(g/4);
+      ctx.strokeStyle=g===0?'rgba(38,198,218,0.22)':GRID;
+      ctx.beginPath();ctx.moveTo(gx,top-rowH*0.55);ctx.lineTo(gx,top+(N-1)*rowH+rowH*0.55);ctx.stroke();
+    }
+
+    rows.forEach(r=>{
+      const x=L+(R-L)*r.cur, y=r.y;
+      // baseline: the single line, position doing the work
+      ctx.strokeStyle='rgba(38,198,218,0.16)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(x,y);ctx.stroke();
+      // label, right-aligned to the axis
+      ctx.fillStyle=DIM;ctx.textAlign='right';
+      ctx.fillText(r.name,L-clampPx(8,12),y);
+      // value readout, faint, trailing the dot
+      ctx.fillStyle='rgba(207,233,238,0.45)';ctx.textAlign='left';
+      ctx.fillText(Math.round(r.cur*100),Math.min(x+dotR+6,R-clampPx(2,4)),y);
+      // the dot — outer halo + solid core
+      ctx.fillStyle='rgba(38,198,218,0.18)';
+      ctx.beginPath();ctx.arc(x,y,dotR+2.4,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=AC;
+      ctx.beginPath();ctx.arc(x,y,dotR,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=INK;
+      ctx.beginPath();ctx.arc(x-dotR*0.28,y-dotR*0.28,dotR*0.34,0,Math.PI*2);ctx.fill();
+    });
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  cv.addEventListener('pointermove',()=>{nudge=1;});
+  cv.addEventListener('click',()=>{if(!reduce&&phase===1){newRound();}});
+  if(reduce){frame();}else start();
+})();
+</script>
+</body>
+</html>

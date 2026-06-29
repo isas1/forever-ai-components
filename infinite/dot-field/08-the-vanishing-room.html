@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Vanishing Room — Infinitude. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Vanishing Room</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4ece0;overflow:hidden}
+  #dot08-stage{position:fixed;inset:0;width:100%;height:100%}
+  #dot08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .dot08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#0a0608;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="dot08-stage" role="img" aria-label="A blank white room slowly covered by blooming coloured dots until it vanishes beneath them, then clears and begins again.">
+  <canvas id="dot08-cv"></canvas>
+</div>
+<div class="dot08-cap">The Vanishing Room</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('dot08-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), last=performance.now();
+  let stickers=[], autoTimer=0;
+  const cols=['#e8112d','#ff2d8a','#ffd400','#ff7a18','#ff63ac','#0a0608'];
+  function addDot(x,y,big){
+    stickers.push({ x:x, y:y, r:(big?10:6)+Math.random()*(big?22:16),
+      c:cols[(Math.random()*cols.length)|0], born:performance.now() });
+    if(stickers.length>240) stickers.shift();
+  }
+  function room(ctx){
+    ctx.fillStyle='#f4ece0'; ctx.fillRect(0,0,S.w,S.h);
+    ctx.strokeStyle='rgba(0,0,0,0.10)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,S.h*0.62); ctx.lineTo(S.w,S.h*0.62); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(S.w*0.16,0); ctx.lineTo(S.w*0.16,S.h*0.62); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(S.w*0.84,0); ctx.lineTo(S.w*0.84,S.h*0.62); ctx.stroke();
+  }
+  function draw(now){
+    const dt=Math.min(50,now-last); last=now;
+    const ctx=S.ctx;
+    room(ctx);
+    if(!REDUCED){
+      autoTimer+=dt;
+      if(autoTimer>120){
+        autoTimer=0;
+        for(let a=0;a<3;a++) addDot(Math.random()*S.w, Math.random()*S.h, Math.random()<0.3);
+        if(stickers.length>=240){ /* room full: let oldest fade out via shift on next adds */ }
+      }
+    }
+    const t=performance.now();
+    for(let i=0;i<stickers.length;i++){
+      const s=stickers[i];
+      const age=(t-s.born)/260;
+      const rr=s.r*Math.min(1, age<0?0:(1-Math.pow(1-Math.min(1,age),3)));
+      ctx.fillStyle=s.c;
+      ctx.beginPath(); ctx.arc(s.x,s.y,rr,0,Math.PI*2); ctx.fill();
+    }
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#f4ece0'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ for(let a=0;a<40;a++) addDot(Math.random()*S.w, Math.random()*S.h, Math.random()<0.3); draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

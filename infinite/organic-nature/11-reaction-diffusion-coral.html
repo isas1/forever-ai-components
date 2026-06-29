@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A Gray-Scott reaction-diffusion simulation grows coral-like stripes and spots in teal-to-coral glowing contour bands; pointer seeds growth.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reaction-Diffusion Coral</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a1418;}
+  #rdc-c{display:block;width:100%;height:100%;}
+  .rdc-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#ff7a4d;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="rdc-c"></canvas>
+<div class="rdc-cap">Reaction-Diffusion Coral</div>
+<script>
+(function(){
+  const cv=document.getElementById('rdc-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,gw,gh,a,b,a2,b2,img,buf,t=0;
+  const Da=1.0,Db=0.5;
+  // palette ramp: deep teal -> teal-green -> coral accent -> warm white
+  const stops=[[10,20,24],[14,52,58],[27,120,110],[255,122,77],[255,224,196]];
+  const LUT=new Uint8Array(256*3);
+  for(let i=0;i<256;i++){const p=i/255*(stops.length-1),k=Math.min(stops.length-2,p|0),f=p-k,c0=stops[k],c1=stops[k+1];
+    LUT[i*3]=c0[0]+(c1[0]-c0[0])*f;LUT[i*3+1]=c0[1]+(c1[1]-c0[1])*f;LUT[i*3+2]=c0[2]+(c1[2]-c0[2])*f;}
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(1,0,0,1,0,0);
+    const tgt=148; gw=Math.max(64,Math.round(tgt*Math.min(1,W/H))); gh=Math.max(64,Math.round(tgt*Math.min(1,H/W)));
+    if(W>H){gw=tgt;gh=Math.round(tgt*H/W);}else{gh=tgt;gw=Math.round(tgt*W/H);}
+    const n=gw*gh; a=new Float32Array(n);b=new Float32Array(n);a2=new Float32Array(n);b2=new Float32Array(n);
+    a.fill(1);
+    img=ctx.createImageData(gw,gh);
+    for(let s=0;s<26;s++){const cx=Math.random()*gw|0,cy=Math.random()*gh|0,r=3+Math.random()*4;
+      for(let y=-r;y<=r;y++)for(let x=-r;x<=r;x++){const px=(cx+x+gw)%gw,py=(cy+y+gh)%gh;if(x*x+y*y<r*r)b[py*gw+px]=1;}}
+    buf=document.createElement('canvas');buf.width=gw;buf.height=gh;
+  }
+  addEventListener('resize',size);size();
+
+  function step(){
+    const f=0.0367,kk=0.0649; // spots->stripes regime
+    for(let y=0;y<gh;y++){
+      const ym=(y-1+gh)%gh,yp=(y+1)%gh;
+      for(let x=0;x<gw;x++){
+        const i=y*gw+x,xm=(x-1+gw)%gw,xp=(x+1)%gw;
+        const av=a[i],bv=b[i];
+        const la=a[ym*gw+x]+a[yp*gw+x]+a[y*gw+xm]+a[y*gw+xp]
+                +0.25*(a[ym*gw+xm]+a[ym*gw+xp]+a[yp*gw+xm]+a[yp*gw+xp])-5*av;
+        const lb=b[ym*gw+x]+b[yp*gw+x]+b[y*gw+xm]+b[y*gw+xp]
+                +0.25*(b[ym*gw+xm]+b[ym*gw+xp]+b[yp*gw+xm]+b[yp*gw+xp])-5*bv;
+        const r=av*bv*bv;
+        a2[i]=av+(Da*la-r+f*(1-av));
+        b2[i]=bv+(Db*lb+r-(kk+f)*bv);
+      }
+    }
+    a.set(a2);b.set(b2);
+  }
+
+  function paint(){
+    const d=img.data;
+    for(let i=0,j=0;i<a.length;i++,j+=4){
+      let v=a[i]-b[i]; // concentration difference
+      v=(v+0.3)*1.55; if(v<0)v=0;else if(v>1)v=1;
+      // contour banding: glowing bands instead of flat ramp
+      const band=v*5.0, fr=band-(band|0);
+      const edge=1-Math.abs(fr-0.5)*2; // 0 at band center, 1 at edges
+      let idx=(v*255)|0; if(idx>255)idx=255;
+      const glow=edge*edge*0.55;
+      let R=LUT[idx*3]+glow*255, G=LUT[idx*3+1]+glow*140, B=LUT[idx*3+2]+glow*90;
+      d[j]=R>255?255:R; d[j+1]=G>255?255:G; d[j+2]=B>255?255:B; d[j+3]=255;
+    }
+    const bc=buf.getContext('2d'); bc.putImageData(img,0,0);
+    ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+    ctx.drawImage(buf,0,0,cv.width,cv.height);
+  }
+
+  function seedAt(mx,my){
+    const gx=Math.round(mx/W*gw),gy=Math.round(my/H*gh),r=4;
+    for(let y=-r;y<=r;y++)for(let x=-r;x<=r;x++){const px=(gx+x+gw)%gw,py=(gy+y+gh)%gh;if(x*x+y*y<r*r)b[py*gw+px]=1;}
+  }
+  cv.addEventListener('pointermove',e=>{const rc=cv.getBoundingClientRect();if(Math.random()<0.3)seedAt(e.clientX-rc.left,e.clientY-rc.top);});
+  cv.addEventListener('click',e=>{const rc=cv.getBoundingClientRect();seedAt(e.clientX-rc.left,e.clientY-rc.top);});
+
+  let raf=0;
+  function frame(){
+    for(let s=0;s<5;s++)step();
+    paint(); t++;
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){for(let s=0;s<900;s++)step();paint();}else start();
+})();
+</script>
+</body>
+</html>

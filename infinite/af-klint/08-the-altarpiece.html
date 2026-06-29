@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Altarpiece — Hilma af Klint. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Altarpiece</title>
+<style>
+  html,body{margin:0;height:100%;background:#1d1a24;overflow:hidden}
+  #afk08-stage{position:fixed;inset:0;width:100%;height:100%}
+  #afk08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .afk08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3eee4;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="afk08-stage" role="img" aria-label="A glowing triangle of concentric pastel gradient ascends toward a point of light as motes drift upward — a homage to af Klint's altarpieces, the diagram resolved at last into devotion.">
+  <canvas id="afk08-cv"></canvas>
+</div>
+<div class="afk08-cap">The Altarpiece</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('afk08-cv'); if(!cv) return;
+  const PAL={cream:'#f3eee4',yellow:'#ecd58a',deep:'#1d1a24'};
+  const PASTELS=['#a9c8e0','#e3a9bd','#ecd58a','#c3b3da','#a9c4a0'];
+  function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), last=performance.now(), t=0;
+  const motes=[];
+  (function seed(){ for(let i=0;i<26;i++) motes.push({x:Math.random(),y:Math.random(),sp:0.02+Math.random()*0.05,sz:1+Math.random()*2.2,col:PASTELS[(Math.random()*PASTELS.length)|0]}); })();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle=PAL.deep;ctx.fillRect(0,0,W,H);
+    const apexX=W*0.5, apexY=H*0.10;
+    const baseY=H*0.92, baseHalf=Math.min(W*0.40,H*0.42);
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(apexX,apexY);ctx.lineTo(apexX+baseHalf,baseY);ctx.lineTo(apexX-baseHalf,baseY);ctx.closePath();ctx.clip();
+    const N=9;
+    for(let i=N;i>=1;i--){
+      const f=i/N;
+      const breath=Math.sin(t*0.5-i*0.45)*0.5+0.5;
+      const cx=apexX, cy=apexY+(baseY-apexY)*f;
+      const r=baseHalf*f*(0.9+0.12*breath);
+      const col=PASTELS[i%PASTELS.length];
+      const g=ctx.createRadialGradient(cx,cy-r*0.2,0,cx,cy,r);
+      g.addColorStop(0,rgba(col,0.5*(0.5+0.5*breath)));
+      g.addColorStop(0.7,rgba(col,0.16));
+      g.addColorStop(1,rgba(col,0));
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle=rgba(col,0.30+0.3*breath);ctx.lineWidth=1.4;
+      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
+    }
+    motes.forEach(m=>{
+      if(!REDUCED){ m.y-=m.sp*dt; if(m.y<0){m.y=1; m.x=Math.random();} }
+      const x=apexX-baseHalf+m.x*baseHalf*2;
+      const y=apexY+m.y*(baseY-apexY);
+      ctx.fillStyle=rgba(m.col,0.7);
+      ctx.beginPath();ctx.arc(x,y,m.sz,0,Math.PI*2);ctx.fill();
+    });
+    ctx.restore();
+    ctx.strokeStyle=rgba(PAL.cream,0.5);ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(apexX,apexY);ctx.lineTo(apexX+baseHalf,baseY);ctx.lineTo(apexX-baseHalf,baseY);ctx.closePath();ctx.stroke();
+    const pulse=0.6+0.4*Math.sin(t*1.6);
+    const ag=ctx.createRadialGradient(apexX,apexY,0,apexX,apexY,26*pulse+10);
+    ag.addColorStop(0,rgba(PAL.cream,0.95));
+    ag.addColorStop(0.4,rgba(PAL.yellow,0.6));
+    ag.addColorStop(1,rgba(PAL.yellow,0));
+    ctx.fillStyle=ag;ctx.beginPath();ctx.arc(apexX,apexY,26*pulse+10,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=rgba(PAL.cream,0.95);
+    ctx.beginPath();ctx.arc(apexX,apexY,3.5,0,Math.PI*2);ctx.fill();
+  }
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric red, blue, yellow and black rectangles zoom endlessly inward in a seamless rebasing magnification on a dark field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nested Frames</title>
+<style>
+  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  #bh07-stage{position:fixed;inset:0;display:block}
+  #bh07-c{position:absolute;inset:0;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="bh07-stage" role="img" aria-label="Concentric rectangles in Bauhaus red, blue, yellow and black zooming endlessly inward on a dark field.">
+  <canvas id="bh07-c"></canvas>
+</div>
+<div class="cap">Nested Frames</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("bh07-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // Bauhaus palette — primaries + black on off-dark.
+  var BG="#101012";
+  var PAL=["#e63329","#1f5fbf","#f2c20e","#111114","#ece8df"]; // red, blue, yellow, black, bone
+
+  // Each frame ring: a fractional position in [0,1) on a log-zoom scale,
+  // plus a fixed color/aspect/offset so the composition reads as ONE work
+  // continuously magnified. We rebase by wrapping the depth phase.
+  var RINGS=14;                 // <= 110, modest
+  var ring=new Array(RINGS);
+  var SCALE=1.46;               // gentle step so several rings read at once
+  var golden=0.61803398875;
+
+  for(var i=0;i<RINGS;i++){
+    ring[i]={
+      col:PAL[i%PAL.length],
+      // aspect + center offset jitter, deterministic, gives Klee-ish asymmetry
+      ar: 0.74 + 0.42*(((i*7)%5)/5),
+      ox: (((i*golden)%1)-0.5)*0.22,
+      oy: (((i*golden*2.0)%1)-0.5)*0.17,
+      rot:((i%2)?1:-1)*0.035,
+      fill:(i%2===0)              // alternate filled / outlined: nested bands
+    };
+  }
+
+  var W=0,H=0,DPR=1,cx=0,cy=0,base=0;
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2; cy=H/2;
+    // base = size of the OUTERMOST ring; *1.6 so it over-fills the frame.
+    base=Math.max(W,H)*1.6;
+  }
+
+  // Draw one rectangle ring given a multiplier m of base size.
+  function frame(m,r){
+    var w=base*m, h=base*m*r.ar;
+    var ex=cx+r.ox*w, ey=cy+r.oy*h;
+    ctx.save();
+    ctx.translate(ex,ey);
+    ctx.rotate(r.rot);
+    ctx.fillStyle=r.col;
+    ctx.fillRect(-w/2,-h/2,w,h);
+    ctx.restore();
+  }
+
+  // A single composition snapshot at zoom phase p (0..1 within one octave).
+  // We render rings from largest (outer) to smallest (inner core).
+  function composition(p){
+    ctx.fillStyle=BG;
+    ctx.fillRect(0,0,W,H);
+    // Continuous magnification: the whole field grows by SCALE^p over one
+    // octave. When p wraps 0->1 every ring lands exactly where its outer
+    // neighbour was — endless inward zoom that rebases seamlessly.
+    var grow=Math.pow(SCALE,p);
+    // Paint outermost (largest) -> innermost (smallest); each solid rect
+    // overlays the previous, leaving a concentric BORDER of the outer color.
+    for(var i=RINGS-1;i>=0;i--){
+      var m=Math.pow(SCALE,i-(RINGS-1))*grow; // i=RINGS-1 -> 1 (fills frame), i=0 tiny
+      frame(m,ring[i]);
+    }
+    // Fixed focal accents — Bauhaus balance: a square holding a counter-dot.
+    var core=ring[0];
+    var cm=Math.pow(SCALE,-(RINGS-1))*grow;
+    var s=base*cm*0.62;
+    var fx=cx+core.ox*base*cm, fy=cy+core.oy*base*cm*core.ar;
+    ctx.fillStyle=PAL[2];
+    ctx.fillRect(fx-s/2,fy-s/2,s,s);
+    ctx.beginPath();
+    ctx.fillStyle=PAL[0];
+    ctx.arc(fx,fy,s*0.22,0,6.2831853);
+    ctx.fill();
+  }
+
+  if(reduce){ resize(); composition(0.42); return; }
+
+  var running=true,raf=0,t0=0;
+  var PERIOD=5200; // ms per octave — calm zoom, no fast strobing
+  function loop(ts){
+    if(!running)return;
+    if(!t0)t0=ts;
+    var p=((ts-t0)%PERIOD)/PERIOD;
+    composition(p);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){ if(!running){running=true;t0=0;raf=requestAnimationFrame(loop);} }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  window.addEventListener("resize",function(){ resize(); if(reduce)composition(0.42); },{passive:true});
+  document.addEventListener("visibilitychange",function(){ document.hidden?stop():start(); });
+
+  resize();
+  raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Red-tinted image crushes into blocky 8x8 DCT cells with banding and ringing as quality oscillates from sharp to wrecked.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JPEG Quantize Crush</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#14060c;}
+  #jqc{display:block;width:100%;height:100%;image-rendering:pixelated;}
+  .jqc-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#ff4040;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="jqc"></canvas>
+<div class="jqc-cap">JPEG Quantize Crush</div>
+<script>
+(function(){
+  const cv=document.getElementById('jqc'),ctx=cv.getContext('2d',{willReadFrequently:true});
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG=[20,6,12], ACC=[255,64,64];
+  let W,H,DPR,GRID,BS,src,buf,off,octx;
+  // source image: a smooth "photo" of overlapping accent fields + chroma drift
+  function makeSource(){
+    src=new Float32Array(GRID*GRID*3);
+    for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
+      const u=x/GRID,v=y/GRID, i=(y*GRID+x)*3;
+      // two radial blooms + a diagonal sweep -> something to compress
+      const d1=Math.hypot(u-0.32,v-0.38), d2=Math.hypot(u-0.72,v-0.66);
+      const bloom=Math.max(0,1-d1*2.4)+0.7*Math.max(0,1-d2*2.7);
+      const sweep=0.5+0.5*Math.sin((u*3.1+v*2.2)*3.14159+0.6);
+      const r=Math.min(1, BG[0]/255 + bloom*0.9 + sweep*0.18);
+      const g=Math.min(1, BG[1]/255 + bloom*0.18*sweep);
+      const b=Math.min(1, BG[2]/255 + bloom*0.30 + (1-sweep)*0.16);
+      // pull toward accent in hot zones
+      const hot=Math.min(1,bloom);
+      src[i]  =r*(1-hot)+ (ACC[0]/255)*hot;
+      src[i+1]=g*(1-hot)+ (ACC[1]/255)*hot*0.6;
+      src[i+2]=b*(1-hot)+ (ACC[2]/255)*hot*0.6;
+    }
+  }
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(1,0,0,1,0,0);
+    // internal resolution kept low & block-aligned for crisp DCT smears
+    BS=8; GRID=Math.max(BS*8, Math.round(Math.min(cv.width,cv.height)/3/BS)*BS);
+    off=document.createElement('canvas');off.width=GRID;off.height=GRID;
+    octx=off.getContext('2d'); octx.imageSmoothingEnabled=false;
+    buf=octx.createImageData(GRID,GRID);
+    makeSource();
+  }
+  addEventListener('resize',size);size();
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(1.4,nudge+0.5);});
+  cv.addEventListener('click',()=>{nudge=1.6;});
+
+  // quantize one 8x8 block to `q` levels with a soft DC/ring term
+  function crushBlock(bx,by,q,ring){
+    const x0=bx*BS,y0=by*BS;
+    let mr=0,mg=0,mb=0;
+    for(let y=0;y<BS;y++)for(let x=0;x<BS;x++){
+      const i=((y0+y)*GRID+(x0+x))*3; mr+=src[i];mg+=src[i+1];mb+=src[i+2];
+    }
+    const n=BS*BS; mr/=n;mg/=n;mb/=n; // DC component (block average)
+    const step=1/q;
+    for(let y=0;y<BS;y++)for(let x=0;x<BS;x++){
+      const i=((y0+y)*GRID+(x0+x))*3, j=((y0+y)*GRID+(x0+x))*4;
+      // blend toward DC by crush amount -> blocky smear; keep some AC for ringing
+      let r=src[i], g=src[i+1], b=src[i+2];
+      const ac=1-step; // how much detail survives
+      r=mr+(r-mr)*ac; g=mg+(g-mg)*ac; b=mb+(b-mb)*ac;
+      // ringing: overshoot near block edges proportional to crush
+      if(ring>0){
+        const edge=(x===0||y===0||x===BS-1||y===BS-1)?1:(x===1||y===1||x===BS-2||y===BS-2?0.5:0);
+        const o=ring*edge*( ((x+y)&1)?1:-1 )*0.22;
+        r+=o;g+=o*0.4;b+=o*0.4;
+      }
+      // color banding: quantize channels to q steps
+      r=Math.round(r/step)*step; g=Math.round(g/step)*step; b=Math.round(b/step)*step;
+      buf.data[j]  =Math.max(0,Math.min(255,r*255))|0;
+      buf.data[j+1]=Math.max(0,Math.min(255,g*255))|0;
+      buf.data[j+2]=Math.max(0,Math.min(255,b*255))|0;
+      buf.data[j+3]=255;
+    }
+  }
+  function render(){
+    nudge*=0.92;
+    // quality oscillator: cranked down to a crushed trough, then back up
+    const phase=t*0.012;
+    let quality=0.5+0.5*Math.sin(phase); // 0..1
+    quality=Math.pow(quality,1.6);       // dwell longer in the crush
+    quality=Math.min(1,quality+nudge*0.5);
+    const nb=GRID/BS;
+    for(let by=0;by<nb;by++)for(let bx=0;bx<nb;bx++){
+      // per-block phase offset -> the grid breathes as a wave, not in lockstep
+      const ph=(bx+by)*0.22 + ((bx*7+by*3)%5)*0.13;
+      let lq=0.5+0.5*Math.sin(phase-ph);
+      lq=Math.pow(Math.max(0,lq),1.5);
+      lq=Math.min(1, lq*0.65 + quality*0.45 + nudge*0.4);
+      const levels=Math.max(2, 2+Math.round(lq*lq*30)); // 2..32 quant levels
+      const ring=(1-lq)*(0.6+0.4*Math.sin(phase*1.7-ph)); // worse rings when crushed
+      crushBlock(bx,by,levels,Math.max(0,ring));
+    }
+    octx.putImageData(buf,0,0);
+    // upscale with nearest-neighbor so blocks read as hard DCT cells
+    ctx.imageSmoothingEnabled=false;
+    ctx.fillStyle='#14060c';ctx.fillRect(0,0,cv.width,cv.height);
+    const s=Math.min(cv.width,cv.height), ox=(cv.width-s)/2, oy=(cv.height-s)/2;
+    ctx.drawImage(off,0,0,GRID,GRID,ox,oy,s,s);
+    // faint scan of the 8x8 quant grid in accent, fading with quality
+    ctx.globalAlpha=0.10+0.16*(1-quality);
+    ctx.strokeStyle='#ff4040';ctx.lineWidth=Math.max(1,DPR*0.5);
+    const cell=s/(GRID/BS);
+    ctx.beginPath();
+    for(let k=0;k<=GRID/BS;k+=4){ const p=Math.round(ox+k*cell)+0.5;
+      ctx.moveTo(p,oy);ctx.lineTo(p,oy+s); ctx.moveTo(ox,Math.round(oy+k*cell)+0.5);ctx.lineTo(ox+s,Math.round(oy+k*cell)+0.5);}
+    ctx.stroke();ctx.globalAlpha=1;
+  }
+  let raf=0;
+  function frame(){ t+=1; render(); raf=requestAnimationFrame(frame); }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=120;render();} else start();
+})();
+</script>
+</body>
+</html>

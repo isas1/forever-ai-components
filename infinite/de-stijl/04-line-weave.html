@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="White horizontal and vertical lines thread and interlace over saturating primary-color blocks on a dark glowing field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Line Weave</title>
+<style>
+  :root{
+    --ds04-bg:#0e0e10;
+    --ds04-line:#f4f1ea;
+    --ds04-blue:#1b5fc4;
+    --ds04-red:#c8362f;
+    --ds04-yellow:#e3c01f;
+  }
+  html,body{margin:0;height:100%}
+  #ds04-stage{
+    position:fixed;inset:0;background:var(--ds04-bg);overflow:hidden;
+  }
+  /* Glow is a single static radial gradient — never repaints */
+  #ds04-stage::before{
+    content:"";position:absolute;inset:-10%;
+    background:radial-gradient(60% 55% at 50% 46%,rgba(27,95,196,.16),transparent 70%);
+    pointer-events:none;
+  }
+  #ds04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ds04-stage" role="img" aria-label="De Stijl composition of woven horizontal and vertical black lines threading over primary-colored rectangles on a dark field.">
+  <canvas id="ds04-c"></canvas>
+</div>
+<div class="cap">Line Weave</div>
+
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("ds04-stage");
+  var cv=document.getElementById("ds04-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  var css=getComputedStyle(document.documentElement);
+  var BG=css.getPropertyValue("--ds04-bg").trim()||"#0e0e10";
+  var LINE=css.getPropertyValue("--ds04-line").trim()||"#f4f1ea";
+  var BLUE=css.getPropertyValue("--ds04-blue").trim()||"#1b5fc4";
+  var RED=css.getPropertyValue("--ds04-red").trim()||"#c8362f";
+  var YEL=css.getPropertyValue("--ds04-yellow").trim()||"#e3c01f";
+
+  // Fixed neoplastic layout in 0..1 normalized space. Originals, no known painting.
+  // Verticals (x) and horizontals (y) — uneven spacing = dynamic equilibrium.
+  var VX=[0.20,0.42,0.63,0.81];
+  var HY=[0.26,0.48,0.70];
+  // Color blocks: cell defined by [x0,y0,x1,y1] in normalized coords + color.
+  var BLOCKS=[
+    {x0:0.00,y0:0.00,x1:0.20,y1:0.26,c:YEL},
+    {x0:0.63,y0:0.00,x1:0.81,y1:0.26,c:BLUE},
+    {x0:0.81,y0:0.48,x1:1.00,y1:0.70,c:RED},
+    {x0:0.00,y0:0.70,x1:0.20,y1:1.00,c:BLUE},
+    {x0:0.42,y0:0.70,x1:0.63,y1:1.00,c:YEL}
+  ];
+
+  var W=0,H=0,DPR=1,S=0; // S = min(W,H) used for stroke scaling
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth;H=stage.clientHeight;
+    cv.width=Math.max(1,Math.round(W*DPR));
+    cv.height=Math.max(1,Math.round(H*DPR));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);
+  }
+
+  // Weave sweep: a luminous band travels along each line and "threads" it in.
+  // We render line coverage as a phase 0..1 per line; band is a soft bright run.
+  var lw=function(){return Math.max(3,S*0.018);}; // line weight
+
+  function drawBlock(b,ph){
+    var x=b.x0*W,y=b.y0*H,w=(b.x1-b.x0)*W,h=(b.y1-b.y0)*H;
+    ctx.globalAlpha=ph; // fade-in saturate
+    ctx.fillStyle=b.c;
+    ctx.fillRect(x,y,w,h);
+    ctx.globalAlpha=1;
+  }
+
+  // draw one vertical line with a thread progress p (0..1) and weave band pos wp
+  function drawV(xn,p,wp){
+    var x=xn*W,t=lw();
+    var len=H*p;
+    ctx.fillStyle=LINE;
+    ctx.fillRect(x-t/2,0,t,len);
+    if(wp>=0){ // bright weave node
+      var ny=wp*H;
+      ctx.fillStyle="#fff";
+      ctx.globalAlpha=0.9;
+      ctx.fillRect(x-t*0.75,ny-t*0.75,t*1.5,t*1.5);
+      ctx.globalAlpha=1;
+    }
+  }
+  function drawH(yn,p,wp){
+    var y=yn*H,t=lw();
+    var len=W*p;
+    ctx.fillStyle=LINE;
+    ctx.fillRect(0,y-t/2,len,t);
+    if(wp>=0){
+      var nx=wp*W;
+      ctx.fillStyle="#fff";
+      ctx.globalAlpha=0.9;
+      ctx.fillRect(nx-t*0.75,y-t*0.75,t*1.5,t*1.5);
+      ctx.globalAlpha=1;
+    }
+  }
+
+  // easing helpers (allocation-free, plain math)
+  function clamp01(v){return v<0?0:v>1?1:v;}
+  function ease(v){return v*v*(3-2*v);}
+
+  var start=0;
+  function render(now){
+    if(!start)start=now;
+    var t=(now-start)/1000;
+    // cycle: 6.4s weave, then a held breath, loop. one period = 8s
+    var P=8.0, ph=(t%P)/P; // 0..1
+
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle=BG;
+    ctx.fillRect(0,0,W,H);
+
+    // blocks saturate in during first 30% of cycle, hold, fade slightly at end
+    var bIn=ease(clamp01(ph/0.30));
+    var bOut=1-0.0*ease(clamp01((ph-0.92)/0.08));
+    var blockA=bIn*bOut;
+    for(var i=0;i<BLOCKS.length;i++)drawBlock(BLOCKS[i],blockA*0.92);
+
+    // Lines thread in: verticals lead, horizontals weave over with slight stagger.
+    // each line has its own window inside 0..0.75 of the cycle.
+    var weaveEnd=0.78;
+    var span=weaveEnd;
+    var k,p,local,wp;
+    // verticals
+    for(k=0;k<VX.length;k++){
+      var s0=(k/(VX.length+HY.length))*0.5; // staggered starts
+      local=clamp01((ph-s0)/(span-s0));
+      p=ease(local);
+      // weave node = the leading edge while threading
+      wp=(local>0.02&&local<0.98)?p:-1;
+      drawV(VX[k],p,wp);
+    }
+    // horizontals (woven over the verticals -> drawn after for over/under feel,
+    // alternate a clip notch so it reads as interlace)
+    for(k=0;k<HY.length;k++){
+      var s1=(0.12+(k/(HY.length+VX.length))*0.5);
+      local=clamp01((ph-s1)/(span-s1));
+      p=ease(local);
+      wp=(local>0.02&&local<0.98)?p:-1;
+      drawH(HY[k],p,wp);
+      // interlace: punch tiny notches where this H crosses each V (over/under)
+      if(p>0){
+        var t2=lw(),yy=HY[k]*H;
+        for(var v=0;v<VX.length;v++){
+          var xx=VX[v]*W;
+          if(xx<=W*p){
+            // on alternating crossings, redraw vertical sliver on top => "over"
+            if(((k+v)&1)===0){
+              ctx.fillStyle=LINE;
+              ctx.fillRect(xx-t2/2,yy-t2*0.95,t2,t2*1.9);
+            }
+          }
+        }
+      }
+    }
+    if(running)raf=requestAnimationFrame(render);
+  }
+
+  function drawOneFrame(){
+    // settled static frame: full weave, full blocks, no nodes
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    for(var i=0;i<BLOCKS.length;i++)drawBlock(BLOCKS[i],0.92);
+    var t2=lw(),v,k;
+    for(k=0;k<VX.length;k++)drawV(VX[k],1,-1);
+    for(k=0;k<HY.length;k++){
+      drawH(HY[k],1,-1);
+      var yy=HY[k]*H;
+      for(v=0;v<VX.length;v++){
+        if(((k+v)&1)===0){
+          var xx=VX[v]*W;
+          ctx.fillStyle=LINE;
+          ctx.fillRect(xx-t2/2,yy-t2*0.95,t2,t2*1.9);
+        }
+      }
+    }
+  }
+
+  var running=false,raf=0;
+  function play(){if(running)return;running=true;start=0;raf=requestAnimationFrame(render);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  function boot(){
+    size();
+    if(reduce){drawOneFrame();return;}
+    play();
+  }
+
+  var rT=0;
+  window.addEventListener("resize",function(){
+    if(rT)clearTimeout(rT);
+    rT=setTimeout(function(){
+      size();
+      if(reduce){drawOneFrame();}
+    },120);
+  });
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden)stop();else play();
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>

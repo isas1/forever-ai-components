@@ -1,0 +1,93 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Purple liquid metaballs orbiting a shared center, merging and splitting with a gooey surface-tension filter as the cluster breathes.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Gooey Merge</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0b0d12;display:grid;place-items:center}
+.ssa03-stage{width:100%;height:100%;display:block}
+.ssa03-c{fill:#7c5cff}
+.ssa03-core{fill:#cdbcff;opacity:.9}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#7c5cff;opacity:.42;letter-spacing:.09em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<svg class="ssa03-stage" id="ssa03-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice"
+     role="img" aria-label="Liquid metaballs merging and splitting">
+  <defs>
+    <radialGradient id="ssa03-grad" cx="42%" cy="38%" r="75%">
+      <stop offset="0%" stop-color="#b9a6ff"/>
+      <stop offset="55%" stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#4a31c4"/>
+    </radialGradient>
+    <filter id="ssa03-goo" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3.1" result="b"/>
+      <feColorMatrix in="b" type="matrix"
+        values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 26 -11" result="goo"/>
+      <feBlend in="SourceGraphic" in2="goo"/>
+    </filter>
+  </defs>
+  <g id="ssa03-field" filter="url(#ssa03-goo)" fill="url(#ssa03-grad)"></g>
+</svg>
+<div class="cap">Gooey Merge</div>
+<script>(function(){
+  var svg=document.getElementById('ssa03-svg');
+  var field=document.getElementById('ssa03-field');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var NS='http://www.w3.org/2000/svg';
+  // Each blob orbits a shared centre on its own ellipse + phase, so the cluster
+  // breathes: paths cross at the centre (merge) and swing wide (split).
+  var CX=50, CY=50;
+  var blobs=[
+    {r:9.5,  ax:0,   ay:0,   sp:0,    ph:0},                 // anchor core, near-still
+    {r:7.2,  ax:22,  ay:11,  sp:0.34, ph:0.0},
+    {r:6.0,  ax:14,  ay:24,  sp:0.47, ph:2.1},
+    {r:6.8,  ax:25,  ay:6,   sp:0.29, ph:4.0},
+    {r:5.2,  ax:10,  ay:19,  sp:0.61, ph:1.0},
+    {r:5.6,  ax:19,  ay:21,  sp:0.41, ph:3.3},
+    {r:4.6,  ax:27,  ay:14,  sp:0.53, ph:5.2}
+  ];
+  var nodes=blobs.map(function(b){
+    var c=document.createElementNS(NS,'circle');
+    c.setAttribute('class','ssa03-c'); c.setAttribute('r',b.r);
+    field.appendChild(c); b.el=c; return c;
+  });
+  // confident, asymmetric easing on the breathing scale of the whole cluster
+  function ease(t){return t*t*(3-2*t);}                      // smoothstep
+  var raf=0, t0=0, running=false;
+  function frame(now){
+    if(!t0)t0=now; var t=(now-t0)/1000;
+    // global pulse drives merge/split — slow inhale, sharper exhale
+    var pu=ease((Math.sin(t*0.42)+1)/2);                     // 0..1
+    var spread=0.5+pu*0.95;                                   // contracts then flings out
+    for(var i=0;i<blobs.length;i++){
+      var b=blobs[i];
+      var a=t*b.sp+b.ph;
+      // radius wobble adds secondary surface-tension motion
+      var wob=1+0.12*Math.sin(t*1.3+b.ph*1.7);
+      var x=CX+Math.cos(a)*b.ax*spread;
+      var y=CY+Math.sin(a*1.06+0.6)*b.ay*spread;
+      b.el.setAttribute('cx',x.toFixed(2));
+      b.el.setAttribute('cy',y.toFixed(2));
+      b.el.setAttribute('r',(b.r*wob).toFixed(2));
+    }
+    if(running) raf=requestAnimationFrame(frame);
+  }
+  function staticFrame(){
+    // legible resting pose: tight cluster, clearly fused
+    for(var i=0;i<blobs.length;i++){
+      var b=blobs[i], a=b.ph;
+      b.el.setAttribute('cx',(CX+Math.cos(a)*b.ax*0.42).toFixed(2));
+      b.el.setAttribute('cy',(CY+Math.sin(a)*b.ay*0.42).toFixed(2));
+    }
+  }
+  function start(){ if(running||reduce)return; running=true; t0=0; raf=requestAnimationFrame(frame);}
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0;}
+  function vis(){
+    if(reduce)return;
+    if(document.hidden){stop(); if(svg.pauseAnimations)svg.pauseAnimations();}
+    else{ if(svg.unpauseAnimations)svg.unpauseAnimations(); start(); }
+  }
+  document.addEventListener('visibilitychange',vis);
+  if(reduce){ staticFrame(); }
+  else{ start(); }
+})();</script>
+</body></html>

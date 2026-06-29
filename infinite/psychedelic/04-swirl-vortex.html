@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A slow vortex of nested rotating petal arms in pink-violet-cyan hues spiralling inward toward a glowing core.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swirl Vortex</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  #ps04-stage{position:fixed;inset:0;width:100%;height:100%;background:#0a0612}
+  #ps04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static glow vignette — painted once, never animated */
+  #ps04-glow{position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(closest-side at 50% 50%, rgba(255,61,166,.22), rgba(255,61,166,0) 62%),
+      radial-gradient(closest-side at 50% 50%, rgba(20,8,30,0) 55%, rgba(7,3,12,.78) 100%);
+    mix-blend-mode:screen}
+  #ps04-glow.v2{mix-blend-mode:normal}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ps04-stage" role="img" aria-label="A slow psychedelic vortex of swirling complementary hues spiralling inward toward a glowing center.">
+  <canvas id="ps04-c"></canvas>
+  <div id="ps04-glow"></div>
+</div>
+<div class="cap">Swirl Vortex</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('ps04-stage');
+  var cv=document.getElementById('ps04-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var dpr=Math.min(2,window.devicePixelRatio||1);
+
+  var W=0,H=0,cx=0,cy=0,maxR=0;
+
+  // vortex = nested rotating petals on log-spiral arms. Few elements, all cheap arcs.
+  var ARMS=5, RINGS=11;            // 55 quads — well under cap
+  var TWO=Math.PI*2;
+  // precomputed per-ring geometry (radius, base hue offset) — no per-frame alloc
+  var ringR=new Float64Array(RINGS), ringHue=new Float64Array(RINGS), ringW=new Float64Array(RINGS);
+
+  function size(){
+    var r=stage.getBoundingClientRect();
+    W=Math.max(1,r.width); H=Math.max(1,r.height);
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    cx=W/2; cy=H/2; maxR=Math.hypot(W,H)*0.62;
+    for(var i=0;i<RINGS;i++){
+      var t=i/(RINGS-1);
+      ringR[i]=maxR*Math.pow(t,1.35)*0.97+maxR*0.03; // log-ish spacing, denser at core
+      ringHue[i]=t*230;                               // pink->violet->cyan sweep
+      ringW[i]=maxR*(0.16-0.10*t)+2;                  // outer petals fat, inner tight
+    }
+  }
+
+  // draw one swirl frame. ang drives global rotation; warp pulses petal twist.
+  function frame(ang,warp){
+    // trailing-fade fill instead of clear → liquid melt persistence, single rect, cheap
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='rgba(10,6,18,0.20)';
+    ctx.fillRect(0,0,W,H);
+
+    ctx.globalCompositeOperation='lighter';
+    var i,a, spiral=0.55;          // arm-to-arm log twist
+    for(i=RINGS-1;i>=0;i--){
+      var R=ringR[i];
+      var hb=ringHue[i];
+      var lw=ringW[i];
+      // each ring rotates a touch faster toward the core → vortex inward pull
+      var spin=ang*(0.5+ (RINGS-i)*0.16);
+      var tw=warp*(0.4+0.6*(i/(RINGS-1)));     // outer petals warp more
+      for(a=0;a<ARMS;a++){
+        var base=spin + a*(TWO/ARMS) + R*0.0009*spiral;
+        var sweep=0.42 + 0.20*Math.sin(tw + a*1.7 + i*0.5);
+        var h=(hb + a*14 + spin*22)%360;
+        ctx.beginPath();
+        ctx.lineWidth=lw;
+        ctx.lineCap='round';
+        ctx.strokeStyle='hsla('+h+',92%,'+(48+18*Math.sin(i*0.6+a))+'%,0.5)';
+        ctx.arc(cx,cy,R,base-sweep,base+sweep);
+        ctx.stroke();
+      }
+    }
+    // calm glowing core — static-feeling pip drawn each frame, tiny, no flash
+    ctx.globalCompositeOperation='lighter';
+    var cr=maxR*0.05;
+    var g=ctx.createRadialGradient(cx,cy,0,cx,cy,cr);
+    g.addColorStop(0,'rgba(255,225,245,0.9)');
+    g.addColorStop(0.5,'rgba(255,61,166,0.55)');
+    g.addColorStop(1,'rgba(255,61,166,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(cx,cy,cr,0,TWO); ctx.fill();
+  }
+
+  function staticFrame(){
+    // opaque base so reduced-motion has solid, legible bg
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#0a0612'; ctx.fillRect(0,0,W,H);
+    frame(0.8,0.0); frame(0.8,0.0); // two passes to build up from transparent trail fill
+  }
+
+  var raf=0, running=false, t0=0;
+  function loop(now){
+    if(!running)return;
+    if(!t0)t0=now;
+    var s=(now-t0)/1000;
+    // SLOW: full rotation ~ every 40s; warp breathes ~ every 17s. Seizure-safe.
+    var ang=s*(TWO/40);
+    var warp=s*(TWO/17);
+    frame(ang,warp);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){ if(running)return; running=true; t0=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size();
+    if(reduce){ staticFrame(); return; }
+    // prime the canvas opaque once so 'lighter' has somewhere to glow from
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#0a0612'; ctx.fillRect(0,0,W,H);
+    start();
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){
+      size();
+      if(reduce){ staticFrame(); }
+      else { ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#0a0612'; ctx.fillRect(0,0,W,H); }
+    },120);
+  });
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Build Runner — Terminal. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build Runner</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0a;color:#00ff41;font:13px/1.7 ui-monospace,Menlo,"Courier New",monospace}
+.trm-wrap{padding:12px 14px;height:100%;overflow:hidden;display:flex;flex-direction:column}
+.trm-line{white-space:pre}
+.trm-dim{color:#2a5a2a}
+.trm-ok{color:#4ade80}
+.trm-warn{color:#ffa500}
+.trm-err{color:#ff5555}
+.trm-hi{color:#e2e8f0}
+.trm-cursor{display:inline-block;width:8px;height:.85em;background:#00ff41;animation:trm-blink 1s step-start infinite;vertical-align:middle}
+@keyframes trm-blink{0%,100%{opacity:1}50%{opacity:0}}
+.trm-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#00ff41;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+</style></head><body>
+<div class="trm-wrap" id="trm-wrap"></div>
+<div class="trm-cap">build runner</div>
+<script>(()=>{
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const wrap=document.getElementById('trm-wrap');
+  const MAX=16;
+
+  function line(txt,cls){
+    const d=document.createElement('div');
+    d.className='trm-line'+(cls?' '+cls:'');
+    d.textContent=txt;
+    wrap.appendChild(d);
+    while(wrap.children.length>MAX)wrap.removeChild(wrap.firstChild);
+    return d;
+  }
+
+  const phases=[
+    ()=>new Promise(res=>{
+      line('$ npm install','trm-hi');
+      line('','');
+      let dots=0;
+      const dotLine=line('  resolving packages .','trm-dim');
+      if(reduce){dotLine.textContent='  resolving packages ......';res();return;}
+      const iv=setInterval(()=>{
+        dots++;
+        dotLine.textContent='  resolving packages '+''.padStart(dots%8,'.')+' '.repeat(8-dots%8);
+        if(dots===16){clearInterval(iv);res();}
+      },180);
+    }),
+    ()=>new Promise(res=>{
+      const pkgs=['  added chalk@5.3.0','  added dotenv@16.4.5','  added express@4.18.2','  added nodemon@3.1.0','  added ws@8.17.0'];
+      let i=0;
+      if(reduce){pkgs.forEach(p=>line(p,'trm-dim'));res();return;}
+      const iv=setInterval(()=>{
+        if(i<pkgs.length){line(pkgs[i],'trm-dim');i++;}
+        else{clearInterval(iv);res();}
+      },120);
+    }),
+    ()=>new Promise(res=>{
+      line('','');
+      line('  added 127 packages in 2.4s','trm-ok');
+      line('','');
+      if(reduce){res();return;}
+      setTimeout(res,500);
+    }),
+    ()=>new Promise(res=>{
+      line('$ npm run build','trm-hi');
+      line('','');
+      if(reduce){res();return;}
+      setTimeout(res,300);
+    }),
+    ()=>new Promise(res=>{
+      const steps=[
+        {t:'  [1/3] linting ...',c:'trm-dim'},
+        {t:'  [1/3] lint OK','c':'trm-ok'},
+        {t:'  [2/3] compiling src/index.ts ...',c:'trm-dim'},
+        {t:'  [2/3] compiled 42 modules','c':'trm-ok'},
+        {t:'  [3/3] bundling ...',c:'trm-dim'},
+        {t:'  [3/3] bundle 84.2 kB → dist/app.js','c':'trm-ok'},
+      ];
+      let i=0;
+      if(reduce){steps.forEach(s=>line(s.t,s.c));res();return;}
+      const iv=setInterval(()=>{
+        if(i<steps.length){line(steps[i].t,steps[i].c);i++;}
+        else{clearInterval(iv);res();}
+      },280);
+    }),
+    ()=>new Promise(res=>{
+      line('','');
+      line('  ✓ Compiled successfully in 1.8s','trm-ok');
+      line('','');
+      if(reduce){res();return;}
+      setTimeout(res,600);
+    }),
+    ()=>new Promise(res=>{
+      line('  watching for file changes...','trm-dim');
+      if(reduce){res();return;}
+      setTimeout(res,2200);
+    }),
+    ()=>new Promise(res=>{
+      line('','');
+      line('  change detected: src/server.ts','trm-warn');
+      line('','');
+      if(reduce){res();return;}
+      setTimeout(res,400);
+    }),
+  ];
+
+  let running=true;
+  async function run(){
+    while(running){
+      wrap.innerHTML='';
+      for(const ph of phases){
+        if(!running)break;
+        await ph();
+      }
+      if(!running)break;
+      await new Promise(r=>setTimeout(r,reduce?100:800));
+    }
+  }
+
+  function stop(){running=false;}
+  function play(){running=true;run();}
+
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():(running||(running=true,run())));
+  play();
+})();</script>
+</body></html>

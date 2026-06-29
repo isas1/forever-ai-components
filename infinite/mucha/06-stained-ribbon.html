@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Stained Ribbon — Alphonse Mucha. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stained Ribbon</title>
+<style>
+  html,body{margin:0;height:100%;background:#231a12;overflow:hidden}
+  #muc06-stage{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 40%,#2f2418,#231a12)}
+  #muc06-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .muc06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f4ecd8;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="muc06-stage" role="img" aria-label="A flowing Art Nouveau banner: stacked teal, sage and peach ribbons undulate across a dark ground, edged in gold and studded with enamel beads that catch the light as they ripple on a loop.">
+  <canvas id="muc06-cv"></canvas>
+</div>
+<div class="muc06-cap">Stained Ribbon</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={cream:'#f4ecd8',sage:'#8a9a5b',peach:'#e7b98f',gold:'#c4a14e',tealDeep:'#1d4248'};
+  const cv=document.getElementById('muc06-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function shade(hex,f){
+    const n=parseInt(hex.slice(1),16);
+    let r=Math.min(255,((n>>16)&255)*f)|0;
+    let g=Math.min(255,((n>>8)&255)*f)|0;
+    let b=Math.min(255,(n&255)*f)|0;
+    return `rgb(${r},${g},${b})`;
+  }
+  let S=fitCanvas(cv);
+  let t=0,last=performance.now();
+  function paintBg(){const g=S.ctx.createRadialGradient(S.w/2,S.h*0.4,0,S.w/2,S.h*0.4,Math.max(S.w,S.h));g.addColorStop(0,'#2f2418');g.addColorStop(1,'#231a12');S.ctx.fillStyle=g;S.ctx.fillRect(0,0,S.w,S.h);}
+  function ribbonY(x,W,off){
+    return Math.sin(x/W*Math.PI*3+off)*0.5+Math.sin(x/W*Math.PI*5+off*1.3)*0.18;
+  }
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    paintBg();
+    const midY=H*0.5, amp=H*0.18, band=H*0.16;
+    const layers=[
+      {col:PAL.tealDeep,off:0.0,sh:-band*0.9,a:0.5},
+      {col:PAL.sage,off:0.5,sh:0,a:0.95},
+      {col:PAL.peach,off:1.1,sh:band*0.9,a:0.7}
+    ];
+    layers.forEach(L=>{
+      ctx.save();ctx.globalAlpha=L.a;
+      const grad=ctx.createLinearGradient(0,midY-band,0,midY+band);
+      grad.addColorStop(0,shade(L.col,1.18));
+      grad.addColorStop(0.5,L.col);
+      grad.addColorStop(1,shade(L.col,0.7));
+      ctx.fillStyle=grad;
+      ctx.beginPath();
+      for(let x=0;x<=W;x+=6){
+        const y=midY+ribbonY(x,W,t*1.2+L.off)*amp+L.sh-band;
+        x?ctx.lineTo(x,y):ctx.moveTo(x,y);
+      }
+      for(let x=W;x>=0;x-=6){
+        const y=midY+ribbonY(x,W,t*1.2+L.off)*amp+L.sh+band;
+        ctx.lineTo(x,y);
+      }
+      ctx.closePath();ctx.fill();
+      ctx.strokeStyle=PAL.gold;ctx.lineWidth=1.6;ctx.globalAlpha=L.a*0.9;
+      ctx.beginPath();
+      for(let x=0;x<=W;x+=6){
+        const y=midY+ribbonY(x,W,t*1.2+L.off)*amp+L.sh-band;
+        x?ctx.lineTo(x,y):ctx.moveTo(x,y);
+      }
+      ctx.stroke();
+      ctx.globalAlpha=L.a;
+      for(let x=30;x<W;x+=64){
+        const y=midY+ribbonY(x,W,t*1.2+L.off)*amp+L.sh;
+        ctx.fillStyle=PAL.gold;ctx.beginPath();ctx.arc(x,y,3.4,0,7);ctx.fill();
+        ctx.fillStyle=PAL.cream;ctx.beginPath();ctx.arc(x-1,y-1,1.1,0,7);ctx.fill();
+      }
+      ctx.restore();
+    });
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  paintBg();
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED) draw(performance.now());},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

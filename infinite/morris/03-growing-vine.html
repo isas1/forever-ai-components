@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Growing Vine — William Morris. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Growing Vine</title>
+<style>
+  html,body{margin:0;height:100%;background:#1d3550;overflow:hidden}
+  #mor03-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mor03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mor03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe7d2;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mor03-stage" role="img" aria-label="A William Morris vine draws itself from the root on a deep indigo ground, branching symmetrically and unfurling sage leaves with madder flowers at the tips, then fades and grows anew.">
+  <canvas id="mor03-cv"></canvas>
+</div>
+<div class="mor03-cap">Growing Vine</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mor03-cv'); if(!cv) return;
+  const PAL={indigoDeep:'#1d3550',olive:'#6b7233',madder:'#a8392b',sage:'#7d9b6a',gold:'#c2a14a',ink:'#23301f'};
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  let grow=0,last=performance.now(),dir=1;
+
+  function vine(ctx,x,y,ang,len,depth,prog){
+    if(depth<=0||len<6) return;
+    const local=Math.max(0,Math.min(1,prog*depth*0.55));
+    if(local<=0) return;
+    const ex=x+Math.cos(ang)*len*local, ey=y+Math.sin(ang)*len*local;
+    ctx.beginPath();ctx.moveTo(x,y);
+    const mx=x+Math.cos(ang)*len*local*0.5+Math.cos(ang+1.5)*len*0.12;
+    const my=y+Math.sin(ang)*len*local*0.5+Math.sin(ang+1.5)*len*0.12;
+    ctx.quadraticCurveTo(mx,my,ex,ey);
+    ctx.strokeStyle=PAL.sage;ctx.lineWidth=Math.max(1.2,depth*0.9);ctx.lineCap='round';ctx.stroke();
+    if(local>0.6){
+      ctx.save();ctx.translate(ex,ey);ctx.rotate(ang+1.3);
+      const ls=(local-0.6)/0.4*(5+depth*2);ctx.scale(ls/9,ls/9);
+      ctx.beginPath();ctx.moveTo(0,0);ctx.bezierCurveTo(7,-4,9,-13,3,-20);ctx.bezierCurveTo(1,-15,-2,-17,-7,-11);ctx.bezierCurveTo(-4,-6,-5,-3,0,0);ctx.closePath();
+      ctx.fillStyle=PAL.olive;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.4;ctx.stroke();ctx.restore();
+    }
+    if(local>=1){
+      const nl=len*0.74,spread=0.55+0.08*depth;
+      vine(ctx,ex,ey,ang-spread,nl,depth-1,prog);
+      vine(ctx,ex,ey,ang+spread,nl,depth-1,prog);
+      if(depth<=2){
+        ctx.save();ctx.translate(ex,ey);
+        for(let i=0;i<5;i++){ctx.rotate(Math.PI*2/5);ctx.beginPath();ctx.ellipse(0,-6,3,5,0,0,7);ctx.fillStyle=PAL.madder;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=.8;ctx.stroke();}
+        ctx.beginPath();ctx.arc(0,0,3,0,7);ctx.fillStyle=PAL.gold;ctx.fill();ctx.restore();
+      }
+    }
+  }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED){grow+=dt*0.28*dir;if(grow>=1.25){grow=1.25;dir=-1;}if(grow<=0){grow=0;dir=1;}}else grow=1;
+    const ctx=S.ctx;ctx.fillStyle=PAL.indigoDeep;ctx.fillRect(0,0,S.w,S.h);
+    ctx.strokeStyle='rgba(125,155,106,.08)';ctx.lineWidth=1;
+    for(let gx=0;gx<S.w;gx+=40){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,S.h);ctx.stroke();}
+    const baseY=S.h-8,prog=Math.min(1,grow);
+    vine(ctx,S.w*0.5,baseY,-Math.PI/2,S.h*0.34,5,prog);
+    vine(ctx,S.w*0.5,baseY,-Math.PI/2-0.0001,S.h*0.34,5,prog*0.96);
+  }
+
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

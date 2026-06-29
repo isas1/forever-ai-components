@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Demoscene cyan-magenta-violet plasma of interfering sine waves blurred and color-cycling into a molten liquid field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plasma Sine Field</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#05031a;}
+  #psf-c{display:block;width:100%;height:100%;}
+  .psf-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#19f0ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="psf-c"></canvas>
+<div class="psf-cap">Plasma Sine Field</div>
+<script>
+(function(){
+  const cv=document.getElementById('psf-c'),ctx=cv.getContext('2d',{alpha:false});
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,img,buf,cols,rows,CELL;
+  // demoscene-style low-res plasma upscaled by canvas smoothing for that liquid early-90s blur
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(1,0,0,1,0,0);
+    CELL=Math.max(3,Math.round(Math.min(W,H)/72)); // adaptive coarseness -> hypnotic blur
+    cols=Math.ceil(W*DPR/CELL)+1;rows=Math.ceil(H*DPR/CELL)+1;
+    img=ctx.createImageData(cols,rows);buf=img.data;
+  }
+  addEventListener('resize',size);size();
+  // palette: 256-entry cycling table tuned to bg #05031a / accent #19f0ff
+  const PAL=new Uint8Array(256*3);
+  for(let i=0;i<256;i++){
+    const p=i/255, a=Math.PI*2*p;
+    // electric cyan/magenta/violet plasma sweep
+    let r=Math.sin(a+0.0)*0.5+0.5;
+    let g=Math.sin(a+2.1)*0.5+0.5;
+    let b=Math.sin(a+4.2)*0.5+0.5;
+    // bias toward accent cyan (#19f0ff) and deep violet, lift floor off pure black
+    r=0.06+r*0.82; g=0.04+g*0.94; b=0.18+b*0.82;
+    const peak=Math.pow(Math.sin(a*1.5)*0.5+0.5,2); // accent flares
+    g=Math.min(1,g+peak*0.35); b=Math.min(1,b+peak*0.30);
+    PAL[i*3]=r*255|0;PAL[i*3+1]=g*255|0;PAL[i*3+2]=b*255|0;
+  }
+  let t=0,boost=0,px=0.5,py=0.5;
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
+    px=(e.clientX-r.left)/W;py=(e.clientY-r.top)/H;boost=1;});
+  cv.addEventListener('click',()=>{boost=2.4;});
+  function render(){
+    const sc=Math.min(cols,rows), inv=4.0/sc;
+    const t1=t*0.013, t2=t*0.021, t3=t*0.009;
+    const cxo=Math.cos(t*0.006)*cols*0.5+px*cols, cyo=Math.sin(t*0.005)*rows*0.5+py*rows;
+    let o=0;
+    for(let y=0;y<rows;y++){
+      const fy=y*inv;
+      const s1y=Math.sin(fy*1.7+t2);
+      const s3yA=fy*0.8, s3yB=t3;
+      for(let x=0;x<cols;x++){
+        const fx=x*inv;
+        // four interfering sine sources — the classic plasma sum
+        let v=Math.sin(fx*1.3+t1)
+             +s1y
+             +Math.sin((fx+fy)*0.9+t1*1.4)
+             +Math.sin(Math.sqrt(((x-cxo)*(x-cxo)+(y-cyo)*(y-cyo)))*inv*1.1+t2*1.7);
+        v+=Math.sin((fx*s3yA+s3yB)*1.0);
+        // map [-5,5] -> palette index, cycle the palette over time (hue-rotate feel)
+        let idx=((v*25.5+128+t*1.6)|0)&255;
+        const pi=idx*3;
+        buf[o++]=PAL[pi];buf[o++]=PAL[pi+1];buf[o++]=PAL[pi+2];buf[o++]=255;
+      }
+    }
+  }
+  // offscreen tiny buffer scaled up smoothly for the molten blur
+  const off=document.createElement('canvas');off.width=1;off.height=1;
+  const octx=off.getContext('2d');
+  function blit(){
+    if(off.width!==cols||off.height!==rows){off.width=cols;off.height=rows;}
+    octx.putImageData(img,0,0);
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';
+    ctx.drawImage(off,0,0,cols,rows,0,0,W*DPR,H*DPR);
+  }
+  let raf=0;
+  function frame(){
+    if(!reduce){t+=1+boost*4;boost*=0.93;}
+    render();blit();
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=40;render();blit();}else start();
+})();
+</script>
+</body>
+</html>

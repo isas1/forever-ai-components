@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Bold sine-wave squiggle ribbons with marching beads drift across a confetti field of dots, zigzags and terrazzo flecks on deep indigo.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Squiggle Parade</title>
+<style>
+  html,body{margin:0;height:100%;background:#141019;overflow:hidden}
+  #mp01-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mp01-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="mp01-stage" role="img" aria-label="Memphis-style parade of bold wiggling squiggles drifting across a confetti field of dots, zigzags and terrazzo flecks on a deep indigo background.">
+    <canvas id="mp01-c"></canvas>
+  </div>
+  <div class="cap">Squiggle Parade</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("mp01-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // Memphis palette around accent #36d6c3.
+  var PAL=["#36d6c3","#ff5d8f","#ffd23f","#7b5cff","#ff7a3c","#f4f0e6","#2bb7e8"];
+  var BG="#141019";
+
+  var W=0,H=0,DPR=1,S=1; // S = min dimension, the layout scale
+  function size(){
+    var r=cv.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,r.width); H=Math.max(1,r.height);
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    S=Math.min(W,H);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  // --- Confetti field: fixed elements, generated once, drawn statically each frame ---
+  var CONF_N=104;
+  var cx=new Float32Array(CONF_N),cy=new Float32Array(CONF_N),
+      cr=new Float32Array(CONF_N),ck=new Uint8Array(CONF_N),
+      crot=new Float32Array(CONF_N),cc=new Uint8Array(CONF_N);
+  function seedConfetti(){
+    var i,rnd=mulberry(99);
+    for(i=0;i<CONF_N;i++){
+      cx[i]=rnd(); cy[i]=rnd();
+      cr[i]=0.012+rnd()*0.03;
+      ck[i]=(rnd()*4)|0;               // 0 dot,1 zigzag,2 cross,3 terrazzo fleck
+      crot[i]=rnd()*Math.PI*2;
+      cc[i]=(rnd()*PAL.length)|0;
+    }
+  }
+  function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+  function drawConfetti(){
+    var i,x,y,s;
+    for(i=0;i<CONF_N;i++){
+      x=cx[i]*W; y=cy[i]*H; s=cr[i]*S;
+      ctx.save();
+      ctx.translate(x,y);
+      ctx.rotate(crot[i]);
+      ctx.globalAlpha=0.85;
+      var col=PAL[cc[i]];
+      if(ck[i]===0){
+        ctx.fillStyle=col;
+        ctx.beginPath();ctx.arc(0,0,s*0.55,0,6.2832);ctx.fill();
+      }else if(ck[i]===1){
+        ctx.strokeStyle=col;ctx.lineWidth=Math.max(1.4,s*0.22);ctx.lineCap="round";ctx.lineJoin="round";
+        ctx.beginPath();ctx.moveTo(-s,-s*0.3);ctx.lineTo(-s*0.33,s*0.3);ctx.lineTo(s*0.33,-s*0.3);ctx.lineTo(s,s*0.3);ctx.stroke();
+      }else if(ck[i]===2){
+        ctx.strokeStyle=col;ctx.lineWidth=Math.max(1.4,s*0.24);ctx.lineCap="round";
+        ctx.beginPath();ctx.moveTo(-s*0.7,0);ctx.lineTo(s*0.7,0);ctx.moveTo(0,-s*0.7);ctx.lineTo(0,s*0.7);ctx.stroke();
+      }else{
+        ctx.fillStyle=col;
+        ctx.beginPath();
+        ctx.moveTo(-s*0.6,-s*0.2);ctx.lineTo(0,-s*0.6);ctx.lineTo(s*0.55,-s*0.1);
+        ctx.lineTo(s*0.25,s*0.55);ctx.lineTo(-s*0.5,s*0.4);ctx.closePath();ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  // --- The parade of squiggles: a few bold sine-ribbons sweeping across ---
+  var SQ_N=6;
+  var sqY=new Float32Array(SQ_N),sqAmp=new Float32Array(SQ_N),
+      sqFreq=new Float32Array(SQ_N),sqSpeed=new Float32Array(SQ_N),
+      sqW=new Float32Array(SQ_N),sqCol=new Uint8Array(SQ_N),
+      sqPhase=new Float32Array(SQ_N);
+  function seedSquiggles(){
+    var r=mulberry(7),i;
+    for(i=0;i<SQ_N;i++){
+      sqY[i]=0.13+0.74*(i/(SQ_N-1));
+      sqAmp[i]=0.05+r()*0.06;
+      sqFreq[i]=1.6+r()*1.8;
+      sqSpeed[i]=(0.18+r()*0.5)*(r()<0.5?-1:1);
+      sqW[i]=0.018+r()*0.02;
+      sqCol[i]=i%PAL.length;
+      sqPhase[i]=r()*6.2832;
+    }
+  }
+
+  function drawSquiggle(i,t){
+    var baseY=sqY[i]*H, amp=sqAmp[i]*H, w=Math.max(3,sqW[i]*S);
+    var freq=sqFreq[i], ph=sqPhase[i]+t*sqSpeed[i];
+    var steps=26, n;
+    var col=PAL[sqCol[i]];
+    // shadow bead is a static dark offset drawn under the ribbon (not animated as box-shadow)
+    ctx.lineCap="round";ctx.lineJoin="round";
+    ctx.strokeStyle="rgba(0,0,0,0.32)";ctx.lineWidth=w;
+    ctx.beginPath();
+    for(n=0;n<=steps;n++){
+      var u=n/steps, x=u*W;
+      var y=baseY+Math.sin(u*freq*6.2832+ph)*amp + w*0.5;
+      if(n===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle=col;ctx.lineWidth=w;
+    ctx.beginPath();
+    for(n=0;n<=steps;n++){
+      var u2=n/steps, x2=u2*W;
+      var y2=baseY+Math.sin(u2*freq*6.2832+ph)*amp;
+      if(n===0)ctx.moveTo(x2,y2);else ctx.lineTo(x2,y2);
+    }
+    ctx.stroke();
+    // marching beads riding the crest for parade rhythm
+    ctx.fillStyle=PAL[(sqCol[i]+3)%PAL.length];
+    var beads=5,b;
+    for(b=0;b<beads;b++){
+      var ub=((b/beads)+ (t*sqSpeed[i]*0.12))%1; if(ub<0)ub+=1;
+      var xb=ub*W, yb=baseY+Math.sin(ub*freq*6.2832+ph)*amp;
+      ctx.beginPath();ctx.arc(xb,yb,w*0.42,0,6.2832);ctx.fill();
+    }
+  }
+
+  function frame(t){
+    ctx.fillStyle=BG;
+    ctx.fillRect(0,0,W,H);
+    drawConfetti();
+    var i;
+    for(i=0;i<SQ_N;i++)drawSquiggle(i,t);
+  }
+
+  var running=false,raf=0,start=0;
+  function loop(now){
+    if(!running)return;
+    if(!start)start=now;
+    frame((now-start)*0.001);
+    raf=requestAnimationFrame(loop);
+  }
+  function play(){ if(running)return; running=true; start=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size(); seedConfetti(); seedSquiggles();
+    if(reduce){ frame(1.4); return; } // one settled, legible, on-brand frame
+    play();
+  }
+
+  var rt=0;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ size(); if(reduce)frame(1.4); },120);
+  });
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden)stop(); else play();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

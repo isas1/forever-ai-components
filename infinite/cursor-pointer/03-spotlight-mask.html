@@ -1,0 +1,150 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A soft radial spotlight follows the pointer, punching through a dark veil to reveal a hidden pink dot grid and the word REVEAL.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Spotlight Mask</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0a0a0f;display:grid;place-items:center}
+#ccp03-c{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:none;touch-action:none}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#ff5ca8;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+</style></head><body>
+<canvas id="ccp03-c" role="img" aria-label="A radial spotlight following the pointer reveals a hidden word grid through a dark veil"></canvas>
+<div class="cap">Spotlight Mask</div>
+<script>(function(){
+var cv=document.getElementById('ccp03-c'),ctx=cv.getContext('2d');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var BG='#0a0a0f',ACC='#ff5ca8';
+var W=0,H=0,DPR=1,running=true,raf=0,t0=0;
+// virtual pointer (in CSS px), real pointer target, blended position
+var vx=0,vy=0,px=0,py=0,bx=0,by=0,rad=0;
+var realActive=false,lastMove=-1e9;
+var WORD='REVEAL';
+
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  bx=px=vx=W*0.5;by=py=vy=H*0.5;
+}
+window.addEventListener('resize',resize);
+
+// eased lissajous demo path — smooth figure that sweeps the whole tile
+function demo(ms){
+  var s=ms*0.00045;
+  var nx=0.5+0.34*Math.sin(s*1.0)*Math.cos(s*0.37);
+  var ny=0.5+0.34*Math.sin(s*0.8+0.6);
+  vx=nx*W;vy=ny*H;
+}
+
+cv.addEventListener('pointermove',function(e){
+  var r=cv.getBoundingClientRect();
+  px=e.clientX-r.left;py=e.clientY-r.top;
+  realActive=true;lastMove=performance.now();
+},{passive:true});
+
+function font(px){return '700 '+px+'px ui-monospace,Menlo,monospace';}
+
+// draw hidden layer: a faint word + dot grid, ALL pre-rendered into the veil
+function drawHidden(){
+  var min=Math.min(W,H);
+  // dot grid
+  var gap=Math.max(14,min/16),r=Math.max(1,min/220);
+  ctx.fillStyle='rgba(255,92,168,0.16)';
+  for(var y=gap*0.5;y<H;y+=gap){for(var x=gap*0.5;x<W;x+=gap){
+    ctx.beginPath();ctx.arc(x,y,r,0,6.2832);ctx.fill();
+  }}
+  // the word, large, centered, low contrast
+  ctx.save();
+  ctx.translate(W*0.5,H*0.5);
+  var fs=Math.min(W/(WORD.length*0.72),H*0.42);
+  ctx.font=font(fs);ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(255,92,168,0.10)';
+  ctx.fillText(WORD,0,0);
+  ctx.restore();
+}
+
+// bright revealed content drawn ONLY inside the spotlight via clip
+function drawRevealed(cx,cy,R){
+  ctx.save();
+  ctx.beginPath();ctx.arc(cx,cy,R,0,6.2832);ctx.clip();
+  var min=Math.min(W,H);
+  // brighter grid
+  var gap=Math.max(14,min/16),r=Math.max(1.2,min/200);
+  ctx.fillStyle='rgba(255,92,168,0.55)';
+  for(var y=gap*0.5;y<H;y+=gap){for(var x=gap*0.5;x<W;x+=gap){
+    var d=Math.hypot(x-cx,y-cy);if(d>R+gap)continue;
+    ctx.beginPath();ctx.arc(x,y,r,0,6.2832);ctx.fill();
+  }}
+  // bright word
+  ctx.translate(W*0.5,H*0.5);
+  var fs=Math.min(W/(WORD.length*0.72),H*0.42);
+  ctx.font=font(fs);ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.shadowColor=ACC;ctx.shadowBlur=fs*0.18;
+  ctx.fillStyle='#fff';ctx.fillText(WORD,0,0);
+  ctx.fillStyle=ACC;ctx.fillText(WORD,0,0);
+  ctx.restore();
+}
+
+function frame(cx,cy,R){
+  ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+  drawHidden();
+  // dark veil sits on top, punched by a soft radial hole at the spotlight
+  var g=ctx.createRadialGradient(cx,cy,0,cx,cy,R);
+  g.addColorStop(0,'rgba(10,10,15,0)');
+  g.addColorStop(0.62,'rgba(10,10,15,0)');
+  g.addColorStop(1,'rgba(10,10,15,0.94)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // veil everywhere outside the gradient reach
+  ctx.fillStyle='rgba(10,10,15,0.94)';
+  ctx.save();ctx.beginPath();ctx.rect(0,0,W,H);
+  ctx.arc(cx,cy,R,0,6.2832,true);ctx.fill('evenodd');ctx.restore();
+  drawRevealed(cx,cy,R);
+  // spotlight ring + soft core glow
+  ctx.save();
+  var rg=ctx.createRadialGradient(cx,cy,R*0.2,cx,cy,R);
+  rg.addColorStop(0,'rgba(255,92,168,0.10)');
+  rg.addColorStop(1,'rgba(255,92,168,0)');
+  ctx.fillStyle=rg;ctx.beginPath();ctx.arc(cx,cy,R,0,6.2832);ctx.fill();
+  ctx.strokeStyle='rgba(255,92,168,0.5)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.arc(cx,cy,R,0,6.2832);ctx.stroke();
+  ctx.restore();
+}
+
+function tick(ms){
+  if(!running)return;
+  if(!t0)t0=ms;
+  // self-demo unless real pointer moved within last 2.6s
+  if(realActive&&ms-lastMove>2600)realActive=false;
+  demo(ms);
+  var tx=realActive?px:vx,ty=realActive?py:vy;
+  // spring/lerp toward target
+  var k=realActive?0.18:0.085;
+  bx+=(tx-bx)*k;by+=(ty-by)*k;
+  // breathing radius
+  var base=Math.min(W,H)*0.22;
+  var tR=base*(1+0.06*Math.sin(ms*0.0021));
+  rad+=(tR-rad)*0.12;
+  frame(bx,by,rad);
+  raf=requestAnimationFrame(tick);
+}
+
+function start(){if(!raf){t0=0;raf=requestAnimationFrame(tick);}}
+function stop(){if(raf){cancelAnimationFrame(raf);raf=0;}}
+
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){running=false;stop();}
+  else if(!reduce){running=true;start();}
+});
+
+resize();
+if(reduce){
+  // single static, legible frame: spotlight centered, no loop
+  rad=Math.min(W,H)*0.24;
+  frame(W*0.5,H*0.5,rad);
+}else{
+  rad=Math.min(W,H)*0.22;
+  start();
+}
+})();</script>
+</body></html>

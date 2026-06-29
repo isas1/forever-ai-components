@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Parallel horizontal white lines kink at a central crease, faking a sharp 3D fold of two tilting sheets that breathes.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Line Illusion</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
+  #op06-stage{position:fixed;inset:0;background:#0a0a0a}
+  #op06-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="op06-stage" role="img" aria-label="Op art: a field of parallel horizontal lines that kink in the center, faking a sharp three-dimensional fold of vertical sheets.">
+  <canvas id="op06-c"></canvas>
+</div>
+<div class="cap">Line Illusion</div>
+<script>
+(function(){
+  "use strict";
+  var cv = document.getElementById("op06-c");
+  var ctx = cv.getContext("2d", { alpha:false });
+  var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  var W=0, H=0, DPR=1;
+  // geometry cache (recomputed on resize only)
+  var LINES=64;          // number of horizontal lines
+  var rowY=new Float32Array(LINES+1);
+  var lineW=1;           // line thickness in css px
+  var foldHalf=0;        // half-width of the folded panel band
+
+  function resize(){
+    var s=cv.clientWidth||cv.parentNode.clientWidth;
+    var h=cv.clientHeight||cv.parentNode.clientHeight;
+    DPR=Math.min(2, window.devicePixelRatio||1);
+    W=Math.max(1,Math.round(s*DPR));
+    H=Math.max(1,Math.round(h*DPR));
+    cv.width=W; cv.height=H;
+    for(var i=0;i<=LINES;i++) rowY[i]=(i/LINES)*H;
+    lineW=Math.max(1, H/LINES*0.46);
+    foldHalf=W*0.30;
+  }
+  resize();
+
+  // The fold: lines run horizontally. A central vertical band displaces each
+  // line by a sine-shaped depth profile, reading as two angled sheets meeting
+  // at a crease. The crease "breathes" — the fold angle eases in and out —
+  // and a slow vertical depth wave sweeps so the surface looks to tilt in 3D.
+  var t=0;
+  var TAU=Math.PI*2;
+
+  function draw(time){
+    t=time*0.001;
+    var cx=W*0.5, cy=H*0.5;
+
+    ctx.fillStyle="#0a0a0a";
+    ctx.fillRect(0,0,W,H);
+
+    // fold amplitude eases (slow, seizure-safe): 0.55..1.0 of max
+    var breathe=0.55+0.225*(1+Math.sin(t*0.55));
+    var maxDepth=H*0.085*breathe;      // vertical kink at the crease
+    var phase=t*0.7;                   // vertical traveling wave for tilt cue
+
+    var lw=lineW;
+    ctx.lineWidth=lw;
+    ctx.lineCap="butt";
+
+    for(var i=0;i<LINES;i++){
+      var y=rowY[i];
+      // per-line depth modulation: a slow sine across rows creates the
+      // illusion the fold tilts toward/away as it descends.
+      var rowN=i/LINES;
+      var tilt=Math.sin(rowN*TAU*0.5 - phase)*0.35;
+      var depth=maxDepth*(1+tilt);
+
+      // shade: faces catch light differently. Left sheet brighter at top.
+      var shadeL=0.62+0.38*Math.sin(rowN*TAU*0.5 - phase + 0.6);
+      var shadeR=0.62+0.38*Math.sin(rowN*TAU*0.5 - phase - 0.6);
+
+      // LEFT sheet: from edge to crease, line bends down by depth*(x progress)
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(cx, y+depth);
+      ctx.strokeStyle="rgba(255,255,255,"+shadeL.toFixed(3)+")";
+      ctx.stroke();
+
+      // RIGHT sheet: crease back up to edge
+      ctx.beginPath();
+      ctx.moveTo(cx, y+depth);
+      ctx.lineTo(W, y);
+      ctx.strokeStyle="rgba(255,255,255,"+shadeR.toFixed(3)+")";
+      ctx.stroke();
+    }
+
+    // crease seam — a single subtle vertical accent where sheets meet,
+    // static contrast, no flashing.
+    ctx.fillStyle="rgba(255,255,255,0.10)";
+    ctx.fillRect(cx-lw*0.5, 0, lw, H);
+  }
+
+  if(reduce){ draw(0); return; }
+
+  var running=true, raf=0;
+  function loop(ts){ if(!running)return; draw(ts); raf=requestAnimationFrame(loop); }
+  raf=requestAnimationFrame(loop);
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; raf=requestAnimationFrame(loop); }
+  });
+
+  var rt;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ resize(); if(reduce)draw(0); },120);
+  });
+})();
+</script>
+</body>
+</html>

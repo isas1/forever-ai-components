@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="An 8x8 modular grid of red, blue, yellow and white dots pulsing in travelling diagonal waves on a near-black field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dot Rhythm</title>
+<style>
+  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  #bh05-stage{position:fixed;inset:0;display:block;background:#101012}
+  #bh05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="bh05-stage" role="img" aria-label="A modular Bauhaus grid of red, blue, yellow and white dots pulsing in travelling diagonal waves on a near-black field.">
+  <canvas id="bh05-c"></canvas>
+</div>
+<div class="cap">Dot Rhythm</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("bh05-stage");
+  var cv=document.getElementById("bh05-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // Bauhaus palette: primary red / blue / yellow + white on off-dark.
+  var PAL=["#e63329","#1f4ed8","#f2c11e","#f4f2ec"];
+  // Modular grid: fixed cell count (<<110 dots), recomputed geometry on resize only.
+  var COLS=8, ROWS=8, N=COLS*ROWS;
+  // Cached per-dot state (typed arrays, allocation-free loop).
+  var px=new Float32Array(N), py=new Float32Array(N);
+  var pc=new Int8Array(N), pr=new Float32Array(N);
+
+  var W=0,H=0,DPR=1,cell=0,ox=0,oy=0,baseR=0;
+
+  function layout(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,Math.round(W*DPR));
+    cv.height=Math.max(1,Math.round(H*DPR));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    // Square modular field, centred, with margin.
+    var span=Math.min(W,H)*0.86;
+    cell=span/COLS;
+    baseR=cell*0.30;
+    ox=(W-span)/2+cell/2;
+    oy=(H-span)/2+cell/2;
+    for(var j=0;j<ROWS;j++)for(var i=0;i<COLS;i++){
+      var k=j*COLS+i;
+      px[k]=ox+i*cell;
+      py[k]=oy+j*cell;
+      // Deterministic, balanced colour assignment — Klee-like rhythmic accents.
+      var v=(i*3+j*5);
+      pc[k]= (v%7===0)?2 : (v%5===0)?1 : ((i+j)%4===0)?0 : 3;
+      // Spatial phase: diagonal travelling wave + radial component.
+      pr[k]=(i+j)*0.62 + Math.hypot(i-(COLS-1)/2,j-(ROWS-1)/2)*0.34;
+    }
+  }
+
+  function paint(t){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle="#101012";
+    ctx.fillRect(0,0,W,H);
+    var TAU=6.2831853;
+    for(var k=0;k<N;k++){
+      // Two interfering waves -> rhythmic pulse. opacity+scale only.
+      var ph=pr[k];
+      var w=Math.sin(t*1.7-ph)*0.6 + Math.sin(t*0.9-ph*0.5)*0.4; // -1..1
+      var e=(w+1)*0.5;                 // 0..1
+      var s=0.30+e*e*0.95;             // scale (squared -> punchy beat)
+      var a=0.18+e*0.82;               // opacity
+      var r=baseR*s;
+      if(r<0.4) continue;
+      var c=pc[k];
+      ctx.globalAlpha=a;
+      ctx.beginPath();
+      if(c===3){
+        // White accent renders as a small square ring on strong beats — pure geometry.
+        var sq=r*1.4;
+        ctx.fillStyle="#f4f2ec";
+        ctx.fillRect(px[k]-sq/2,py[k]-sq/2,sq,sq);
+      }else{
+        ctx.fillStyle=PAL[c];
+        ctx.arc(px[k],py[k],r,0,TAU);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+
+  var running=false, raf=0, t0=0;
+  function loop(ts){
+    if(!running) return;
+    if(!t0) t0=ts;
+    paint((ts-t0)/1000);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){ if(running||reduce) return; running=true; t0=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  function onResize(){ layout(); if(reduce){ paint(2.0); } }
+  window.addEventListener("resize",onResize);
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden) stop(); else start();
+  });
+
+  layout();
+  if(reduce){ paint(2.0); return; }   // one static, balanced frame; no loop.
+  start();
+})();
+</script>
+</body>
+</html>

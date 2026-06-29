@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Green monospace glyph grid where a descending wavefront corrupts clean text into flickering mojibake and box-drawing characters.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Glyph Corruption Cascade</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#021207;}
+  #gcc-c{display:block;width:100%;height:100%;}
+  .gcc-cap{position:fixed;right:9px;bottom:8px;font:600 10px/1.2 ui-monospace,monospace;
+       letter-spacing:.14em;color:#39ff14;opacity:.32;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="gcc-c"></canvas>
+<div class="gcc-cap">Glyph Corruption Cascade</div>
+<script>
+(function(){
+  const cv=document.getElementById('gcc-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // clean payload glyphs vs corrupted mojibake/box-drawing/control glyphs
+  const CLEAN="abcdefghijklmnopqrstuvwxyz0123456789/.:_-=<>{}[]()";
+  const CORR ="█▓▒░▀▄▌▐╔╗╚╝═║╬╣╦¤þÐ¶§≡≈±⌐¬⌠⌡■▬▒";
+  const BG="#021207", ACC="#39ff14";
+  let W,H,DPR,cols,rows,cw,ch,cells,fontPx,t=0,raf=0;
+  function rc(s){return s[(Math.random()*s.length)|0];}
+  function build(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    fontPx=Math.max(9,Math.min(W,H)/26);
+    cw=fontPx*0.62; ch=fontPx*1.18;
+    cols=Math.max(8,Math.floor(W/cw)); rows=Math.max(8,Math.floor(H/ch));
+    cw=W/cols; ch=H/rows;
+    cells=[];
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      cells.push({g:rc(CLEAN),corr:0,flash:0,next:Math.random()*120});
+    }
+    ctx.textBaseline="middle";ctx.textAlign="center";
+  }
+  addEventListener('resize',build);build();
+  // corruption wavefront: a y-position sweeping down then resetting
+  let front=-0.3, fspeed=0.004, intensity=0;
+  cv.addEventListener('pointermove',e=>{
+    const ry=e.clientY/H; front=ry-0.05; intensity=1; // nudge the failure to the cursor
+  });
+  cv.addEventListener('click',()=>{front=-0.2;intensity=1.2;});
+  function drawFrame(step){
+    t+=step;
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    ctx.font="700 "+fontPx.toFixed(1)+"px ui-monospace,'SFMono-Regular',Menlo,monospace";
+    // advance failing-filesystem wavefront
+    if(step){
+      front+=fspeed; intensity*=0.985;
+      if(front>1.5){front=-0.4+Math.random()*0.2; fspeed=0.0032+Math.random()*0.004;}
+    }
+    for(let r=0;r<rows;r++){
+      const ry=r/rows;
+      // proximity to the descending corruption band -> probability of mojibake
+      const d=ry-front;
+      const band=d>0&&d<0.34?(1-d/0.34):0;
+      const corruptP=band*band*(0.55+0.45*intensity);
+      const ypix=r*ch+ch/2;
+      for(let c=0;c<cols;c++){
+        const cell=cells[r*cols+c];
+        if(step){
+          cell.next-=step;
+          if(cell.next<=0){
+            const corrupt=Math.random()<corruptP;
+            cell.corr=corrupt?1:0;
+            cell.g=corrupt?rc(CORR):rc(CLEAN);
+            cell.flash=1;
+            cell.next=corrupt?(3+Math.random()*10):(20+Math.random()*90);
+          }
+          cell.flash*=0.78;
+        }
+        const xpix=c*cw+cw/2;
+        const fl=cell.flash;
+        if(fl>0.18){ // invert flash: bright block behind the glyph
+          ctx.fillStyle=ACC;ctx.globalAlpha=Math.min(1,fl);
+          ctx.fillRect(c*cw+cw*0.06,r*ch+ch*0.08,cw*0.88,ch*0.84);
+          ctx.globalAlpha=1;
+          ctx.fillStyle=BG;
+          ctx.fillText(cell.g,xpix,ypix);
+        } else {
+          if(cell.corr){
+            // glow without per-glyph canvas shadowBlur (avoids per-frame repaint cost):
+            // draw a few faint offset copies to fake the bloom, then the bright glyph
+            ctx.fillStyle=ACC;ctx.globalAlpha=0.18;
+            ctx.fillText(cell.g,xpix-1,ypix);
+            ctx.fillText(cell.g,xpix+1,ypix);
+            ctx.fillText(cell.g,xpix,ypix-1);
+            ctx.fillText(cell.g,xpix,ypix+1);
+            ctx.globalAlpha=0.92;
+            ctx.fillText(cell.g,xpix,ypix);
+          } else {
+            // clean text dims with distance from any corruption -> calm green
+            ctx.fillStyle="#2fae3a";ctx.globalAlpha=0.5+band*0.3;
+            ctx.fillText(cell.g,xpix,ypix);
+          }
+          ctx.globalAlpha=1;
+        }
+      }
+    }
+    // scanline + faint band glow over the failing region
+    const by=front*H;
+    const g=ctx.createLinearGradient(0,by,0,by+0.34*H);
+    g.addColorStop(0,'rgba(57,255,20,0.10)');g.addColorStop(1,'rgba(57,255,20,0)');
+    ctx.fillStyle=g;ctx.fillRect(0,Math.max(0,by),W,0.34*H);
+    if(step&&!reduce)raf=requestAnimationFrame(()=>drawFrame(1));
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(()=>drawFrame(1));}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ // one static resting frame: mostly clean, a single corrupted band
+    front=0.4;intensity=0.5;
+    for(let i=0;i<cells.length;i++){const r=(i/cols)|0;const ry=r/rows;
+      const d=ry-front,band=d>0&&d<0.34?(1-d/0.34):0;
+      if(Math.random()<band*0.7){cells[i].corr=1;cells[i].g=rc(CORR);}}
+    drawFrame(0);
+  } else start();
+})();
+</script>
+</body>
+</html>

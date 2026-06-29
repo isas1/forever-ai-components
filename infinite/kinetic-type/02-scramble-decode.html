@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Monospace neon-green words cycle through random glyph scramble then lock left-to-right like a terminal decrypting, on near-black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scramble Decode</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#06120c;}
+  body{display:flex;align-items:center;justify-content:center;
+       font-family:"SFMono-Regular",ui-monospace,"Courier New",monospace;}
+  #out{
+    color:#39ff14;
+    font-size:clamp(26px,11vw,84px);
+    font-weight:700;
+    letter-spacing:.06em;
+    text-shadow:0 0 12px rgba(57,255,20,.6);
+    white-space:nowrap;
+  }
+  #out .lock{color:#aaffaa;text-shadow:0 0 18px rgba(57,255,20,.9);}
+  #out .rng{color:#1f7a3a;}
+  .cap{position:absolute;right:10px;bottom:8px;font-size:11px;letter-spacing:.08em;
+       color:#39ff14;opacity:.3;text-transform:uppercase;font-family:monospace;}
+</style>
+</head>
+<body>
+  <div id="out"></div>
+  <div class="cap">Scramble Decode</div>
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var words=["DECODE","SIGNAL","ACCESS","DECRYPT"];
+  var chars="ABCDEFGHIJKLMNOPQRSTUVWXYZ#%@&$0123456789";
+  var out=document.getElementById('out');
+  var wi=0, target=words[0], frame=0, raf=0, settled=[], cells=[];
+  function reset(){ target=words[wi]; settled=target.split('').map(function(){return -1;});
+    // reveal left to right with slight jitter
+    for(var i=0;i<target.length;i++) settled[i]=8+i*5+Math.floor(Math.random()*5);
+    frame=0;
+    // reuse a pool of span nodes instead of rebuilding innerHTML every frame
+    while(cells.length>target.length){ out.removeChild(cells.pop()); }
+    while(cells.length<target.length){ var s=document.createElement('span'); out.appendChild(s); cells.push(s); }
+    for(var j=0;j<cells.length;j++){ cells[j].className=''; cells[j].textContent=''; }
+  }
+  function rc(){ return chars[Math.floor(Math.random()*chars.length)]; }
+  function set(cell,cls,txt){ if(cell.className!==cls)cell.className=cls; if(cell.textContent!==txt)cell.textContent=txt; }
+  function tick(){
+    frame++;
+    var allDone=true;
+    var scramble=(frame&1)===0;   // update random glyphs every other frame (still reads as fast churn)
+    for(var i=0;i<target.length;i++){
+      if(frame>=settled[i]){ set(cells[i],'lock',target[i]); }
+      else { allDone=false; if(scramble) set(cells[i],'rng',rc()); }
+    }
+    if(allDone){
+      if(frame>settled[settled.length-1]+70){ wi=(wi+1)%words.length; reset(); }
+    }
+    raf=requestAnimationFrame(tick);
+  }
+  function start(){ if(!raf&&!reduce) raf=requestAnimationFrame(tick); }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  out.addEventListener('click',function(){ wi=(wi+1)%words.length; reset(); });
+  reset();
+  if(reduce){ out.innerHTML='<span class="lock">'+target+'</span>'; } else start();
+})();
+</script>
+</body>
+</html>

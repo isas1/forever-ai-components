@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The word MORPH on dark navy morphs its variable-font axes (weight, width, slant) with a violet-to-magenta glow, breathing wide and italic.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Optical Axis Morph</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0e27;}
+  #oam-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.14em;color:#c77dff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="oam-c"></canvas>
+<div class="cap">Optical Axis Morph</div>
+<script>
+(function(){
+  const cv=document.getElementById('oam-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  addEventListener('resize',size);size();
+
+  // Each letter = vertical "stem" segments [yTop,yBottom] across a 0..1 cell.
+  // Rendered as rounded bars; width (weight) + horizontal squeeze (optical size)
+  // + slant are the morphing axes. The word never re-spells.
+  const WORD="MORPH";
+  const G={ // segment lists in a 0..1 box (x,y normalized within the glyph cell)
+    M:[[0,1,0,0],[0,0,.5,.5],[.5,.5,1,0],[1,0,1,1]],
+    O:[[0,.12,0,.88],[1,.12,1,.88],[0,.12,1,.12],[0,.88,1,.88]],
+    R:[[0,0,0,1],[0,0,.9,0],[.9,0,.9,.5],[0,.5,.9,.5],[.1,.5,1,1]],
+    P:[[0,0,0,1],[0,0,.9,0],[.9,0,.9,.5],[0,.5,.9,.5]],
+    H:[[0,0,0,1],[1,0,1,1],[0,.5,1,.5]]
+  };
+  const glyphs=WORD.split('').map(c=>G[c]);
+
+  let t=0,boost=0;
+  cv.addEventListener('pointermove',()=>{boost=Math.min(boost+.35,1.4);});
+  cv.addEventListener('click',()=>{boost=1.4;});
+
+  function rr(x0,y0,x1,y1,w){ // rounded bar from p0->p1 of thickness w
+    const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1,nx=-dy/len*w/2,ny=dx/len*w/2,r=w/2;
+    ctx.beginPath();
+    ctx.moveTo(x0+nx,y0+ny);ctx.lineTo(x1+nx,y1+ny);
+    ctx.arc(x1,y1,r,Math.atan2(ny,nx),Math.atan2(-ny,-nx),false);
+    ctx.lineTo(x0-nx,y0-ny);
+    ctx.arc(x0,y0,r,Math.atan2(-ny,-nx),Math.atan2(ny,nx),false);
+    ctx.closePath();ctx.fill();
+  }
+
+  function frame(){
+    if(!reduce){t+=0.012+boost*0.02;boost*=0.95;}
+    ctx.fillStyle='rgba(10,14,39,0.28)';ctx.fillRect(0,0,W,H);
+
+    // optical axis phase: 0 = narrow upright, 1 = wide italic display
+    const ph=reduce?0.32:(Math.sin(t)*0.5+0.5);
+    const ease=ph*ph*(3-2*ph);
+    const weight=0.06+ease*0.20;          // stem thickness (in cell units)
+    const widthAxis=0.62+ease*0.78;        // horizontal expansion
+    const slant=ease*0.32;                 // italic shear
+    const tracking=ease*0.22;              // letters drift apart when wide
+
+    const unit=Math.min(W/(WORD.length*1.55+1.2),H*0.46);
+    const cellH=unit, cellW=unit*widthAxis;
+    const gap=unit*(0.34+tracking);
+    let totalW=0;
+    for(let i=0;i<glyphs.length;i++) totalW+=cellW+(i<glyphs.length-1?gap:0);
+    const startX=(W-totalW)/2, baseY=H/2;
+
+    let x=startX;
+    for(let i=0;i<glyphs.length;i++){
+      const cy=baseY, top=cy-cellH/2;
+      // per-letter shimmer of weight so the word breathes unevenly
+      const lw=weight*(1+0.18*Math.sin(t*1.3+i*0.9))*unit;
+      // accent gradient: cool violet core -> hot magenta edge as it opens
+      const hot=ease*0.5+0.5;
+      ctx.fillStyle=`rgba(${Math.round(150+hot*49)},${Math.round(80+hot*45)},255,${0.92})`;
+      ctx.shadowColor='rgba(199,125,255,'+(0.25+ease*0.5)+')';
+      ctx.shadowBlur=(8+ease*26);
+      for(const s of glyphs[i]){
+        // shear: shift x by slant proportional to height above baseline
+        const sx0=x+s[0]*cellW+(0.5-s[1])*slant*cellH;
+        const sy0=top+s[1]*cellH;
+        const sx1=x+s[2]*cellW+(0.5-s[3])*slant*cellH;
+        const sy1=top+s[3]*cellH;
+        rr(sx0,sy0,sx1,sy1,lw);
+      }
+      x+=cellW+gap;
+    }
+    ctx.shadowBlur=0;
+    if(!reduce) raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ctx.fillStyle='#0a0e27';ctx.fillRect(0,0,W,H);frame();}else start();
+})();
+</script>
+</body>
+</html>

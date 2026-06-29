@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Orbiting Troika — Wassily Kandinsky. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Orbiting Troika</title>
+<style>
+  html,body{margin:0;height:100%;background:#17151a;overflow:hidden}
+  #kan06-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kan06-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kan06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f4efe2;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kan06-stage" role="img" aria-label="Three bodies — blue, yellow and vermilion — orbit a black sun in fixed harmonic ratios, their fading trails drawing a slowly turning rosette of light.">
+  <canvas id="kan06-cv"></canvas>
+</div>
+<div class="kan06-cap">The Orbiting Troika</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={paper:'#f4efe2',ink:'#16130f',blue:'#1438a8',yellow:'#f7c80b',red:'#d8321b'};
+  const cv=document.getElementById('kan06-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const bodies=[
+    {c:PAL.blue,  R:0.30, sp:0.5, sz:14, ph:0},
+    {c:PAL.yellow,R:0.46, sp:0.8, sz:11, ph:2},
+    {c:PAL.red,   R:0.62, sp:1.3, sz:9,  ph:4}
+  ];
+  let trail=[];
+  let ang=0,last=performance.now();
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    if(!REDUCED) ang+=dt*0.6;
+    const cx=S.w/2, cy=S.h/2, base=Math.min(S.w,S.h)/2;
+    S.ctx.fillStyle='rgba(23,21,26,0.16)';S.ctx.fillRect(0,0,S.w,S.h);
+    S.ctx.fillStyle=PAL.ink;S.ctx.beginPath();S.ctx.arc(cx,cy,16,0,7);S.ctx.fill();
+    S.ctx.strokeStyle=PAL.yellow;S.ctx.lineWidth=1.5;S.ctx.beginPath();S.ctx.arc(cx,cy,22,0,7);S.ctx.stroke();
+    bodies.forEach(b=>{
+      const a=ang*b.sp*2 + b.ph;
+      const x=cx+Math.cos(a)*base*b.R, y=cy+Math.sin(a)*base*b.R;
+      if(!REDUCED) trail.push({x,y,c:b.c,t:0,r:b.sz*0.4});
+      S.ctx.strokeStyle='rgba(244,239,226,.10)';S.ctx.lineWidth=1;
+      S.ctx.beginPath();S.ctx.arc(cx,cy,base*b.R,0,7);S.ctx.stroke();
+      S.ctx.fillStyle=b.c;S.ctx.strokeStyle=PAL.paper;S.ctx.lineWidth=2;
+      S.ctx.beginPath();S.ctx.arc(x,y,b.sz,0,7);S.ctx.fill();S.ctx.stroke();
+    });
+    if(trail.length>360) trail.splice(0,trail.length-360);
+    for(const p of trail){p.t+=dt;const al=Math.max(0,1-p.t/3.5);if(al<=0){p.dead=true;continue;}
+      S.ctx.globalAlpha=al*0.7;S.ctx.fillStyle=p.c;S.ctx.beginPath();S.ctx.arc(p.x,p.y,p.r,0,7);S.ctx.fill();}
+    S.ctx.globalAlpha=1;
+    for(let i=trail.length-1;i>=0;i--) if(trail[i].dead) trail.splice(i,1);
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); trail.length=0; if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ for(let i=0;i<40;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

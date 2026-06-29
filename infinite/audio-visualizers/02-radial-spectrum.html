@@ -1,0 +1,142 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Cyan radial bars radiate from a pulsing bass-driven core around a slowly rotating ring, driven by synth or live mic.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Radial Spectrum</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#07080d;display:grid;place-items:center}
+#aav02-c{display:block;width:100%;height:100%}
+.aav02-live{position:fixed;right:8px;top:8px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.28);
+  border-radius:4px;padding:5px 8px;letter-spacing:.06em;cursor:pointer;opacity:.55;
+  transition:opacity .25s ease,background .25s ease}
+.aav02-live:hover{opacity:1;background:rgba(34,211,238,.16)}
+.aav02-live.on{color:#07080d;background:#22d3ee;opacity:.95}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<canvas id="aav02-c" role="img" aria-label="Radial frequency spectrum around a rotating ring"></canvas>
+<button class="aav02-live" id="aav02-live" type="button" aria-label="Switch to live microphone input">&#9834; live</button>
+<div class="cap">Radial Spectrum</div>
+<script>(function(){
+var cv=document.getElementById('aav02-c'),x=cv.getContext('2d');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,cx=0,cy=0,R=0,dpr=1;
+var N=96;                                  // number of radial bars
+var bars=new Float32Array(N);              // smoothed magnitudes 0..1
+var ACC='#22d3ee';
+
+function resize(){
+  dpr=Math.min(2,window.devicePixelRatio||1);
+  var w=cv.clientWidth||window.innerWidth,h=cv.clientHeight||window.innerHeight;
+  W=w;H=h;cv.width=w*dpr|0;cv.height=h*dpr|0;
+  x.setTransform(dpr,0,0,dpr,0,0);
+  cx=w/2;cy=h/2;R=Math.min(w,h)*0.22;
+}
+window.addEventListener('resize',resize);resize();
+
+// --- synthesized signal: sum of sines + slow LFO envelopes + smoothed noise ---
+var t=0,nz=0;
+function synth(i,time){
+  var f=i/N;                               // 0=bass .. 1=treble
+  // three drifting tonal peaks that wander across the spectrum
+  var p1=0.10+0.04*Math.sin(time*0.23);
+  var p2=0.34+0.06*Math.sin(time*0.17+1.3);
+  var p3=0.62+0.05*Math.sin(time*0.31+2.7);
+  var band=function(c,wd,amp){var d=(f-c)/wd;return amp*Math.exp(-d*d);};
+  var v=band(p1,0.10,1.0)+band(p2,0.10,0.74)+band(p3,0.12,0.55);
+  // beat: bass swells on a slow LFO
+  v*=0.55+0.45*Math.pow(0.5+0.5*Math.sin(time*1.7),2)*(1-f*0.6);
+  // shimmer on the treble + a touch of smoothed noise
+  v+=0.10*f*(0.5+0.5*Math.sin(time*6+i*0.7));
+  v+=nz*0.06*(0.5+0.5*Math.sin(i*1.9+time));
+  // overall bass-heavy tilt so bass bars read longer
+  v*=(1.0-0.42*f);
+  return v<0?0:v>1?1:v;
+}
+
+// --- live audio (created only inside click) ---
+var actx=null,analyser=null,freq=null,live=false;
+var btn=document.getElementById('aav02-live');
+btn.addEventListener('click',function(){
+  if(live)return;
+  try{
+    actx=new (window.AudioContext||window.webkitAudioContext)();
+    analyser=actx.createAnalyser();analyser.fftSize=256;analyser.smoothingTimeConstant=0.78;
+    freq=new Uint8Array(analyser.frequencyBinCount);
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      var src=actx.createMediaStreamSource(stream);
+      src.connect(analyser);               // never connect to destination
+      live=true;btn.classList.add('on');btn.textContent='♪ on';
+    }).catch(function(){btn.textContent='♪ n/a';});
+  }catch(e){btn.textContent='♪ n/a';}
+});
+
+function sample(i,time){
+  if(live&&analyser){
+    analyser.getByteFrequencyData(freq);
+    var f=i/N, idx=Math.floor(Math.pow(f,1.35)*(freq.length-1));
+    return (freq[idx]/255)*(1.05-0.3*f);
+  }
+  return synth(i,time);
+}
+
+function frame(time){
+  t=time;nz+=(Math.random()-0.5)*0.5;if(nz>1)nz=1;if(nz<-1)nz=-1;
+  if(live&&analyser)analyser.getByteFrequencyData(freq);
+  x.clearRect(0,0,W,H);
+
+  var rot=time*0.16;                        // slow ring rotation
+  var maxLen=R*1.55;
+
+  // pulsing core — bass-driven, drawn as soft stacked discs (static radial feel)
+  var coreE=(bars[0]+bars[1]+bars[2])/3;
+  var pulse=R*(0.46+coreE*0.5);
+  x.save();
+  for(var c=4;c>=1;c--){
+    x.beginPath();x.arc(cx,cy,pulse*c/4,0,6.2832);
+    x.fillStyle='rgba(34,211,238,'+(0.05+coreE*0.10)*(1/c)+')';x.fill();
+  }
+  x.beginPath();x.arc(cx,cy,R*0.30+coreE*R*0.12,0,6.2832);
+  x.fillStyle='rgba(160,245,255,'+(0.22+coreE*0.4)+')';x.fill();
+  x.restore();
+
+  // the rotating ring
+  x.beginPath();x.arc(cx,cy,R,0,6.2832);
+  x.lineWidth=1.5;x.strokeStyle='rgba(34,211,238,0.30)';x.stroke();
+
+  // radial bars
+  x.lineCap='round';
+  for(var i=0;i<N;i++){
+    var target=sample(i,time);
+    bars[i]+=(target-bars[i])*(live?0.5:0.22);   // smoothing / follow-through
+    var v=bars[i];
+    var a=rot+(i/N)*6.2832;
+    var ca=Math.cos(a),sa=Math.sin(a);
+    var len=v*maxLen;
+    var x0=cx+ca*R, y0=cy+sa*R;
+    var x1=cx+ca*(R+len), y1=cy+sa*(R+len);
+    // bass end (i near 0) brighter & thicker; hue cools toward treble
+    var bass=1-(i/N);
+    x.lineWidth=1.5+bass*3.2;
+    var lum=42+v*48;
+    x.strokeStyle='hsla('+(186-bass*8)+','+(70+v*25)+'%,'+lum+'%,'+(0.35+v*0.6)+')';
+    x.beginPath();x.moveTo(x0,y0);x.lineTo(x1,y1);x.stroke();
+    // tip spark
+    if(v>0.55){x.beginPath();x.arc(x1,y1,1.2+v*1.6,0,6.2832);
+      x.fillStyle='rgba(190,250,255,'+(v-0.3)+')';x.fill();}
+  }
+}
+
+var raf=0,running=false;
+function loop(time){frame(time/1000);raf=requestAnimationFrame(loop);}
+function start(){if(!running&&!reduce){running=true;raf=requestAnimationFrame(loop);}}
+function stop(){running=false;cancelAnimationFrame(raf);}
+function vis(){if(document.hidden)stop();else start();}
+document.addEventListener('visibilitychange',vis);
+
+if(reduce){                                 // settle to one static, legible frame
+  for(var k=0;k<N;k++)bars[k]=synth(k,3.0);
+  frame(3.0);
+}else{start();}
+})();</script>
+</body></html>

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Canvas toggle switch whose glossy knob springs between off and green-on states with squash-and-stretch and a moving shadow.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Toggle Switch Spring</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0E1116;}
+  #tss-c{display:block;width:100%;height:100%;cursor:pointer;}
+  .tss-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#34D399;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="tss-c"></canvas>
+<div class="tss-cap">Toggle Switch Spring</div>
+<script>
+(function(){
+  const cv=document.getElementById('tss-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const OFF='#222A33', ON='#34D399', KNOB='#F4F8F6';
+  let W,H,DPR,cx,cy,S;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;S=Math.min(W,H);
+  }
+  addEventListener('resize',size);size();
+
+  // hold ON, travel, hold OFF, travel (in frames @ ~60fps)
+  const HOLD=78, TRAVEL=64, CYCLE=2*(HOLD+TRAVEL);
+  let t=Math.random()*CYCLE;
+  function nudge(){ t=(Math.floor((t)/(HOLD+TRAVEL))*(HOLD+TRAVEL))+HOLD+1; if(t>=CYCLE)t=HOLD+1; }
+  cv.addEventListener('click',nudge);
+
+  // overshoot spring ease: settles at 1 with a small bounce
+  function spring(x){
+    if(x<=0)return 0; if(x>=1)return 1;
+    const w=9.2, z=0.34;
+    const wd=w*Math.sqrt(1-z*z);
+    return 1-Math.exp(-z*w*x)*(Math.cos(wd*x)+(z*w/wd)*Math.sin(wd*x));
+  }
+  function lerp(a,b,k){return a+(b-a)*k;}
+  function mix(c1,c2,k){
+    const a=parseInt(c1.slice(1),16),b=parseInt(c2.slice(1),16);
+    const r=Math.round(lerp((a>>16)&255,(b>>16)&255,k));
+    const g=Math.round(lerp((a>>8)&255,(b>>8)&255,k));
+    const bl=Math.round(lerp(a&255,b&255,k));
+    return 'rgb('+r+','+g+','+bl+')';
+  }
+
+  function frame(){
+    if(!reduce){ t+=1; if(t>=CYCLE)t-=CYCLE; }
+    ctx.clearRect(0,0,W,H);
+
+    // geometry
+    const trackW=Math.min(W*0.62,S*0.62), trackH=trackW*0.46;
+    const tx=cx-trackW/2, ty=cy-trackH/2, r=trackH/2;
+    const pad=trackH*0.12, kr=r-pad;
+    const x0=tx+r, x1=tx+trackW-r; // knob centre endpoints
+
+    // phase: 0 hold-on .. then off, etc.
+    let p=reduce?1:t%CYCLE, on, prog, vel=0;
+    if(reduce){ on=1; prog=1; }
+    else if(p<HOLD){ on=1; prog=1; }                          // held ON
+    else if(p<HOLD+TRAVEL){ const u=(p-HOLD)/TRAVEL; const s=spring(u); on=1-s; prog=s; } // ON->OFF
+    else if(p<2*HOLD+TRAVEL){ on=0; prog=1; }                 // held OFF
+    else { const u=(p-2*HOLD-TRAVEL)/TRAVEL; const s=spring(u); on=s; prog=s; } // OFF->ON
+
+    // velocity proxy for squash/stretch (derivative of spring around current u)
+    let phaseU=-1;
+    if(p>=HOLD&&p<HOLD+TRAVEL)phaseU=(p-HOLD)/TRAVEL;
+    else if(p>=2*HOLD+TRAVEL)phaseU=(p-2*HOLD-TRAVEL)/TRAVEL;
+    if(phaseU>=0){ const d=0.012; vel=Math.abs(spring(Math.min(phaseU+d,1))-spring(Math.max(phaseU-d,0)))/(2*d); }
+
+    // knob position (direction depends on which travel)
+    let knobX;
+    const goingOff = (p>=HOLD&&p<HOLD+TRAVEL);
+    if(reduce) knobX=x1;
+    else if(p<HOLD) knobX=x1;
+    else if(goingOff) knobX=lerp(x1,x0,prog);
+    else if(p<2*HOLD+TRAVEL) knobX=x0;
+    else knobX=lerp(x0,x1,prog);
+
+    const fill = on>=0.999?1: on<=0.001?0: on;
+
+    // track
+    ctx.fillStyle=mix(OFF,ON,fill);
+    rr(tx,ty,trackW,trackH,r); ctx.fill();
+    // inner subtle inset for depth
+    ctx.globalAlpha=0.14; ctx.fillStyle='#000';
+    rr(tx,ty,trackW,trackH*0.5,r); ctx.fill();
+    ctx.globalAlpha=1;
+    // accent glow when on (soft radial gradient instead of per-frame shadowBlur)
+    if(fill>0.05){ ctx.save(); ctx.globalAlpha=fill*0.5;
+      const gr=Math.max(trackW,trackH)*0.85;
+      const gg=ctx.createRadialGradient(cx,cy,trackH*0.2,cx,cy,gr);
+      gg.addColorStop(0,ON); gg.addColorStop(0.55,ON); gg.addColorStop(1,'rgba(52,211,153,0)');
+      ctx.fillStyle=gg; ctx.fillRect(cx-gr,cy-gr,gr*2,gr*2); ctx.restore(); }
+
+    // squash & stretch: horizontal travel -> stretch along x, squash y
+    const stretch=1+Math.min(vel*0.55,0.34);
+    const squash=1/Math.sqrt(stretch);
+    let sx=stretch, sy=squash;
+    // anticipation: tiny counter-squash right as it leaves the hold (first ~14% of travel)
+    if(phaseU>=0&&phaseU<0.16){ const a=1-phaseU/0.16; sx=lerp(sx,0.86,a*0.6); sy=lerp(sy,1.12,a*0.6); }
+
+    // soft moving shadow under knob (radial gradient instead of per-frame blur filter)
+    const dir = goingOff?-1:1;
+    const shOff=kr*0.16+vel*kr*0.05;
+    const shX=knobX+dir*shOff*0.4, shY=cy+kr*0.22;
+    const shRx=kr*sx*1.02, shRy=kr*sy*0.92, shR=Math.max(shRx,shRy)*1.4;
+    ctx.save();
+    ctx.translate(shX,shY);
+    ctx.scale(shRx/shR,shRy/shR);
+    const sg2=ctx.createRadialGradient(0,0,0,0,0,shR);
+    sg2.addColorStop(0,'rgba(0,0,0,0.32)');
+    sg2.addColorStop(0.6,'rgba(0,0,0,0.18)');
+    sg2.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=sg2;
+    ctx.beginPath();ctx.arc(0,0,shR,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+
+    // knob
+    ctx.save();
+    ctx.translate(knobX,cy);
+    ctx.scale(sx,sy);
+    const g=ctx.createRadialGradient(-kr*0.3,-kr*0.35,kr*0.1,0,0,kr);
+    g.addColorStop(0,'#FFFFFF'); g.addColorStop(0.7,KNOB); g.addColorStop(1,'#D7DEDB');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(0,0,kr,0,Math.PI*2); ctx.fill();
+    // rim light
+    ctx.globalAlpha=0.5; ctx.lineWidth=Math.max(1,kr*0.04);
+    ctx.strokeStyle='#fff'; ctx.beginPath(); ctx.arc(0,-kr*0.04,kr*0.94,Math.PI*1.05,Math.PI*1.95); ctx.stroke();
+    ctx.restore();
+
+    raf=requestAnimationFrame(frame);
+  }
+
+  function rr(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+  }
+
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ frame(); } else start();
+})();
+</script>
+</body>
+</html>

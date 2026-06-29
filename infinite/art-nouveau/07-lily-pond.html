@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Stylised water lilies and pads bloom and drift over expanding gold ripples on a green pond framed by whiplash vines.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lily Pond</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e1310;overflow:hidden}
+  #an07-stage{position:fixed;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<canvas id="an07-stage" role="img" aria-label="Art Nouveau lily pond: stylised water lilies and concentric ripples in muted gold, green and rose, with flowing whiplash vines."></canvas>
+<div class="cap">Lily Pond</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("an07-stage"), ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,S=0,dpr=1,running=true,raf=0,t0=0;
+
+  // Art Nouveau palette: pond green, gold, rose
+  var BG="#0e1310", GOLD="#c9a24b", GOLD2="#e6c477", GREEN="#3f6b4f",
+      GREEN2="#598a64", LEAF="#274838", ROSE="#c98a8f", ROSE2="#e3aeb0",
+      LINE="#1a2a22", PETAL="#f0dca8";
+
+  // Lily definitions: cx,cy in fractional pond coords, scale, hue(0 rose/1 gold), phase
+  var lilies=[
+    {x:0.30,y:0.40,s:1.00,h:0,ph:0.0},
+    {x:0.68,y:0.30,s:0.72,h:1,ph:1.7},
+    {x:0.55,y:0.66,s:0.86,h:0,ph:3.1},
+    {x:0.14,y:0.74,s:0.58,h:1,ph:4.4}
+  ];
+  // ripple ring origins
+  var ripO=[{x:0.30,y:0.40,t:0},{x:0.68,y:0.30,t:1.3},{x:0.55,y:0.66,t:2.6},{x:0.82,y:0.58,t:3.8}];
+
+  function resize(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    S=Math.min(W,H);
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  // a stylised lily pad (asymmetric kidney with a notch)
+  function pad(cx,cy,r,rot,col){
+    ctx.save(); ctx.translate(cx,cy); ctx.rotate(rot);
+    ctx.beginPath();
+    var n=28;
+    for(var i=0;i<=n;i++){
+      var a=i/n*Math.PI*2;
+      // notch carved near a=0
+      var notch=Math.max(0,1-Math.abs(((a+Math.PI)%(Math.PI*2))-Math.PI)/0.5);
+      var rr=r*(1+0.12*Math.sin(a*3)-0.55*notch);
+      var x=Math.cos(a)*rr, y=Math.sin(a)*rr*0.82;
+      if(i===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle=col; ctx.fill();
+    ctx.strokeStyle=LINE; ctx.lineWidth=Math.max(1,S*0.004); ctx.stroke();
+    // radial veins
+    ctx.strokeStyle="rgba(14,19,16,0.55)"; ctx.lineWidth=Math.max(0.6,S*0.0022);
+    for(var v=0;v<7;v++){
+      var va=-1.1+v/6*2.2;
+      ctx.beginPath(); ctx.moveTo(0,0);
+      ctx.lineTo(Math.cos(va)*r*0.85,Math.sin(va)*r*0.7); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // stylised flat-color flower (Mucha-style radial petals + gold heart)
+  function flower(cx,cy,r,bloom,h){
+    var pc1 = h? GOLD2 : ROSE2, pc2 = h? GOLD : ROSE;
+    ctx.save(); ctx.translate(cx,cy);
+    var outer=8, inner=6;
+    // outer petal ring
+    for(var i=0;i<outer;i++){
+      var a=i/outer*Math.PI*2 + 0.2*Math.sin(bloom*1.0);
+      petal(a, r*(0.55+0.45*bloom), r*0.30, pc2);
+    }
+    // inner petal ring (brighter)
+    for(var j=0;j<inner;j++){
+      var a2=(j/inner*Math.PI*2)+Math.PI/inner + 0.15*Math.sin(bloom*1.3);
+      petal(a2, r*(0.30+0.30*bloom), r*0.20, pc1);
+    }
+    // heart
+    ctx.beginPath(); ctx.arc(0,0,r*0.20,0,Math.PI*2);
+    ctx.fillStyle=PETAL; ctx.fill();
+    ctx.strokeStyle=LINE; ctx.lineWidth=Math.max(1,S*0.003); ctx.stroke();
+    // stamens
+    ctx.fillStyle=GOLD;
+    for(var k=0;k<7;k++){
+      var ka=k/7*Math.PI*2;
+      ctx.beginPath();
+      ctx.arc(Math.cos(ka)*r*0.11,Math.sin(ka)*r*0.11,Math.max(1,r*0.028),0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  function petal(a,len,wid,col){
+    ctx.save(); ctx.rotate(a);
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.quadraticCurveTo(wid,len*0.45,0,len);
+    ctx.quadraticCurveTo(-wid,len*0.45,0,0);
+    ctx.closePath();
+    ctx.fillStyle=col; ctx.fill();
+    ctx.strokeStyle=LINE; ctx.lineWidth=Math.max(0.8,S*0.0026); ctx.stroke();
+    ctx.restore();
+  }
+
+  // whiplash vine border (static frame line, drawn once per frame, cheap)
+  function vines(){
+    var m=S*0.06;
+    ctx.strokeStyle="rgba(201,162,75,0.30)";
+    ctx.lineWidth=Math.max(1.2,S*0.0045);
+    var corners=[[m,m,1,1],[W-m,m,-1,1],[W-m,H-m,-1,-1],[m,H-m,1,-1]];
+    for(var c=0;c<4;c++){
+      var cx=corners[c][0],cy=corners[c][1],sx=corners[c][2],sy=corners[c][3];
+      ctx.beginPath();
+      ctx.moveTo(cx,cy+sy*S*0.18);
+      ctx.bezierCurveTo(cx,cy+sy*S*0.05, cx+sx*S*0.05,cy, cx+sx*S*0.18,cy);
+      ctx.stroke();
+      // curl
+      ctx.beginPath();
+      ctx.arc(cx+sx*S*0.18,cy+sy*S*0.018,S*0.018,0,Math.PI*1.7);
+      ctx.stroke();
+    }
+  }
+
+  function ripple(cx,cy,age){
+    // age in seconds; expanding rings, fade out
+    for(var k=0;k<3;k++){
+      var ph=(age*0.42 + k*0.34);
+      var fr=ph%1.0;
+      var rad=fr*S*0.26 + k*S*0.02;
+      var al=(1-fr)*0.5;
+      if(al<=0.01) continue;
+      ctx.beginPath();
+      ctx.ellipse(cx,cy,rad,rad*0.78,0,0,Math.PI*2);
+      ctx.strokeStyle="rgba(201,162,75,"+al.toFixed(3)+")";
+      ctx.lineWidth=Math.max(0.8,S*0.0028);
+      ctx.stroke();
+    }
+  }
+
+  function scene(time){
+    // water ground with subtle stained-glass cell shading (static gradient)
+    var g=ctx.createRadialGradient(W*0.4,H*0.4,S*0.05,W*0.5,H*0.5,S*0.75);
+    g.addColorStop(0,"#16241c"); g.addColorStop(0.55,"#102019"); g.addColorStop(1,BG);
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+    // pond mapping
+    var ox=(W-S)/2, oy=(H-S)/2;
+    function px(fx){return ox+fx*S;} function py(fy){return oy+fy*S;}
+
+    // ripples first (behind pads)
+    for(var r=0;r<ripO.length;r++){
+      ripple(px(ripO[r].x),py(ripO[r].y), time*0.6+ripO[r].t);
+    }
+
+    // lily pads
+    for(var i=0;i<lilies.length;i++){
+      var L=lilies[i];
+      var drift= reduce?0: Math.sin(time*0.5+L.ph)*S*0.006;
+      var rot=L.ph + (reduce?0:Math.sin(time*0.3+L.ph)*0.05);
+      pad(px(L.x)+drift, py(L.y), S*0.13*L.s, rot, i%2? GREEN: GREEN2);
+    }
+
+    // flowers atop pads
+    for(var f=0;f<lilies.length;f++){
+      var F=lilies[f];
+      var bloom= reduce?1: 0.6+0.4*(0.5+0.5*Math.sin(time*0.8+F.ph));
+      var dr= reduce?0: Math.sin(time*0.5+F.ph)*S*0.006;
+      flower(px(F.x)+dr, py(F.y)-S*0.01, S*0.10*F.s, bloom, F.h);
+    }
+
+    vines();
+  }
+
+  function frame(now){
+    if(!running) return;
+    if(!t0) t0=now;
+    var time=(now-t0)/1000;
+    scene(time);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){
+    if(reduce){ scene(1.2); return; }
+    running=true; raf=requestAnimationFrame(frame);
+  }
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+    else if(!reduce && !raf){ running=true; t0=0; raf=requestAnimationFrame(frame); }
+  });
+
+  var rt=0;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt); rt=setTimeout(function(){ resize(); if(reduce)scene(1.2); },120);
+  });
+
+  resize();
+  start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Bird & Berry Repeat — William Morris. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bird &amp; Berry Repeat</title>
+<style>
+  html,body{margin:0;height:100%;background:#efe6cf;overflow:hidden}
+  #mor02-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mor02-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mor02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#23301f;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mor02-stage" role="img" aria-label="Abstracted William Morris birds nesting among berry sprigs in a mirrored repeat; the colourway breathes slowly from indigo to madder and back, like a printed cloth turning in the light.">
+  <canvas id="mor02-cv"></canvas>
+</div>
+<div class="mor02-cap">Bird &amp; Berry Repeat</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mor02-cv'); if(!cv) return;
+  const PAL={indigo:'#2c4a6e',olive:'#6b7233',madder:'#a8392b',sage:'#7d9b6a',gold:'#c2a14a',ink:'#23301f'};
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+
+  function bird(ctx,body,wing){
+    ctx.save();
+    ctx.beginPath();ctx.moveTo(-16,2);
+    ctx.bezierCurveTo(-20,-12,4,-18,14,-6);
+    ctx.bezierCurveTo(20,-3,20,3,14,6);
+    ctx.bezierCurveTo(6,10,-8,12,-16,2);ctx.closePath();
+    ctx.fillStyle=body;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.6;ctx.stroke();
+    ctx.beginPath();ctx.moveTo(-8,-4);ctx.bezierCurveTo(-16,-2,-14,6,-2,5);ctx.bezierCurveTo(0,0,-4,-4,-8,-4);
+    ctx.closePath();ctx.fillStyle=wing;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.2;ctx.stroke();
+    ctx.beginPath();ctx.moveTo(15,-2);ctx.lineTo(22,0);ctx.lineTo(15,2);ctx.closePath();ctx.fillStyle=PAL.gold;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.stroke();
+    ctx.beginPath();ctx.arc(9,-5,1.6,0,7);ctx.fillStyle=PAL.ink;ctx.fill();
+    ctx.restore();
+  }
+  function sprig(ctx,berryCol){
+    ctx.save();
+    ctx.strokeStyle=PAL.olive;ctx.lineWidth=3;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(0,18);ctx.quadraticCurveTo(-6,0,0,-20);ctx.stroke();
+    for(let i=-1;i<=1;i+=2){
+      ctx.save();ctx.translate(0,-2);ctx.rotate(i*0.7);
+      ctx.beginPath();ctx.ellipse(0,-10,5,11,0,0,7);ctx.fillStyle=PAL.sage;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.2;ctx.stroke();
+      ctx.restore();
+    }
+    for(let i=0;i<3;i++){
+      const a=i*2.1;
+      ctx.beginPath();ctx.arc(Math.cos(a)*7,-18+Math.sin(a)*5,4,0,7);ctx.fillStyle=berryCol;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1;ctx.stroke();
+    }
+    ctx.restore();
+  }
+  const ways=[
+    {body:PAL.indigo,wing:PAL.sage,berry:PAL.madder,ground:'#f1e9d4'},
+    {body:PAL.madder,wing:PAL.gold,berry:PAL.indigo,ground:'#efe6cf'},
+    {body:PAL.olive,wing:PAL.indigo,berry:PAL.gold,ground:'#ece3cb'}
+  ];
+  function mix(a,b,t){
+    const pa=parseInt(a.slice(1),16),pb=parseInt(b.slice(1),16);
+    const ar=pa>>16,ag=(pa>>8)&255,ab=pa&255,br=pb>>16,bg=(pb>>8)&255,bb=pb&255;
+    return 'rgb('+Math.round(ar+(br-ar)*t)+','+Math.round(ag+(bg-ag)*t)+','+Math.round(ab+(bb-ab)*t)+')';
+  }
+  function curWay(t){
+    const n=ways.length,f=(t%(n*4))/4,i=Math.floor(f),k=f-i,j=(i+1)%n;
+    const a=ways[i],b=ways[j];
+    return {body:mix(a.body,b.body,k),wing:mix(a.wing,b.wing,k),berry:mix(a.berry,b.berry,k),ground:mix(a.ground,b.ground,k)};
+  }
+
+  let t=0,last=performance.now();
+  const cell=92;
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    const w=curWay(REDUCED?0:t);
+    const ctx=S.ctx;ctx.fillStyle=w.ground;ctx.fillRect(0,0,S.w,S.h);
+    const cols=Math.ceil(S.w/cell)+1,rows=Math.ceil(S.h/cell)+1;
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      const cx=c*cell,cy=r*cell,flip=(c%2===0)?1:-1;
+      ctx.save();ctx.translate(cx+cell*0.5,cy+cell*0.5);ctx.scale(flip,1);
+      ctx.save();ctx.translate(-cell*0.22,-cell*0.16);ctx.scale(0.9,0.9);bird(ctx,w.body,w.wing);ctx.restore();
+      ctx.save();ctx.translate(cell*0.26,cell*0.18);ctx.scale(0.8,0.8);sprig(ctx,w.berry);ctx.restore();
+      ctx.restore();
+    }
+  }
+
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

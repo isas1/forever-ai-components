@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A Constructivist tower crane sways and hoists red blocks onto a growing stack over a red diagonal wedge in red, black, white and amber.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crane Build</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0c0d;overflow:hidden}
+  #cv09-stage{position:fixed;inset:0;background:#0c0c0d}
+  #cv09-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="cv09-stage" role="img" aria-label="A Constructivist crane raising stacked geometric blocks across bold red, black and white diagonals.">
+  <canvas id="cv09-c"></canvas>
+</div>
+<div class="cap">Crane Build</div>
+<script>
+(function(){
+  "use strict";
+  var RED="#d11f1f", BG="#0c0c0d", INK="#0c0c0d", WHT="#f3f0e7", AMBER="#e8b32c";
+  var cv=document.getElementById("cv09-c"), ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,DPR=1,S=0,running=true,raf=0,t0=0;
+
+  function size(){
+    var st=document.getElementById("cv09-stage");
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=st.clientWidth; H=st.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);
+  }
+
+  // static photomontage backdrop: diagonal red wedge + black bands + white slab
+  function backdrop(){
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    var cx=W*0.5, cy=H*0.5;
+    // big red diagonal wedge (Lissitzky energy)
+    ctx.save();
+    ctx.fillStyle=RED;
+    ctx.beginPath();
+    ctx.moveTo(W*0.62,0); ctx.lineTo(W,0); ctx.lineTo(W,H*0.46); ctx.lineTo(W*0.30,H);
+    ctx.lineTo(0,H); ctx.lineTo(0,H*0.78); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    // white slab band cutting through
+    ctx.save();
+    ctx.translate(cx,cy); ctx.rotate(-0.62);
+    ctx.fillStyle=WHT;
+    ctx.fillRect(-S*0.95,S*0.30,S*1.9,Math.max(10,S*0.052));
+    ctx.restore();
+    // thin amber rule
+    ctx.save();
+    ctx.translate(cx,cy); ctx.rotate(-0.62);
+    ctx.fillStyle=AMBER;
+    ctx.fillRect(-S*0.95,S*0.30-Math.max(5,S*0.026),S*1.9,Math.max(2,S*0.008));
+    ctx.restore();
+    // ground plane (black)
+    ctx.fillStyle=INK;
+    ctx.beginPath();
+    ctx.moveTo(0,H*0.86); ctx.lineTo(W,H*0.74); ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
+  }
+
+  // crane geometry derived from S; base near lower-left, boom reaches up-right
+  function crane(swing){
+    var bx=W*0.20, by=H*0.86;            // base pivot
+    var mastH=S*0.52;                     // vertical mast
+    var topx=bx, topy=by-mastH;
+    var lw=Math.max(3,S*0.018);
+    // mast (black with red outline strokes -> use solid ink + white edge)
+    ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.strokeStyle=INK; ctx.lineWidth=lw*2.2;
+    line(bx,by,topx,topy);
+    ctx.strokeStyle=WHT; ctx.lineWidth=lw*0.5;
+    line(bx,by,topx,topy);
+    // counter-jib (short, left) + counterweight block
+    var cjx=topx-S*0.16, cjy=topy+S*0.02;
+    ctx.strokeStyle=INK; ctx.lineWidth=lw*1.6; line(topx,topy,cjx,cjy);
+    block(cjx-S*0.05,cjy-S*0.01,S*0.085,S*0.06,RED,0);
+    // jib (boom) up-right, with slight swing
+    var blen=S*0.46, ang=-0.34+swing;     // radians from horizontal
+    var jx=topx+Math.cos(ang)*blen, jy=topy+Math.sin(ang)*blen;
+    ctx.strokeStyle=RED; ctx.lineWidth=lw*1.4; line(topx,topy,jx,jy);
+    // lattice ticks on jib
+    ctx.strokeStyle=WHT; ctx.lineWidth=Math.max(1,lw*0.28);
+    for(var i=1;i<7;i++){
+      var f=i/7, px=topx+(jx-topx)*f, py=topy+(jy-topy)*f;
+      var nx=Math.cos(ang+Math.PI/2)*S*0.03, ny=Math.sin(ang+Math.PI/2)*S*0.03;
+      line(px-nx,py-ny,px+nx,py+ny);
+    }
+    // tie-bar from top to jib mid (suprematist triangle feel)
+    ctx.strokeStyle=AMBER; ctx.lineWidth=Math.max(1,lw*0.4);
+    line(topx,topy-S*0.0,(topx+jx)/2,(topy+jy)/2);
+    return {jx:jx, jy:jy, by:by};
+  }
+
+  function line(x1,y1,x2,y2){ ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+
+  function block(x,y,w,h,fill,rot){
+    ctx.save(); ctx.translate(x+w/2,y+h/2); ctx.rotate(rot||0);
+    ctx.fillStyle=fill; ctx.fillRect(-w/2,-h/2,w,h);
+    ctx.strokeStyle=INK; ctx.lineWidth=Math.max(1.5,S*0.006); ctx.strokeRect(-w/2,-h/2,w,h);
+    ctx.restore();
+  }
+
+  function scene(time){
+    backdrop();
+    // crane sway: slow, small
+    var swing=Math.sin(time*0.5)*0.07;
+    var c=crane(swing);
+    // hook cable from jib tip, hoist phase raises a block
+    var phase=(time*0.22)%1;                 // 0..1 raise cycle
+    var lift=phase<0.78? phase/0.78 : 1;      // ease into top then hold
+    var groundY=c.by-S*0.02;
+    var topY=c.jy+S*0.10;
+    var hookY=groundY-(groundY-topY)*lift;
+    var hookX=c.jx + Math.sin(time*0.5)*S*0.012; // tiny pendulum
+    // cable
+    ctx.strokeStyle=WHT; ctx.lineWidth=Math.max(1,S*0.004);
+    line(c.jx,c.jy,hookX,hookY-S*0.03);
+    // the raised block (red square, suprematist)
+    var bs=S*0.12;
+    block(hookX-bs/2,hookY-bs/2,bs,bs,RED,Math.sin(time*0.5)*0.05);
+    // small black square nested (montage)
+    block(hookX-bs*0.18,hookY-bs*0.18,bs*0.36,bs*0.36,INK,Math.sin(time*0.5)*0.05);
+
+    // stacked finished blocks on the right base (the build grows over time)
+    var stackX=W*0.78, baseY=H*0.80, u=S*0.11;
+    var built=Math.floor(((time*0.22)%4));   // 0..3 blocks placed cyclically
+    var cols=[INK,WHT,RED,AMBER];
+    for(var k=0;k<built;k++){
+      block(stackX-u/2,baseY-u*(k+1)+u*0.06,u,u*0.92,cols[k%4],0);
+    }
+    // foundation slab
+    block(stackX-u*0.9,baseY,u*1.8,u*0.22,WHT,0);
+
+    // big slab numeral / mark — constructivist typographic anchor
+    ctx.save();
+    ctx.fillStyle=WHT;
+    ctx.font="900 "+Math.round(S*0.11)+"px Helvetica,Arial,sans-serif";
+    ctx.textBaseline="alphabetic";
+    ctx.translate(W*0.085,H*0.30); ctx.rotate(-0.06);
+    ctx.fillText("09",0,0);
+    ctx.fillStyle=RED;
+    ctx.fillRect(0,S*0.022,S*0.20,Math.max(3,S*0.012));
+    ctx.restore();
+  }
+
+  function frame(ts){
+    if(!running) return;
+    if(!t0) t0=ts;
+    var time=(ts-t0)/1000;
+    scene(time);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(reduce){scene(2.4);return;} running=true; t0=0; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden){ stop(); } else if(!running){ start(); }
+  });
+  window.addEventListener("resize",function(){ size(); if(reduce) scene(2.4); });
+
+  size();
+  start();
+})();
+</script>
+</body>
+</html>

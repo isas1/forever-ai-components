@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A green SAVE pill morphs into a circle, sweeps a spinner, then springs a checkmark into a Saved state with red-square and blue-dot Bauhaus a">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Save → Saved</title>
+<style>
+  html,body{margin:0;height:100%}
+  body{background:#0b0d12;overflow:hidden}
+  #fb10-stage{position:fixed;inset:0;display:grid;place-items:center;outline:none}
+  #fb10-stage:focus-visible{box-shadow:inset 0 0 0 2px rgba(52,211,153,.55)}
+  #fb10-svg{width:min(74vmin,520px);height:min(74vmin,520px);display:block}
+  #fb10-arc{transform-origin:120px 120px}
+  #fb10-tick{transform-origin:121px 120px}
+  /* Bauhaus idiom: hard geometry, primary-adjacent palette anchored on the green accent,
+     mechanical-precise motion. Glow is a STATIC drop-shadow that never repaints. */
+  #fb10-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  #fb10-hint{position:fixed;right:9px;bottom:7px;font:600 9px/1 ui-monospace,Menlo,monospace;
+    color:#34d399;opacity:.34;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fb10-stage" role="button" tabindex="0"
+     aria-label="Save button. Activate to save and watch it morph through a spinner to a saved tick.">
+  <svg id="fb10-svg" viewBox="0 0 240 240" aria-hidden="true">
+    <defs>
+      <filter id="fb10-glow" x="-40%" y="-40%" width="180%" height="180%">
+        <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#34d399" flood-opacity="0.55"/>
+      </filter>
+    </defs>
+    <!-- Bauhaus accent bar: a static red square + blue dot framing the action -->
+    <rect x="44" y="40" width="14" height="14" fill="#e4572e"></rect>
+    <circle cx="190" cy="47" r="7" fill="#2d6cdf"></circle>
+    <!-- the morphing pill: rounded rect collapses toward a circle as r grows -->
+    <g filter="url(#fb10-glow)">
+      <rect id="fb10-pill" x="60" y="100" width="120" height="40" rx="20" ry="20"
+            fill="#34d399"></rect>
+    </g>
+    <!-- spinner arc, drawn on top, revealed mid-morph -->
+    <circle id="fb10-arc" cx="120" cy="120" r="22" fill="none"
+            stroke="#0b0d12" stroke-width="6" stroke-linecap="round"
+            stroke-dasharray="138" stroke-dashoffset="138"
+            transform-origin="120px 120px" opacity="0"></circle>
+    <!-- saved tick -->
+    <path id="fb10-tick" d="M106 121 L116 132 L136 108" fill="none"
+          stroke="#062b20" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"
+          stroke-dasharray="60" stroke-dashoffset="60" opacity="0"></path>
+    <!-- SAVE label sits inside the pill, fades as it morphs -->
+    <text id="fb10-label" x="120" y="124" text-anchor="middle"
+          font-family="ui-monospace,Menlo,monospace" font-size="15" font-weight="700"
+          letter-spacing="2" fill="#06281e">SAVE</text>
+  </svg>
+</div>
+<div id="fb10-cap">Save → Saved</div>
+<div id="fb10-hint" aria-hidden="true">tap / space</div>
+<div id="fb10-live" role="status" aria-live="polite"
+     style="position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var stage = document.getElementById("fb10-stage");
+  var pill  = document.getElementById("fb10-pill");
+  var arc   = document.getElementById("fb10-arc");
+  var tick  = document.getElementById("fb10-tick");
+  var label = document.getElementById("fb10-label");
+  var live  = document.getElementById("fb10-live");
+
+  var TICK_LEN = 60, ARC_LEN = 138;
+  // pill geometry: from a 120x40 bar to a 44-dia circle, centered at 120,120
+  var W0 = 120, H0 = 40, W1 = 44, H1 = 44;
+
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function easeOut(t){ return 1 - Math.pow(1-t,3); }
+  function easeInOut(t){ return t<.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2; }
+  // decaying-overshoot spring for the final tick pop
+  function spring(t){
+    if(t>=1) return 1;
+    return 1 + Math.pow(2,-7*t) * Math.sin((t*7 - 0.18) * (Math.PI*2)) * 0.45;
+  }
+
+  function setPill(w,h){
+    pill.setAttribute("x", (120 - w/2).toFixed(2));
+    pill.setAttribute("y", (120 - h/2).toFixed(2));
+    pill.setAttribute("width",  w.toFixed(2));
+    pill.setAttribute("height", h.toFixed(2));
+    pill.setAttribute("rx", (Math.min(w,h)/2).toFixed(2));
+    pill.setAttribute("ry", (Math.min(w,h)/2).toFixed(2));
+  }
+
+  // ---- static reduced-motion frame: the resolved "Saved" state ----
+  function drawOneFrame(){
+    setPill(W1,H1);
+    label.style.opacity = 0;
+    arc.style.opacity = 0;
+    tick.style.strokeDashoffset = 0;
+    tick.style.opacity = 1;
+    tick.style.transform = "scale(1)";
+    live.textContent = "Saved";
+  }
+  if(reduce){ drawOneFrame(); return; }
+
+  // ---- timeline (ms) ----
+  // 0–260  press: pill dips (scale) + SAVE fades
+  // 200–520 morph: pill bar -> circle
+  // 440–1180 spinner: arc sweeps ~1.3 turns
+  // 1180–1320 arc retracts, pill stays
+  // 1240–1700 tick draws with spring pop, "Saved"
+  var DUR = 1760;
+  var IDLE_AFTER = 4600;
+  var AUTO_GAP   = 2400;
+
+  var running = true, rafId = 0;
+  var playStart = -1, nextAuto = 0, userMode = false, lastInput = 0;
+
+  function reset(){
+    setPill(W0,H0);
+    label.style.opacity = 1;
+    arc.style.opacity = 0;
+    arc.style.strokeDashoffset = ARC_LEN;
+    tick.style.strokeDashoffset = TICK_LEN;
+    tick.style.opacity = 0;
+    tick.style.transform = "scale(1)";
+    pill.parentNode.style.transform = "scale(1)";
+  }
+
+  function trigger(now, fromUser){
+    playStart = now;
+    if(fromUser){ userMode = true; lastInput = now; }
+  }
+
+  function frame(now){
+    if(!running) return;
+
+    if(playStart < 0){
+      if(userMode && now - lastInput > IDLE_AFTER) userMode = false;
+      if(now >= nextAuto && !userMode){ reset(); trigger(now, false); }
+    }
+
+    if(playStart >= 0){
+      var ms = now - playStart;
+      if(ms > DUR) ms = DUR;
+
+      // press dip on the pill group (compositor transform only)
+      var dip = ms < 260 ? 1 - 0.06*easeOut(ms/260)
+              : ms < 420 ? 1 - 0.06*(1-easeOut((ms-260)/160)) : 1;
+      pill.parentNode.style.transform = "scale(" + dip.toFixed(4) + ")";
+
+      // SAVE label fade 0..240
+      label.style.opacity = ms < 240 ? (1 - ms/240).toFixed(3) : 0;
+
+      // morph bar -> circle 200..520
+      if(ms <= 200){ setPill(W0,H0); }
+      else if(ms < 520){ var m = easeInOut((ms-200)/320); setPill(lerp(W0,W1,m), lerp(H0,H1,m)); }
+      else { setPill(W1,H1); }
+
+      // spinner 440..1180 : sweep dashoffset + rotate
+      if(ms > 440 && ms < 1240){
+        var s = (ms-440)/740; if(s>1) s=1;
+        arc.style.opacity = 1;
+        arc.style.transform = "rotate(" + (s*470 - 90).toFixed(1) + "deg)";
+        // breathe the visible arc length a touch for a living spinner
+        var seg = 0.30 + 0.18*Math.sin(s*Math.PI*2);
+        arc.style.strokeDashoffset = (ARC_LEN*(1-seg)).toFixed(1);
+      }
+      // arc retract 1180..1320
+      if(ms >= 1180){
+        var rOff = ms < 1320 ? easeOut((ms-1180)/140) : 1;
+        arc.style.opacity = (1 - rOff).toFixed(3);
+      }
+
+      // tick draw + spring pop 1240..1700
+      if(ms > 1240){
+        tick.style.opacity = 1;
+        var k = ms < 1620 ? easeOut((ms-1240)/380) : 1;
+        tick.style.strokeDashoffset = (TICK_LEN*(1-k)).toFixed(2);
+        var sp = spring(Math.min(1,(ms-1240)/420));
+        tick.style.transform = "scale(" + sp.toFixed(4) + ")";
+        if(live.textContent !== "Saved") live.textContent = "Saved";
+      }
+
+      if(ms >= DUR){
+        playStart = -1;
+        nextAuto = now + AUTO_GAP;
+      }
+    }
+    rafId = requestAnimationFrame(frame);
+  }
+
+  function start(){ if(!running){ running = true; rafId = requestAnimationFrame(frame); } }
+  function stop(){ running = false; cancelAnimationFrame(rafId); }
+
+  function userPlay(){
+    var now = performance.now();
+    reset();
+    live.textContent = "Saving";
+    trigger(now, true);
+  }
+
+  stage.addEventListener("pointerdown", function(){ userPlay(); });
+  stage.addEventListener("keydown", function(e){
+    if(e.key === " " || e.key === "Enter"){ e.preventDefault(); userPlay(); }
+  });
+
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden){ stop(); }
+    else { nextAuto = performance.now() + 400; start(); }
+  });
+
+  // init idle visuals (the un-pressed SAVE button), kick first auto play
+  reset();
+  // set transform-box so group scale pivots about its own box center
+  pill.parentNode.style.transformBox = "fill-box";
+  pill.parentNode.style.transformOrigin = "center";
+  nextAuto = performance.now() + 700;
+  rafId = requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

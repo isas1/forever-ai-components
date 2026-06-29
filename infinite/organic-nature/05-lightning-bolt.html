@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Jagged white-blue lightning bolts with branching forks strike randomly down a dark storm-sky gradient, screen flashes; tap to trigger a stri">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lightning Bolt</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0e1a}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
+       letter-spacing:.08em;text-transform:uppercase;color:#cdd8ff;opacity:.34;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Lightning Bolt · tap</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,raf,bolt=null,flash=0,timer=0;
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',size);size();
+function makeBolt(sx){
+  const segs=[{x:sx,y:0}];let cx=sx,cy=0;
+  const steps=14;
+  for(let i=1;i<=steps;i++){
+    cy=(i/steps)*H;
+    cx+=(Math.random()-0.5)*W*0.16;
+    cx=Math.max(W*0.1,Math.min(W*0.9,cx));
+    segs.push({x:cx,y:cy});
+  }
+  // branches
+  const br=[];
+  for(let i=3;i<segs.length-2;i++){if(Math.random()<0.35){
+    let bx=segs[i].x,by=segs[i].y;const b=[{x:bx,y:by}];
+    for(let k=0;k<4;k++){bx+=(Math.random()-0.3)*W*0.12;by+=H*0.06;b.push({x:bx,y:by});}
+    br.push(b);
+  }}
+  return {main:segs,branches:br,life:1};
+}
+function strike(sx){bolt=makeBolt(sx==null?W*(0.3+Math.random()*0.4):sx);flash=1;}
+cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();strike(e.clientX-r.left);});
+function path(seg,lw,a,col){
+  x.beginPath();x.moveTo(seg[0].x,seg[0].y);
+  for(let i=1;i<seg.length;i++)x.lineTo(seg[i].x,seg[i].y);
+  x.strokeStyle=col;x.lineWidth=lw;x.globalAlpha=a;
+  x.lineJoin='round';x.lineCap='round';x.stroke();
+}
+function frame(){
+  // sky
+  const g=x.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#141a2e');g.addColorStop(1,'#070a14');
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  if(flash>0){x.fillStyle=`rgba(150,170,255,${flash*0.28})`;x.fillRect(0,0,W,H);flash-=reduce?0.06:0.08;}
+  if(!reduce){timer--;if(timer<=0&&!bolt){if(Math.random()<0.5)strike();timer=40+Math.random()*120;}}
+  else {timer--;if(timer<=0){strike();timer=120;}}
+  if(bolt){
+    x.globalCompositeOperation='lighter';
+    const a=bolt.life;
+    path(bolt.main,8,a*0.25,'#5e74ff');
+    path(bolt.main,3,a*0.9,'#dfe6ff');
+    path(bolt.main,1.2,a,'#ffffff');
+    for(const b of bolt.branches)path(b,1.6,a*0.7,'#cdd8ff');
+    x.globalCompositeOperation='source-over';x.globalAlpha=1;
+    bolt.life-=reduce?0.04:0.07;
+    if(bolt.life<=0)bolt=null;
+  }
+  raf=requestAnimationFrame(frame);
+}
+raf=requestAnimationFrame(frame);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>

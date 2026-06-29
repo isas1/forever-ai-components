@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A radial ring of seven colored cards around a glowing hub that you fling with inertia and it settles to the nearest card under a marker.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Carousel Throw</title>
+<style>
+  :root{--dr08-bg:#0c0e13;--dr08-acc:#22d3ee;--dr08-ink:#e9eef5;
+    --dr08-red:#e4573b;--dr08-yel:#f2c14e;--dr08-blue:#2f6df0;--dr08-line:#1c222e}
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--dr08-bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+  #dr08-stage{position:fixed;inset:0;display:grid;place-items:center;
+    background:radial-gradient(120% 120% at 50% 42%,#11151d 0%,var(--dr08-bg) 70%)}
+  #dr08-stage:focus-visible{outline:2px solid var(--dr08-acc);outline-offset:-4px}
+  #dr08-ring{position:relative;width:min(78vmin,560px);aspect-ratio:1;will-change:transform;
+    touch-action:none;cursor:grab}
+  #dr08-ring.dr08-grab{cursor:grabbing}
+  .dr08-hub{position:absolute;left:50%;top:50%;width:14%;aspect-ratio:1;transform:translate(-50%,-50%);
+    border-radius:50%;background:conic-gradient(from 0deg,var(--dr08-acc),#0b1b22 60%,var(--dr08-acc));
+    box-shadow:0 0 0 1px #0b323d,0 0 22px -4px var(--dr08-acc);opacity:.9}
+  .dr08-hub::after{content:"";position:absolute;inset:34%;border-radius:50%;background:var(--dr08-bg)}
+  .dr08-tk{position:absolute;left:50%;top:0;width:1px;height:6%;background:var(--dr08-line);
+    transform-origin:50% calc((min(78vmin,560px))*0);transform:translateX(-50%)}
+  .dr08-card{position:absolute;left:50%;top:50%;width:30%;aspect-ratio:3/4;margin:-20% 0 0 -15%;
+    will-change:transform;display:grid;place-items:center;color:var(--dr08-bg);
+    font:800 clamp(18px,7vmin,52px)/1 ui-monospace,Menlo,monospace;
+    box-shadow:0 10px 26px -10px #000,0 0 0 1px rgba(255,255,255,.06);backface-visibility:hidden}
+  .dr08-card span{transform:rotate(var(--dr08-cs,0deg));mix-blend-mode:luminosity;opacity:.92}
+  .dr08-marker{position:absolute;left:50%;top:6%;width:0;height:0;transform:translateX(-50%);
+    border:7px solid transparent;border-top-color:var(--dr08-acc);
+    filter:drop-shadow(0 0 6px var(--dr08-acc))}
+  .dr08-hint{position:fixed;right:9px;bottom:7px;font:600 9px/1 ui-monospace,monospace;
+    color:var(--dr08-ink);opacity:.34;letter-spacing:.1em;text-transform:uppercase}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;
+    opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="dr08-stage" role="application" tabindex="0"
+     aria-label="Carousel Throw. Drag or use arrow keys to fling the carousel; it settles to the nearest card.">
+  <div id="dr08-ring"></div>
+  <div class="dr08-marker" aria-hidden="true"></div>
+</div>
+<div class="dr08-hint" aria-hidden="true">drag / ← →</div>
+<div class="cap">Carousel Throw</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var ring=document.getElementById('dr08-ring');
+  var stage=document.getElementById('dr08-stage');
+  var N=7, R=37; // count, orbit radius in %
+  var PAL=['var(--dr08-acc)','var(--dr08-red)','var(--dr08-yel)','var(--dr08-blue)',
+           'var(--dr08-acc)','var(--dr08-red)','var(--dr08-yel)'];
+  var cards=[], live=null;
+
+  for(var t=0;t<24;t++){ // suprematist tick marks around rim
+    var tk=document.createElement('div');tk.className='dr08-tk';
+    tk.style.transform='translateX(-50%) rotate('+(t*15)+'deg)';
+    tk.style.transformOrigin='50% calc(min(78vmin,560px)*0.5)';
+    ring.appendChild(tk);
+  }
+  var hub=document.createElement('div');hub.className='dr08-hub';ring.appendChild(hub);
+
+  for(var i=0;i<N;i++){
+    var a=(i/N)*Math.PI*2 - Math.PI/2;
+    var c=document.createElement('div');c.className='dr08-card';
+    var cs=((i*53)%41-20); // varied glyph tilt — constructivist asymmetry
+    c.style.left=(50+Math.cos(a)*R)+'%';
+    c.style.top=(50+Math.sin(a)*R)+'%';
+    c.style.background=PAL[i%PAL.length];
+    c.innerHTML='<span style="--dr08-cs:'+cs+'deg">'+(i+1)+'</span>';
+    ring.appendChild(c);cards.push(c);
+  }
+
+  // physics: angle in degrees, velocity in deg/frame
+  var ang=0, vel=0, target=null, dragging=false, idle=0, demoT=0;
+  var STEP=360/N, FR=1000/60;
+  var lastX=0,lastY=0,cx=0,cy=0,RWH=0;
+
+  function measure(){var r=ring.getBoundingClientRect();cx=r.left+r.width/2;cy=r.top+r.height/2;RWH=r.width;}
+  measure();
+  addEventListener('resize',measure);
+
+  function place(){ring.style.transform='rotate('+ang+'deg)';}
+  function counterRotate(){ // keep glyphs upright
+    for(var k=0;k<N;k++){cards[k].firstChild.style.transform='rotate('+(-ang)+'deg)';}
+  }
+
+  function nearest(){return Math.round(ang/STEP)*STEP;}
+
+  function fling(v){ // user/synth throw
+    vel+=v; target=null; idle=0;
+  }
+  function snap(){target=nearest();}
+
+  // ---- pointer drag ----
+  function ptAngle(x,y){return Math.atan2(y-cy,x-cx)*180/Math.PI;}
+  ring.addEventListener('pointerdown',function(e){
+    dragging=true;target=null;vel=0;idle=0;ring.classList.add('dr08-grab');
+    ring.setPointerCapture(e.pointerId);lastX=ptAngle(e.clientX,e.clientY);
+  });
+  ring.addEventListener('pointermove',function(e){
+    if(!dragging)return;var a=ptAngle(e.clientX,e.clientY);var d=a-lastX;
+    if(d>180)d-=360;if(d<-180)d+=360;ang+=d;vel=d*0.9;lastX=a;
+  });
+  function up(){if(!dragging)return;dragging=false;ring.classList.remove('dr08-grab');
+    if(Math.abs(vel)<0.6)snap();}
+  ring.addEventListener('pointerup',up);ring.addEventListener('pointercancel',up);
+
+  // ---- keyboard reorder ----
+  stage.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'){fling(STEP*0.42);snapSoon();e.preventDefault();}
+    else if(e.key==='ArrowLeft'){fling(-STEP*0.42);snapSoon();e.preventDefault();}
+  });
+  var snapTimer=0;
+  function snapSoon(){clearTimeout(snapTimer);snapTimer=setTimeout(snap,260);}
+
+  // ---- self-demo ----
+  function demo(){ // gentle randomized throw
+    var dir=Math.random()<0.5?-1:1;
+    fling(dir*(STEP*0.7+Math.random()*STEP*1.4));
+    setTimeout(snap,520);
+  }
+
+  if(reduce){ang=0;place();counterRotate();return;}
+
+  var running=true,raf=0;
+  function loop(){
+    if(!running)return;
+    if(dragging){
+      // momentum tracked live; nothing to integrate
+    }else if(target!==null){
+      // spring to snap target
+      var diff=target-ang;
+      vel+=diff*0.10; vel*=0.74; ang+=vel;
+      if(Math.abs(diff)<0.15&&Math.abs(vel)<0.15){ang=target;vel=0;target=null;}
+    }else{
+      ang+=vel; vel*=0.965; // free inertia, friction
+      if(Math.abs(vel)<0.45&&Math.abs(vel)>0.001){snap();}
+    }
+    place();counterRotate();
+
+    idle++;
+    if(!dragging&&target===null&&Math.abs(vel)<0.05){
+      demoT++;
+      if(idle>150&&demoT>180){demo();demoT=0;}
+    }else{demoT=0;}
+
+    raf=requestAnimationFrame(loop);
+  }
+  // kick off with an initial idle demo soon after load
+  idle=152;demoT=120;
+  raf=requestAnimationFrame(loop);
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){running=false;cancelAnimationFrame(raf);}
+    else if(!running){running=true;measure();raf=requestAnimationFrame(loop);}
+  });
+})();
+</script>
+</body>
+</html>

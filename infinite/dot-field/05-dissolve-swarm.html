@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Dissolve — Infinitude. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dissolve — A Swarm of Dots</title>
+<style>
+  html,body{margin:0;height:100%;background:#060406;overflow:hidden}
+  #dot05-stage{position:fixed;inset:0;width:100%;height:100%}
+  #dot05-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .dot05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#ff63ac;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="dot05-stage" role="img" aria-label="A cloud of coloured dots orbiting an empty centre, periodically dissolving outward and reforming as it slowly rotates.">
+  <canvas id="dot05-cv"></canvas>
+</div>
+<div class="dot05-cap">Dissolve</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('dot05-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), last=performance.now(), t=0;
+  const N=115, P=new Array(N);
+  const cols=['#e8112d','#ff2d8a','#ffd400','#fbf6ef'];
+  for(let i=0;i<N;i++){
+    P[i]={ a:Math.random()*Math.PI*2, rad:30+Math.random()*130,
+      z:Math.random()*2-1, sp:(0.2+Math.random()*0.6)*(Math.random()<0.5?1:-1),
+      c:cols[(Math.random()*cols.length)|0], s:1.2+Math.random()*3.4, ph:Math.random()*Math.PI*2 };
+  }
+  let spin=0;
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx;
+    ctx.fillStyle='rgba(6,4,6,0.32)'; ctx.fillRect(0,0,S.w,S.h);
+    const cx=S.w/2, cy=S.h/2;
+    if(!REDUCED) spin+=0.0025;
+    const breath=0.6+0.5*Math.sin(t*0.5);
+    const scatter=Math.max(0,Math.sin(t*0.33));
+    for(let i=0;i<N;i++){
+      const p=P[i];
+      if(!REDUCED) p.a+=p.sp*0.012;
+      const wob=1+scatter*(0.4+Math.sin(p.ph+t*2)*0.6);
+      const R=p.rad*breath*wob;
+      const ang=p.a+spin+p.z*0.4;
+      const px=cx+Math.cos(ang)*R;
+      const py=cy+Math.sin(ang)*R*0.62+p.z*18;
+      const depth=(p.z+1)/2;
+      ctx.globalAlpha=0.35+depth*0.6;
+      ctx.fillStyle=p.c;
+      ctx.beginPath(); ctx.arc(px,py,p.s*(0.6+depth*0.9),0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#060406'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ for(let i=0;i<6;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

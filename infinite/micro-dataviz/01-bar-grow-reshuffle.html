@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Seven rounded gradient bars with cap dots on a dark slate grid ease to new random heights every 1.6s, reshuffling like a live chart.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bar Grow + Reshuffle</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0e1726;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
+    color:#5ec8c2;opacity:.4;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div class="cap">bar reshuffle</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let W,H,DPR;
+  const N=7, pal=['#5ec8c2','#7ad9c6','#9be8b8','#f2c14e','#f08a5d','#e85d75','#a06cd5'];
+  let bars=[];
+  function rnd(){return Math.random()}
+  function init(){
+    bars=[];for(let i=0;i<N;i++)bars.push({cur:rnd(),tgt:rnd(),c:pal[i%pal.length]});
+  }
+  function resize(){
+    DPR=Math.min(2,devicePixelRatio||1);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  let last=0,acc=0;
+  function newTargets(){for(const b of bars)b.tgt=0.15+rnd()*0.85}
+  function draw(t){
+    if(document.hidden){last=t;return raf()}
+    const dt=Math.min(64,t-last);last=t;acc+=dt;
+    if(acc>1600){acc=0;newTargets()}
+    ctx.clearRect(0,0,W,H);
+    const pad=W*0.1, baseY=H*0.82, top=H*0.16;
+    const slot=(W-2*pad)/N, bw=slot*0.62;
+    for(let i=0;i<N;i++){
+      const b=bars[i];
+      if(!reduce)b.cur+=(b.tgt-b.cur)*0.08; else b.cur=b.tgt;
+      const h=(baseY-top)*b.cur, x=pad+slot*i+(slot-bw)/2, y=baseY-h;
+      const g=ctx.createLinearGradient(0,y,0,baseY);
+      g.addColorStop(0,b.c);g.addColorStop(1,b.c+'33');
+      ctx.fillStyle=g;
+      rr(x,y,bw,h,Math.min(5,bw/2));ctx.fill();
+      ctx.fillStyle=b.c;ctx.beginPath();ctx.arc(x+bw/2,y,bw*0.16,0,7);ctx.fill();
+    }
+    ctx.strokeStyle='#ffffff14';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(pad*0.6,baseY+1);ctx.lineTo(W-pad*0.6,baseY+1);ctx.stroke();
+    raf();
+  }
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,0);ctx.arcTo(x,y+h,x,y,0);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  function raf(){requestAnimationFrame(draw)}
+  addEventListener('resize',resize);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
+  cv.addEventListener('pointerdown',newTargets);
+  resize();init();raf();
+})();
+</script>
+</body>
+</html>

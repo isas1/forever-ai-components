@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A purple gradient bar fills left-to-right under a large percent readout with a glowing leading head, tick scale and status dot.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Linear Progress</title>
+<style>
+  :root{
+    --bg:#0b0d12; --accent:#7c5cff; --accent2:#a78bff;
+    --track:#1b1f2b; --ink:#eef0f7; --mute:#6f768c;
+  }
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:500 14px/1.3 ui-sans-serif,Inter,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  #pg01-stage{
+    position:absolute; inset:0; display:grid; place-items:center;
+    padding:clamp(18px,7vmin,56px);
+  }
+  #pg01-card{
+    width:min(78vmin,520px); display:flex; flex-direction:column;
+    gap:clamp(12px,3.2vmin,22px);
+  }
+  /* top row: label + numeric readout */
+  .pg01-row{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+  .pg01-label{
+    font:600 clamp(10px,2.4vmin,13px)/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.22em; text-transform:uppercase; color:var(--mute);
+  }
+  #pg01-pct{
+    font:600 clamp(34px,12vmin,76px)/0.9 ui-monospace,Menlo,monospace;
+    letter-spacing:-.02em; color:var(--ink);
+    font-variant-numeric:tabular-nums; display:flex; align-items:baseline; gap:.06em;
+  }
+  #pg01-pct b{font-weight:600}
+  #pg01-pct span{font-size:.36em; color:var(--accent2); letter-spacing:0; transform:translateY(-.1em)}
+  /* the bar */
+  #pg01-bar{
+    position:relative; height:clamp(10px,3vmin,16px); border-radius:999px;
+    background:var(--track);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);
+  }
+  #pg01-fill{
+    position:absolute; inset:0; border-radius:inherit; transform-origin:left center;
+    transform:scaleX(0);
+    background:linear-gradient(90deg,var(--accent) 0%,var(--accent2) 100%);
+    box-shadow:0 0 18px -2px rgba(124,92,255,.6);
+    will-change:transform;
+  }
+  /* the leading head marker — rides the fill edge, compositor transform only */
+  #pg01-head{
+    position:absolute; top:50%; left:0; width:2px; height:200%;
+    margin-top:-100%; border-radius:2px;
+    background:var(--accent2);
+    box-shadow:0 0 10px 1px rgba(167,139,255,.7);
+    transform:translateX(0); will-change:transform;
+  }
+  /* tick scale under the bar — static, Swiss-functional */
+  #pg01-ticks{
+    position:relative; height:14px; display:flex; justify-content:space-between;
+    font:600 9px/1 ui-monospace,Menlo,monospace; color:var(--mute);
+    letter-spacing:.05em;
+  }
+  #pg01-ticks i{position:relative; width:1px; height:6px; background:var(--track); display:block}
+  .pg01-tk{display:flex; flex-direction:column; align-items:center; gap:5px}
+  .pg01-tk:nth-child(odd) i{height:9px; background:#2a3042}
+  /* status line */
+  #pg01-status{
+    display:flex; align-items:center; gap:8px; min-height:1em;
+    font:600 clamp(9px,2.2vmin,11px)/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--mute);
+  }
+  #pg01-dot{
+    width:7px; height:7px; border-radius:50%; background:var(--accent);
+    box-shadow:0 0 8px 1px rgba(124,92,255,.7); flex:0 0 auto;
+  }
+  #pg01-status.done #pg01-dot{background:#3ddc97; box-shadow:0 0 8px 1px rgba(61,220,151,.7)}
+  #pg01-status.done{color:#8ff0c4}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    #pg01-fill{transform:scaleX(.68)}
+    #pg01-head{transform:translateX(0)}
+  }
+</style>
+</head>
+<body>
+  <div id="pg01-stage">
+    <div id="pg01-card">
+      <div class="pg01-row">
+        <div class="pg01-label">Uploading</div>
+        <div id="pg01-pct" aria-hidden="true"><b>0</b><span>%</span></div>
+      </div>
+      <div id="pg01-bar" role="progressbar" aria-label="Linear progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div id="pg01-fill"></div>
+        <div id="pg01-head"></div>
+      </div>
+      <div id="pg01-ticks" aria-hidden="true"></div>
+      <div id="pg01-status"><span id="pg01-dot"></span><span id="pg01-stxt">In progress</span></div>
+    </div>
+  </div>
+  <div class="cap">Linear Progress</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var bar   = document.getElementById('pg01-bar');
+  var fill  = document.getElementById('pg01-fill');
+  var head  = document.getElementById('pg01-head');
+  var pctEl = document.getElementById('pg01-pct').querySelector('b');
+  var ticks = document.getElementById('pg01-ticks');
+  var status= document.getElementById('pg01-status');
+  var stxt  = document.getElementById('pg01-stxt');
+
+  // static tick scale (Swiss measure): 0..100 in 10s
+  var tk = '';
+  for(var i=0;i<=10;i++){ tk += '<div class="pg01-tk"><i></i></div>'; }
+  ticks.innerHTML = tk;
+
+  // cached geometry, recomputed only on resize
+  var barW = 0;
+  function measure(){ barW = bar.clientWidth; }
+  measure();
+  addEventListener('resize', measure, {passive:true});
+
+  // easeInOutCubic — honest acceleration, no default linear crawl
+  function ease(t){ return t<0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2; }
+
+  function paint(p){               // p = 0..1 fill ratio
+    fill.style.transform = 'scaleX(' + p + ')';
+    head.style.transform = 'translateX(' + (p*barW) + 'px)';
+    var pct = Math.round(p*100);
+    if(pct !== lastPct){
+      lastPct = pct;
+      pctEl.textContent = pct;
+      bar.setAttribute('aria-valuenow', pct);
+      if(pct>=100){ status.classList.add('done'); stxt.textContent='Complete'; }
+      else if(status.classList.contains('done')){ status.classList.remove('done'); stxt.textContent='In progress'; }
+    }
+  }
+  var lastPct = -1;
+
+  if(reduce){ measure(); paint(0.68); pctEl.textContent='68'; bar.setAttribute('aria-valuenow',68); return; }
+
+  // loop timing
+  var FILL = 2600, HOLD = 900, RESET = 700;  // ms phases: fill, hold full, ease back
+  var CYCLE = FILL + HOLD + RESET;
+  var raf = 0, t0 = 0, running = true;
+
+  function frame(now){
+    if(!running) return;
+    if(!t0) t0 = now;
+    var t = (now - t0) % CYCLE;
+    var p;
+    if(t < FILL){ p = ease(t/FILL); }
+    else if(t < FILL+HOLD){ p = 1; }
+    else { p = 1 - ease((t-FILL-HOLD)/RESET); }   // graceful settle back to 0
+    paint(p);
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+    else if(!running){ running=true; t0=0; raf=requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

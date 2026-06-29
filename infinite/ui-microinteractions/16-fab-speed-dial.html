@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Pink floating action button that rotates plus-to-X and fans out three labeled mini action buttons on a springy arc with a pulse ring.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FAB Speed Dial</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#171717;}
+  .fsd-stage{
+    position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  .fsd-rig{position:relative;width:clamp(160px,46vmin,320px);height:clamp(160px,46vmin,320px);}
+  /* anchor bottom-right inside the rig, like a real screen corner */
+  .fsd-fab{
+    position:absolute;right:6%;bottom:6%;
+    width:clamp(40px,15vmin,72px);height:clamp(40px,15vmin,72px);
+    border-radius:50%;background:#FB7185;
+    box-shadow:0 6px 18px rgba(251,113,133,.38);
+    will-change:transform;transform-origin:center;cursor:pointer;z-index:5;
+  }
+  /* pulse ring on its own compositor layer (transform/opacity only) */
+  .fsd-pulse{
+    position:absolute;right:6%;bottom:6%;
+    width:clamp(40px,15vmin,72px);height:clamp(40px,15vmin,72px);
+    border-radius:50%;
+    box-shadow:0 0 0 6px rgba(251,113,133,.35);
+    transform-origin:center;will-change:transform,opacity;
+    pointer-events:none;z-index:4;opacity:0;
+  }
+  .fsd-x{position:absolute;inset:0;}
+  .fsd-x i{
+    position:absolute;left:50%;top:50%;width:42%;height:9%;min-height:2px;border-radius:2px;
+    background:#171717;transform-origin:center;
+    transform:translate(-50%,-50%) rotate(0deg);
+  }
+  .fsd-mini{
+    position:absolute;width:clamp(30px,11vmin,52px);height:clamp(30px,11vmin,52px);
+    border-radius:50%;background:#1f1f1f;border:1.5px solid rgba(251,113,133,.55);
+    box-shadow:0 4px 14px rgba(0,0,0,.45);
+    will-change:transform,opacity;transform-origin:center;
+    display:flex;align-items:center;justify-content:center;z-index:4;
+  }
+  .fsd-mini svg{width:46%;height:46%;stroke:#FB7185;fill:none;
+    stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+  .fsd-label{
+    position:absolute;right:0;top:50%;transform:translate(8px,-50%);
+    white-space:nowrap;font-size:clamp(9px,3vmin,13px);font-weight:600;letter-spacing:.02em;
+    color:#f4f4f4;background:rgba(20,20,20,.92);padding:.32em .6em;border-radius:6px;
+    box-shadow:0 3px 10px rgba(0,0,0,.4);pointer-events:none;will-change:transform,opacity;
+  }
+  .fsd-cap{position:fixed;left:10px;bottom:8px;font-size:10px;letter-spacing:.14em;
+    color:#FB7185;opacity:.34;text-transform:uppercase;pointer-events:none;
+    font-family:ui-monospace,monospace;}
+</style>
+</head>
+<body>
+  <div class="fsd-stage">
+    <div class="fsd-rig" id="fsd-rig">
+      <div class="fsd-pulse" id="fsd-pulse"></div>
+      <div class="fsd-fab" id="fsd-fab"><div class="fsd-x"><i></i><i></i></div></div>
+    </div>
+  </div>
+  <div class="fsd-cap">FAB Speed Dial</div>
+<script>
+(function(){
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const rig=document.getElementById('fsd-rig'), fab=document.getElementById('fsd-fab'), pulse=document.getElementById('fsd-pulse');
+  const bars=fab.querySelectorAll('.fsd-x i');
+  const icons=[
+    '<path d="M12 5v14M5 12h14"/>',                                  // plus
+    '<path d="M4 7h16M4 12h16M4 17h10"/>',                           // list
+    '<path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-3-5 3 1-6-4-4 5.5-.5z"/>'// star
+  ];
+  const labels=['Compose','Note','Favorite'];
+  const minis=[];
+  // arc spread: launch upward, fanning slightly left
+  const ang=[-90,-118,-62];          // degrees, 0 = right
+  for(let k=0;k<3;k++){
+    const m=document.createElement('div'); m.className='fsd-mini';
+    m.innerHTML='<svg viewBox="0 0 24 24">'+icons[k]+'</svg>';
+    const lab=document.createElement('div'); lab.className='fsd-label'; lab.textContent=labels[k];
+    m.appendChild(lab); rig.appendChild(m); minis.push({el:m,lab:lab,ang:ang[k]});
+  }
+  // geometry relative to fab centre
+  function fabCenter(){
+    const r=rig.getBoundingClientRect(), f=fab.getBoundingClientRect();
+    return {cx:f.left-r.left+f.width/2, cy:f.top-r.top+f.height/2, R:Math.min(r.width,r.height)};
+  }
+  function place(){
+    const g=fabCenter();
+    minis.forEach((m,i)=>{
+      m.dist=g.R*(0.28+i*0.205);                 // staggered radial distance
+      m.x0=g.cx-m.el.offsetWidth/2; m.y0=g.cy-m.el.offsetHeight/2;
+      const a=m.ang*Math.PI/180;
+      m.tx=Math.cos(a)*m.dist; m.ty=Math.sin(a)*m.dist;
+      m.el.style.left=m.x0+'px'; m.el.style.top=m.y0+'px';
+    });
+  }
+  addEventListener('resize',place); place();
+
+  // critically-ish damped spring with overshoot toward target p(0..1 progress along arc)
+  function springPos(t,delay,dur){            // returns 0->overshoot->1 settle
+    let x=(t-delay)/dur; if(x<=0)return 0; if(x>=1)return 1;
+    // overshoot easing
+    const o=1.7;
+    return 1+ (o+1)*Math.pow(x-1,3) + o*Math.pow(x-1,2);
+  }
+  const T={open:0.62,close:0.42,hold:1.15,gap:0.10};
+  let open=true, clock=0, phaseStart=0, raf=0, last=0;
+
+  function render(p){            // p: 0 closed -> 1 fully open (global env)
+    // FAB rotation + plus->x morph: bars rotate to +/-45
+    const rot=p*45;
+    bars[0].style.transform='translate(-50%,-50%) rotate('+rot+'deg)';
+    bars[1].style.transform='translate(-50%,-50%) rotate('+(-rot)+'deg)';
+    fab.style.transform='rotate('+(p*45)+'deg) scale('+(1+0.06*Math.sin(p*Math.PI))+')';
+    // pulse ring: animate transform/opacity only (static box-shadow on its own layer)
+    const pr=14+18*p;                 // original spread in px
+    pulse.style.transform='scale('+(1+pr/6)+')';   // 6px = base ring spread
+    pulse.style.opacity=((0.30*(1-p))/0.35).toFixed(3);
+  }
+
+  function step(now){
+    const dt=Math.min((now-last)/1000||0,0.05); last=now;
+    clock+=dt;
+    const local=clock-phaseStart;
+    const dur=open?T.open:T.close;
+    let env=open?Math.min(local/dur,1):1-Math.min(local/dur,1);
+    // smooth FAB env
+    render(open? ease(env): ease(env));
+
+    minis.forEach((m,i)=>{
+      const idx=open? i : (2-i);              // reverse stagger on close
+      const delay=idx*T.gap;
+      let s;
+      if(open){ s=springPos(local,delay,dur); }
+      else {
+        // collapse: reverse with follow-through (small back-arc)
+        let x=(local-delay)/dur; x=Math.max(0,Math.min(1,x));
+        const o=1.5; const cx=x*x*((o+1)*x-o);  // anticipation/back ease
+        s=1-cx;
+      }
+      const X=m.tx*s, Y=m.ty*s;
+      const sc=0.55+0.45*Math.max(0,Math.min(1,s));
+      m.el.style.transform='translate('+X+'px,'+Y+'px) scale('+sc+')';
+      m.el.style.opacity=Math.max(0,Math.min(1,s*1.4)).toFixed(3);
+      // label trails behind the button, fading in last
+      const lp=Math.max(0,Math.min(1,(s-0.45)/0.55));
+      m.lab.style.opacity=(open?lp:lp).toFixed(3);
+      m.lab.style.transform='translate('+(8 - (1-lp)*14)+'px,-50%)';
+    });
+
+    // phase transitions
+    if(open && local>=dur+T.hold){ open=false; phaseStart=clock; }
+    if(!open && local>=dur+0.55){ open=true; phaseStart=clock; }
+
+    raf=requestAnimationFrame(step);
+  }
+  function ease(x){return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;}
+
+  function start(){ if(!raf && !reduce){ last=performance.now(); raf=requestAnimationFrame(step);} }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  // pointer nudge: click toggles / restarts the cycle
+  fab.addEventListener('click',()=>{ open=!open; phaseStart=clock; });
+
+  if(reduce){
+    place(); render(1);
+    minis.forEach(m=>{ m.el.style.transform='translate('+m.tx+'px,'+m.ty+'px) scale(1)';
+      m.el.style.opacity=1; m.lab.style.opacity=1; m.lab.style.transform='translate(8px,-50%)'; });
+  } else { start(); }
+})();
+</script>
+</body>
+</html>

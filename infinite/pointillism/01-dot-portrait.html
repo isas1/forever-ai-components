@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Thousands of scattered colored dots converge to assemble a sun rising over a hill, then dissolve and loop.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dot Assemble</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14}
+  #po01-stage{position:fixed;inset:0;background:#0d0f14}
+  #po01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .po01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="po01-stage" role="img" aria-label="Pointillist scene: a sun rising over a hill, assembling itself from thousands of scattered colored dots that converge into place.">
+  <canvas id="po01-c"></canvas>
+</div>
+<div class="po01-cap">Dot Assemble</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv=document.getElementById('po01-c');
+  var ctx=cv.getContext('2d',{alpha:false});
+  var W=0,H=0,DPR=1,running=false,raf=0,t0=0;
+
+  // Divisionist palette: warm sun, cool sky, green earth, accent #f0a830.
+  var PAL=[
+    [240,168,48],[247,201,108],[230,120,60],[214,76,74],   // sun / warm
+    [60,86,140],[92,120,176],[40,58,104],[150,170,210],     // sky / cool
+    [70,120,96],[44,92,72],[120,150,90],[180,170,80]        // earth
+  ];
+  var BG=[13,15,20]; // #0d0f14 — ImageData background fill
+
+  var N=0, px,py,qx,qy; // current px/py, target qx/qy (all in DEVICE pixels)
+  var col32; // Uint32Array: per-dot pre-packed 0xAABBGGRR color (brightness baked in)
+  var img=null, buf32=null, bw=0, bh=0; // ImageData + Uint32 view + device dims
+  var t=0; // 0..1 progress
+
+  function cl(v){ v=v|0; return v<0?0:v>255?255:v; }
+  // pack r,g,b into native-endian 0xAABBGGRR (alpha 255) for the Uint32 ImageData view
+  function pack(r,g,b){ return (255<<24)|(cl(b)<<16)|(cl(g)<<8)|cl(r); }
+
+  function build(){
+    // device-pixel canvas dims
+    bw=cv.width; bh=cv.height;
+    img=ctx.createImageData(bw,bh);
+    buf32=new Uint32Array(img.data.buffer);
+    // target = a scene: hill (lower third), sun disc, sky. Density scales with area;
+    // hard count is irrelevant to the cap because rendering is a single ImageData blit.
+    var W2=bw, H2=bh, cap=Math.min(9000,(W2*H2/(520*DPR*DPR))|0);
+    N=cap<1?1:cap;
+    px=new Float32Array(N); py=new Float32Array(N);
+    qx=new Float32Array(N); qy=new Float32Array(N);
+    col32=new Uint32Array(N);
+    var horizon=H2*0.66, sunX=W2*0.62, sunY=H2*0.40, sunR=Math.min(W2,H2)*0.17;
+    for(var i=0;i<N;i++){
+      var x,y,tries=0,col;
+      do{
+        x=Math.random()*W2; y=Math.random()*H2; tries++;
+        var below=y>horizon;
+        var dx=x-sunX, dy=y-sunY, dsun=Math.sqrt(dx*dx+dy*dy);
+        if(dsun<sunR){ col=Math.random()<0.5?0:1; if(dsun>sunR*0.7&&Math.random()<0.5)col=2; break; }
+        if(below){ // earth, denser sampling
+          col= y>horizon+(H2-horizon)*0.5 ? (Math.random()<0.6?8:9) : (Math.random()<0.5?10:8); break;
+        } else { // sky: glow near sun, cool away
+          if(dsun<sunR*2.2 && Math.random()<0.55){ col=2+(Math.random()*2|0); break; }
+          if(Math.random()<0.62){ col=4+(Math.random()*4|0); break; }
+        }
+      } while(tries<6);
+      if(col===undefined) col=4+(Math.random()*4|0);
+      qx[i]=x; qy[i]=y;
+      // bake per-dot brightness jitter into the packed color once (optical mixing)
+      var c=PAL[col], k=0.78+((i*2654435761)>>>0)%100/100*0.42;
+      col32[i]=pack(c[0]*k,c[1]*k,c[2]*k);
+      // start scattered from a turbulent ring outside the frame center
+      var a=Math.random()*6.2832, rr=Math.max(W2,H2)*(0.55+Math.random()*0.6);
+      px[i]=W2*0.5+Math.cos(a)*rr; py[i]=H2*0.5+Math.sin(a)*rr;
+    }
+  }
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(1,0,0,1,0,0); // ImageData is written in device pixels
+    build();
+    if(reduce){ t=1; draw(); }
+  }
+
+  function ease(u){ return u<0?0:u>1?1:(u*u*(3-2*u)); }
+
+  function draw(){
+    var b=buf32, w=bw, h=bh, n=N;
+    // clear to background (single packed fill, no allocation)
+    var bgp=pack(BG[0],BG[1],BG[2]);
+    b.fill(bgp);
+    var e=ease(t);
+    // disc radius in device pixels; grows slightly while scattered
+    var dotR=Math.max(1.0,Math.min(w,h)*0.0045)*(1+(1-e)*0.6);
+    var R=dotR|0; if(R<1)R=1; var R2=dotR*dotR;
+    var spread=(1-e)*Math.max(w,h)*0.06;
+    for(var i=0;i<n;i++){
+      var sx=px[i], sy=py[i];
+      var jx=(1-e)*Math.sin(i+t*40)*spread*0.06;
+      var cx=(sx+(qx[i]-sx)*e+jx)|0;
+      var cy=(sy+(qy[i]-sy)*e)|0;
+      var pc=col32[i];
+      // rasterize a filled disc directly into the Uint32 buffer (no per-pixel alpha:
+      // dots are opaque; overlap is order-dependent which reads as dense stippling)
+      var y0=cy-R; if(y0<0)y0=0; var y1=cy+R; if(y1>=h)y1=h-1;
+      var x0=cx-R; if(x0<0)x0=0; var x1=cx+R; if(x1>=w)x1=w-1;
+      for(var yy=y0;yy<=y1;yy++){
+        var dyy=yy-cy, row=yy*w;
+        for(var xx=x0;xx<=x1;xx++){
+          var dxx=xx-cx;
+          if(dxx*dxx+dyy*dyy<=R2) b[row+xx]=pc;
+        }
+      }
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  function frame(ts){
+    if(!running)return;
+    if(!t0)t0=ts;
+    var el=(ts-t0)/1000;
+    // assemble over ~3.4s, hold, then gently re-scatter and loop
+    var cyc=6.4, p=el%cyc;
+    if(p<3.4) t=p/3.4;
+    else if(p<4.9) t=1;
+    else t=1-(p-4.9)/1.5; // dissolve back out
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(running||reduce)return; running=true; t0=0; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  window.addEventListener('resize',resize,{passive:true});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) stop(); else { t0=0; start(); }
+  });
+
+  resize();
+  if(reduce){ draw(); return; }
+  start();
+})();
+</script>
+</body>
+</html>

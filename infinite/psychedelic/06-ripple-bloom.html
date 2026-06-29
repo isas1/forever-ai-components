@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric lobed color rings blooming outward from a glowing center in swirling pink-violet-cyan complementary hues.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ripple Bloom</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  #ps06-stage{position:fixed;inset:0;width:100%;height:100%}
+  #ps06-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ps06-stage" role="img" aria-label="Concentric psychedelic color ripples blooming outward from a glowing center in swirling complementary hues.">
+  <canvas id="ps06-c"></canvas>
+</div>
+<div class="cap">Ripple Bloom</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('ps06-stage');
+  var cv = document.getElementById('ps06-c');
+  var ctx = cv.getContext('2d');
+
+  // Fillmore-style psychedelic ring palette: hot pink -> magenta -> violet ->
+  // cyan -> chartreuse -> tangerine. Complementary swirl around #ff3da6.
+  var PAL = [
+    [255,61,166],[214,52,201],[124,72,224],[58,168,224],
+    [82,224,148],[212,224,58],[255,142,58],[255,61,120]
+  ];
+  var TAU = Math.PI*2;
+  var NRINGS = 22;          // capped ring count
+  var phase = new Float32Array(NRINGS); // bloom progress 0..1 per ring
+  var seedT = new Float32Array(NRINGS); // start offset
+  for(var i=0;i<NRINGS;i++){ seedT[i] = i/NRINGS; phase[i] = seedT[i]; }
+
+  var W=0,H=0,CX=0,CY=0,MAXR=0,DPR=1;
+  function size(){
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = stage.clientWidth; H = stage.clientHeight;
+    cv.width = Math.max(1, W*DPR|0);
+    cv.height = Math.max(1, H*DPR|0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    CX = W*0.5; CY = H*0.5;
+    MAXR = Math.hypot(W,H)*0.62;
+  }
+  size();
+
+  function col(idx, a){
+    var c = PAL[((idx%PAL.length)+PAL.length)%PAL.length];
+    return 'rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';
+  }
+
+  // Static center glow gradient — built once, never repaints per ring.
+  var glow=null;
+  function buildGlow(){
+    glow = ctx.createRadialGradient(CX,CY,0,CX,CY,MAXR*0.42);
+    glow.addColorStop(0,'rgba(255,61,166,0.55)');
+    glow.addColorStop(0.35,'rgba(124,72,224,0.22)');
+    glow.addColorStop(1,'rgba(10,6,18,0)');
+  }
+  buildGlow();
+
+  var t=0;
+  function frame(now){
+    if(!running){ return; }
+    t = now*0.001;
+
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#0a0612';
+    ctx.fillRect(0,0,W,H);
+
+    // static bloom glow
+    ctx.fillStyle=glow;
+    ctx.fillRect(0,0,W,H);
+
+    ctx.globalCompositeOperation='lighter';
+
+    // swirling wobble — slow, seizure-safe
+    var swirl = Math.sin(t*0.25)*0.5;
+
+    for(var k=0;k<NRINGS;k++){
+      phase[k]+= 0.0011;            // slow outward bloom
+      if(phase[k]>1) phase[k]-=1;
+      var p = phase[k];
+      var r = p*MAXR;
+      if(r<2) continue;
+      var fade = Math.sin(p*Math.PI);       // bloom in, dissolve out
+      var a = fade*0.5;
+      if(a<=0.004) continue;
+
+      // melted, lobed ring — liquid distortion
+      var lobes = 5 + (k%3);
+      var amp = (8 + r*0.06) * (0.4+0.6*fade);
+      var rot = swirl + k*0.4 + t*0.12;
+
+      ctx.beginPath();
+      var seg=64, x, y, rr, ang;
+      for(var s=0;s<=seg;s++){
+        ang = s/seg*TAU;
+        rr = r + Math.sin(ang*lobes + rot)*amp
+               + Math.sin(ang*2 - t*0.2)*amp*0.4;
+        x = CX + Math.cos(ang)*rr;
+        y = CY + Math.sin(ang)*rr;
+        if(s===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      ctx.lineWidth = 2 + fade*5;
+      ctx.strokeStyle = col(k + (t*0.2|0), a);
+      ctx.stroke();
+    }
+
+    raf = requestAnimationFrame(frame);
+  }
+
+  function drawOneFrame(){
+    // calm static bloom for reduced-motion
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#0a0612';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=glow;
+    ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    for(var k=0;k<NRINGS;k++){
+      var p = seedT[k];
+      var r = p*MAXR;
+      if(r<2) continue;
+      var fade = Math.sin(p*Math.PI);
+      var a = fade*0.5;
+      if(a<=0.004) continue;
+      var lobes = 5+(k%3), amp=(8+r*0.06)*(0.4+0.6*fade);
+      ctx.beginPath();
+      for(var s=0;s<=64;s++){
+        var ang=s/64*TAU;
+        var rr=r+Math.sin(ang*lobes+k*0.4)*amp;
+        var x=CX+Math.cos(ang)*rr, y=CY+Math.sin(ang)*rr;
+        if(s===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      ctx.lineWidth=2+fade*5;
+      ctx.strokeStyle=col(k,a);
+      ctx.stroke();
+    }
+  }
+
+  var raf=0, running=false;
+  function start(){
+    if(running) return;
+    running=true;
+    raf=requestAnimationFrame(frame);
+  }
+  function stop(){
+    running=false;
+    if(raf) cancelAnimationFrame(raf);
+    raf=0;
+  }
+
+  var rT=0;
+  window.addEventListener('resize',function(){
+    clearTimeout(rT);
+    rT=setTimeout(function(){
+      size(); buildGlow();
+      if(reduce){ drawOneFrame(); }
+    },120);
+  });
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+
+  if(reduce){ drawOneFrame(); return; }
+  start();
+})();
+</script>
+</body>
+</html>

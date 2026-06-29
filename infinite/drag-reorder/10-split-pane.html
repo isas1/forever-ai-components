@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Two color-coded panes split by a draggable cyan divider with a grip and percent readout, auto-sweeping in a gentle spring motion.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Split Pane</title>
+<style>
+  :root{--bg:#0c0e13;--ac:#22d3ee;--l:#f2b705;--r:#e0457b}
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+  #dr10-stage{position:absolute;inset:0;display:grid;place-items:center}
+  #dr10-frame{position:relative;width:78%;height:64%;max-width:560px;border-radius:10px;overflow:hidden;
+    background:#11141b;box-shadow:0 0 0 1px rgba(255,255,255,.06),0 0 60px -28px var(--ac)}
+  .dr10-pane{position:absolute;top:0;height:100%;will-change:transform;transform-origin:left center}
+  #dr10-pL{left:0;width:50%;background:
+    repeating-linear-gradient(90deg,rgba(242,183,5,.07) 0 1px,transparent 1px 22px),
+    linear-gradient(135deg,rgba(242,183,5,.16),rgba(242,183,5,.04))}
+  #dr10-pR{right:0;width:50%;transform-origin:right center;background:
+    repeating-linear-gradient(0deg,rgba(224,69,123,.07) 0 1px,transparent 1px 22px),
+    linear-gradient(315deg,rgba(224,69,123,.16),rgba(224,69,123,.04))}
+  .dr10-mark{position:absolute;border-radius:3px;will-change:transform}
+  #dr10-mL{left:14px;top:16px;width:34%;height:14px;background:var(--l);opacity:.85}
+  #dr10-mL2{left:14px;top:40px;width:54%;height:8px;background:rgba(242,183,5,.4)}
+  #dr10-mR{right:14px;top:16px;width:34%;height:14px;background:var(--r);opacity:.85}
+  #dr10-mR2{right:14px;top:40px;width:54%;height:8px;background:rgba(224,69,123,.4)}
+  #dr10-bar{position:absolute;top:0;height:100%;width:14px;margin-left:-7px;left:50%;
+    cursor:ew-resize;display:grid;place-items:center;will-change:transform;z-index:3;outline:none;touch-action:none}
+  #dr10-bline{width:2px;height:100%;background:var(--ac);box-shadow:0 0 0 1px rgba(34,211,238,.25)}
+  #dr10-grip{position:absolute;width:24px;height:46px;border-radius:7px;background:var(--bg);
+    border:2px solid var(--ac);display:grid;grid-auto-flow:column;gap:3px;place-content:center;will-change:transform}
+  #dr10-grip i{width:2px;height:16px;background:var(--ac);border-radius:2px}
+  #dr10-bar:focus-visible #dr10-grip{box-shadow:0 0 0 3px rgba(34,211,238,.5)}
+  #dr10-read{position:absolute;left:50%;top:-2px;transform:translateX(-50%);font:600 9px/1 ui-monospace,monospace;
+    color:var(--ac);background:var(--bg);padding:3px 5px;border-radius:0 0 5px 5px;letter-spacing:.06em;z-index:4;will-change:transform}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;
+    letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="dr10-stage" role="application" aria-label="Split Pane: a draggable divider resizing two panes. Arrow keys to resize.">
+  <div id="dr10-frame">
+    <div class="dr10-pane" id="dr10-pL"><span class="dr10-mark" id="dr10-mL"></span><span class="dr10-mark" id="dr10-mL2"></span></div>
+    <div class="dr10-pane" id="dr10-pR"><span class="dr10-mark" id="dr10-mR"></span><span class="dr10-mark" id="dr10-mR2"></span></div>
+    <div id="dr10-bar" tabindex="0" role="slider" aria-label="Split position" aria-valuemin="14" aria-valuemax="86" aria-valuenow="50" aria-orientation="vertical">
+      <div id="dr10-read">50%</div>
+      <div id="dr10-bline"></div>
+      <div id="dr10-grip"><i></i><i></i></div>
+    </div>
+  </div>
+</div>
+<div class="cap">Split Pane</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var frame=document.getElementById("dr10-frame"),bar=document.getElementById("dr10-bar"),
+      read=document.getElementById("dr10-read"),pL=document.getElementById("dr10-pL"),
+      pR=document.getElementById("dr10-pR"),grip=document.getElementById("dr10-grip");
+  var W=1,pos=50,target=50,vel=0;            // pos = split % (0..100)
+  var MIN=14,MAX=86,K=0.16,D=0.78;           // spring constant + damping
+  var demo=true,idleAt=0,running=true,raf=0;
+  var dragging=false;
+
+  function measure(){W=frame.clientWidth||1;}
+  measure();
+  addEventListener("resize",measure,{passive:true});
+
+  // FLIP-style: panes always 50% wide; scaleX maps to split fraction. Crisp, transform-only.
+  function paint(p){
+    var f=p/50;                              // 1 = even split
+    pL.style.transform="scaleX("+f+")";
+    pR.style.transform="scaleX("+(2-f)+")";
+    // bar + readout ride a single translate from center
+    var x=(p-50)/100*W;
+    bar.style.transform="translateX("+x+"px)";
+    var ip=Math.round(p);
+    read.style.transform="translateX(-50%) translateX("+x+"px)";
+    if(read._v!==ip){read._v=ip;read.textContent=ip+"%";bar.setAttribute("aria-valuenow",ip);}
+  }
+
+  function clamp(v){return v<MIN?MIN:v>MAX?MAX:v;}
+
+  // ---- self-demo: ease target toward a gentle keyframed sweep
+  var phase=0;
+  function demoTarget(t){
+    // breathing asymmetric sweep, never hits the rails
+    return 50+Math.sin(t)*22+Math.sin(t*0.5+1)*8;
+  }
+
+  var last=0;
+  function loop(now){
+    if(!running)return;
+    raf=requestAnimationFrame(loop);
+    if(!last)last=now;
+    var dt=(now-last)/16.667;if(dt>3)dt=3;last=now;
+
+    if(demo&&!dragging){
+      phase+=0.012*dt;
+      target=clamp(demoTarget(phase));
+    }
+    // critically-damped-ish spring toward target
+    var a=(target-pos)*K;
+    vel=(vel+a)*Math.pow(D,dt);
+    pos+=vel*dt;
+    // grip squash on velocity (transform-only secondary motion)
+    var sp=Math.min(Math.abs(vel)*0.04,0.22);
+    grip.style.transform="scaleY("+(1+sp)+") scaleX("+(1-sp*0.7)+")";
+    paint(pos);
+
+    if(!demo&&now>idleAt){demo=true;} // hand back to self-demo after idle
+  }
+
+  function pause(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;last=0;}
+  function resume(){if(running)return;running=true;raf=requestAnimationFrame(loop);}
+  document.addEventListener("visibilitychange",function(){document.hidden?pause():resume();});
+
+  // ---- real input: pointer drag
+  function userGrab(){demo=false;dragging=true;}
+  function userRelease(){dragging=false;idleAt=performance.now()+2600;}
+  function fromClientX(cx){
+    var r=frame.getBoundingClientRect();
+    return clamp((cx-r.left)/r.width*100);
+  }
+  bar.addEventListener("pointerdown",function(e){
+    userGrab();bar.setPointerCapture(e.pointerId);
+    target=pos=fromClientX(e.clientX);vel=0;e.preventDefault();
+  });
+  bar.addEventListener("pointermove",function(e){
+    if(!dragging)return;target=fromClientX(e.clientX);
+  });
+  bar.addEventListener("pointerup",userRelease);
+  bar.addEventListener("pointercancel",userRelease);
+
+  // ---- keyboard reorder/resize
+  bar.addEventListener("keydown",function(e){
+    var step=e.shiftKey?10:3,d=0;
+    if(e.key==="ArrowLeft"){d=-step;}
+    else if(e.key==="ArrowRight"){d=step;}
+    else if(e.key==="Home"){target=MIN;}
+    else if(e.key==="End"){target=MAX;}
+    else if(e.key===" "||e.key==="Enter"){target=50;}
+    else return;
+    demo=false;idleAt=performance.now()+2600;
+    if(d)target=clamp(target+d);
+    e.preventDefault();
+  });
+
+  // ---- reduced motion: one static, balanced frame, no loop
+  if(reduce){pos=target=50;paint(50);grip.style.transform="scaleY(1)";return;}
+  raf=requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

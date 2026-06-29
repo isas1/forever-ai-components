@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Stepped gold ziggurat skyscraper silhouettes rise and settle with damped bob against a radial sunburst on deep black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ziggurat Rise</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0b08;overflow:hidden}
+  #ad02-stage{position:fixed;inset:0;display:block}
+  #ad02-c{position:absolute;inset:0;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ad02-stage" role="img" aria-label="Art Deco scene: stepped ziggurat skyscraper silhouettes in gold rising and settling against a deep black sky beneath a radiant sunburst.">
+  <canvas id="ad02-c"></canvas>
+</div>
+<div class="cap">Ziggurat Rise</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("ad02-c"),ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var BG="#0c0b08",GOLD="#d4af37",GOLD2="#f0d98a",DK="#0a1f1b",EM="#0e3b30",LINE="#8a6d1f";
+  var W=0,H=0,DPR=1,cx=0,top=0,unit=1;
+
+  // Six towers, mirrored about center. Each: x offset (in units), base width, tier specs.
+  // tiers described as [widthUnits, heightUnits] stacked bottom->top.
+  var TOWERS=[
+    {x:0,   tiers:[[3.4,2.0],[2.6,1.8],[1.9,1.7],[1.3,1.5],[0.8,1.4],[0.34,1.0]]}, // center spire
+    {x:3.2, tiers:[[2.4,1.5],[1.8,1.4],[1.25,1.3],[0.7,1.1]]},
+    {x:5.7, tiers:[[2.0,1.1],[1.45,1.1],[0.95,1.0],[0.5,0.8]]}
+  ];
+  // animation state per tower (rise progress + settle bob), index 0=center
+  var prog=new Float32Array(TOWERS.length);
+  var startMul=[0.0,0.22,0.42]; // staggered entrance
+
+  function resize(){
+    var r=cv.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,r.width|0);H=Math.max(1,r.height|0);
+    cv.width=W*DPR;cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2; top=H*0.18;
+    unit=Math.min(W,H)/22; // scene scaled to frame
+  }
+
+  function rays(){ // static radial sunburst behind towers
+    ctx.save();
+    ctx.translate(cx,top);
+    var n=24,R=Math.max(W,H);
+    for(var i=0;i<n;i++){
+      var a0=(i/n)*Math.PI*2, a1=((i+0.5)/n)*Math.PI*2;
+      ctx.beginPath();ctx.moveTo(0,0);
+      ctx.lineTo(Math.cos(a0)*R,Math.sin(a0)*R);
+      ctx.lineTo(Math.cos(a1)*R,Math.sin(a1)*R);
+      ctx.closePath();
+      ctx.fillStyle=(i%2)?"rgba(212,175,55,0.045)":"rgba(212,175,55,0.012)";
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function tower(spec,riseY,glow){
+    // draw stacked stepped tiers centered on (cx+spec.x*unit). riseY shifts up from baseline.
+    var baseX=cx+spec.x*unit;
+    var by=H*0.96 + riseY; // bottom baseline
+    var grad=ctx.createLinearGradient(0,top,0,by);
+    grad.addColorStop(0,GOLD2);grad.addColorStop(0.5,GOLD);grad.addColorStop(1,EM);
+    drawSide(spec,baseX,by,grad);
+    if(spec.x>0) drawSide(spec,cx-spec.x*unit,by,grad); // mirror
+  }
+
+  function drawSide(spec,bx,by,grad){
+    var t=spec.tiers,y=by,h;
+    for(var i=0;i<t.length;i++){
+      var w=t[i][0]*unit; h=t[i][1]*unit;
+      // body
+      ctx.fillStyle=grad;
+      ctx.fillRect(bx-w/2,y-h,w,h);
+      // emerald inset shadow facet (static, right half)
+      ctx.fillStyle="rgba(8,28,24,0.34)";
+      ctx.fillRect(bx,y-h,w/2,h);
+      // gold setback line at each step
+      ctx.fillStyle=LINE;
+      ctx.fillRect(bx-w/2,y-h,w,Math.max(1,unit*0.06));
+      // thin vertical fluting
+      var fl=Math.max(2,Math.round(w/(unit*0.55)));
+      ctx.fillStyle="rgba(240,217,138,0.16)";
+      for(var f=1;f<fl;f++){var fx=bx-w/2+ (w/fl)*f;ctx.fillRect(fx,y-h+unit*0.08,Math.max(1,unit*0.04),h-unit*0.12);}
+      y-=h;
+    }
+    // crowning chevron finial
+    ctx.beginPath();
+    ctx.moveTo(bx,y-unit*1.1);
+    ctx.lineTo(bx+t[t.length-1][0]*unit*0.5,y);
+    ctx.lineTo(bx-t[t.length-1][0]*unit*0.5,y);
+    ctx.closePath();
+    ctx.fillStyle=GOLD2;ctx.fill();
+  }
+
+  function frameScene(time){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    rays();
+    // fountain ground line
+    ctx.fillStyle="rgba(212,175,55,0.22)";
+    ctx.fillRect(0,H*0.955,W,Math.max(1,unit*0.05));
+    // draw back towers first (outer), then center on top
+    for(var i=TOWERS.length-1;i>=0;i--){
+      var p=prog[i];
+      var ease=p>=1?1:1-Math.pow(1-p,3); // easeOutCubic rise
+      var settle=p>1?Math.sin((p-1)*Math.PI*2)*Math.exp(-(p-1)*3):0; // damped settle bob
+      var riseY=(1-ease)*H*0.55 + settle*unit*0.5;
+      tower(TOWERS[i],riseY);
+    }
+  }
+
+  var running=true,raf=0,t0=0;
+  function loop(ts){
+    if(!running)return;
+    if(!t0)t0=ts;
+    var el=(ts-t0)/1000;
+    for(var i=0;i<TOWERS.length;i++){
+      var local=(el*0.4 - startMul[i]);
+      prog[i]=local<0?0:local%2.6; // cycle: rise then settle then reset
+    }
+    frameScene(ts);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function staticFrame(){
+    for(var i=0;i<TOWERS.length;i++)prog[i]=1; // fully risen, settled
+    frameScene(0);
+  }
+
+  function start(){
+    if(reduce){staticFrame();return;}
+    running=true;t0=0;raf=requestAnimationFrame(loop);
+  }
+
+  resize();
+  window.addEventListener("resize",function(){resize();if(reduce)staticFrame();},{passive:true});
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);}
+    else if(!reduce){start();}
+  });
+  start();
+})();
+</script>
+</body>
+</html>

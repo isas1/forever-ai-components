@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Four-item checklist whose rings draw and ticks snap in sequence as a progress bar fills to 100%, ending with a popped Done approval stamp.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checklist</title>
+<style>
+  :root{
+    --pg12-bg:#0b0d12; --pg12-accent:#7c5cff; --pg12-red:#e84a3c;
+    --pg12-yellow:#f5c451; --pg12-ink:#e8e9f0; --pg12-mute:#5b5f72;
+    --pg12-line:#1c2030; --pg12-row:#12151f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--pg12-bg);overflow:hidden;
+    font-family:"Helvetica Neue",Inter,system-ui,Arial,sans-serif;color:var(--pg12-ink)}
+  #pg12-stage{position:absolute;inset:0;display:grid;place-items:center}
+  #pg12-card{width:78%;max-width:380px;display:flex;flex-direction:column;gap:5.2%}
+  #pg12-head{display:flex;align-items:baseline;justify-content:space-between}
+  #pg12-title{font-weight:700;letter-spacing:.02em;
+    font-size:clamp(15px,5.2vw,26px);text-transform:uppercase}
+  #pg12-pct{font:700 clamp(15px,5.4vw,28px)/1 ui-monospace,Menlo,monospace;
+    color:var(--pg12-accent);font-variant-numeric:tabular-nums}
+  /* honest determinate track */
+  #pg12-track{height:clamp(8px,2.6vw,14px);border-radius:99px;
+    background:var(--pg12-line);overflow:hidden;position:relative}
+  #pg12-fill{position:absolute;inset:0;transform-origin:left center;
+    transform:scaleX(0);background:var(--pg12-accent);border-radius:99px;
+    box-shadow:0 0 14px -2px var(--pg12-accent)}
+  #pg12-list{display:flex;flex-direction:column;gap:clamp(7px,2.1vw,11px)}
+  .pg12-row{display:flex;align-items:center;gap:clamp(10px,3.2vw,16px);
+    padding:clamp(7px,2.2vw,12px) clamp(9px,3vw,14px);
+    background:var(--pg12-row);border-radius:9px;
+    border-left:3px solid var(--pg12-line);will-change:transform,opacity;
+    transform:translateX(0);opacity:.55}
+  .pg12-row.pg12-on{opacity:1;border-left-color:var(--pg12-accent)}
+  /* Bauhaus tick: circle + chevron, drawn via dashoffset (transform-safe) */
+  .pg12-box{flex:0 0 auto;width:clamp(20px,6vw,30px);height:clamp(20px,6vw,30px);
+    display:block}
+  .pg12-disc{fill:none;stroke:var(--pg12-line);stroke-width:6}
+  .pg12-ring{fill:none;stroke:var(--pg12-accent);stroke-width:6;
+    stroke-linecap:round;stroke-dasharray:283;stroke-dashoffset:283;
+    transform:rotate(-90deg);transform-origin:50% 50%}
+  .pg12-tick{fill:none;stroke:var(--pg12-accent);stroke-width:9;
+    stroke-linecap:round;stroke-linejoin:round;
+    stroke-dasharray:60;stroke-dashoffset:60}
+  .pg12-on .pg12-ring{transition:stroke-dashoffset .42s cubic-bezier(.2,.7,.2,1);
+    stroke-dashoffset:0}
+  .pg12-on .pg12-tick{transition:stroke-dashoffset .34s .22s cubic-bezier(.2,.8,.3,1);
+    stroke-dashoffset:0}
+  .pg12-label{flex:1;min-width:0;height:clamp(8px,2.4vw,12px);border-radius:99px;
+    background:linear-gradient(90deg,var(--pg12-mute),var(--pg12-line));
+    transform-origin:left center;transform:scaleX(.62);opacity:.7}
+  .pg12-row:nth-child(2) .pg12-label{transform:scaleX(.86)}
+  .pg12-row:nth-child(3) .pg12-label{transform:scaleX(.5)}
+  .pg12-row:nth-child(4) .pg12-label{transform:scaleX(.74)}
+  .pg12-on .pg12-label{background:var(--pg12-mute);opacity:.9}
+  /* final flourish: stamp over the card */
+  #pg12-stamp{position:absolute;inset:0;display:grid;place-items:center;
+    pointer-events:none}
+  #pg12-stampInner{display:flex;align-items:center;gap:12px;
+    padding:10px 22px;border:3px solid var(--pg12-accent);border-radius:99px;
+    background:rgba(124,92,255,.08);
+    transform:scale(.4) rotate(-8deg);opacity:0;will-change:transform,opacity}
+  #pg12-stampInner.pg12-pop{animation:pg12-pop .6s cubic-bezier(.2,1.5,.4,1) forwards}
+  @keyframes pg12-pop{0%{transform:scale(.4) rotate(-8deg);opacity:0}
+    60%{opacity:1}100%{transform:scale(1) rotate(-8deg);opacity:1}}
+  #pg12-stampSvg{width:clamp(20px,6vw,30px);height:clamp(20px,6vw,30px)}
+  #pg12-stampTxt{font:700 clamp(13px,4vw,20px)/1 var(--font,inherit);
+    letter-spacing:.14em;text-transform:uppercase;color:var(--pg12-accent)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;
+    animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="pg12-stage" role="img" aria-label="A four-item checklist filling to one hundred percent complete with a final approved stamp.">
+  <div id="pg12-card">
+    <div id="pg12-head">
+      <div id="pg12-title">Checklist</div>
+      <div id="pg12-pct" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">0%</div>
+    </div>
+    <div id="pg12-track"><div id="pg12-fill"></div></div>
+    <div id="pg12-list"></div>
+  </div>
+  <div id="pg12-stamp"><div id="pg12-stampInner">
+    <svg id="pg12-stampSvg" viewBox="0 0 100 100" aria-hidden="true">
+      <path class="pg12-tick" d="M26 52 L44 70 L76 32" style="stroke-dashoffset:0"/>
+    </svg>
+    <span id="pg12-stampTxt">Done</span>
+  </div></div>
+</div>
+<div class="cap">Checklist</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var list=document.getElementById("pg12-list");
+  var fill=document.getElementById("pg12-fill");
+  var pctEl=document.getElementById("pg12-pct");
+  var stamp=document.getElementById("pg12-stampInner");
+  var N=4, rows=[];
+  var TICK='<svg class="pg12-box" viewBox="0 0 100 100" aria-hidden="true">'+
+    '<circle class="pg12-disc" cx="50" cy="50" r="40"/>'+
+    '<circle class="pg12-ring" cx="50" cy="50" r="40"/>'+
+    '<path class="pg12-tick" d="M30 52 L44 66 L72 34"/></svg>';
+  for(var i=0;i<N;i++){
+    var r=document.createElement("div");
+    r.className="pg12-row";
+    r.innerHTML=TICK+'<span class="pg12-label"></span>';
+    list.appendChild(r); rows.push(r);
+  }
+  function setPct(p){ var v=Math.round(p);
+    pctEl.textContent=v+"%"; pctEl.setAttribute("aria-valuenow",v);
+    fill.style.transform="scaleX("+(p/100)+")"; }
+
+  if(reduce){
+    for(var k=0;k<N;k++) rows[k].classList.add("pg12-on");
+    setPct(100); stamp.style.opacity="1";
+    stamp.style.transform="scale(1) rotate(-8deg)"; return;
+  }
+
+  // timeline (ms): each row checks, bar eases between, then stamp, then reset
+  var CHECK=900, GAP=140, SETTLE=900, HOLD=1100, FADE=700;
+  var checkAt=[]; var t=420;
+  for(var a=0;a<N;a++){ checkAt.push(t); t+=CHECK+GAP; }
+  var stampAt=t+260, resetAt=stampAt+SETTLE+HOLD, total=resetAt+FADE;
+
+  var start=0, raf=0, running=true, cur=0;
+  function frame(now){
+    if(!running) return;
+    if(!start){ start=now; cur=0; }
+    var e=(now-start)%total, on=0;
+    for(var j=0;j<N;j++){
+      if(e>=checkAt[j]){ on++; if(!rows[j].classList.contains("pg12-on")) rows[j].classList.add("pg12-on"); }
+      else if(rows[j].classList.contains("pg12-on")) rows[j].classList.remove("pg12-on");
+    }
+    // progress tracks rows actually checked, eased toward count/N (cached, no layout read)
+    var target=on/N;
+    cur=cur+(target-cur)*0.12;
+    if(Math.abs(target-cur)<0.002) cur=target;
+    setPct(cur*100);
+    // stamp flourish
+    if(e>=stampAt && e<resetAt){ if(!stamp.classList.contains("pg12-pop")) stamp.classList.add("pg12-pop"); }
+    else { stamp.classList.remove("pg12-pop"); }
+    // reset window: clear for next cycle
+    if(e>=resetAt){ stamp.style.opacity=""; }
+    raf=requestAnimationFrame(frame);
+  }
+  raf=requestAnimationFrame(frame);
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ running=false; if(raf) cancelAnimationFrame(raf); }
+    else if(!running){ running=true; start=0; raf=requestAnimationFrame(frame); }
+  });
+})();
+</script>
+</body>
+</html>

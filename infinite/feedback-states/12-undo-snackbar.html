@@ -1,0 +1,187 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A dark toast slides up over a ledger of deleted rows with a draining countdown ring and UNDO button that restores the item before auto-confi">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Undo Snackbar</title>
+<style>
+  :root{--fb12-bg:#0b0d12;--fb12-acc:#34d399;--fb12-acc2:#10b981;--fb12-err:#fb7185;--fb12-ink:#e7ecf3;--fb12-mut:#8b94a3}
+  html,body{margin:0;height:100%}
+  body{background:var(--fb12-bg);overflow:hidden;font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,system-ui,sans-serif}
+  #fb12-stage{position:fixed;inset:0;display:grid;place-items:center}
+  /* faint ledger of recently-deleted rows, sets context */
+  #fb12-ledger{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;gap:10px;opacity:.5;pointer-events:none}
+  .fb12-row{width:min(62%,360px);height:clamp(7px,2.1vw,11px);border-radius:99px;background:#161a22;position:relative;overflow:hidden;transform:translateZ(0)}
+  .fb12-row::after{content:"";position:absolute;inset:0;width:38%;background:#1f2530;border-radius:99px;transform-origin:left}
+  .fb12-row.fb12-gone{transition:opacity .5s ease,transform .5s cubic-bezier(.2,.8,.2,1)}
+
+  #fb12-bar{position:relative;width:min(82%,420px);min-height:54px;padding:0 12px 0 16px;
+    display:flex;align-items:center;gap:12px;border-radius:14px;color:var(--fb12-ink);
+    background:linear-gradient(180deg,#1a212c,#141a23);border:1px solid #283041;
+    box-shadow:0 18px 44px -16px rgba(0,0,0,.7),0 0 0 1px rgba(52,211,153,.05);
+    transform:translateY(140%);opacity:0;will-change:transform,opacity;z-index:2}
+  #fb12-bar.fb12-in{animation:fb12pop .62s cubic-bezier(.18,1.5,.3,1) forwards}
+  #fb12-bar.fb12-out{animation:fb12dismiss .42s cubic-bezier(.5,0,.7,.2) forwards}
+  @keyframes fb12pop{0%{transform:translateY(140%);opacity:0}60%{opacity:1}100%{transform:translateY(0);opacity:1}}
+  @keyframes fb12dismiss{to{transform:translateY(160%);opacity:0}}
+
+  /* timer ring — SVG, only stroke-dashoffset (compositor-safe-ish, cheap) animates via JS */
+  .fb12-ring{flex:0 0 auto;width:30px;height:30px;transform:rotate(-90deg)}
+  .fb12-ring circle{fill:none;stroke-width:3.4;stroke-linecap:round}
+  .fb12-track{stroke:#283041}
+  .fb12-prog{stroke:var(--fb12-acc);transition:stroke .25s}
+  .fb12-icon{position:absolute;left:16px;width:30px;height:30px;display:grid;place-items:center;
+    opacity:0;transform:scale(.4);pointer-events:none}
+  .fb12-icon svg{width:18px;height:18px}
+  .fb12-icon.fb12-show{animation:fb12chk .5s cubic-bezier(.2,1.6,.3,1) forwards}
+  @keyframes fb12chk{to{opacity:1;transform:scale(1)}}
+
+  .fb12-msg{flex:1 1 auto;min-width:0;line-height:1.25}
+  .fb12-t{font-size:clamp(12px,3.4vw,14px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fb12-s{font-size:clamp(9px,2.6vw,11px);color:var(--fb12-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  #fb12-undo{flex:0 0 auto;appearance:none;border:0;cursor:pointer;font:inherit;
+    font-size:clamp(11px,3vw,13px);font-weight:700;letter-spacing:.04em;color:var(--fb12-acc);
+    background:rgba(52,211,153,.10);padding:8px 12px;border-radius:9px;
+    transition:transform .18s cubic-bezier(.2,1.7,.3,1),background .18s,color .18s;outline:none}
+  #fb12-undo:hover{background:rgba(52,211,153,.18)}
+  #fb12-undo:active{transform:scale(.92)}
+  #fb12-undo:focus-visible{box-shadow:0 0 0 2px var(--fb12-bg),0 0 0 4px var(--fb12-acc)}
+  #fb12-undo.fb12-pressed{animation:fb12press .4s cubic-bezier(.2,1.6,.3,1)}
+  @keyframes fb12press{0%{transform:scale(1)}40%{transform:scale(.88)}100%{transform:scale(1)}}
+
+  /* restore flash on the bar when undo wins */
+  #fb12-bar.fb12-restored{border-color:rgba(52,211,153,.5)}
+  #fb12-bar.fb12-confirmed{border-color:rgba(251,113,133,.35)}
+
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="fb12-stage" role="img" aria-label="An undo snackbar with a draining countdown timer; an item is removed and can be restored before the timer empties.">
+  <div id="fb12-ledger" aria-hidden="true">
+    <div class="fb12-row"></div><div class="fb12-row"></div><div class="fb12-row"></div><div class="fb12-row"></div>
+  </div>
+  <div id="fb12-bar" role="status" aria-live="polite">
+    <svg class="fb12-ring" viewBox="0 0 30 30"><circle class="fb12-track" cx="15" cy="15" r="12.5"></circle><circle class="fb12-prog" cx="15" cy="15" r="12.5"></circle></svg>
+    <span class="fb12-icon" id="fb12-ic"><svg viewBox="0 0 24 24" fill="none" stroke="var(--fb12-acc)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></span>
+    <div class="fb12-msg"><div class="fb12-t" id="fb12-title">Item moved to trash</div><div class="fb12-s" id="fb12-sub">Auto-confirms in a moment</div></div>
+    <button id="fb12-undo" type="button">UNDO</button>
+  </div>
+</div>
+<div class="cap">Undo Snackbar</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var bar=document.getElementById('fb12-bar'),
+      undo=document.getElementById('fb12-undo'),
+      prog=bar.querySelector('.fb12-prog'),
+      icon=document.getElementById('fb12-ic'),
+      title=document.getElementById('fb12-title'),
+      sub=document.getElementById('fb12-sub'),
+      rows=Array.prototype.slice.call(document.querySelectorAll('.fb12-row'));
+  var R=12.5, C=2*Math.PI*R;
+  prog.style.strokeDasharray=C;
+  prog.style.strokeDashoffset=0;
+
+  var DURATION=4200;          // countdown length
+  var state='idle';           // idle | counting | confirmed | restored
+  var rowIdx=0, t0=0, raf=0, running=true, idleSince=0;
+  var labels=['Photo deleted','Message archived','File moved to trash','Draft discarded','Note removed'];
+
+  function setProg(p){ // p:1 full -> 0 empty
+    prog.style.strokeDashoffset=(1-p)*C;
+    prog.style.stroke = p<0.28 ? 'var(--fb12-err)' : 'var(--fb12-acc)';
+  }
+
+  function show(){
+    bar.classList.remove('fb12-out','fb12-restored','fb12-confirmed');
+    icon.classList.remove('fb12-show');
+    void bar.offsetWidth;
+    title.textContent=labels[rowIdx%labels.length];
+    sub.textContent='Tap undo to restore';
+    // mark the matching ledger row as gone
+    var r=rows[rowIdx%rows.length];
+    r.classList.add('fb12-gone'); r.style.opacity='.12'; r.style.transform='translateX(18px)';
+    bar.classList.add('fb12-in');
+    setProg(1);
+    state='counting'; t0=performance.now();
+    if(reduce){ setProg(.55); } // static legible frame, no countdown
+  }
+
+  function confirm(){
+    if(state!=='counting')return;
+    state='confirmed';
+    bar.classList.add('fb12-confirmed');
+    title.textContent='Done';
+    sub.textContent='Removed';
+    setProg(0);
+    schedule(820, dismiss);
+  }
+
+  function restore(){
+    if(state!=='counting')return;
+    state='restored';
+    bar.classList.add('fb12-restored');
+    icon.classList.add('fb12-show');
+    title.textContent='Restored';
+    sub.textContent='Back where it was';
+    setProg(1);
+    var r=rows[rowIdx%rows.length];
+    r.style.opacity='.5'; r.style.transform='translateX(0)';
+    schedule(980, dismiss);
+  }
+
+  function dismiss(){
+    bar.classList.remove('fb12-in');
+    bar.classList.add('fb12-out');
+    state='idle';
+    schedule(700, function(){ rowIdx++; rows[(rowIdx-1)%rows.length].classList.remove('fb12-gone'); show(); });
+  }
+
+  // timer helper using rAF clock so it pauses with the loop
+  var timers=[];
+  function schedule(ms,fn){ timers.push({due:performance.now()+ms,fn:fn,done:false}); }
+
+  // interaction: hand control to user, ease back after idle
+  function userUndo(){
+    undo.classList.remove('fb12-pressed'); void undo.offsetWidth; undo.classList.add('fb12-pressed');
+    restore();
+    idleSince=performance.now();
+  }
+  undo.addEventListener('click',userUndo);
+  undo.setAttribute('tabindex','0');
+  undo.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();userUndo();} });
+
+  function loop(now){
+    if(!running)return;
+    // drain countdown
+    if(state==='counting' && !reduce){
+      var p=1-(now-t0)/DURATION;
+      if(p<=0){ setProg(0); confirm(); }
+      else setProg(p);
+    }
+    // run pending timers off the same clock
+    for(var i=0;i<timers.length;i++){ var tm=timers[i]; if(!tm.done && now>=tm.due){ tm.done=true; tm.fn(); } }
+    if(timers.length>40){ timers=timers.filter(function(t){return !t.done;}); }
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){
+    if(reduce){ show(); setProg(.55); return; } // one static frame, no loop
+    running=true; show(); raf=requestAnimationFrame(loop);
+  }
+
+  var hiddenAt=0;
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; cancelAnimationFrame(raf); hiddenAt=performance.now(); }
+    else if(!reduce){
+      var gap=performance.now()-hiddenAt;   // rebase clocks so nothing fast-forwards
+      t0+=gap; for(var i=0;i<timers.length;i++)timers[i].due+=gap;
+      running=true; raf=requestAnimationFrame(loop);
+    }
+  });
+
+  start();
+})();
+</script>
+</body></html>

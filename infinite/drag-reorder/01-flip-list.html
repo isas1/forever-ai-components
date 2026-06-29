@@ -1,0 +1,193 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A vertical list of numbered color-barred rows reorders with spring FLIP physics as cards are dragged and lifted into new slots.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FLIP Reorder</title>
+<style>
+  :root{--dr01-bg:#0c0e13;--dr01-acc:#22d3ee;--dr01-ink:#e7eef2;--dr01-mut:#5b6573}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--dr01-bg);overflow:hidden;font-family:ui-monospace,"SF Mono",Menlo,monospace}
+  #dr01-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  #dr01-list{position:relative;width:min(74%,360px);outline:none}
+  .dr01-row{position:relative;display:flex;align-items:center;gap:0;height:13.4%;min-height:34px;margin:5px 0;
+    border:1px solid #1b2230;background:#11151d;border-radius:7px;overflow:hidden;
+    will-change:transform;transform:translate3d(0,0,0);cursor:grab;user-select:none}
+  .dr01-row.dr01-grab{cursor:grabbing;z-index:5}
+  .dr01-bar{width:9px;align-self:stretch;flex:0 0 9px}
+  .dr01-num{flex:0 0 auto;width:34px;text-align:center;font:700 13px/1 ui-monospace,monospace;color:var(--dr01-bg);
+    background:var(--dr01-acc);align-self:stretch;display:flex;align-items:center;justify-content:center;letter-spacing:.02em}
+  .dr01-body{flex:1 1 auto;padding:0 12px;display:flex;flex-direction:column;gap:5px;min-width:0}
+  .dr01-t{height:7px;border-radius:3px;background:#2b3545}
+  .dr01-s{height:5px;border-radius:3px;background:#1d2433}
+  .dr01-dot{flex:0 0 auto;width:26px;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;padding-right:10px}
+  .dr01-dot i{width:3px;height:3px;border-radius:50%;background:var(--dr01-mut);display:block}
+  .dr01-lift{box-shadow:0 14px 30px -8px rgba(0,0,0,.7),0 0 0 1px var(--dr01-acc)}
+  #dr01-list:focus-visible{box-shadow:0 0 0 2px var(--dr01-acc),0 0 0 6px rgba(34,211,238,.18);border-radius:11px}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}.dr01-row{transition:none!important}}
+</style></head>
+<body>
+<div id="dr01-stage">
+  <div id="dr01-list" role="listbox" tabindex="0" aria-label="Reorderable list. Use arrow keys to move the selected item.">
+  </div>
+</div>
+<div class="cap">FLIP Reorder</div>
+<script>(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var list=document.getElementById("dr01-list");
+  // Constructivist-leaning palette around the brand accent.
+  var hues=["#22d3ee","#f4b942","#e2533d","#3d7de2","#8a5cf6","#33c98a","#e0e4ea"];
+  var N=7, rows=[], order=[];
+  for(var i=0;i<N;i++){
+    var r=document.createElement("div");
+    r.className="dr01-row";r.setAttribute("role","option");r.setAttribute("aria-selected","false");
+    var col=hues[i%hues.length];
+    r.innerHTML='<span class="dr01-bar" style="background:'+col+'"></span>'+
+      '<span class="dr01-num">'+("0"+(i+1)).slice(-2)+'</span>'+
+      '<span class="dr01-body"><span class="dr01-t" style="width:'+(54+((i*29)%40))+'%"></span>'+
+      '<span class="dr01-s" style="width:'+(30+((i*17)%34))+'%"></span></span>'+
+      '<span class="dr01-dot"><i></i><i></i><i></i></span>';
+    list.appendChild(r);rows.push(r);order.push(i);
+  }
+  // Geometry cache (recomputed only on resize / layout shifts).
+  var slotH=0, gap=0, sel=0, running=true, demoT=0, idle=0;
+  var DEMO_GAP=150;            // frames between auto-moves (~2.5s)
+  var IDLE_BACK=240;           // frames idle before demo resumes (~4s)
+  var k=0.16, damp=0.78;       // spring constants
+  // per-row physics: current y, velocity, target y (typed arrays, no per-frame alloc)
+  var cy=new Float32Array(N), vy=new Float32Array(N), ty=new Float32Array(N);
+  var lift=-1;                 // index currently lifted (visual emphasis)
+
+  function measure(){
+    var rect=rows[0].getBoundingClientRect();
+    slotH=rect.height; gap=10; // 5px margin top+bottom
+    layoutTargets(true);
+  }
+  function layoutTargets(snap){
+    // target y for each row = (its rank in order) * pitch, relative to its DOM index
+    var pitch=slotH+gap;
+    for(var rank=0;rank<N;rank++){
+      var idx=order[rank];
+      ty[idx]=(rank-idx)*pitch;
+      if(snap){cy[idx]=ty[idx];vy[idx]=0;rows[idx].style.transform="translate3d(0,"+cy[idx]+"px,0)";}
+    }
+  }
+  function move(from,to){
+    if(to<0||to>=N||from===to)return;
+    var idx=order[from];
+    order.splice(from,1);
+    order.splice(to,0,idx);
+    sel=to; lift=idx;
+    layoutTargets(false);
+    syncAria();
+  }
+  function syncAria(){
+    for(var rank=0;rank<N;rank++){
+      var idx=order[rank];
+      rows[idx].setAttribute("aria-selected", rank===sel?"true":"false");
+      rows[idx].classList.toggle("dr01-lift", idx===lift);
+    }
+  }
+
+  // ---- interaction: pointer drag ----
+  var dragIdx=-1, dragStartY=0, dragBaseRank=0, pitch0=0;
+  function onDown(e){
+    var t=e.target.closest(".dr01-row"); if(!t)return;
+    var idx=rows.indexOf(t); if(idx<0)return;
+    idle=0; demoT=0; dragIdx=idx; lift=idx;
+    dragBaseRank=order.indexOf(idx);
+    sel=dragBaseRank;
+    pitch0=slotH+gap;
+    dragStartY=(e.touches?e.touches[0].clientY:e.clientY);
+    t.classList.add("dr01-grab"); t.setAttribute("aria-grabbed","true");
+    syncAria();
+    window.addEventListener("pointermove",onMove,{passive:false});
+    window.addEventListener("pointerup",onUp);
+    e.preventDefault();
+  }
+  function onMove(e){
+    if(dragIdx<0)return;
+    idle=0;
+    var y=(e.touches?e.touches[0].clientY:e.clientY)-dragStartY;
+    // follow finger directly (no spring) for the lifted card
+    cy[dragIdx]=(dragBaseRank-dragIdx)*pitch0 + y; vy[dragIdx]=0;
+    rows[dragIdx].style.transform="translate3d(0,"+cy[dragIdx]+"px,0)";
+    // compute hovered rank, reflow others via FLIP springs
+    var curRank=order.indexOf(dragIdx);
+    var want=Math.max(0,Math.min(N-1,Math.round(dragBaseRank + y/pitch0)));
+    if(want!==curRank){order.splice(curRank,1);order.splice(want,0,dragIdx);sel=want;
+      // re-target everyone except the dragged card
+      var p=pitch0;
+      for(var rank=0;rank<N;rank++){var ix=order[rank];if(ix!==dragIdx)ty[ix]=(rank-ix)*p;}
+    }
+    e.preventDefault();
+  }
+  function onUp(){
+    if(dragIdx<0)return;
+    var idx=dragIdx; rows[idx].classList.remove("dr01-grab");rows[idx].setAttribute("aria-grabbed","false");
+    var rank=order.indexOf(idx); ty[idx]=(rank-idx)*(slotH+gap); // settle to slot via spring
+    dragIdx=-1; idle=0;
+    window.removeEventListener("pointermove",onMove);
+    window.removeEventListener("pointerup",onUp);
+  }
+  list.addEventListener("pointerdown",onDown);
+
+  // ---- interaction: keyboard ----
+  list.addEventListener("keydown",function(e){
+    idle=0; demoT=0;
+    var k2=e.key;
+    if(k2==="ArrowUp"){move(sel,sel-1);e.preventDefault();}
+    else if(k2==="ArrowDown"){move(sel,sel+1);e.preventDefault();}
+    else if(k2==="Home"){move(sel,0);e.preventDefault();}
+    else if(k2==="End"){move(sel,N-1);e.preventDefault();}
+  });
+  list.addEventListener("focus",function(){idle=0;demoT=0;syncAria();});
+
+  // ---- self-demo: synthesized reorder on a gentle timer ----
+  function userActive(){return dragIdx>=0 || document.activeElement===list || idle<IDLE_BACK;}
+  function autoMove(){
+    // pick the lifted-into-place choreography: lift a card and carry it a few slots.
+    var from=Math.floor(Math.random()*N);
+    var delta=(Math.random()<.5?-1:1)*(1+Math.floor(Math.random()*2));
+    var to=Math.max(0,Math.min(N-1,from+delta));
+    sel=from; move(from,to);
+  }
+
+  // ---- single rAF loop, allocation-free ----
+  function tick(){
+    if(!running)return;
+    if(idle<100000)idle++;
+    if(!userActive()){
+      demoT++;
+      if(demoT>=DEMO_GAP){demoT=0;autoMove();}
+    }
+    for(var i=0;i<N;i++){
+      if(i===dragIdx)continue; // finger-driven
+      var d=ty[i]-cy[i];
+      vy[i]=(vy[i]+d*k)*damp;
+      cy[i]+=vy[i];
+      if(d<0.05&&d>-0.05&&vy[i]<0.05&&vy[i]>-0.05){cy[i]=ty[i];vy[i]=0;}
+      rows[i].style.transform="translate3d(0,"+cy[i]+"px,0)";
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function start(){running=true;requestAnimationFrame(tick);}
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){running=false;}
+    else if(reduce){/* stay static */}else{if(!running)start();}
+  });
+  window.addEventListener("resize",function(){measure();},{passive:true});
+
+  // boot
+  requestAnimationFrame(function(){
+    measure();
+    syncAria();
+    if(reduce){ // one static, legible, on-brand frame: clean settled list
+      layoutTargets(true); lift=2; sel=2; syncAria(); return;
+    }
+    start();
+  });
+})();</script>
+</body></html>

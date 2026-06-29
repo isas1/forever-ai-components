@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Eight vivid gradient album covers with reflections orbiting in a rotating 3D coverflow ring, speed steered by the pointer.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coverflow Ring</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#070a12;
+    font-family:system-ui,-apple-system,sans-serif;}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    perspective:800px;}
+  #ring{position:relative;width:22vmin;height:22vmin;transform-style:preserve-3d;
+    will-change:transform;}
+  .cover{position:absolute;inset:0;border-radius:8px;
+    box-shadow:0 0 24px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.15);
+    background-size:200% 200%;}
+  .cover::after{content:"";position:absolute;left:0;right:0;bottom:-100%;height:100%;
+    border-radius:8px;background:inherit;transform:scaleY(-1);
+    -webkit-mask-image:linear-gradient(transparent 55%,rgba(0,0,0,.4));
+            mask-image:linear-gradient(transparent 55%,rgba(0,0,0,.4));}
+  .cap{position:fixed;left:10px;bottom:8px;color:#9ad7ff;opacity:.34;
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div id="stage"><div id="ring"></div></div>
+<div class="cap">Coverflow Ring</div>
+<script>
+  const ring=document.getElementById('ring');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const N=8,R=20, palettes=[['#ff6ec7','#7b2ff7'],['#36d1dc','#5b86e5'],
+    ['#f7971e','#ffd200'],['#11998e','#38ef7d'],['#ee0979','#ff6a00'],
+    ['#c471ed','#12c2e9'],['#f54ea2','#ff7676'],['#43cea2','#185a9d']];
+  const items=[];
+  for(let i=0;i<N;i++){
+    const c=document.createElement('div');c.className='cover';
+    const p=palettes[i];
+    c.style.backgroundImage=`linear-gradient(135deg,${p[0]},${p[1]})`;
+    ring.appendChild(c);items.push(c);
+  }
+  let ang=0,vel=0.4,raf;
+  // Cache viewport width once; re-read only on resize (avoid layout read per pointermove).
+  let vw=innerWidth;
+  addEventListener('resize',()=>{vw=innerWidth;});
+  function loop(){
+    ang+=vel;
+    items.forEach((c,i)=>{
+      const a=(360/N)*i+ang, rad=a*Math.PI/180;
+      const depth=Math.cos(rad);
+      const sc=0.7+0.3*(depth*0.5+0.5);
+      c.style.transform=`rotateY(${a}deg) translateZ(${R}vmin) rotateY(${-a}deg) scale(${sc})`;
+      c.style.zIndex=Math.round(depth*100)+100;
+      c.style.opacity=(0.45+0.55*(depth*0.5+0.5)).toFixed(2);
+    });
+    raf=requestAnimationFrame(loop);
+  }
+  addEventListener('pointermove',e=>{vel=0.4+(e.clientX/vw-.5)*2.4;});
+  function start(){if(!raf&&!reduce)loop();}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  if(reduce){vel=0;loop();cancelAnimationFrame(raf);raf=0;}else start();
+</script>
+</body>
+</html>

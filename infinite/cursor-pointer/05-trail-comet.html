@@ -1,0 +1,115 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A hot-cored pink comet springs after the pointer, dragging an additive tapering tail and flinging sparks, lengthening with speed.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Trail Comet</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0a0a0f;display:grid;place-items:center}
+.ccp05-stage{position:relative;width:100%;height:100%}
+#ccp05-c{display:block;width:100%;height:100%;cursor:none}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#ff5ca8;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<div class="ccp05-stage"><canvas id="ccp05-c" role="img" aria-label="Comet tracing the pointer path"></canvas></div>
+<div class="cap">Trail Comet</div>
+<script>(function(){
+var cv=document.getElementById('ccp05-c'),ctx=cv.getContext('2d');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,DPR=1,raf=0,running=true,t=0;
+// pointer state: pos = real/target, head = spring-followed comet head
+var px=0,py=0,hx=0,hy=0,vx=0,vy=0;
+var real=false,lastMove=0;
+var MAX=110,trail=[];           // ring of {x,y} samples, head-first
+function resize(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  px=hx=W*0.5;py=hy=H*0.5;
+}
+// self-demo: eased Lissajous figure, breathing scale, centred
+function demoPoint(time){
+  var cx=W*0.5,cy=H*0.5;
+  var rx=W*0.30,ry=H*0.28;
+  var a=time*0.55, b=time*0.83+0.6;
+  // ease the phase so it lingers at the lobes — secondary life
+  return {x:cx+Math.sin(a)*rx*(0.9+0.1*Math.sin(time*0.4)),
+          y:cy+Math.sin(b)*ry};
+}
+function step(){
+  if(!running)return;
+  t+=1/60;
+  // decide source: real pointer if moved within 2.4s, else self-demo
+  if(real && t-lastMove>2.4){real=false;}
+  if(!real){var d=demoPoint(t);px=d.x;py=d.y;}
+  // critically-ish damped spring toward target -> head; speed sets trail length
+  var k=real?0.22:0.14, dmp=0.74;
+  vx=(vx+(px-hx)*k)*dmp; vy=(vy+(py-hy)*k)*dmp;
+  hx+=vx; hy+=vy;
+  var sp=Math.sqrt(vx*vx+vy*vy);
+  // push new head sample, store local speed for taper
+  trail.unshift({x:hx,y:hy,s:sp});
+  // length scales with speed: 18 baseline -> up to MAX
+  var want=Math.min(MAX,18+sp*4.2);
+  while(trail.length>want)trail.pop();
+  draw(sp);
+  raf=requestAnimationFrame(step);
+}
+function draw(sp){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,W,H);
+  var n=trail.length;if(!n)return;
+  ctx.globalCompositeOperation='lighter';
+  // trail: additive tapering ribbon, fading from head to tail
+  for(var i=n-1;i>=1;i--){
+    var p=trail[i],q=trail[i-1];
+    var f=1-i/n;                 // 1 at head, 0 at tail
+    var w=f*f*5.2+0.4;           // taper
+    var al=f*f*0.6;
+    ctx.lineWidth=w;ctx.lineCap='round';
+    ctx.strokeStyle='rgba(255,92,168,'+al.toFixed(3)+')';
+    ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
+  }
+  // sparse spark particles flung off the head, denser when fast
+  for(var j=1;j<n;j+=4){
+    var pp=trail[j],ff=1-j/n;
+    var ang=j*2.4+t*3, rr=(1-ff)*8*(0.4+sp*0.05);
+    var a2=ff*0.5;
+    ctx.fillStyle='rgba(255,160,210,'+a2.toFixed(3)+')';
+    ctx.beginPath();
+    ctx.arc(pp.x+Math.cos(ang)*rr,pp.y+Math.sin(ang)*rr,ff*1.3+0.3,0,6.283);
+    ctx.fill();
+  }
+  // comet head: layered glow with a hot white core
+  var hd=trail[0],gx=hd.x,gy=hd.y;
+  var glow=ctx.createRadialGradient(gx,gy,0,gx,gy,20+sp*1.6);
+  glow.addColorStop(0,'rgba(255,210,235,0.95)');
+  glow.addColorStop(0.25,'rgba(255,92,168,0.85)');
+  glow.addColorStop(1,'rgba(255,92,168,0)');
+  ctx.fillStyle=glow;
+  ctx.beginPath();ctx.arc(gx,gy,20+sp*1.6,0,6.283);ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.95)';
+  ctx.beginPath();ctx.arc(gx,gy,2.6,0,6.283);ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+}
+function still(){            // single legible frame for reduced-motion
+  resize();var d=demoPoint(2.1);hx=px=d.x;hy=py=d.y;
+  trail.length=0;
+  // lay a static curved tail behind the head along the demo path
+  for(var i=0;i<70;i++){var dd=demoPoint(2.1-i*0.018);trail.push({x:dd.x,y:dd.y,s:6});}
+  draw(6);
+}
+window.addEventListener('resize',function(){resize();if(reduce)still();},{passive:true});
+cv.addEventListener('pointermove',function(e){
+  if(reduce)return;
+  var r=cv.getBoundingClientRect();
+  px=e.clientX-r.left;py=e.clientY-r.top;
+  real=true;lastMove=t;
+},{passive:true});
+function vis(){
+  if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  else if(!reduce&&!running){running=true;lastMove=t;raf=requestAnimationFrame(step);}
+}
+document.addEventListener('visibilitychange',vis);
+resize();
+if(reduce){still();}else{raf=requestAnimationFrame(step);}
+})();</script>
+</body></html>

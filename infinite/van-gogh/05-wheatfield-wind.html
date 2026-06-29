@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Wheatfield Wind — Vincent van Gogh. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wheatfield Wind</title>
+<style>
+  html,body{margin:0;height:100%;background:#7a5f2e;overflow:hidden}
+  #vg05-stage{position:fixed;inset:0;width:100%;height:100%}
+  #vg05-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .vg05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe6cf;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="vg05-stage" role="img" aria-label="A Van Gogh wheatfield: golden stalks bend in a roving breeze under a cobalt sky while crows scatter and wheel overhead.">
+  <canvas id="vg05-cv"></canvas>
+</div>
+<div class="vg05-cap">Wheatfield Wind</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('vg05-cv'); if(!cv) return;
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+
+  let S=fitCanvas(cv);
+  let stalks=[], crows=[], t=0, last=performance.now(), autoP=0, scatterT=0;
+  function build(){
+    stalks=[];
+    const cols=Math.min(120, Math.round(S.w/7));
+    for(let i=0;i<cols;i++){
+      const x=(i+0.5)/cols*S.w;
+      stalks.push({x, h: S.h*(0.34+Math.random()*0.30), bend:0, vb:0,
+        ph:Math.random()*6.28, sw:0.6+Math.random()*0.8,
+        c: Math.random()<0.5?'#f2c10b':(Math.random()<0.5?'#c98a2b':'#e0b53d')});
+    }
+  }
+  build();
+  function scatter(ox,oy){
+    for(let i=0;i<6;i++){
+      crows.push({x:ox+(Math.random()-0.5)*60, y:oy+(Math.random()-0.5)*40,
+        vx:(Math.random()*1.4+0.6)*(Math.random()<0.5?-1:1), vy:-(0.6+Math.random()*1.2),
+        ph:Math.random()*6.28, t:0});
+    }
+    if(crows.length>40) crows.splice(0,crows.length-40);
+  }
+  function crow(ctx,c){
+    const flap=Math.sin(c.t*16+c.ph)*0.6;
+    ctx.strokeStyle='#0b0f16';ctx.lineWidth=2.4;ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(c.x-8, c.y+flap*5);
+    ctx.quadraticCurveTo(c.x, c.y-3, c.x, c.y);
+    ctx.quadraticCurveTo(c.x, c.y-3, c.x+8, c.y+flap*5);
+    ctx.stroke();
+  }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    const sky=ctx.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0,'#1c3f7c');sky.addColorStop(0.55,'#3a5680');sky.addColorStop(1,'#7a5f2e');
+    ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+    /* autonomous roving breeze */
+    autoP+=dt;
+    let apx=-999, apy=H*0.6;
+    if(!REDUCED){ apx=W*(0.5+0.42*Math.sin(autoP*0.7)); }
+    const baseWind=REDUCED?0:Math.sin(t*0.8)*0.12;
+    ctx.lineCap='round';
+    for(const s of stalks){
+      const sway=Math.sin(t*1.6*s.sw + s.ph)*0.10;
+      let target=baseWind+sway;
+      if(apx>-900){
+        const d=(s.x-apx);
+        const infl=Math.exp(-(d*d)/(2*70*70));
+        target += (d<0?-1:1)*infl*0.9;
+      }
+      s.vb += (target - s.bend)*0.12; s.vb*=0.82; s.bend+=s.vb;
+      const topX=s.x + s.bend*s.h*0.6;
+      const topY=H - s.h;
+      ctx.strokeStyle=s.c;ctx.lineWidth=2.6;
+      ctx.beginPath();
+      ctx.moveTo(s.x, H);
+      ctx.quadraticCurveTo(s.x+s.bend*s.h*0.3, H-s.h*0.5, topX, topY);
+      ctx.stroke();
+      ctx.fillStyle='#f7e39a';
+      ctx.beginPath();ctx.arc(topX, topY, 2.4, 0,7);ctx.fill();
+    }
+    /* autonomous crow scatter on a timer */
+    if(!REDUCED){
+      scatterT+=dt;
+      if(scatterT>5.2){ scatterT=0; if(crows.length<4) scatter(W*(0.2+Math.random()*0.6), H*(0.35+Math.random()*0.2)); }
+    }
+    for(const c of crows){
+      c.t+=dt; c.x+=c.vx*60*dt; c.y+=c.vy*60*dt; c.vy+=0.4*dt;
+      if(c.y<-20||c.x<-30||c.x>W+30) c.dead=true;
+      crow(ctx,c);
+    }
+    for(let i=crows.length-1;i>=0;i--) if(crows[i].dead) crows.splice(i,1);
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); build(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ for(let i=0;i<30;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

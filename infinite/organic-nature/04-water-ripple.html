@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric blue ripple rings expand across a deep teal water surface with shimmering caustics; tap anywhere to drop a new ripple.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Water Ripple</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#06222e}
+  #c{display:block;width:100%;height:100%;cursor:crosshair}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
+       letter-spacing:.08em;text-transform:uppercase;color:#9fe2ff;opacity:.34;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Water Ripple · tap</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,t=0,raf,R=[];
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',size);size();
+function drop(px,py){R.push({x:px,y:py,r:0,life:1});if(R.length>16)R.shift();}
+cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();drop(e.clientX-r.left,e.clientY-r.top);});
+let auto=0;
+function frame(){
+  t+=0.016;
+  // water gradient base
+  const g=x.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#0a3a4d');g.addColorStop(1,'#052430');
+  x.fillStyle=g;x.fillRect(0,0,W,H);
+  // shimmer caustics
+  x.globalCompositeOperation='lighter';
+  for(let i=0;i<5;i++){
+    const yy=(i/5)*H+Math.sin(t*0.7+i)*20;
+    const gr=x.createLinearGradient(0,yy-30,0,yy+30);
+    gr.addColorStop(0,'rgba(120,210,255,0)');
+    gr.addColorStop(0.5,`rgba(120,210,255,${0.05+0.03*Math.sin(t+i)})`);
+    gr.addColorStop(1,'rgba(120,210,255,0)');
+    x.fillStyle=gr;x.fillRect(0,yy-30,W,60);
+  }
+  x.globalCompositeOperation='source-over';
+  // auto drops
+  if(!reduce){auto-=1;if(auto<=0){drop(Math.random()*W,Math.random()*H);auto=70+Math.random()*60;}}
+  // ripples
+  for(let i=R.length-1;i>=0;i--){
+    const p=R[i];
+    if(!reduce){p.r+=2.4;p.life-=0.012;}else p.life-=0.05;
+    if(p.life<=0){R.splice(i,1);continue;}
+    for(let k=0;k<3;k++){
+      const rr=p.r-k*9; if(rr<=0)continue;
+      x.beginPath();x.arc(p.x,p.y,rr,0,7);
+      x.strokeStyle=`rgba(170,230,255,${p.life*0.5*(1-k*0.3)})`;
+      x.lineWidth=2-k*0.5;x.stroke();
+    }
+  }
+  raf=requestAnimationFrame(frame);
+}
+raf=requestAnimationFrame(frame);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Amber LED dot-matrix marquee scrolling GAME OVER / INSERT COIN / HIGH SCORE across a dim dot grid.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dot-matrix ticker</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#160500}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,Menlo,monospace;
+    color:#ffae2b;opacity:.42;letter-spacing:.5px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div class="cap">DOT MATRIX</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+let W,H,raf,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+let dot,step,rowsTotal,topRow,gcols;
+// static dim-dot background (never changes between frames) baked once per resize
+const bg=document.createElement('canvas'),bx=bg.getContext('2d');
+function size(){
+  W=c.width=Math.floor(innerWidth);H=c.height=Math.floor(innerHeight);
+  dot=Math.max(3,Math.min(W,H)/34);
+  const gap=dot*0.18; step=dot+gap;
+  rowsTotal=Math.floor(H/step);
+  topRow=Math.floor((rowsTotal-7)/2);
+  gcols=Math.floor(W/step);
+  bg.width=W;bg.height=H;
+  bx.fillStyle='#160500';bx.fillRect(0,0,W,H);
+  bx.fillStyle='#2a0f02';
+  for(let r=0;r<rowsTotal;r++)for(let q=0;q<gcols;q++){
+    bx.beginPath();bx.arc(q*step+dot/2,r*step+dot/2,dot/2,0,7);bx.fill();
+  }
+}
+addEventListener('resize',size);size();
+// 5x7 font for the marquee
+const F={
+'A':['01110','10001','10001','11111','10001','10001','10001'],
+'R':['11110','10001','10001','11110','10100','10010','10001'],
+'C':['01110','10001','10000','10000','10000','10001','01110'],
+'D':['11110','10001','10001','10001','10001','10001','11110'],
+'E':['11111','10000','10000','11110','10000','10000','11111'],
+'G':['01110','10001','10000','10111','10001','10001','01110'],
+'M':['10001','11011','10101','10101','10001','10001','10001'],
+'O':['01110','10001','10001','10001','10001','10001','01110'],
+'V':['10001','10001','10001','10001','10001','01010','00100'],
+'L':['10000','10000','10000','10000','10000','10000','11111'],
+'S':['01111','10000','10000','01110','00001','00001','11110'],
+'T':['11111','00100','00100','00100','00100','00100','00100'],
+'I':['11111','00100','00100','00100','00100','00100','11111'],
+'N':['10001','11001','10101','10011','10001','10001','10001'],
+'★':['00100','01110','11111','01110','01110','01010','10001'],
+' ':['00000','00000','00000','00000','00000','00000','00000']};
+const msg=" ★ GAME OVER ★ INSERT COIN ★ HIGH SCORE ★ ";
+function glyph(ch){return F[ch]||F[' '];}
+let off=0;
+function draw(){
+  // blit the precomputed dim-dot background (bg fill + static grid)
+  x.drawImage(bg,0,0);
+  // lit dots from text
+  const charW=6;
+  const startCol=Math.floor(off/step);
+  const cols=gcols;
+  for(let q=0;q<cols;q++){
+    const gx=startCol+q;
+    const ci=Math.floor(gx/charW)%msg.length;
+    const px=gx%charW;
+    if(px<5){
+      const g=glyph(msg[(ci+msg.length)%msg.length]);
+      for(let r=0;r<7;r++){
+        if(g[r][px]==='1'){
+          const sx=q*step - (off%step) + dot/2;
+          const sy=(topRow+r)*step+dot/2;
+          const pulse=0.7+0.3*Math.sin((gx)*0.4);
+          x.fillStyle='rgb('+Math.round(255*pulse)+','+Math.round(150*pulse)+',20)';
+          x.beginPath();x.arc(sx,sy,dot/2,0,7);x.fill();
+        }
+      }
+    }
+  }
+  off+=reduce?0:1.3;
+  raf=requestAnimationFrame(draw);
+}
+function play(){cancelAnimationFrame(raf);draw();}
+document.addEventListener('visibilitychange',()=>document.hidden?cancelAnimationFrame(raf):play());
+play();
+</script>
+</body>
+</html>

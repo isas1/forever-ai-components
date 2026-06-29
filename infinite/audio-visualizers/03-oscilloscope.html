@@ -1,0 +1,168 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Cyan phosphor-glow waveform traces across a faint scope grid with a ghosting persistence trail on dark background.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Oscilloscope</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#07080d;display:grid;place-items:center}
+#aav03-c{width:100%;height:100%;display:block}
+.aav03-live{position:fixed;top:8px;right:9px;z-index:2;font:600 9px/1 ui-monospace,Menlo,monospace;
+  letter-spacing:.1em;text-transform:uppercase;color:#22d3ee;background:rgba(34,211,238,.08);
+  border:1px solid rgba(34,211,238,.28);border-radius:5px;padding:5px 8px;cursor:pointer;
+  opacity:.55;transition:opacity .25s,background .25s,box-shadow .25s;user-select:none}
+.aav03-live:hover{opacity:1;background:rgba(34,211,238,.16)}
+.aav03-live.on{opacity:1;color:#07080d;background:#22d3ee;box-shadow:0 0 14px rgba(34,211,238,.6)}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<canvas id="aav03-c" role="img" aria-label="Oscilloscope time-domain waveform"></canvas>
+<button class="aav03-live" id="aav03-live" type="button" aria-label="Switch to live microphone input">&#9834; live</button>
+<div class="cap">Oscilloscope</div>
+<script>(function(){
+var cv=document.getElementById('aav03-c'),x=cv.getContext('2d'),btn=document.getElementById('aav03-live');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,dpr=1,N=512;
+var samp=new Float32Array(N);            // current waveform [-1,1]
+var trail=new Float32Array(N);           // previous sweep, additive ghost
+var live=null;                           // {an,buf} once mic connected
+var ACC='#22d3ee';
+
+function size(){
+  dpr=Math.min(2,window.devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=Math.max(1,W*dpr|0);cv.height=Math.max(1,H*dpr|0);
+  x.setTransform(dpr,0,0,dpr,0,0);
+}
+
+// --- synthesized signal: sum of detuned sines + LFO envelopes + smoothed noise ---
+var ph=0,n1=0;
+function synth(t){
+  // three partials, each breathing on its own slow LFO
+  var a1=.55*(.6+.4*Math.sin(t*0.27)),
+      a2=.30*(.6+.4*Math.sin(t*0.41+1.7)),
+      a3=.18*(.5+.5*Math.sin(t*0.19+3.1));
+  var f1=2.0,f2=3.01,f3=5.0+1.5*Math.sin(t*0.13);  // slight inharmonic drift
+  var sweep=2*Math.PI*(1.0+0.15*Math.sin(t*0.07)); // gentle horizontal scale wobble
+  for(var i=0;i<N;i++){
+    var u=i/N;                  // 0..1 across screen
+    var p=u*sweep+ph;
+    var v=a1*Math.sin(p*f1)+a2*Math.sin(p*f2+0.9)+a3*Math.sin(p*f3+2.2);
+    // smoothed noise grain (one-pole low-pass on white)
+    n1+=( (Math.random()*2-1) - n1)*0.18;
+    v+=n1*0.05;
+    samp[i]=v*0.72;
+  }
+  ph+=0.013;
+}
+
+function fromLive(){
+  live.an.getByteTimeDomainData(live.buf);
+  var b=live.buf,L=b.length;
+  for(var i=0;i<N;i++){
+    var s=b[(i*L/N)|0]/128-1;   // 0..255 -> -1..1
+    samp[i]=s;
+  }
+}
+
+function grid(){
+  x.lineWidth=1;
+  x.strokeStyle='rgba(34,211,238,0.07)';
+  x.beginPath();
+  var cols=10,rows=6,c,r;
+  for(c=0;c<=cols;c++){var gx=Math.round(c/cols*W)+.5;x.moveTo(gx,0);x.lineTo(gx,H);}
+  for(r=0;r<=rows;r++){var gy=Math.round(r/rows*H)+.5;x.moveTo(0,gy);x.lineTo(W,gy);}
+  x.stroke();
+  // brighter centre axes
+  x.strokeStyle='rgba(34,211,238,0.16)';
+  x.beginPath();
+  x.moveTo(0,Math.round(H/2)+.5);x.lineTo(W,Math.round(H/2)+.5);
+  x.moveTo(Math.round(W/2)+.5,0);x.lineTo(Math.round(W/2)+.5,H);
+  x.stroke();
+}
+
+function trace(arr,amp,glow,w,alpha){
+  var mid=H/2,scale=H*0.34;
+  x.lineJoin='round';x.lineCap='round';
+  x.lineWidth=w;
+  x.shadowColor=ACC;x.shadowBlur=glow;
+  x.globalAlpha=alpha;
+  x.strokeStyle=ACC;
+  x.beginPath();
+  for(var i=0;i<N;i++){
+    var px=i/(N-1)*W, py=mid-arr[i]*scale*amp;
+    if(i===0)x.moveTo(px,py);else x.lineTo(px,py);
+  }
+  x.stroke();
+  x.shadowBlur=0;x.globalAlpha=1;
+}
+
+function draw(t){
+  // faint persistence wash instead of hard clear -> phosphor feel
+  x.globalCompositeOperation='source-over';
+  x.fillStyle='rgba(7,8,13,0.30)';
+  x.fillRect(0,0,W,H);
+  grid();
+  // additive so overlapping glows bloom toward white-cyan
+  x.globalCompositeOperation='lighter';
+  trace(trail,1,8,1.4,0.28);                 // ghost of previous sweep
+  trace(samp,1,14,2.2,1);                     // live line
+  x.globalCompositeOperation='source-over';
+  // snapshot current -> trail for next frame
+  trail.set(samp);
+}
+
+var run=false,raf=0;
+function frame(){
+  if(!run)return;
+  var t=performance.now()/1000;
+  if(live)fromLive();else synth(t);
+  draw(t);
+  raf=requestAnimationFrame(frame);
+}
+
+function start(){if(run)return;run=true;raf=requestAnimationFrame(frame);}
+function stop(){run=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+function still(){            // one composed static frame for reduced-motion
+  synth(2.4);
+  x.fillStyle='#07080d';x.fillRect(0,0,W,H);
+  grid();
+  x.globalCompositeOperation='lighter';
+  trace(samp,1,12,2.2,1);
+  x.globalCompositeOperation='source-over';
+}
+
+function boot(){
+  size();
+  x.fillStyle='#07080d';x.fillRect(0,0,W,H);
+  if(reduce){still();return;}
+  start();
+}
+
+// live upgrade: only create AudioContext inside the click (autoplay policy)
+btn.addEventListener('click',function(){
+  if(live){return;}
+  var AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC||!navigator.mediaDevices){return;}
+  var ctx=new AC();
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    var src=ctx.createMediaStreamSource(stream);
+    var an=ctx.createAnalyser();an.fftSize=1024;an.smoothingTimeConstant=0.5;
+    src.connect(an);                       // NEVER connect to ctx.destination (feedback)
+    live={an:an,buf:new Uint8Array(an.fftSize)};
+    btn.classList.add('on');btn.textContent='♪ on';
+    if(reduce){still();}
+  }).catch(function(){ if(ctx.close)ctx.close(); });
+});
+
+var rt;window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(function(){
+  size();if(reduce)still();
+},120);});
+
+document.addEventListener('visibilitychange',function(){
+  if(reduce)return;
+  if(document.hidden)stop();else start();
+});
+
+boot();
+})();</script>
+</body></html>

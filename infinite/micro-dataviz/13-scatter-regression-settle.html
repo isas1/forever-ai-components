@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Teal scatter cloud flies in, jitters, then settles as a glowing regression line and confidence band inhale, revealing the Pearson r.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Scatter Regression Settle</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0c1f1c;}
+  #srs-c{display:block;width:100%;height:100%;}
+  .srs-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#2fd2b0;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="srs-c"></canvas>
+<div class="srs-cap">Scatter Regression Settle</div>
+<script>
+(function(){
+  const cv=document.getElementById('srs-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG='#0c1f1c',AC='#2fd2b0';
+  let W,H,DPR,pad,plot;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    pad=Math.max(14,Math.min(W,H)*0.12);
+    plot={x0:pad,y0:pad,x1:W-pad,y1:H-pad,w:W-2*pad,h:H-2*pad};
+  }
+  addEventListener('resize',size);size();
+
+  // True linear relation y = a + b*x + noise, on normalized [0,1] data space.
+  const N=46, a0=0.18, b0=0.62, pts=[];
+  let seed=20240611;
+  function rnd(){seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;}
+  function gauss(){return (rnd()+rnd()+rnd()+rnd()-2)/2;}
+  for(let i=0;i<N;i++){
+    const x=rnd();
+    const y=Math.max(0.02,Math.min(0.98,a0+b0*x+gauss()*0.16));
+    pts.push({x,y, sx:rnd(), sy:rnd(), ph:rnd()*Math.PI*2});
+  }
+  // Least-squares fit of the actual point cloud.
+  let mx=0,my=0;for(const p of pts){mx+=p.x;my+=p.y;}mx/=N;my/=N;
+  let sxx=0,sxy=0;for(const p of pts){sxx+=(p.x-mx)*(p.x-mx);sxy+=(p.x-mx)*(p.y-my);}
+  const bFit=sxy/sxx, aFit=my-bFit*mx;
+  // residual sigma for confidence band
+  let ss=0;for(const p of pts){const r=p.y-(aFit+bFit*p.x);ss+=r*r;}
+  const sig=Math.sqrt(ss/(N-2));
+  let syy=0;for(const p of pts){syy+=(p.y-my)*(p.y-my);}
+  const rFull=sxy/Math.sqrt(sxx*syy); // Pearson r of the cloud
+
+  const DX=v=>plot.x0+v*plot.w, DY=v=>plot.y1-v*plot.h; // y up
+
+  // ease
+  const eo=t=>1-Math.pow(1-t,3);
+
+  // cycle: scatter-in -> jitter -> settle+fit-sweep -> hold -> reset
+  const CYC=560; // frames
+  let t=0,raf=0,nudge=0;
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(1,nudge+0.25);});
+  cv.addEventListener('click',()=>{t=0;});
+
+  function frame(){
+    if(!reduce)t=(t+1)%CYC;
+    nudge*=0.93;
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+
+    // progress phases (normalized 0..1)
+    const u=t/CYC;
+    // arrival: points fly from scattered seed to true pos
+    const arr=eo(Math.min(1,u/0.30));
+    // settle of jitter amplitude (high during arrival, decays)
+    const jit=1-eo(Math.min(1,Math.max(0,(u-0.18)/0.34)));
+    // fit sweep: line rotates from flat(at my) to fitted, band inhales
+    const fitU=eo(Math.min(1,Math.max(0,(u-0.30)/0.42)));
+    const fade=u>0.92?1-(u-0.92)/0.08:1; // gentle fade before reset
+
+    // --- axes / frame ---
+    ctx.strokeStyle='rgba(47,210,176,0.16)';ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(plot.x0,plot.y0);ctx.lineTo(plot.x0,plot.y1);ctx.lineTo(plot.x1,plot.y1);
+    ctx.stroke();
+    // subtle gridlines
+    ctx.strokeStyle='rgba(47,210,176,0.06)';
+    for(let g=1;g<=3;g++){
+      const gx=plot.x0+plot.w*g/4, gy=plot.y0+plot.h*g/4;
+      ctx.beginPath();ctx.moveTo(gx,plot.y0);ctx.lineTo(gx,plot.y1);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(plot.x0,gy);ctx.lineTo(plot.x1,gy);ctx.stroke();
+    }
+
+    // current line params interpolate flat->fit
+    const aNow=my+(aFit-my)*fitU;
+    const bNow=0+(bFit-0)*fitU;
+    const yL=x=>aNow+bNow*x;
+
+    // --- confidence band (inhales as fit converges) ---
+    const bandT=fitU; // tightens from wide to true
+    const widen=(1-bandT)*0.9+1; // extra width early
+    const half=x=>{
+      const lev=2*sig*widen;
+      const conf=lev*(0.6+1.6*Math.abs(x-mx)); // wider at extremes
+      return conf;
+    };
+    ctx.beginPath();
+    const steps=40;
+    for(let i=0;i<=steps;i++){const x=i/steps;ctx.lineTo(DX(x),DY(yL(x)+half(x)));}
+    for(let i=steps;i>=0;i--){const x=i/steps;ctx.lineTo(DX(x),DY(yL(x)-half(x)));}
+    ctx.closePath();
+    ctx.fillStyle='rgba(47,210,176,'+(0.06*fade)+')';ctx.fill();
+    ctx.strokeStyle='rgba(47,210,176,'+(0.10*fade)+')';ctx.lineWidth=1;ctx.stroke();
+
+    // --- regression line ---
+    const x0=0,x1=1;
+    ctx.lineWidth=Math.max(1.6,Math.min(W,H)/240);
+    ctx.strokeStyle='rgba(47,210,176,'+(0.92*fade)+')';
+    ctx.shadowColor=AC;ctx.shadowBlur=10;
+    ctx.beginPath();ctx.moveTo(DX(x0),DY(yL(x0)));ctx.lineTo(DX(x1),DY(yL(x1)));ctx.stroke();
+    ctx.shadowBlur=0;
+
+    // --- points ---
+    const r=Math.max(2,Math.min(W,H)/130);
+    for(const p of pts){
+      // seed scattered position (chaotic), lerp to true
+      const sx=p.sx, sy=p.sy;
+      const jx=Math.sin(t*0.13+p.ph)*0.02*jit;
+      const jy=Math.cos(t*0.11+p.ph*1.7)*0.02*jit;
+      const px=sx+(p.x-sx)*arr+jx*arr;
+      const py=sy+(p.y-sy)*arr+jy*arr;
+      const X=DX(px),Y=DY(py);
+      // residual emphasis: when settled, faint stem to the line
+      if(fitU>0.05){
+        const lineY=DY(yL(p.x));
+        ctx.strokeStyle='rgba(47,210,176,'+(0.10*fitU*fade)+')';ctx.lineWidth=1;
+        ctx.beginPath();ctx.moveTo(DX(p.x),DY(p.y));ctx.lineTo(DX(p.x),lineY);ctx.stroke();
+      }
+      const heat=0.55+0.45*arr;
+      ctx.beginPath();ctx.arc(X,Y,r,0,Math.PI*2);
+      ctx.fillStyle='rgba(47,210,176,'+(heat*fade)+')';ctx.fill();
+      ctx.beginPath();ctx.arc(X,Y,r*0.42,0,Math.PI*2);
+      ctx.fillStyle='rgba(224,255,247,'+(heat*0.9*fade)+')';ctx.fill();
+    }
+
+    // --- readout: correlation reveals as the fit converges ---
+    const rShow=rFull*fitU;
+    ctx.font='600 '+Math.max(9,Math.min(W,H)/34)+'px ui-monospace,monospace';
+    ctx.fillStyle='rgba(47,210,176,'+(0.6*fade)+')';
+    ctx.textBaseline='top';
+    ctx.fillText('r = '+rShow.toFixed(2),plot.x0+4,plot.y0-Math.max(11,Math.min(W,H)/30));
+
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=Math.floor(CYC*0.85);frame();}else start();
+})();
+</script>
+</body>
+</html>

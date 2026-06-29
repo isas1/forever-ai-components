@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Four teal monospace OTP cells with a blinking caret that auto-fill digits with a slide-up bounce then clear and repeat.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OTP Boxes</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a1418;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .wrap{height:100%;display:flex;align-items:center;justify-content:center}
+  .row{display:flex;gap:10px}
+  .cell{width:46px;height:60px;border-radius:12px;background:#10242b;border:2px solid #1c3b44;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;color:#3ff0c0;position:relative;overflow:hidden;transition:border-color .2s,box-shadow .2s}
+  .cell.active{border-color:#3ff0c0;box-shadow:0 0 14px rgba(63,240,192,.4)}
+  .caret{position:absolute;width:2px;height:30px;background:#3ff0c0;opacity:0}
+  .cell.active .caret{animation:bl 1s steps(2) infinite}
+  @keyframes bl{0%,50%{opacity:1}50.01%,100%{opacity:0}}
+  .digit{display:inline-block;transform:translateY(120%);opacity:0}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#3ff0c0;opacity:.45;text-transform:uppercase;font-family:ui-sans-serif,system-ui,sans-serif}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="row" id="row"></div></div>
+<div class="cap">OTP Boxes</div>
+<script>
+(function(){
+  const row=document.getElementById('row');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const N=4,cells=[];
+  for(let i=0;i<N;i++){
+    const c=document.createElement('div');c.className='cell';
+    const car=document.createElement('span');car.className='caret';
+    const d=document.createElement('span');d.className='digit';
+    c.appendChild(car);c.appendChild(d);row.appendChild(c);
+    cells.push({c,d,filled:false});
+  }
+  let running=true,timer=0,pos=0,phase='filling';
+  function setActive(i){cells.forEach((o,j)=>o.c.classList.toggle('active',j===i&&phase==='filling'));}
+  function fill(i){
+    const o=cells[i];o.d.textContent=Math.floor(Math.random()*10);
+    o.d.style.transition='transform .3s cubic-bezier(.2,1.4,.4,1),opacity .3s';
+    o.d.style.transform='translateY(0)';o.d.style.opacity='1';o.filled=true;
+    o.c.style.transition='transform .12s';o.c.style.transform='scale(1.12)';
+    setTimeout(()=>o.c.style.transform='scale(1)',120);
+  }
+  function clearAll(){cells.forEach(o=>{o.d.style.transform='translateY(120%)';o.d.style.opacity='0';o.filled=false;});}
+  function frame(){
+    if(!running)return;
+    timer++;
+    if(phase==='filling'){
+      setActive(pos);
+      if(timer>34){timer=0;fill(pos);pos++;if(pos>=N){phase='done';setActive(-1);}}
+    } else if(phase==='done'){
+      if(timer>60){timer=0;phase='clearing';}
+    } else { // clearing
+      clearAll();phase='filling';pos=0;timer=0;
+    }
+    requestAnimationFrame(frame);
+  }
+  document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
+  if(reduce){cells.forEach((o,i)=>fill(i));}
+  else requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

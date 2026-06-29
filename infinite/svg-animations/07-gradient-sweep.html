@@ -1,0 +1,114 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A faceted hex-prism wireframe on near-black, raked by a rotating spectral gradient band whose hue drifts as it sweeps the line-art.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Gradient Sweep</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0b0d12;display:grid;place-items:center}
+.ssa07-stage{width:min(86vmin,640px);height:min(86vmin,640px);position:relative}
+#ssa07-c{width:100%;height:100%;display:block}
+/* base wireframe: cool dim line-art, always visible for legibility */
+.ssa07-wire{fill:none;stroke:#2a3050;stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
+/* the lit copy on top, painted by the sweeping gradient + bright glow */
+.ssa07-lit{fill:none;stroke:url(#ssa07-grad);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;
+  filter:url(#ssa07-glow)}
+.ssa07-dot{fill:#cdbcff;opacity:.7}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#7c5cff;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+@media (prefers-reduced-motion:reduce){#ssa07-sweep{display:none}}
+</style></head><body>
+<div class="ssa07-stage" role="img" aria-label="A hue band rakes across a wireframe like raking light">
+  <svg id="ssa07-c" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+</div>
+<div class="cap">Gradient Sweep</div>
+<script>(function(){
+  var NS='http://www.w3.org/2000/svg';
+  var svg=document.getElementById('ssa07-c');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // --- defs: a narrow lit band riding a linear gradient, swept by rotation.
+  // The band is mostly transparent so only a slice of strokes lights at once;
+  // the hue cycles so the lit slice reads as a shifting spectral edge.
+  var defs=document.createElementNS(NS,'defs');
+  defs.innerHTML=
+    '<filter id="ssa07-glow" x="-30%" y="-30%" width="160%" height="160%">'+
+      '<feGaussianBlur stdDeviation="1.4" result="b"/>'+
+      '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>'+
+    '</filter>'+
+    '<linearGradient id="ssa07-grad" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox" '+
+      'gradientTransform="rotate(0 .5 .5)">'+
+      '<stop offset="0"     stop-color="#7c5cff" stop-opacity="0"/>'+
+      '<stop offset=".40"   stop-color="#7c5cff" stop-opacity="0"/>'+
+      '<stop offset=".47" id="ssa07-s1" stop-color="#22d3ee" stop-opacity="1"/>'+
+      '<stop offset=".50" id="ssa07-s2" stop-color="#ffffff" stop-opacity="1"/>'+
+      '<stop offset=".53" id="ssa07-s3" stop-color="#ff5cc8" stop-opacity="1"/>'+
+      '<stop offset=".60"  stop-color="#7c5cff" stop-opacity="0"/>'+
+      '<stop offset="1"    stop-color="#7c5cff" stop-opacity="0"/>'+
+      '<animateTransform id="ssa07-sweep" attributeName="gradientTransform" type="rotate" '+
+        'from="0 .5 .5" to="360 .5 .5" dur="7s" repeatCount="indefinite" calcMode="linear"/>'+
+    '</linearGradient>';
+  svg.appendChild(defs);
+
+  // --- build an isometric wireframe lattice: a clear focal object, not noise.
+  // Two stacked hex rings joined by struts + radial spokes => a faceted prism.
+  var cx=100,cy=100;
+  function poly(n,r,oy,rot){var a=[];for(var i=0;i<n;i++){var t=rot+i/n*Math.PI*2;
+    a.push([cx+Math.cos(t)*r,cy+Math.sin(t)*r*0.46+oy]);}return a;}
+  var top=poly(6,58,-30,-Math.PI/2), mid=poly(6,72,4,-Math.PI/2), bot=poly(6,46,40,-Math.PI/2);
+  var segs=[];
+  function ring(p){for(var i=0;i<p.length;i++)segs.push([p[i],p[(i+1)%p.length]]);}
+  ring(top);ring(mid);ring(bot);
+  for(var i=0;i<6;i++){segs.push([top[i],mid[i]]);segs.push([mid[i],bot[i]]);}
+  // a small inner star on the top face for a focal accent
+  for(i=0;i<6;i++)segs.push([top[i],[cx,cy-30]]);
+  // faint horizon brackets for staging
+  segs.push([[14,150],[58,150]]);segs.push([[142,150],[186,150]]);
+
+  function pathFor(s){
+    var d='';for(var k=0;k<s.length;k++){var a=s[k];
+      d+='M'+a[0][0].toFixed(1)+' '+a[0][1].toFixed(1)+'L'+a[1][0].toFixed(1)+' '+a[1][1].toFixed(1);}
+    return d;}
+  var dAll=pathFor(segs);
+
+  var base=document.createElementNS(NS,'path');
+  base.setAttribute('class','ssa07-wire');base.setAttribute('d',dAll);svg.appendChild(base);
+  var lit=document.createElementNS(NS,'path');
+  lit.setAttribute('class','ssa07-lit');lit.setAttribute('d',dAll);svg.appendChild(lit);
+
+  // vertex dots, brighter where lit will pass — kept static + cheap
+  var verts=top.concat(mid,bot);
+  for(i=0;i<verts.length;i++){var c=document.createElementNS(NS,'circle');
+    c.setAttribute('class','ssa07-dot');c.setAttribute('cx',verts[i][0].toFixed(1));
+    c.setAttribute('cy',verts[i][1].toFixed(1));c.setAttribute('r','1.6');svg.appendChild(c);}
+
+  // --- hue band shift: rotate the three core stops through the spectrum so the
+  // raking light is never the same colour twice. SMIL handles the sweep angle;
+  // a tiny rAF handles the hue so the band feels like living light.
+  var s1=document.getElementById('ssa07-s1'),s2=document.getElementById('ssa07-s2'),
+      s3=document.getElementById('ssa07-s3');
+  function hsl(h){return 'hsl('+((h%360+360)%360).toFixed(0)+',92%,66%)';}
+
+  if(reduce){
+    // static legible frame: a fixed diagonal lit edge, no animation.
+    svg.querySelector('#ssa07-sweep').setAttribute('to','40 .5 .5');
+    var st=svg.querySelector('#ssa07-grad');st.setAttribute('gradientTransform','rotate(40 .5 .5)');
+    s1.setAttribute('stop-color',hsl(190));s3.setAttribute('stop-color',hsl(310));
+    return;
+  }
+
+  var raf=0,t0=0,hue=210;
+  function tick(ts){
+    if(!t0)t0=ts;var dt=ts-t0;t0=ts;
+    hue+=dt*0.05;                    // ~18deg/sec hue drift, slower than the sweep
+    s1.setAttribute('stop-color',hsl(hue-26));
+    s3.setAttribute('stop-color',hsl(hue+26));
+    raf=requestAnimationFrame(tick);
+  }
+  raf=requestAnimationFrame(tick);
+
+  function vis(){
+    if(document.hidden){if(raf)cancelAnimationFrame(raf),raf=0;svg.pauseAnimations();}
+    else{svg.unpauseAnimations();if(!raf){t0=0;raf=requestAnimationFrame(tick);}}
+  }
+  document.addEventListener('visibilitychange',vis);vis();
+})();</script>
+</body></html>

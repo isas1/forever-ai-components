@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Kaleido Tile — William Morris. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Kaleido Tile</title>
+<style>
+  html,body{margin:0;height:100%;background:#1d3550;overflow:hidden}
+  #mor07-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mor07-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mor07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe7d2;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mor07-stage" role="img" aria-label="A William Morris botanical motif folded into eight-fold mirror symmetry and slowly turned on a deep indigo ground — sage stems, olive leaves and madder berries blossoming into a rose-window of pattern.">
+  <canvas id="mor07-cv"></canvas>
+</div>
+<div class="mor07-cap">The Kaleido Tile</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mor07-cv'); if(!cv) return;
+  const PAL={indigoDeep:'#1d3550',olive:'#6b7233',madder:'#a8392b',sage:'#7d9b6a',gold:'#c2a14a',ink:'#23301f'};
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+
+  function wedge(ctx,R){
+    ctx.save();
+    ctx.strokeStyle=PAL.sage;ctx.lineWidth=3.5;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(0,0);ctx.quadraticCurveTo(R*0.2,-R*0.3,R*0.12,-R*0.85);ctx.stroke();
+    ctx.save();ctx.translate(R*0.16,-R*0.5);ctx.rotate(-0.3);ctx.scale(R/200,R/200);
+    ctx.beginPath();ctx.moveTo(0,0);ctx.bezierCurveTo(24,-12,30,-44,10,-66);ctx.bezierCurveTo(4,-48,-8,-52,-22,-36);ctx.bezierCurveTo(-12,-20,-14,-8,0,0);ctx.closePath();
+    ctx.fillStyle=PAL.olive;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=2.4;ctx.stroke();ctx.restore();
+    ctx.beginPath();ctx.arc(R*0.12,-R*0.85,R*0.05,0,7);ctx.fillStyle=PAL.madder;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.6;ctx.stroke();
+    ctx.beginPath();ctx.arc(R*0.05,-R*0.22,R*0.035,0,7);ctx.fillStyle=PAL.gold;ctx.fill();
+    ctx.restore();
+  }
+
+  let rot=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) rot+=dt*0.16;
+    const ctx=S.ctx, cx=S.w/2, cy=S.h/2, R=Math.min(S.w,S.h)*0.5;
+    ctx.fillStyle=PAL.indigoDeep;ctx.fillRect(0,0,S.w,S.h);
+    ctx.strokeStyle='rgba(194,161,74,.12)';ctx.lineWidth=1;
+    for(let i=1;i<=4;i++){ctx.beginPath();ctx.arc(cx,cy,R*i/4.2,0,7);ctx.stroke();}
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(rot);
+    for(let i=0;i<8;i++){
+      ctx.save();ctx.rotate(i*Math.PI/4);ctx.scale(i%2?-1:1,1);
+      wedge(ctx,R*0.92);ctx.restore();
+    }
+    ctx.restore();
+    ctx.save();ctx.translate(cx,cy);
+    for(let i=0;i<8;i++){ctx.rotate(Math.PI/4);ctx.beginPath();ctx.ellipse(0,-12,5,11,0,0,7);ctx.fillStyle=PAL.madder;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.2;ctx.stroke();}
+    ctx.beginPath();ctx.arc(0,0,8,0,7);ctx.fillStyle=PAL.gold;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.4;ctx.stroke();
+    ctx.restore();
+  }
+
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

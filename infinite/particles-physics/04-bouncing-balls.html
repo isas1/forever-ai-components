@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A handful of glossy pastel balls bounce off walls and collide elastically with each other, repelled gently by the cursor.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bouncing Balls</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a1418}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#5eead4;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Bouncing Balls</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,balls=[],reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const pal=['#5eead4','#fca5a5','#fcd34d','#93c5fd','#c4b5fd','#86efac'];
+function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);init();}
+function init(){balls=[];const n=Math.min(14,Math.max(7,Math.round(W*H/9000)));
+  for(let i=0;i<n;i++){const r=7+Math.random()*Math.min(18,W/14);
+    balls.push({x:r+Math.random()*(W-2*r),y:r+Math.random()*(H-2*r),
+      vx:(Math.random()-0.5)*3,vy:(Math.random()-0.5)*3,r,m:r*r,
+      c:pal[i%pal.length]});}}
+addEventListener('resize',size);size();
+let pointer={x:-999,y:-999,d:false};
+function pp(e){const r=cv.getBoundingClientRect();pointer.x=e.clientX-r.left;pointer.y=e.clientY-r.top;}
+cv.addEventListener('pointermove',pp);
+cv.addEventListener('pointerleave',()=>pointer.x=-999);
+function step(){
+  x.clearRect(0,0,W,H);
+  for(const b of balls){
+    b.x+=b.vx;b.y+=b.vy;
+    const dx=b.x-pointer.x,dy=b.y-pointer.y,dd=Math.hypot(dx,dy);
+    if(dd<70&&dd>0.1){const f=(70-dd)/70*0.6;b.vx+=dx/dd*f;b.vy+=dy/dd*f;}
+    if(b.x<b.r){b.x=b.r;b.vx=Math.abs(b.vx);}if(b.x>W-b.r){b.x=W-b.r;b.vx=-Math.abs(b.vx);}
+    if(b.y<b.r){b.y=b.r;b.vy=Math.abs(b.vy);}if(b.y>H-b.r){b.y=H-b.r;b.vy=-Math.abs(b.vy);}
+    const sp=Math.hypot(b.vx,b.vy);if(sp>5){b.vx*=5/sp;b.vy*=5/sp;}
+  }
+  for(let i=0;i<balls.length;i++)for(let j=i+1;j<balls.length;j++){
+    const a=balls[i],c=balls[j],dx=c.x-a.x,dy=c.y-a.y,d=Math.hypot(dx,dy),min=a.r+c.r;
+    if(d<min&&d>0.01){const nx=dx/d,ny=dy/d,ov=(min-d)/2;
+      a.x-=nx*ov;a.y-=ny*ov;c.x+=nx*ov;c.y+=ny*ov;
+      const dvx=c.vx-a.vx,dvy=c.vy-a.vy,p=2*(dvx*nx+dvy*ny)/(a.m+c.m);
+      a.vx+=p*c.m*nx;a.vy+=p*c.m*ny;c.vx-=p*a.m*nx;c.vy-=p*a.m*ny;}
+  }
+  for(const b of balls){
+    const g=x.createRadialGradient(b.x-b.r*0.3,b.y-b.r*0.3,1,b.x,b.y,b.r);
+    g.addColorStop(0,'#fff');g.addColorStop(0.25,b.c);g.addColorStop(1,b.c);
+    x.fillStyle=g;x.beginPath();x.arc(b.x,b.y,b.r,0,7);x.fill();
+  }
+}
+let raf;function loop(){step();raf=requestAnimationFrame(loop);}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+function stop(){cancelAnimationFrame(raf);raf=0;}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+play();
+</script>
+</body>
+</html>

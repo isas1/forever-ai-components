@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A wave of colored dots sweeps left to right, revealing a glowing sun setting over water in optically mixing pigment.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Density Wave</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  #po06-stage{position:fixed;inset:0;display:block}
+  #po06-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="po06-stage" role="img" aria-label="Pointillist scene: a wave of colored dots sweeping across the frame to reveal a glowing sun setting over water, rendered as optically mixing points of pigment.">
+  <canvas id="po06-c"></canvas>
+</div>
+<div class="cap">Density Wave</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("po06-c");
+  var ctx=cv.getContext("2d",{alpha:false});
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // Divisionist palette (Seurat/Signac): warm orange light over cool violet water.
+  // Each band is a small set of pure hues that optically mix at viewing distance.
+  var SKY=[[240,168,48],[244,196,96],[232,118,56],[210,142,170],[150,118,176]];
+  var SEA=[[64,96,150],[42,70,128],[96,128,170],[150,110,150],[34,52,96]];
+  var SUN=[[255,224,150],[244,176,72],[255,200,110],[240,150,90]];
+  var BG =[13,15,20];
+
+  var W=0,H=0,dpr=1,GRID=10,cols=0,rows=0;
+  var img=null,data=null;
+  // per-cell static attributes (typed arrays, allocation-free loop)
+  var cellR=null,cellG=null,cellB=null,cellJX=null,cellJY=null,cellSz=null,cellThr=null;
+
+  function pick(arr,t){ // t 0..1 -> a hue from band with slight scatter
+    var i=(arr.length*t)|0; if(i>=arr.length)i=arr.length-1; return arr[i];
+  }
+
+  function build(){
+    var rect=cv.getBoundingClientRect();
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,Math.round(rect.width*dpr));
+    H=Math.max(1,Math.round(rect.height*dpr));
+    cv.width=W; cv.height=H;
+    GRID=Math.max(7,Math.round(9*dpr));
+    cols=Math.ceil(W/GRID); rows=Math.ceil(H/GRID);
+    var n=cols*rows;
+    cellR=new Uint8Array(n);cellG=new Uint8Array(n);cellB=new Uint8Array(n);
+    cellJX=new Float32Array(n);cellJY=new Float32Array(n);cellSz=new Float32Array(n);cellThr=new Float32Array(n);
+    img=ctx.createImageData(W,H); data=img.data;
+    // horizon a bit below centre; sun centre on it
+    var horizon=0.56, sunX=0.40, sunY=horizon, sunR=0.26;
+    var k=0;
+    for(var gy=0;gy<rows;gy++){
+      for(var gx=0;gx<cols;gx++,k++){
+        var u=gx/(cols-1||1), v=gy/(rows-1||1);
+        var dx=(u-sunX), dy=(v-sunY)*1.15, dist=Math.sqrt(dx*dx+dy*dy);
+        var rnd=(Math.sin(k*12.9898+78.233)*43758.5453); rnd-=Math.floor(rnd);
+        var c;
+        if(dist<sunR){
+          c=pick(SUN, dist/sunR);                         // the sun disc
+        } else if(v<horizon){
+          var sg=Math.min(1,(v/horizon)+ (dist-sunR)*0.6);// sky: orange near sun -> violet high/away
+          c=pick(SKY, sg);
+        } else {
+          var wv=(v-horizon)/(1-horizon);                 // sea: bright reflection under sun
+          var refl=Math.max(0,1-Math.abs(u-sunX)*3.2)*(1-wv*0.7);
+          c = refl>0.45 ? pick(SUN,0.5+refl*0.4) : pick(SEA, wv*0.8+(rnd*0.2));
+        }
+        // pigment scatter so neighbouring dots differ -> optical mixing, not flat fills
+        var jit=(rnd-0.5)*44;
+        cellR[k]=Math.max(0,Math.min(255,c[0]+jit));
+        cellG[k]=Math.max(0,Math.min(255,c[1]+jit*0.7));
+        cellB[k]=Math.max(0,Math.min(255,c[2]+jit*0.9));
+        cellJX[k]=(rnd-0.5)*GRID*0.5;
+        cellJY[k]=((Math.sin(k*3.17)*0.5+0.5)-0.5)*GRID*0.5;
+        cellSz[k]=GRID*(0.30+rnd*0.16);
+        cellThr[k]=rnd;                                   // stipple threshold for density
+      }
+    }
+  }
+
+  function clear(){
+    for(var i=0;i<data.length;i+=4){data[i]=BG[0];data[i+1]=BG[1];data[i+2]=BG[2];data[i+3]=255;}
+  }
+
+  // splat a soft round dot into ImageData (additive-ish over bg), allocation-free
+  function dot(cx,cy,rad,r,g,b){
+    var x0=Math.max(0,(cx-rad)|0), x1=Math.min(W-1,(cx+rad)|0);
+    var y0=Math.max(0,(cy-rad)|0), y1=Math.min(H-1,(cy+rad)|0);
+    var r2=rad*rad;
+    for(var y=y0;y<=y1;y++){
+      var row=y*W*4, ddy=y-cy;
+      for(var x=x0;x<=x1;x++){
+        var ddx=x-cx, q=ddx*ddx+ddy*ddy;
+        if(q>r2)continue;
+        var a=1-q/r2; a*=a;                 // soft falloff
+        var p=row+x*4;
+        data[p]  = data[p]  +(r-data[p])  *a;
+        data[p+1]= data[p+1]+(g-data[p+1])*a;
+        data[p+2]= data[p+2]+(b-data[p+2])*a;
+      }
+    }
+  }
+
+  // density profile: a travelling band, dense at its crest, sparse outside
+  function density(u,head){
+    var d=u-head;                            // signed distance from wave crest
+    if(d>0.04) return 0;                     // ahead of wave: empty (not yet revealed)
+    var band=Math.exp(-Math.pow(d*4.2,2));   // gaussian crest
+    var settled=1/(1+Math.exp((d+0.55)*9));  // far behind: settle to steady medium density
+    return Math.min(1, band*0.7+settled*0.62+0.12);
+  }
+
+  function frame(head){
+    clear();
+    var k=0;
+    for(var gy=0;gy<rows;gy++){
+      for(var gx=0;gx<cols;gx++,k++){
+        var u=gx/(cols-1||1);
+        var den=density(u,head);
+        if(cellThr[k]>den) continue;          // stipple: skip dot when below local density
+        var cx=gx*GRID+GRID*0.5+cellJX[k];
+        var cy=gy*GRID+GRID*0.5+cellJY[k];
+        var sz=cellSz[k]*(0.7+den*0.5);        // crest dots a touch larger
+        dot(cx,cy,sz,cellR[k],cellG[k],cellB[k]);
+      }
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  var running=true,raf=0,head=-0.15,t0=0;
+  function loop(ts){
+    if(!running)return;
+    if(!t0)t0=ts;
+    head=((ts-t0)/5200)%1.5 -0.25;            // sweep crest L->R, then loop with empty lead-in
+    frame(head);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){ if(reduce){frame(1.4);return;} t0=0; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden){stop();}
+    else if(!running){running=true; t0=0; raf=requestAnimationFrame(loop);}
+  });
+
+  var rt=0;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ build(); if(reduce){frame(1.4);} },140);
+  });
+
+  build();
+  start();
+})();
+</script>
+</body>
+</html>

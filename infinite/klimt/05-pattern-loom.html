@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Pattern Loom — Gustav Klimt. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Pattern Loom</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0805;overflow:hidden}
+  #kli05-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kli05-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kli05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#e6cf86;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kli05-stage" role="img" aria-label="Three stacked ornamental friezes of circles, spirals, triangles and eyes scroll at different speeds in the Secession idiom, endlessly re-weaving themselves.">
+  <canvas id="kli05-cv"></canvas>
+</div>
+<div class="kli05-cap">The Pattern Loom</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('kli05-cv'); if(!cv) return;
+  const GOLD='#c8a951', GOLD2='#9a7d28', GOLD_HI='#e6cf86', MALA='#1f6b4f';
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  let t=0,last=performance.now();
+  const KINDS=['circ','spiral','tri','circ','eye'];
+  function unit(ctx,kind,x,y,r,ph){
+    ctx.save();ctx.translate(x,y);
+    const k=0.85+0.15*Math.sin(ph);
+    ctx.strokeStyle=GOLD;ctx.lineWidth=1.5;
+    if(kind==='circ'){
+      ctx.beginPath();ctx.arc(0,0,r*k,0,7);ctx.strokeStyle=GOLD_HI;ctx.stroke();
+      ctx.beginPath();ctx.arc(0,0,r*0.45*k,0,7);ctx.fillStyle=GOLD2;ctx.fill();
+    }else if(kind==='spiral'){
+      ctx.rotate(ph*0.5);ctx.beginPath();let rr=1,an=0;
+      for(let i=0;i<26;i++){an+=0.5;rr*=1.085;if(rr>r)break;ctx.lineTo(Math.cos(an)*rr,Math.sin(an)*rr);}
+      ctx.strokeStyle=GOLD_HI;ctx.stroke();
+    }else if(kind==='tri'){
+      const z=r*k;ctx.beginPath();ctx.moveTo(0,-z);ctx.lineTo(z*.86,z*.6);ctx.lineTo(-z*.86,z*.6);ctx.closePath();
+      ctx.fillStyle=GOLD;ctx.globalAlpha=0.85;ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle=GOLD_HI;ctx.stroke();
+    }else{
+      ctx.beginPath();ctx.ellipse(0,0,r,r*0.5,0,0,7);ctx.stroke();
+      ctx.beginPath();ctx.arc(0,0,r*0.28,0,7);ctx.fillStyle=MALA;ctx.fill();
+    }
+    ctx.restore();
+  }
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.clearRect(0,0,W,H);
+    const rows=3, rowH=H/rows;
+    for(let ri=0;ri<rows;ri++){
+      const cy=rowH*(ri+0.5);
+      const unitW=46;
+      const speed=(ri%2?-1:1)*(10+ri*6);
+      const offset=((t*speed)%unitW+unitW)%unitW;
+      ctx.strokeStyle='rgba(200,169,81,.14)';ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(W,cy);ctx.stroke();
+      const count=Math.ceil(W/unitW)+2;
+      for(let i=-1;i<count;i++){
+        const x=i*unitW+offset;
+        const idx=((i + Math.floor(t*0.2) + ri*2)%KINDS.length+KINDS.length)%KINDS.length;
+        unit(ctx,KINDS[idx],x,cy,14,t*1.5+i*0.6+ri);
+      }
+    }
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#0a0805';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

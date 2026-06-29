@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Sun &amp; Moon Discs — Robert Delaunay. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sun &amp; Moon Discs</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0d11;overflow:hidden}
+  #del07-stage{position:fixed;inset:0;width:100%;height:100%}
+  #del07-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .del07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3f0e8;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="del07-stage" role="img" aria-label="In Delaunay's sun-and-moon vein: two great discs, one warm and one cool, orbit and overlap, and where they cross their colours add into new hues born of pure light.">
+  <canvas id="del07-cv"></canvas>
+</div>
+<div class="del07-cap">Sun &amp; Moon Discs</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('del07-cv'); if(!cv) return;
+  const PAL={yellow:'#f4c81e',orange:'#f08a24',blue:'#1f6fd0'};
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  let t=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h,cx=W/2,cy=H/2;
+    const R=Math.min(W,H)*0.30;
+    const orbit=Math.min(W,H)*0.18;
+    ctx.fillStyle='#0c0d11';ctx.fillRect(0,0,W,H);
+    const sx=cx+Math.cos(t*0.6)*orbit,   sy=cy+Math.sin(t*0.6)*orbit;
+    const mx=cx+Math.cos(t*0.6+Math.PI)*orbit, my=cy+Math.sin(t*0.6+Math.PI)*orbit;
+    ctx.globalCompositeOperation='lighter';
+    const sun=ctx.createRadialGradient(sx,sy,0,sx,sy,R);
+    sun.addColorStop(0,PAL.yellow);
+    sun.addColorStop(0.5,PAL.orange);
+    sun.addColorStop(1,'rgba(226,59,46,0.12)');
+    ctx.fillStyle=sun;ctx.beginPath();ctx.arc(sx,sy,R,0,7);ctx.fill();
+    const moon=ctx.createRadialGradient(mx,my,0,mx,my,R);
+    moon.addColorStop(0,'#8fc0ff');
+    moon.addColorStop(0.5,PAL.blue);
+    moon.addColorStop(1,'rgba(123,63,160,0.12)');
+    ctx.fillStyle=moon;ctx.beginPath();ctx.arc(mx,my,R,0,7);ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+    ctx.lineWidth=1.5;
+    for(let k=1;k<=3;k++){
+      ctx.strokeStyle='rgba(243,240,232,'+(0.16-k*0.03)+')';
+      ctx.beginPath();ctx.arc(sx,sy,R*k/3,0,7);ctx.stroke();
+      ctx.beginPath();ctx.arc(mx,my,R*k/3,0,7);ctx.stroke();
+    }
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#0c0d11';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

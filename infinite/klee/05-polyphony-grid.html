@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Polyphony Grid — Paul Klee. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Polyphony Grid</title>
+<style>
+  html,body{margin:0;height:100%;background:#efe7d6;overflow:hidden}
+  #kle05-stage{position:fixed;inset:0;width:100%;height:100%}
+  .kle05-grid{position:absolute;inset:0;display:grid;gap:4px;padding:14px;}
+  .kle05-cell{border-radius:3px;border:1px solid rgba(42,38,32,.25);will-change:transform;
+    transition:transform .18s ease, box-shadow .2s ease, background .3s ease;}
+  .kle05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2620;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kle05-stage" role="img" aria-label="A Paul Klee polyphony grid: a sweep travels the colour grid like a playhead, sounding each lit cell as a flare of colour. The melody re-composes itself over time, improvising new colour-voices.">
+  <div class="kle05-grid" id="kle05-grid"></div>
+</div>
+<div class="kle05-cap">Polyphony Grid</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const grid=document.getElementById('kle05-grid'); if(!grid) return;
+  const PAL={terra:'#c96f4a',teal:'#3a8a8c',mustard:'#d9a441',slate:'#46566b',plum:'#7a4b6b'};
+  const COLS=16, ROWS=6;
+  grid.style.gridTemplateColumns=`repeat(${COLS},1fr)`;
+  grid.style.gridTemplateRows=`repeat(${ROWS},1fr)`;
+  const rowCol=[PAL.terra,PAL.teal,PAL.mustard,PAL.plum,PAL.slate,PAL.terra];
+  const cells=[];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const el=document.createElement('div');
+    el.className='kle05-cell';
+    const cell={el,row:r,col:c,on:Math.random()<0.22,flash:0,flashLatch:-1,base:rowCol[r]};
+    paint(cell); grid.appendChild(el); cells.push(cell);
+  }
+  function paint(cell){
+    if(cell.on){ cell.el.style.background=cell.base; cell.el.style.opacity='0.95'; }
+    else { cell.el.style.background='rgba(42,38,32,0.06)'; cell.el.style.opacity='1'; }
+  }
+
+  let phase=0, last=performance.now();
+  function step(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    const prev=Math.floor(phase);
+    phase += dt*COLS*0.9;
+    if(phase>=COLS){ phase-=COLS;
+      // improvise: re-seed a few voices each lap
+      for(let i=0;i<3;i++){ const c=cells[(Math.random()*cells.length)|0]; c.on=!c.on; paint(c); }
+    }
+    const head=Math.floor(phase);
+    for(const cell of cells){
+      const onHead = (cell.col===head);
+      if(onHead && cell.on && cell.flashLatch!==head){ cell.flash=1; }
+      if(cell.flash>0) cell.flash=Math.max(0,cell.flash-dt*2.4);
+      if(cell.on){
+        const f=cell.flash;
+        cell.el.style.transform = f>0? `scale(${1+f*0.12})` : 'scale(1)';
+        cell.el.style.boxShadow = f>0? `0 0 ${8+12*f}px ${cell.base}` : 'none';
+        cell.el.style.background=cell.base;
+        cell.el.style.opacity = (0.78+0.22*(onHead?1:0)).toFixed(2);
+      } else {
+        cell.el.style.transform='scale(1)';
+        cell.el.style.boxShadow='none';
+        cell.el.style.background = onHead? 'rgba(201,111,74,0.10)':'rgba(42,38,32,0.06)';
+      }
+    }
+    cells.forEach(c=>{ if(c.col===head) c.flashLatch=head; });
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; step(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ cells.forEach(c=>{ if(c.on){ c.el.style.boxShadow=`0 0 6px ${c.base}`; } }); }
+  else start();
+})();
+</script>
+</body>
+</html>

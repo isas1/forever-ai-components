@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="An off-white plane partitioned by heavy black lines repeatedly splits along a seam, halves sliding apart and reflowing into new primary-colo">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Split Plane</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0e10}
+  #ds07-stage{position:fixed;inset:0;overflow:hidden;background:#0e0e10}
+  #ds07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="ds07-stage" role="img" aria-label="De Stijl Neoplastic composition: an off-white plane partitioned by heavy black lines repeatedly splits along a horizontal or vertical seam, the two halves sliding apart and reflowing into new proportions with red, blue, and yellow rectangles in dynamic equilibrium on a near-black field">
+    <canvas id="ds07-c"></canvas>
+  </div>
+  <div class="cap">Split Plane</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('ds07-stage');
+  var cv=document.getElementById('ds07-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // Neoplastic palette around accent #1b5fc4
+  var PAINT='#f4f1e9';   // off-white plane
+  var LINE ='#101012';   // black structure
+  var RED  ='#c8261d';
+  var BLUE ='#1b5fc4';   // brief accent
+  var YEL  ='#e8b714';
+  var COLS=[PAINT,RED,BLUE,YEL,PAINT,PAINT]; // index 0..5, weighted toward plane
+
+  var W=0,H=0,DPR=1,S=0,OX=0,OY=0,LW=0;
+
+  // The composition is one plane cut at a single seam into two slabs (A,B).
+  // Each slab carries an internal sub-partition (two cells stacked across the seam normal).
+  // On each cycle: the seam fraction reanimates to a NEW proportion, the slabs briefly
+  // separate (gap opens then closes), and cell colors reflow. Axis alternates H/V.
+  var axis=0;            // 0 = vertical seam (splits left|right), 1 = horizontal seam (top|bottom)
+  var seamFr=0.5, seamFrFrom=0.5, seamFrTo=0.5;   // seam position along split axis
+  var crossA=0.4, crossAFrom=0.4, crossATo=0.4;   // cross-cut inside slab A
+  var crossB=0.6, crossBFrom=0.6, crossBTo=0.6;   // cross-cut inside slab B
+  var gap=0;             // current separation gap (normalized), opens mid-cycle
+  // four cells: A-near, A-far, B-near, B-far (relative to cross-cut)
+  var col=[4,4,4,4], colFrom=[4,4,4,4], colTo=[4,4,4,4];
+
+  var SEAMS=[0.34,0.42,0.5,0.58,0.66];
+  var CROSS=[0.30,0.44,0.58,0.72];
+  var WELL =[0,1,2,3,0,0,0]; // color draw weighted to plane; primaries appear ~3/7 of time
+
+  function pick(a,not){var v;do{v=a[(Math.random()*a.length)|0];}while(v===not&&a.length>1);return v;}
+  function rnd(a,b){return a+Math.random()*(b-a);}
+  function ez(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;} // in-out cubic
+  function bump(t){return Math.sin(Math.PI*Math.max(0,Math.min(1,t)));} // 0->1->0
+
+  function resize(){
+    W=stage.clientWidth; H=stage.clientHeight;
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    S=Math.min(W,H); OX=(W-S)/2; OY=(H-S)/2;
+    LW=Math.max(3,Math.round(S*0.024));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  function reflow(){
+    axis^=1;
+    seamFrFrom=seamFr; seamFrTo=pick(SEAMS,seamFr);
+    crossAFrom=crossA; crossATo=pick(CROSS,crossA);
+    crossBFrom=crossB; crossBTo=pick(CROSS,crossB);
+    var i;
+    for(i=0;i<4;i++){ colFrom[i]=colTo[i]; colTo[i]=pick(WELL,colTo[i]); }
+  }
+
+  function seed(){
+    seamFr=seamFrFrom=seamFrTo=0.46;
+    crossA=crossAFrom=crossATo=0.40;
+    crossB=crossBFrom=crossBTo=0.62;
+    col[0]=colFrom[0]=colTo[0]=2; // blue
+    col[1]=colFrom[1]=colTo[1]=4;
+    col[2]=colFrom[2]=colTo[2]=4;
+    col[3]=colFrom[3]=colTo[3]=1; // red
+    axis=0;
+  }
+
+  var cycle=4.4;
+  function advance(now){
+    var local=now%cycle, p=local/cycle;
+    // animate proportions over the first 70% (ease), hold last 30%
+    var k=ez(Math.min(1,p/0.7));
+    seamFr=seamFrFrom+(seamFrTo-seamFrFrom)*k;
+    crossA=crossAFrom+(crossATo-crossAFrom)*k;
+    crossB=crossBFrom+(crossBTo-crossBFrom)*k;
+    gap=bump(p/0.7)*0.045; // separation opens then closes within the move window
+  }
+
+  // draw a slab as two stacked cells split by `cross`, then its black sub-line.
+  // (x,y,w,h) is the slab rect in px; `vertCut` true => cross-cut is a vertical line.
+  function slab(x,y,w,h,cross,c0,c1,vertCut){
+    var hw=LW/2;
+    if(vertCut){
+      var cx=x+w*cross;
+      ctx.fillStyle=COLS[c0]; ctx.fillRect(x,y,cx-x,h);
+      ctx.fillStyle=COLS[c1]; ctx.fillRect(cx,y,(x+w)-cx,h);
+      ctx.fillStyle=LINE; ctx.fillRect(cx-hw,y-hw,LW,h+LW);
+    }else{
+      var cy=y+h*cross;
+      ctx.fillStyle=COLS[c0]; ctx.fillRect(x,y,w,cy-y);
+      ctx.fillStyle=COLS[c1]; ctx.fillRect(x,cy,w,(y+h)-cy);
+      ctx.fillStyle=LINE; ctx.fillRect(x-hw,cy-hw,w+LW,LW);
+    }
+  }
+
+  function draw(){
+    var x0=OX,y0=OY,hw=LW/2;
+    ctx.fillStyle='#0e0e10'; ctx.fillRect(0,0,W,H);
+
+    var g=gap*S;            // pixel gap, split symmetrically about the seam
+    if(axis===0){           // vertical seam -> left slab A | right slab B, cross-cut horizontal
+      var sx=x0+S*seamFr;
+      var aw=(sx-x0)-g/2, bw=(x0+S-sx)-g/2;
+      slab(x0, y0, aw, S, crossA, col[0], col[1], false);
+      slab(sx+g/2, y0, bw, S, crossB, col[2], col[3], false);
+      ctx.fillStyle=LINE; ctx.fillRect(sx-hw, y0-hw, LW, S+LW); // seam line at center of gap
+    }else{                  // horizontal seam -> top slab A / bottom slab B, cross-cut vertical
+      var sy=y0+S*seamFr;
+      var ah=(sy-y0)-g/2, bh=(y0+S-sy)-g/2;
+      slab(x0, y0, S, ah, crossA, col[0], col[1], true);
+      slab(x0, sy+g/2, S, bh, crossB, col[2], col[3], true);
+      ctx.fillStyle=LINE; ctx.fillRect(x0-hw, sy-hw, S+LW, LW);
+    }
+
+    // outer frame keeps the composition contained
+    ctx.fillStyle=LINE;
+    ctx.fillRect(x0-hw,y0-hw,S+LW,LW);
+    ctx.fillRect(x0-hw,y0+S-hw,S+LW,LW);
+    ctx.fillRect(x0-hw,y0-hw,LW,S+LW);
+    ctx.fillRect(x0+S-hw,y0-hw,LW,S+LW);
+  }
+
+  var raf=0,running=false,start=0,lastCyc=-1;
+  function loop(ts){
+    if(!running)return;
+    if(!start)start=ts;
+    var now=(ts-start)/1000;
+    var cyc=Math.floor(now/cycle);
+    if(cyc!==lastCyc){ lastCyc=cyc; reflow(); }
+    advance(now);
+    draw();
+    raf=requestAnimationFrame(loop);
+  }
+  function startLoop(){ if(running)return; running=true; start=0; raf=requestAnimationFrame(loop); }
+  function stopLoop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    resize(); seed();
+    if(reduce){ reflow(); advance(cycle*0.7); gap=0; draw(); return; }
+    startLoop();
+  }
+
+  var rt;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ resize(); if(reduce)draw(); },120);
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden)stopLoop(); else startLoop();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

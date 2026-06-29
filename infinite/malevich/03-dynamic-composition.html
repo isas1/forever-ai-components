@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Dynamic Composition — Kazimir Malevich. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dynamic Composition</title>
+<style>
+  html,body{margin:0;height:100%;background:#f0ece2;overflow:hidden}
+  #mal03-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mal03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mal03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#111;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mal03-stage" role="img" aria-label="A self-painting Suprematist composition: diagonal bars, a circle and a cross in black, red, blue and yellow fly in, find balance in the white void, hold, and depart, never repeating.">
+  <canvas id="mal03-cv"></canvas>
+</div>
+<div class="mal03-cap">Dynamic Composition</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={black:'#111111',red:'#d8261c',blue:'#1746a0',yellow:'#f2b705'};
+  const cv=document.getElementById('mal03-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const cols=[PAL.black,PAL.red,PAL.blue,PAL.yellow];
+  let elems=[];
+  function spawn(){
+    const t=Math.random();
+    const kind=t<.34?'bar':t<.55?'circ':t<.72?'cross':t<.88?'sq':'tri';
+    const fromEdge=(Math.random()*4)|0;
+    const tx=0.18+Math.random()*0.64, ty=0.18+Math.random()*0.64;
+    let sx,sy;
+    if(fromEdge===0){sx=-0.2;sy=Math.random();}
+    else if(fromEdge===1){sx=1.2;sy=Math.random();}
+    else if(fromEdge===2){sx=Math.random();sy=-0.2;}
+    else{sx=Math.random();sy=1.2;}
+    elems.push({born:performance.now(), life:5200+Math.random()*4200,
+      sx,sy,tx,ty, ex:sx<0.5?-0.25:1.25, ey:Math.random(),
+      c:cols[(Math.random()*cols.length)|0], rot:(-0.6+Math.random()*1.2),
+      sz:(kind==='bar'?0.10+Math.random()*0.10:0.07+Math.random()*0.07),
+      ratio:kind==='bar'?(4+Math.random()*5):1, kind});
+    if(elems.length>14) elems.shift();
+  }
+  let acc=0,last=performance.now();
+  function ease(t){return t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;}
+  function draw(now){
+    const dt=now-last; last=now; acc+=dt;
+    const ms=REDUCED?2600:1100;
+    if(acc>ms){acc=0; spawn();}
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle='#f0ece2'; ctx.fillRect(0,0,W,H);
+    const unit=Math.min(W,H);
+    for(const e of elems){
+      const age=(now-e.born)/e.life;
+      if(age>1){e.dead=true;continue;}
+      let px,py,a;
+      if(age<0.22){const k=ease(age/0.22); px=e.sx+(e.tx-e.sx)*k; py=e.sy+(e.ty-e.sy)*k; a=Math.min(1,age/0.10);}
+      else if(age<0.78){px=e.tx; py=e.ty; a=1; px+=Math.sin((now/1000)*0.5+e.born)*0.004; py+=Math.cos((now/1000)*0.6+e.born)*0.004;}
+      else{const k=ease((age-0.78)/0.22); px=e.tx+(e.ex-e.tx)*k; py=e.ty+(e.ey-e.ty)*k; a=Math.max(0,1-k);}
+      const x=px*W,y=py*H,z=e.sz*unit;
+      ctx.save(); ctx.translate(x,y); ctx.rotate(e.rot); ctx.globalAlpha=a;
+      ctx.fillStyle=e.c; ctx.strokeStyle=PAL.black; ctx.lineWidth=1.5;
+      if(e.kind==='bar'){const w=z*e.ratio,h=z*0.5; ctx.fillRect(-w/2,-h/2,w,h); if(e.c!==PAL.black) ctx.strokeRect(-w/2,-h/2,w,h);}
+      else if(e.kind==='sq'){ctx.fillRect(-z*0.7,-z*0.7,z*1.4,z*1.4); if(e.c!==PAL.black) ctx.strokeRect(-z*0.7,-z*0.7,z*1.4,z*1.4);}
+      else if(e.kind==='circ'){ctx.beginPath();ctx.arc(0,0,z*0.8,0,7);ctx.fill(); if(e.c!==PAL.black) ctx.stroke();}
+      else if(e.kind==='tri'){ctx.beginPath();ctx.moveTo(0,-z);ctx.lineTo(z*0.9,z*0.75);ctx.lineTo(-z*0.9,z*0.75);ctx.closePath();ctx.fill(); if(e.c!==PAL.black) ctx.stroke();}
+      else{const arm=z*1.1,th=z*0.32; ctx.fillRect(-arm,-th,2*arm,2*th); ctx.fillRect(-th,-arm,2*th,2*arm);}
+      ctx.restore();
+    }
+    elems=elems.filter(e=>!e.dead);
+  }
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  for(let i=0;i<4;i++){ spawn(); elems[elems.length-1].born=performance.now()-Math.random()*3000; }
+  S.ctx.fillStyle='#f0ece2'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ for(let i=0;i<30;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

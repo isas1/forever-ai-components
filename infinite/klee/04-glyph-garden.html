@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Glyph Garden — Paul Klee. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Glyph Garden</title>
+<style>
+  html,body{margin:0;height:100%;background:#efe7d6;overflow:hidden}
+  #kle04-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kle04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kle04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2620;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kle04-stage" role="img" aria-label="A Paul Klee glyph garden: childlike pictographs — fish, moon, arrow, little face, tree, star, boat — are drawn stroke by stroke by an unseen hand on warm paper, held, then gently erased so the garden may be re-sown.">
+  <canvas id="kle04-cv"></canvas>
+</div>
+<div class="kle04-cap">Glyph Garden</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('kle04-cv'); if(!cv) return;
+  const INK='#2a2620', HUES=['#c96f4a','#3a8a8c','#d9a441','#46566b','#7a4b6b'];
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const GLYPHS={
+    fish:[ [[-1,0],[-.3,-.5],[.5,-.5],[1,0],[.5,.5],[-.3,.5],[-1,0]],
+           [[1,0],[1.4,-.45]],[[1,0],[1.4,.45]],[[1.4,-.45],[1.4,.45]],[[-.15,-.05]] ],
+    moon:[ [[.5,-1],[-.2,-.7],[-.5,0],[-.2,.7],[.5,1],[.05,.6],[-.1,0],[.05,-.6],[.5,-1]] ],
+    arrow:[ [[-1,0],[1,0]],[[1,0],[.4,-.5]],[[1,0],[.4,.5]] ],
+    face:[ [[-.8,-.9],[.8,-.9],[.95,.6],[0,1.05],[-.95,.6],[-.8,-.9]],
+           [[-.4,-.2]],[[.4,-.2]],[[-.4,.45],[0,.6],[.4,.45]],[[0,-.5],[0,.1]] ],
+    tree:[ [[0,1],[0,-.2]],[[0,.4],[-.5,0]],[[0,.1],[.5,-.3]],
+           [[0,-.2],[-.4,-.7]],[[0,-.2],[.4,-.7]],[[0,-.2],[0,-.9]] ],
+    star:[ [[0,-1],[.23,-.31],[.95,-.31],[.36,.12],[.59,.81],[0,.38],[-.59,.81],[-.36,.12],[-.95,-.31],[-.23,-.31],[0,-1]] ],
+    boat:[ [[-1,.2],[1,.2],[.6,.7],[-.6,.7],[-1,.2]],[[0,.2],[0,-.9]],[[0,-.9],[.7,-.4],[0,-.25]] ]
+  };
+  const NAMES=Object.keys(GLYPHS);
+  let items=[];
+  function seed(){
+    items=[];
+    const cols=Math.max(2,Math.round(S.w/120));
+    const rows=Math.max(1,Math.round(S.h/120));
+    const cw=S.w/cols, ch=S.h/rows;
+    let k=0;
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      items.push({name:NAMES[(Math.random()*NAMES.length)|0], cx:cw*(c+0.5), cy:ch*(r+0.5),
+        sc:Math.min(cw,ch)*0.30, col:HUES[(c+r+k)%HUES.length],
+        prog:0, delay:k*0.5, phase:'draw', hold:0});
+      k++;
+    }
+  }
+  function strokeLen(s){ let L=0; for(let i=1;i<s.length;i++) L+=Math.hypot(s[i][0]-s[i-1][0], s[i][1]-s[i-1][1]); return L||0.001; }
+  function drawGlyph(it){
+    const g=GLYPHS[it.name];
+    S.ctx.save();S.ctx.translate(it.cx,it.cy);
+    S.ctx.lineWidth=2.4;S.ctx.lineJoin='round';S.ctx.lineCap='round';
+    const lens=g.map(strokeLen), total=lens.reduce((a,b)=>a+b,0);
+    let target=it.prog*total, consumed=0;
+    for(let si=0;si<g.length;si++){
+      const stroke=g[si];
+      if(stroke.length===1){
+        if(target>=consumed){ S.ctx.beginPath();
+          S.ctx.arc(stroke[0][0]*it.sc, stroke[0][1]*it.sc, 3.2, 0, 7);
+          S.ctx.fillStyle=INK;S.ctx.fill(); }
+        continue;
+      }
+      const sl=lens[si], remaining=target-consumed; consumed+=sl;
+      if(remaining<=0) break;
+      const need=Math.min(1, remaining/sl)*sl;
+      S.ctx.strokeStyle = (si===0)? it.col : INK;
+      S.ctx.beginPath(); let acc=0;
+      S.ctx.moveTo(stroke[0][0]*it.sc, stroke[0][1]*it.sc);
+      for(let i=1;i<stroke.length;i++){
+        const px=stroke[i][0]*it.sc, py=stroke[i][1]*it.sc;
+        const segLen=Math.hypot(stroke[i][0]-stroke[i-1][0], stroke[i][1]-stroke[i-1][1]);
+        if(acc+segLen<=need){ S.ctx.lineTo(px,py); acc+=segLen; }
+        else{ const f=Math.max(0,(need-acc)/segLen);
+          const lx=stroke[i-1][0]*it.sc + (px-stroke[i-1][0]*it.sc)*f;
+          const ly=stroke[i-1][1]*it.sc + (py-stroke[i-1][1]*it.sc)*f;
+          S.ctx.lineTo(lx,ly); break; }
+      }
+      S.ctx.stroke();
+    }
+    S.ctx.restore();
+  }
+  let last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    S.ctx.clearRect(0,0,S.w,S.h);
+    for(const it of items){
+      if(REDUCED){ it.prog=1; it.delay=0; }
+      else {
+        if(it.delay>0){ it.delay-=dt; }
+        else if(it.phase==='draw'){ it.prog+=dt*0.9;
+          if(it.prog>=1){ it.prog=1; it.phase='hold'; it.hold=1.4+Math.random()*1.2; } }
+        else if(it.phase==='hold'){ it.hold-=dt; if(it.hold<=0){ it.phase='erase'; } }
+        else { it.prog-=dt*1.4;
+          if(it.prog<=0){ it.prog=0; it.name=NAMES[(Math.random()*NAMES.length)|0];
+            it.col=HUES[(Math.random()*HUES.length)|0]; it.phase='draw'; it.delay=Math.random()*0.4; } }
+      }
+      S.ctx.globalAlpha = it.delay>0 ? 0 : Math.min(1, it.prog*1.6);
+      if(it.prog>0) drawGlyph(it);
+      S.ctx.globalAlpha=1;
+    }
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  seed();
+  S.ctx.fillStyle='#efe7d6';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); seed(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

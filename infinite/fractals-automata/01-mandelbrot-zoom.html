@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A slow escape-time Mandelbrot zoom into a filigree boundary seam in smooth violet-to-gold bands on near-black, with static vignette.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mandelbrot Zoom</title>
+<style>
+  :root{--fr01-bg:#06070b;--fr01-accent:#9b8cff}
+  html,body{margin:0;height:100%;background:var(--fr01-bg)}
+  .fr01-stage{position:fixed;inset:0;overflow:hidden;background:var(--fr01-bg)}
+  #fr01-c{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:auto;filter:saturate(1.04)}
+  /* STATIC glow + vignette — painted once, never animated */
+  .fr01-glow{position:absolute;inset:0;pointer-events:none;
+    background:
+      radial-gradient(120% 90% at 38% 44%,rgba(155,140,255,.16),transparent 58%),
+      radial-gradient(140% 120% at 50% 50%,transparent 52%,rgba(6,7,11,.78) 100%);
+    mix-blend-mode:screen}
+  .fr01-frame{position:absolute;inset:0;pointer-events:none;
+    box-shadow:inset 0 0 0 1px rgba(155,140,255,.10)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div class="fr01-stage" role="img" aria-label="A slow escape-time Mandelbrot fractal zooming into a filigree boundary seam, rendered in violet and gold smooth color bands.">
+    <canvas id="fr01-c"></canvas>
+    <div class="fr01-glow"></div>
+    <div class="fr01-frame"></div>
+    <div class="cap">Mandelbrot Zoom</div>
+  </div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('fr01-c');
+  var ctx = cv.getContext('2d', {alpha:false});
+  var stage = cv.parentNode;
+
+  // Seam target on the boundary (a filigree valley near the period-bulb).
+  var TX = -0.74364388703, TY = 0.13182590421;
+  var BASE = 3.0;            // starting view height in complex units
+  var MINS = 0.0009;         // deepest zoom (span) before reset
+  var MAXIT = 220;           // iteration cap
+
+  // Hard work cap: render into a fixed-size low-res offscreen buffer, then let the
+  // browser scale it up to the stage via CSS. Keeps per-frame compute bounded and
+  // independent of viewport size / DPR. ~MAXPIX pixels * MAXIT iters is the ceiling.
+  var MAXPIX = 96000;        // ~310x310 worth of cells, total, regardless of tile size
+  var STEP_MS = 1000/30;     // throttle escape-time recompute to ~30fps
+
+  var W=0,H=0,img=null,pix=null;
+  var LUT_R=new Uint8Array(2048),LUT_G=new Uint8Array(2048),LUT_B=new Uint8Array(2048);
+
+  // Palette LUT: violet -> indigo -> gold (movement palette around #9b8cff on #06070b).
+  (function(){
+    function lerp(a,b,t){return a+(b-a)*t;}
+    var stops=[[6,7,11],[40,30,92],[110,92,230],[155,140,255],[214,196,255],[255,214,140],[120,72,30]];
+    for(var i=0;i<2048;i++){
+      var t=i/2047, f=t*(stops.length-1), k=f|0, fr=f-k;
+      if(k>=stops.length-1){k=stops.length-2;fr=1;}
+      var a=stops[k],b=stops[k+1];
+      LUT_R[i]=lerp(a[0],b[0],fr)|0;
+      LUT_G[i]=lerp(a[1],b[1],fr)|0;
+      LUT_B[i]=lerp(a[2],b[2],fr)|0;
+    }
+  })();
+
+  function resize(){
+    // Fixed low-res buffer sized to the stage's aspect under a hard pixel budget.
+    var aspect=Math.max(0.2,Math.min(5,stage.clientWidth/Math.max(1,stage.clientHeight)));
+    // W*H <= MAXPIX with W/H == aspect  =>  H = sqrt(MAXPIX/aspect)
+    H=Math.max(1,Math.round(Math.sqrt(MAXPIX/aspect)));
+    W=Math.max(1,Math.round(H*aspect));
+    cv.width=W;cv.height=H;          // backing store; CSS stretches it to the stage
+    img=ctx.createImageData(W,H);
+    // Cache a Uint32 view directly over the ImageData's backing buffer — written
+    // into in-place each frame, so the rAF loop never allocates.
+    pix=new Uint32Array(img.data.buffer);
+  }
+
+  var LOG2=Math.log(2);
+  // Render one frame at view height `span` centered on target. Allocation-free.
+  function render(span){
+    var aspect=W/H;
+    var halfH=span*0.5, halfW=halfH*aspect;
+    var x0=TX-halfW, y0=TY-halfH;
+    var dx=(2*halfW)/W, dy=(2*halfH)/H;
+    var maxit=MAXIT, esc=256.0; // larger escape radius => smoother continuous index
+    var p=0, cy=y0;
+    for(var py=0; py<H; py++){
+      var cx=x0;
+      for(var px=0; px<W; px++){
+        var zr=0.0, zi=0.0, zr2=0.0, zi2=0.0, it=0;
+        while(zr2+zi2<=esc && it<maxit){
+          zi=2.0*zr*zi+cy;
+          zr=zr2-zi2+cx;
+          zr2=zr*zr; zi2=zi*zi;
+          it++;
+        }
+        var col;
+        if(it>=maxit){
+          col=0xff000000|(11<<16)|(7<<8)|6; // interior = bg (ABGR)
+        }else{
+          // smooth (continuous) iteration count
+          var nu=it+1-Math.log(Math.log(zr2+zi2)*0.5)/LOG2;
+          var idx=((nu*22.0)%2048+2048)%2048|0;
+          col=0xff000000|(LUT_B[idx]<<16)|(LUT_G[idx]<<8)|LUT_R[idx];
+        }
+        pix[p++]=col;
+        cx+=dx;
+      }
+      cy+=dy;
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  var running=true, raf=0;
+  var span=BASE, last=0;
+  function frame(ts){
+    if(running)raf=requestAnimationFrame(frame);
+    // Throttle the escape-time recompute to a sane step rate.
+    if(ts-last<STEP_MS) return;
+    last=ts;
+    // ~26s per octave-ish zoom cycle; geometric decay then snap-reset.
+    span*=0.9885;
+    if(span<MINS)span=BASE;
+    render(span);
+  }
+
+  function start(){ if(!raf){last=0;raf=requestAnimationFrame(frame);} }
+  function stop(){ if(raf){cancelAnimationFrame(raf);raf=0;} }
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){running=false;stop();}
+    else if(!reduce){running=true;start();}
+  });
+
+  window.addEventListener('resize',function(){
+    resize();
+    if(reduce)render(span);
+  },{passive:true});
+
+  resize();
+  if(reduce){ render(BASE*0.13); return; } // one static, deep, legible frame
+  start();
+})();
+</script>
+</body>
+</html>

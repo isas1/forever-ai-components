@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Woodblock scene of diagonal rain falling over flat indigo and coral hill bands above a village silhouette under a cream bokashi sky.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rain Lines</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  #uk02-stage{position:fixed;inset:0;width:100%;height:100%}
+  #uk02-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#e8d5b0;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="uk02-stage" role="img" aria-label="A stylised Japanese woodblock scene of diagonal rain falling over flat indigo and coral hillside bands above a low village silhouette, beneath a cream bokashi sky.">
+  <canvas id="uk02-c"></canvas>
+</div>
+<div class="cap">Rain Lines</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("uk02-c"), ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,dpr=1,running=false,raf=0,t=0;
+
+  // ukiyo-e palette: indigo / cream / coral
+  var SKY_TOP="#f0e3c6", SKY_LOW="#e8d5b0", CORAL="#d97a55", CORAL_D="#b85a3e",
+      HILL1="#2f5e86", HILL2="#1c3a5e", HILL3="#102438", VILLAGE="#0c151f",
+      RAIN="#dfe9f0", INK="#0a121b", MOON="#f3ead4";
+
+  // diagonal rain streaks (<=110): normalized x, vertical position, length, speed, alpha
+  var N=96, rx=new Float32Array(N), ry=new Float32Array(N),
+      rl=new Float32Array(N), rs=new Float32Array(N), ra=new Float32Array(N);
+  function seedRain(){
+    for(var i=0;i<N;i++){
+      rx[i]=Math.random();
+      ry[i]=Math.random();
+      rl[i]=0.06+Math.random()*0.08;       // streak length, fraction of H
+      rs[i]=0.45+Math.random()*0.55;       // fall speed factor
+      ra[i]=0.3+Math.random()*0.5;         // opacity
+    }
+  }
+  seedRain();
+
+  // village rooflines: deterministic peaks across the base
+  var M=9, vx=new Float32Array(M), vh=new Float32Array(M);
+  for(var j=0;j<M;j++){ vx[j]=j/(M-1); vh[j]=0.5+((j*7)%5)/5*0.5; }
+
+  var SLOPE=0.34; // rain slant (x drift per unit fall)
+
+  function resize(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function drawSky(){
+    // bokashi: cream graded down toward warm sand
+    var g=ctx.createLinearGradient(0,0,0,H*0.62);
+    g.addColorStop(0,SKY_TOP); g.addColorStop(1,SKY_LOW);
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // pale flat moon disc, upper right
+    ctx.fillStyle=MOON;
+    ctx.beginPath(); ctx.arc(W*0.74,H*0.20,Math.min(W,H)*0.10,0,6.2832); ctx.fill();
+  }
+
+  // flat color band with bold ink edge; crest is a gentle hill curve
+  function drawHill(yBase,amp,phase,fill){
+    ctx.beginPath();
+    ctx.moveTo(0,H);
+    var steps=26,k,nx,x,y;
+    for(k=0;k<=steps;k++){
+      nx=k/steps; x=nx*W;
+      y=yBase + Math.sin(nx*3.4+phase)*amp + Math.cos(nx*1.7+phase)*amp*0.4;
+      ctx.lineTo(x,y);
+    }
+    ctx.lineTo(W,H); ctx.closePath();
+    ctx.fillStyle=fill; ctx.fill();
+    // bold woodblock edge along the crest
+    ctx.lineJoin="round"; ctx.lineCap="round";
+    ctx.strokeStyle=INK; ctx.lineWidth=Math.max(1.5,Math.min(W,H)*0.008);
+    ctx.beginPath();
+    for(k=0;k<=steps;k++){
+      nx=k/steps; x=nx*W;
+      y=yBase + Math.sin(nx*3.4+phase)*amp + Math.cos(nx*1.7+phase)*amp*0.4;
+      if(k===0)ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  // village silhouette: blocky roofs along the lowest band
+  function drawVillage(){
+    var base=H*0.88, roof=H*0.07;
+    ctx.fillStyle=VILLAGE;
+    ctx.beginPath();
+    ctx.moveTo(0,H);
+    ctx.lineTo(0,base);
+    var j,cx,h,w=W/(M-1);
+    for(j=0;j<M;j++){
+      cx=vx[j]*W; h=base-roof*vh[j];
+      ctx.lineTo(cx-w*0.32,base);     // wall up
+      ctx.lineTo(cx-w*0.32,h+roof*0.4*vh[j]);
+      ctx.lineTo(cx,h);               // ridge peak
+      ctx.lineTo(cx+w*0.32,h+roof*0.4*vh[j]);
+      ctx.lineTo(cx+w*0.32,base);
+    }
+    ctx.lineTo(W,base); ctx.lineTo(W,H); ctx.closePath();
+    ctx.fill();
+  }
+
+  function scene(){
+    drawSky();
+    // coral accent ridge behind, then indigo bands stacking forward
+    drawHill(H*0.50,H*0.020,0.0,CORAL);
+    drawHill(H*0.55,H*0.026,1.3,CORAL_D);
+    drawHill(H*0.62,H*0.030,2.4,HILL1);
+    drawHill(H*0.71,H*0.034,0.7,HILL2);
+    drawHill(H*0.80,H*0.030,3.1,HILL3);
+    drawVillage();
+  }
+
+  function drawRain(){
+    var lw=Math.max(1,Math.min(W,H)*0.004);
+    ctx.lineWidth=lw; ctx.lineCap="round"; ctx.strokeStyle=RAIN;
+    var i,x,y,len,dx,dy;
+    for(i=0;i<N;i++){
+      x=rx[i]*W;
+      y=ry[i]*H;
+      len=rl[i]*H;
+      dx=len*SLOPE; dy=len;
+      ctx.globalAlpha=ra[i];
+      ctx.beginPath();
+      ctx.moveTo(x,y);
+      ctx.lineTo(x-dx,y-dy);  // streak trails up-left from its falling head
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function step(){
+    // advance each streak down-right; wrap when off bottom
+    var i;
+    for(i=0;i<N;i++){
+      ry[i]+=rs[i]*0.018;
+      rx[i]+=rs[i]*0.018*SLOPE;
+      if(ry[i]>1.12){ ry[i]=-0.12; rx[i]=Math.random(); }
+      if(rx[i]>1.12){ rx[i]-=1.24; }
+    }
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    scene();
+    drawRain();
+  }
+
+  function loop(){
+    if(!running) return;
+    step();
+    render();
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){ if(running)return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    resize();
+    if(reduce){ render(); return; }   // one static legible frame, no loop
+    start();
+  }
+
+  window.addEventListener("resize",function(){ resize(); if(reduce)render(); },{passive:true});
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

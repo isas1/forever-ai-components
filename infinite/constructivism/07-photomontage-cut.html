@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Red, black and white rectangular cut-outs, halftone photo blocks and a slab MONTAGE title slide along a diagonal grid then hold.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Montage Cut</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0c0d;overflow:hidden}
+  #cv07-stage{position:fixed;inset:0;background:#0c0c0d}
+  #cv07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="cv07-stage" role="img" aria-label="Constructivist photomontage: rectangular cut-outs sliding into a diagonal grid in red, black and white">
+  <canvas id="cv07-c"></canvas>
+</div>
+<div class="cap">Montage Cut</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("cv07-stage");
+  var cv=document.getElementById("cv07-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var RED="#d11f1f",BLK="#0c0c0d",WHT="#f3efe6",INK="#161616";
+
+  // Montage cut definitions (normalized 0..1 layout in a 4x3 grid feel).
+  // type: 0 halftone block, 1 solid red, 2 white slab, 3 ink bar, 4 diagonal red wedge.
+  // Each slides from an off-stage origin angle to its home along a Constructivist diagonal.
+  var N=11;
+  var hx=new Float32Array(N), hy=new Float32Array(N), hw=new Float32Array(N), hh=new Float32Array(N);
+  var ang=new Float32Array(N), typ=new Int8Array(N), dly=new Float32Array(N), rot=new Float32Array(N);
+  function def(i,x,y,w,h,a,t,d,r){hx[i]=x;hy[i]=y;hw[i]=w;hh[i]=h;ang[i]=a;typ[i]=t;dly[i]=d;rot[i]=r;}
+  def(0,.06,.10,.40,.30, 180,0,.00,-4);   // big halftone top-left
+  def(1,.50,.06,.44,.20,  90,3,.12, 0);    // ink bar top
+  def(2,.50,.30,.30,.26,   0,1,.24, 5);    // red block
+  def(3,.82,.30,.16,.40, 270,2,.34, 0);    // white vertical slab right
+  def(4,.06,.46,.24,.30, 200,0,.30, 6);    // halftone mid-left
+  def(5,.34,.52,.22,.22, -30,4,.42, 0);    // red wedge
+  def(6,.06,.80,.50,.16, 160,3,.50, 0);    // ink bar bottom
+  def(7,.62,.58,.32,.20,  30,0,.46,-7);    // halftone mid-right
+  def(8,.62,.82,.20,.14, 250,1,.58, 0);    // small red bottom
+  def(9,.30,.30,.16,.16,  60,2,.20, 0);    // white square center
+  def(10,.86,.74,.12,.20, 320,0,.54, 8);   // halftone tiny
+
+  var W=0,H=0,S=0,OX=0,OY=0,dpr=1;
+  function resize(){
+    var r=stage.getBoundingClientRect();
+    W=r.width;H=r.height;
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.max(1,(W*dpr)|0);
+    cv.height=Math.max(1,(H*dpr)|0);
+    S=Math.min(W,H);
+    OX=(W-S)/2;OY=(H-S)/2;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  // ease: sharp constructivist snap — fast in, hard settle
+  function ek(t){ if(t<=0)return 0; if(t>=1)return 1; var u=1-t; return 1-u*u*u; }
+
+  function px(v){return OX+v*S;}
+  function py(v){return OY+v*S;}
+
+  function drawHalftone(x,y,w,h,al){
+    // static-feeling dotted texture drawn fresh but cheap; dots in a fixed lattice.
+    ctx.save();
+    ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+    ctx.fillStyle=INK;ctx.fillRect(x,y,w,h);
+    var step=Math.max(5,S*0.018);
+    ctx.fillStyle=WHT;
+    ctx.globalAlpha=al*0.9;
+    for(var gy=y;gy<y+h;gy+=step){
+      for(var gx=x;gx<x+w;gx+=step){
+        // radius grows toward bottom-right => directional shading (montage)
+        var fx=(gx-x)/w, fy=(gy-y)/h;
+        var rad=step*0.16+ (fx+fy)*step*0.20;
+        ctx.beginPath();ctx.arc(gx+step*0.5,gy+step*0.5,rad,0,6.2832);ctx.fill();
+      }
+    }
+    ctx.globalAlpha=al;
+    // a slashing red accent line across the photo block
+    ctx.strokeStyle=RED;ctx.lineWidth=Math.max(2,S*0.012);
+    ctx.beginPath();ctx.moveTo(x,y+h*0.72);ctx.lineTo(x+w,y+h*0.30);ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawWedge(x,y,w,h,al){
+    ctx.save();ctx.globalAlpha=al;ctx.fillStyle=RED;
+    ctx.beginPath();ctx.moveTo(x,y+h);ctx.lineTo(x+w,y);ctx.lineTo(x+w,y+h);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPiece(i,p){
+    // p: appearance progress 0..1
+    var e=ek(p);
+    var x=px(hx[i]),y=py(hy[i]),w=hw[i]*S,h=hh[i]*S;
+    // slide-in offset along the piece's diagonal angle
+    var a=ang[i]*Math.PI/180;
+    var travel=(1-e)*S*0.85;
+    var dx=Math.cos(a)*travel, dy=Math.sin(a)*travel;
+    var cx=x+w/2, cy=y+h/2;
+    var rr=(1-e)*rot[i]*Math.PI/180;
+    ctx.save();
+    ctx.globalAlpha=Math.min(1,e*1.4);
+    ctx.translate(cx+dx,cy+dy);
+    ctx.rotate(rr);
+    ctx.translate(-cx,-cy);
+    var t=typ[i];
+    if(t===0) drawHalftone(x,y,w,h,1);
+    else if(t===4) drawWedge(x,y,w,h,1);
+    else{
+      ctx.fillStyle = t===1?RED : t===2?WHT : INK;
+      ctx.fillRect(x,y,w,h);
+      if(t===2){ // white slab gets thin red edge
+        ctx.fillStyle=RED;ctx.fillRect(x,y,w,Math.max(2,S*0.012));
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawDiag(){
+    // the dominant red diagonal bar that anchors the whole montage
+    ctx.save();
+    var bw=S*0.085;
+    ctx.translate(px(0.5),py(0.5));
+    ctx.rotate(-32*Math.PI/180);
+    ctx.fillStyle=RED;
+    ctx.fillRect(-S*0.85,-bw/2,S*1.7,bw);
+    // black hairlines for register-cut feel
+    ctx.fillStyle=BLK;
+    ctx.fillRect(-S*0.85,-bw/2,S*1.7,Math.max(1,S*0.006));
+    ctx.fillRect(-S*0.85,bw/2-Math.max(1,S*0.006),S*1.7,Math.max(1,S*0.006));
+    ctx.restore();
+  }
+
+  function drawType(){
+    // bold slab title fragment, Constructivist propaganda stack
+    ctx.save();
+    ctx.fillStyle=WHT;
+    var fs=S*0.115;
+    ctx.font="900 "+fs+"px Arial Black, Impact, sans-serif";
+    ctx.textBaseline="alphabetic";
+    ctx.translate(px(0.085),py(0.40));
+    ctx.rotate(-4*Math.PI/180);
+    ctx.fillText("MON",0,0);
+    ctx.fillStyle=RED;
+    ctx.fillText("TAGE",0,fs*0.92);
+    ctx.restore();
+  }
+
+  function frame(g){
+    // g global progress 0..1 (assembly), then a slow breathing diagonal hold
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle=BLK;ctx.fillRect(0,0,W,H);
+    // pieces assemble staggered by delay
+    for(var i=0;i<N;i++){
+      var local=(g-dly[i])/0.34;
+      if(local<0)local=0; if(local>1)local=1;
+      if(local>0) drawPiece(i,local);
+    }
+    if(g>0.55) drawType();
+    drawDiag();
+  }
+
+  var start=0, running=true, raf=0;
+  var CYCLE=4200, HOLD=2200; // assemble then hold, then loop
+  function loop(now){
+    if(!running)return;
+    if(!start)start=now;
+    var t=(now-start)%(CYCLE+HOLD);
+    var g = t<CYCLE ? t/CYCLE : 1;
+    frame(g);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function init(){
+    resize();
+    if(reduce){ frame(1); return; }
+    raf=requestAnimationFrame(loop);
+  }
+
+  window.addEventListener("resize",function(){ resize(); if(reduce) frame(1); },{passive:true});
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; start=0; raf=requestAnimationFrame(loop); }
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

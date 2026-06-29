@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Red and black slab bars carrying propaganda words radiate and rotate at staggered speeds from an off-center hub on black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rotodynamic</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0c0d;overflow:hidden}
+  #cv03-stage{position:fixed;inset:0;background:#0c0c0d}
+  #cv03-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="cv03-stage" role="img" aria-label="Constructivist composition: bold red and black slab-typography bars radiating and rotating from an off-center hub on black, in the style of Rodchenko">
+  <canvas id="cv03-c"></canvas>
+</div>
+<div class="cap">Rotodynamic</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("cv03-stage");
+  var cv=document.getElementById("cv03-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // palette — constructivist red/black/white + a paper bone
+  var RED="#d11f1f", INK="#0c0c0d", BONE="#ece6d8", WHT="#f4f1ea";
+
+  // radial "spokes": each a slab bar at a base angle, with its own angular rate.
+  // word slabs evoke propaganda type without copying any work.
+  var WORDS=["ROTO","DYNAMO","KINO","AGIT","TEMPO","FORCE","RADIO","MASS","SVET","UDAR"];
+  var N=18, spokeAng=new Float32Array(N), spokeRate=new Float32Array(N),
+      spokeLen=new Float32Array(N), spokeW=new Float32Array(N),
+      spokeType=new Uint8Array(N); // 0 bar,1 word,2 thin line
+  (function seed(){
+    for(var i=0;i<N;i++){
+      spokeAng[i]=(i/N)*Math.PI*2 + (i%3)*0.13;
+      var dir=(i%2)?1:-1;
+      spokeRate[i]=dir*(0.10+ (i%4)*0.045);   // staggered velocities
+      spokeLen[i]=0.42+ ((i*7)%5)/5*0.5;        // fraction of radius
+      spokeW[i]=(i%5===0)?0.40:(i%2?0.16:0.085);// slab thickness fraction
+      spokeType[i]=(i%5===0)?1:(i%3===0?2:0);
+    }
+  })();
+
+  var W=0,H=0,DPR=1,R=0,cx=0,cy=0,tBase=0;
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W*0.40; cy=H*0.46;                      // off-center hub (Rodchenko tension)
+    R=Math.hypot(Math.max(cx,W-cx),Math.max(cy,H-cy))*1.05;
+    tBase=Math.max(11,Math.min(34,R*0.10));    // slab type size
+  }
+
+  function spoke(ang,len,wfrac,type,idx){
+    var L=R*len, th=Math.max(3,R*wfrac);
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(ang);
+    if(type===2){ // thin radial line
+      ctx.fillStyle=(idx%2)?RED:BONE;
+      ctx.fillRect(R*0.10,-Math.max(1.5,th*0.18),L,Math.max(2.4,th*0.36));
+    } else if(type===1){ // red slab carrying a word
+      ctx.fillStyle=RED;
+      ctx.fillRect(R*0.06,-th/2,L,th);
+      // white tick at the far end — typographic punctuation
+      ctx.fillStyle=WHT;
+      ctx.fillRect(R*0.06+L-th*0.55,-th/2,th*0.55,th);
+      // word
+      var w=WORDS[idx%WORDS.length];
+      ctx.fillStyle=WHT;
+      ctx.font="800 "+tBase+"px Helvetica,Arial,sans-serif";
+      ctx.textBaseline="middle";
+      ctx.textAlign="left";
+      // keep glyphs upright-ish on the left half by flipping
+      var flip=Math.cos(ang)<0;
+      if(flip){ ctx.save(); ctx.scale(-1,-1); ctx.fillText(w,-(R*0.06+L-th*0.5),0); ctx.restore(); }
+      else ctx.fillText(w,R*0.10,0);
+    } else { // bone/ink slab bar
+      ctx.fillStyle=(idx%4===1)?INK:BONE;
+      ctx.fillRect(R*0.08,-th/2,L,th);
+      ctx.fillStyle=RED;                       // red cap
+      ctx.fillRect(R*0.08,-th/2,th*0.7,th);
+    }
+    ctx.restore();
+  }
+
+  // static suprematist accents that do NOT rotate (anchor the frame)
+  function accents(){
+    // big black wedge lower-right
+    ctx.fillStyle=INK;
+    ctx.beginPath();
+    ctx.moveTo(W*1.02,H*0.58);
+    ctx.lineTo(W*1.02,H*1.04);
+    ctx.lineTo(W*0.46,H*1.04);
+    ctx.closePath();
+    ctx.fill();
+    // red bar across top-left, the propaganda banner
+    ctx.fillStyle=RED;
+    ctx.save();
+    ctx.translate(W*0.06,H*0.10);
+    ctx.rotate(-0.18);
+    ctx.fillRect(0,0,W*0.5,Math.max(7,H*0.035));
+    ctx.restore();
+    // bone disc at hub
+    ctx.fillStyle=BONE;
+    ctx.beginPath();
+    ctx.arc(cx,cy,Math.max(5,R*0.045),0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle=RED;
+    ctx.beginPath();
+    ctx.arc(cx,cy,Math.max(2.4,R*0.02),0,Math.PI*2);
+    ctx.fill();
+  }
+
+  function frame(t){
+    ctx.fillStyle=INK;
+    ctx.fillRect(0,0,W,H);
+    // rotating spokes — drawn back-to-front by length so slabs layer cleanly
+    for(var i=0;i<N;i++){
+      var a=spokeAng[i]+t*spokeRate[i];
+      spoke(a,spokeLen[i],spokeW[i],spokeType[i],i);
+    }
+    accents();
+  }
+
+  var running=false,raf=0,start=0;
+  function loop(now){
+    if(!running)return;
+    if(!start)start=now;
+    frame((now-start)/1000);
+    raf=requestAnimationFrame(loop);
+  }
+  function play(){ if(running||reduce)return; running=true; start=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size();
+    if(reduce){ frame(0.55); return; } // one strong diagonal static frame
+    play();
+  }
+
+  var rt;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ size(); if(reduce)frame(0.55); },120);
+  });
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden)stop(); else play();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

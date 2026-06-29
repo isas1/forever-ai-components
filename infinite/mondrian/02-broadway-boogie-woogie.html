@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Broadway Boogie Woogie — Piet Mondrian. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Broadway Boogie Woogie</title>
+<style>
+  html,body{margin:0;height:100%;background:#f7f4ec;overflow:hidden}
+  #mon02-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mon02-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mon02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#15110d;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mon02-stage" role="img" aria-label="A grid of avenues where streams of coloured squares pulse along the lines like New York traffic, blinking at the intersections.">
+  <canvas id="mon02-cv"></canvas>
+</div>
+<div class="mon02-cap">Broadway Boogie Woogie</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mon02-cv'); if(!cv) return;
+  const C={white:'#f7f4ec',black:'#15110d',red:'#d6191e',blue:'#1d3bd1',yellow:'#f6c700'};
+  const PAL=[C.yellow,C.red,C.blue];
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h};
+  }
+  const clamp=(v,a,b)=>v<a?a:v>b?b:v, rand=(a,b)=>a+Math.random()*(b-a), choice=a=>a[(Math.random()*a.length)|0];
+
+  let S=fitCanvas(cv),cols,rows,runners=[],blinks=[],last=performance.now();
+  const gap=30,band=11;
+  function spawnRunner(dir,pos){
+    const n=2+(Math.random()*3|0);
+    for(let k=0;k<n;k++)runners.push({dir,pos,t:Math.random(),speed:rand(.04,.11)/100*(REDUCED?.4:1),len:rand(8,15),c:choice(PAL)});
+  }
+  function setup(){
+    S=fitCanvas(cv);const W=S.w,H=S.h;
+    cols=[];rows=[];
+    for(let x=gap;x<W-10;x+=gap)cols.push(x);
+    for(let y=gap;y<H-10;y+=gap)rows.push(y);
+    runners=[];
+    cols.forEach((x,i)=>{if(i%2===0)spawnRunner('v',x);});
+    rows.forEach((y,i)=>{if(i%2===1)spawnRunner('h',y);});
+    blinks=[];
+    cols.forEach(x=>rows.forEach(y=>{if(Math.random()<.18)blinks.push({x,y,c:choice(PAL),p:Math.random()});}));
+  }
+  function draw(){
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle=C.white;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#e9e6dc';
+    cols.forEach(x=>ctx.fillRect(x-band/2,0,band,H));
+    rows.forEach(y=>ctx.fillRect(0,y-band/2,W,band));
+    ctx.fillStyle=C.yellow;
+    cols.forEach((x,i)=>{if(i%3===0)ctx.fillRect(x-2,0,4,H);});
+    rows.forEach((y,i)=>{if(i%3===1)ctx.fillRect(0,y-2,W,4);});
+    runners.forEach(r=>{
+      r.t+=r.speed;if(r.t>1.2)r.t=-0.2;
+      const span=(r.dir==='v'?H:W),head=r.t*span;
+      for(let s=0;s<3;s++){
+        const off=head-s*r.len*1.6,a=1-s*0.3;
+        ctx.globalAlpha=clamp(a,0,1);ctx.fillStyle=r.c;
+        if(r.dir==='v')ctx.fillRect(r.pos-band/2,off,band,r.len);
+        else ctx.fillRect(off,r.pos-band/2,r.len,band);
+      }
+      ctx.globalAlpha=1;
+    });
+    blinks.forEach(b=>{
+      b.p+=REDUCED?0.004:0.02;
+      const on=(Math.sin(b.p*Math.PI*2)>0),sz=13;
+      ctx.fillStyle=on?b.c:C.white;ctx.fillRect(b.x-sz/2,b.y-sz/2,sz,sz);
+      ctx.strokeStyle=C.black;ctx.lineWidth=1;ctx.strokeRect(b.x-sz/2+.5,b.y-sz/2+.5,sz-1,sz-1);
+    });
+  }
+
+  let raf=0,running=false;
+  function loop(){if(!running)return;draw();raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  setup();
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{setup();if(REDUCED)draw();},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else start();});
+
+  if(REDUCED){draw();}
+  else start();
+})();
+</script>
+</body>
+</html>

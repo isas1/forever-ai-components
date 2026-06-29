@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A white-on-black square grid warps outward as an invisible sphere bulges through the surface with faint moire shimmer.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bulge Grid</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a}
+  #op02-stage{position:fixed;inset:0;background:#0a0a0a;overflow:hidden}
+  #op02-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="op02-stage" role="img" aria-label="An op-art square grid of white lines on black, warping outward as if an invisible sphere pushes through the surface, with subtle moire shimmer.">
+    <canvas id="op02-c"></canvas>
+  </div>
+  <div class="cap">Bulge Grid</div>
+
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('op02-stage');
+  var cv=document.getElementById('op02-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  var W=0,H=0,DPR=1,cx=0,cy=0,R=0;
+  // grid resolution: lines per axis (cells). Kept modest.
+  var N=22;                 // intersections per axis
+  var px=new Float32Array((N+1)*(N+1)); // warped x
+  var py=new Float32Array((N+1)*(N+1)); // warped y
+  var idx=function(i,j){return j*(N+1)+i;};
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2; cy=H/2;
+    R=Math.min(W,H)*0.34;     // bulge radius
+  }
+
+  // Build warped grid into px/py given phase t and bulge strength b.
+  // Each base node displaces radially outward by a smooth lens function.
+  function build(t,b){
+    var min=Math.min(W,H), span=min*0.92;
+    var ox=cx-span/2, oy=cy-span/2, step=span/N;
+    // sphere center drifts slowly on a small lissajous so the bulge "moves through"
+    var scx=cx+Math.cos(t*0.6)*min*0.10;
+    var scy=cy+Math.sin(t*0.47)*min*0.10;
+    var R2=R*R;
+    for(var j=0;j<=N;j++){
+      for(var i=0;i<=N;i++){
+        var bx=ox+i*step, by=oy+j*step;
+        var dx=bx-scx, dy=by-scy;
+        var d2=dx*dx+dy*dy;
+        var k=idx(i,j);
+        if(d2<R2){
+          var d=Math.sqrt(d2);
+          // dome height -> apparent magnification; cosine falloff (smooth, seizure-safe)
+          var f=Math.cos((d/R)*Math.PI*0.5);   // 1 at center -> 0 at rim
+          var mag=1+b*f*f*1.35;                // radial magnification
+          // breathing shimmer for moire (tiny)
+          var sh=1+0.012*Math.sin(d*0.06 - t*2.0);
+          px[k]=scx+dx*mag*sh;
+          py[k]=scy+dy*mag*sh;
+        }else{
+          px[k]=bx; py[k]=by;
+        }
+      }
+    }
+  }
+
+  function strokeGrid(){
+    ctx.lineWidth=1;
+    ctx.strokeStyle='#fff';
+    // horizontal lines (rows)
+    var i,j,k;
+    ctx.beginPath();
+    for(j=0;j<=N;j++){
+      k=idx(0,j);
+      ctx.moveTo(px[k],py[k]);
+      for(i=1;i<=N;i++){k=idx(i,j);ctx.lineTo(px[k],py[k]);}
+    }
+    // vertical lines (cols)
+    for(i=0;i<=N;i++){
+      k=idx(i,0);
+      ctx.moveTo(px[k],py[k]);
+      for(j=1;j<=N;j++){k=idx(i,j);ctx.lineTo(px[k],py[k]);}
+    }
+    ctx.stroke();
+  }
+
+  function frame(t,b){
+    ctx.fillStyle='#0a0a0a';
+    ctx.fillRect(0,0,W,H);
+    build(t,b);
+    // back grid (offset twin) creates moire interference — faint
+    ctx.globalAlpha=0.28;
+    ctx.save();
+    ctx.translate(0.9,0.9);
+    strokeGrid();
+    ctx.restore();
+    // main grid
+    ctx.globalAlpha=0.82;
+    strokeGrid();
+    // bright rim ring at the lens edge (static-feeling, drawn each frame, no filter)
+    ctx.globalAlpha=0.5;
+    ctx.lineWidth=1.4;
+    ctx.beginPath();
+    var min=Math.min(W,H);
+    var scx=cx+Math.cos(t*0.6)*min*0.10;
+    var scy=cy+Math.sin(t*0.47)*min*0.10;
+    ctx.arc(scx,scy,R*0.985,0,Math.PI*2);
+    ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+
+  var running=false,raf=0,t0=0;
+  function loop(now){
+    if(!running)return;
+    if(!t0)t0=now;
+    var t=(now-t0)/1000;
+    // bulge gently breathes between two depths — slow, never strobing
+    var b=0.55+0.45*(0.5-0.5*Math.cos(t*0.9));
+    frame(t,b);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){if(running)return;running=true;t0=0;raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  function init(){
+    size();
+    if(reduce){frame(2.4,0.9);return;}  // one settled, dimensional frame
+    start();
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){
+      var was=running; if(was)stop();
+      size();
+      if(reduce){frame(2.4,0.9);} else {start();}
+    },120);
+  });
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden)stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

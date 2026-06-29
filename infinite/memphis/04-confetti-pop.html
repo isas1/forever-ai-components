@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Geometric confetti shapes (dots, zigzags, triangles, bars, pluses) burst upward and fall with gravity in repeating pops on deep plum.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Confetti Pop</title>
+<style>
+  html,body{margin:0;height:100%;background:#141019;overflow:hidden}
+  #mp04-stage{position:fixed;inset:0;background:#141019}
+  #mp04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="mp04-stage" role="img" aria-label="Memphis-style geometric confetti popping in playful bursts against deep plum">
+  <canvas id="mp04-c"></canvas>
+</div>
+<div class="cap">Confetti Pop</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("mp04-c"),ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var dpr=Math.min(2,window.devicePixelRatio||1);
+  var W=0,H=0,run=true,raf=0,t0=0;
+
+  // Memphis palette around #36d6c3 accent on #141019
+  var COL=["#36d6c3","#ff5e8a","#ffd23f","#7b6cff","#ff8a3d","#f4f1ea"];
+  // shape kinds: 0 dot, 1 zigzag, 2 squiggle, 3 triangle, 4 bar, 5 plus
+  var N=104;
+  var px=new Float32Array(N),py=new Float32Array(N),vx=new Float32Array(N),vy=new Float32Array(N);
+  var rot=new Float32Array(N),vr=new Float32Array(N),sz=new Float32Array(N);
+  var kind=new Uint8Array(N),col=new Uint8Array(N),life=new Float32Array(N),ttl=new Float32Array(N);
+  var burstX=0,burstY=0,nextBurst=0,seed=1234;
+  function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;}
+
+  function spawn(i,ox,oy){
+    var a=rnd()*6.2832, sp=(0.6+rnd()*2.6);
+    px[i]=ox; py[i]=oy;
+    vx[i]=Math.cos(a)*sp; vy[i]=Math.sin(a)*sp-1.4;
+    rot[i]=rnd()*6.2832; vr[i]=(rnd()-0.5)*0.22;
+    sz[i]=6+rnd()*14; kind[i]=(rnd()*6)|0; col[i]=(rnd()*COL.length)|0;
+    ttl[i]=70+rnd()*70; life[i]=ttl[i];
+  }
+  function burst(){
+    burstX=W*(0.22+rnd()*0.56); burstY=H*(0.32+rnd()*0.4);
+    var k=18+((rnd()*14)|0);
+    for(var n=0;n<k;n++){
+      // recycle the most-dead particle
+      var idx=-1,lo=1e9;
+      for(var i=0;i<N;i++){ if(life[i]<lo){lo=life[i];idx=i;} }
+      spawn(idx,burstX,burstY);
+    }
+  }
+
+  function resize(){
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,(W*dpr)|0); cv.height=Math.max(1,(H*dpr)|0);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function clearBg(){
+    ctx.fillStyle="#141019"; ctx.fillRect(0,0,W,H);
+    // static terrazzo speckle backdrop (drawn each frame, no layout reads, cheap)
+  }
+
+  function shape(k,s,c){
+    ctx.fillStyle=c; ctx.strokeStyle=c;
+    if(k===0){ ctx.beginPath(); ctx.arc(0,0,s*0.5,0,6.2832); ctx.fill(); }
+    else if(k===1){ ctx.lineWidth=s*0.22; ctx.lineCap="round"; ctx.beginPath();
+      ctx.moveTo(-s*0.6,-s*0.3); ctx.lineTo(-s*0.2,s*0.3); ctx.lineTo(s*0.2,-s*0.3); ctx.lineTo(s*0.6,s*0.3); ctx.stroke(); }
+    else if(k===2){ ctx.lineWidth=s*0.2; ctx.lineCap="round"; ctx.beginPath();
+      ctx.moveTo(-s*0.6,0); ctx.quadraticCurveTo(-s*0.3,-s*0.6,0,0); ctx.quadraticCurveTo(s*0.3,s*0.6,s*0.6,0); ctx.stroke(); }
+    else if(k===3){ ctx.beginPath(); ctx.moveTo(0,-s*0.55); ctx.lineTo(s*0.5,s*0.45); ctx.lineTo(-s*0.5,s*0.45); ctx.closePath(); ctx.fill(); }
+    else if(k===4){ ctx.fillRect(-s*0.55,-s*0.18,s*1.1,s*0.36); }
+    else { ctx.fillRect(-s*0.12,-s*0.5,s*0.24,s); ctx.fillRect(-s*0.5,-s*0.12,s,s*0.24); }
+  }
+
+  function drawParticle(i){
+    var a=life[i]/ttl[i];
+    var op=a>0.85?(1-a)/0.15:(a<0.25?a/0.25:1);
+    ctx.globalAlpha=op<0?0:op>1?1:op;
+    ctx.translate(px[i],py[i]); ctx.rotate(rot[i]);
+    shape(kind[i],sz[i],COL[col[i]]);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function step(){
+    clearBg();
+    for(var i=0;i<N;i++){
+      if(life[i]<=0) continue;
+      vy[i]+=0.045; vx[i]*=0.992; vy[i]*=0.994;
+      px[i]+=vx[i]; py[i]+=vy[i]; rot[i]+=vr[i]; life[i]-=1;
+      drawParticle(i);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function frame(ts){
+    if(!run) return;
+    if(!t0) t0=ts;
+    if(ts>=nextBurst){ burst(); nextBurst=ts+520+rnd()*340; }
+    step();
+    raf=requestAnimationFrame(frame);
+  }
+
+  function staticFrame(){
+    // reduced-motion: one settled, legible, on-brand burst
+    resize(); clearBg();
+    var cx=W*0.5, cy=H*0.5, ring=Math.min(W,H)*0.3;
+    for(var i=0;i<46;i++){
+      var a=i/46*6.2832, r=ring*(0.35+ (i%5)*0.16);
+      ctx.save();
+      ctx.translate(cx+Math.cos(a)*r, cy+Math.sin(a)*r);
+      ctx.rotate(a*1.7);
+      shape(i%6, 9+(i%4)*3, COL[i%COL.length]);
+      ctx.restore();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function start(){
+    resize();
+    if(reduce){ staticFrame(); return; }
+    nextBurst=0; t0=0; run=true;
+    raf=requestAnimationFrame(frame);
+  }
+
+  window.addEventListener("resize",function(){
+    if(reduce){ staticFrame(); return; }
+    resize();
+  });
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden){ run=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+    else if(!run){ run=true; nextBurst=0; raf=requestAnimationFrame(frame); }
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>

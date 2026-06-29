@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Blue 10x10 waffle grid fills cell-by-cell with a bright ripple to an honest integer percent, holds, then drains and cycles.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Waffle Fill Quantize</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d1626;}
+  #wfq-c{display:block;width:100%;height:100%;}
+  .wfq-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#4fc3f7;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="wfq-c"></canvas>
+<div class="wfq-cap">Waffle Fill Quantize</div>
+<script>
+(function(){
+  const cv=document.getElementById('wfq-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ACC='#4fc3f7',BG='#0d1626',GRID='#1d2c45',DIM='#27405f';
+  const TARGETS=[63,38,87,42,71,56];           // honest percentages to cycle
+  let W,H,DPR,S,ox,oy,cell,gap,unit;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);unit=S*0.072;             // 10 cells + gaps fit ~0.8 of frame
+    gap=unit*0.16;cell=unit-gap;
+    const span=unit*10;ox=(W-span)/2+gap/2;oy=(H-span)/2+gap/2;
+  }
+  addEventListener('resize',size);size();
+
+  // cell index in COLUMN-fill order (bottom-up, left-to-right) -> grid r,c
+  const order=[];
+  for(let c=0;c<10;c++)for(let r=9;r>=0;r--)order.push([r,c]);
+
+  let ti=0,phase=0,t=0,boost=0;               // phase: 0 fill,1 hold,2 drain
+  let pct=0,disp=0,prevTarget=0;
+  function curTarget(){return TARGETS[ti%TARGETS.length];}
+
+  cv.addEventListener('pointermove',()=>{boost=1;});
+  cv.addEventListener('click',()=>{ti++;phase=0;t=0;});
+
+  const FILL=64,HOLD=46,DRAIN=44;             // frames per phase
+  function ease(x){return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;}
+
+  function draw(filled,rippleHead){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    for(let i=0;i<100;i++){
+      const [r,c]=order[i];
+      const x=ox+c*unit,y=oy+r*unit;
+      const on=i<Math.floor(filled);
+      const frac=i===Math.floor(filled)?filled-Math.floor(filled):0;
+      // base track
+      ctx.fillStyle=on?ACC:GRID;
+      ctx.globalAlpha=1;
+      rrect(x,y,cell,cell,cell*0.16);ctx.fill();
+      // partial cell currently filling
+      if(frac>0){
+        ctx.save();ctx.beginPath();
+        const h=cell*frac;
+        ctx.rect(x,y+cell-h,cell,h);ctx.clip();
+        ctx.fillStyle=ACC;rrect(x,y,cell,cell,cell*0.16);ctx.fill();
+        ctx.restore();
+      }
+      // ripple of activation: bright pulse trailing the fill head
+      if(on){
+        const d=Math.abs(i-rippleHead);
+        if(d<3.2){
+          ctx.globalAlpha=(1-d/3.2)*0.8;
+          ctx.fillStyle='#cdeeff';
+          rrect(x,y,cell,cell,cell*0.16);ctx.fill();
+        }
+      }
+    }
+    ctx.globalAlpha=1;
+    // readout: countable squares = honest integer percent
+    const n=Math.round(filled);
+    ctx.fillStyle=ACC;
+    ctx.font='700 '+(S*0.052).toFixed(1)+'px ui-monospace,Menlo,monospace';
+    ctx.textAlign='left';ctx.textBaseline='alphabetic';
+    const ty=oy-unit*0.55, tx=ox-gap/2;
+    ctx.fillText(n,tx,ty);
+    const nw=ctx.measureText(n).width;
+    ctx.globalAlpha=0.5;ctx.font='600 '+(S*0.03).toFixed(1)+'px ui-monospace,Menlo,monospace';
+    ctx.fillText('%',tx+nw+S*0.008,ty);
+    ctx.fillText('/100 cells',tx+nw+S*0.04,ty);
+    ctx.globalAlpha=1;
+  }
+  function rrect(x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+  }
+
+  function frame(){
+    t+=1+boost*2;boost*=0.92;
+    const tgt=curTarget();
+    let filled,head;
+    if(phase===0){                            // fill up to target
+      const p=ease(Math.min(t/FILL,1));
+      filled=p*tgt;head=filled;
+      if(t>=FILL){phase=1;t=0;}
+    }else if(phase===1){                      // hold full reading
+      filled=tgt;head=-9;
+      if(t>=HOLD){phase=2;t=0;}
+    }else{                                    // drain to zero
+      const p=ease(Math.min(t/DRAIN,1));
+      filled=tgt*(1-p);head=filled;
+      if(t>=DRAIN){phase=0;t=0;ti++;}
+    }
+    draw(filled,head);
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){draw(curTarget(),-9);}else start();
+})();
+</script>
+</body>
+</html>

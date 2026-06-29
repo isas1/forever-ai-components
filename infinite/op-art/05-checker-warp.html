@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A black-and-white checkerboard bends and swells around an invisible central lens, slowly rotating and drifting.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checker Warp</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
+  #op05-stage{position:fixed;inset:0;background:#0a0a0a}
+  #op05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static vignette to seat the lens into the field — never repaints */
+  #op05-stage::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%,rgba(10,10,10,0) 52%,rgba(10,10,10,.72) 100%)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="op05-stage" role="img" aria-label="An op-art checkerboard of black and white squares bending and swelling around an invisible lens at the center, lines warping with slow continuous distortion.">
+  <canvas id="op05-c"></canvas>
+</div>
+<div class="cap">Checker Warp</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('op05-stage');
+  var cv = document.getElementById('op05-c');
+  var ctx = cv.getContext('2d');
+
+  var W=0,H=0,DPR=1,CX=0,CY=0,LR=0,CELL=0;
+  var running=false, raf=0, t0=0;
+
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = Math.max(1, Math.round(stage.clientWidth));
+    H = Math.max(1, Math.round(stage.clientHeight));
+    cv.width = W*DPR; cv.height = H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    CX = W*0.5; CY = H*0.5;
+    var m = Math.min(W,H);
+    LR = m*0.42;                 // lens radius
+    CELL = Math.max(14, m/11);   // checker period (one black+white pair = 2*CELL)
+  }
+
+  // Lens warp: radial pinch/swell. Maps a point toward center based on
+  // distance, with a breathing strength so the bulge inhales and exhales.
+  // Returns warped distance for a given true distance r and strength s.
+  function warpR(r, s){
+    if(r>=LR) return r;
+    var x = r/LR;                 // 0..1
+    // smooth falloff, magnify center (barrel), compress rim
+    var k = 1 - x*x;              // 1 at center -> 0 at rim
+    return r * (1 + s*k*0.85);
+  }
+
+  // Sample the checker color at a warped coordinate, given a phase drift.
+  // Inverse-warp not needed; we walk screen pixels coarsely via line field.
+  // Instead we draw the field as deformed grid quads for crisp edges.
+
+  function drawFrame(time){
+    var s = reduce ? 0.30 : (0.34 + 0.30*Math.sin(time*0.00045)); // swell
+    var rot = reduce ? 0.18 : time*0.000055;                       // slow turn
+    var drift = reduce ? 0 : time*0.00018;                         // checker slide
+
+    ctx.fillStyle = '#0a0a0a';
+    ctx.fillRect(0,0,W,H);
+
+    // Build deformed checker by scanning a polar-aware grid.
+    // We iterate base grid lines, warp each vertex through the lens,
+    // and fill alternating quads. Grid spans beyond lens for context.
+    var span = Math.max(W,H)*0.62;
+    var n = Math.ceil(span/CELL);          // cells each side of center
+    if(n>26) n=26;                         // cap quad count (<=~2916 quads worst, but visible band thin)
+    var cos=Math.cos(rot), sin=Math.sin(rot);
+    // precompute warped vertex ring positions into reused arrays
+    // grid index gx,gy in [-n..n]; vertex count (2n+1)^2 — keep n modest
+    var dim = 2*n+1;
+    if(!drawFrame._vx || drawFrame._dim!==dim){
+      drawFrame._vx = new Float32Array(dim*dim);
+      drawFrame._vy = new Float32Array(dim*dim);
+      drawFrame._dim = dim;
+    }
+    var VX=drawFrame._vx, VY=drawFrame._vy;
+
+    var i,j,idx,gx,gy,bx,by,rx,ry,r,wr,ux,uy,sc;
+    for(j=0;j<dim;j++){
+      gy=(j-n)*CELL;
+      for(i=0;i<dim;i++){
+        gx=(i-n)*CELL;
+        // rotate base grid for subtle twist
+        bx = gx*cos - gy*sin;
+        by = gx*sin + gy*cos;
+        r = Math.sqrt(bx*bx+by*by);
+        if(r<0.0001){ rx=CX; ry=CY; }
+        else{
+          wr = warpR(r,s);
+          sc = wr/r;
+          rx = CX + bx*sc;
+          ry = CY + by*sc;
+        }
+        idx=j*dim+i;
+        VX[idx]=rx; VY[idx]=ry;
+      }
+    }
+
+    // phase shift drives the checker color slide along diagonal
+    var pshift = drift*2.0;
+    for(j=0;j<dim-1;j++){
+      for(i=0;i<dim-1;i++){
+        // checker parity with slow diagonal drift
+        var par = ((i + j + Math.floor(pshift)) & 1);
+        ctx.fillStyle = par ? '#f2f2f2' : '#0a0a0a';
+        if(!par) continue; // black == background, skip fill = fewer ops
+        idx=j*dim+i;
+        var a=idx, b=idx+1, c=idx+dim+1, d=idx+dim;
+        ctx.beginPath();
+        ctx.moveTo(VX[a],VY[a]);
+        ctx.lineTo(VX[b],VY[b]);
+        ctx.lineTo(VX[c],VY[c]);
+        ctx.lineTo(VX[d],VY[d]);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // thin moire ring at the lens edge — static-style stroke, recolored only
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.beginPath();
+    ctx.arc(CX,CY,LR,0,Math.PI*2);
+    ctx.stroke();
+  }
+
+  function loop(now){
+    if(!running) return;
+    drawFrame(now - t0);
+    raf = requestAnimationFrame(loop);
+  }
+
+  function start(){
+    if(running) return;
+    running=true; t0=performance.now();
+    raf=requestAnimationFrame(loop);
+  }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    resize();
+    if(reduce){ drawFrame(1400); return; }   // one settled, legible frame
+    start();
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){
+      resize();
+      if(reduce) drawFrame(1400);
+    },120);
+  });
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce) return;
+    if(document.hidden) stop();
+    else { t0=performance.now()-((performance.now())%100000); start(); }
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

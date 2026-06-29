@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A glossy green pressurized jelly blob repeatedly drops, squashes on the floor and bounces back up; click to nudge it sideways.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Soft-Body Jelly Drop</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a1208;}
+  #jd-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#9be65a;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="jd-c"></canvas>
+<div class="cap">Soft-Body Jelly Drop</div>
+<script>
+(function(){
+  const cv=document.getElementById('jd-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,S,floorY;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);floorY=H*0.80;
+  }
+  addEventListener('resize',()=>{size();reset();});
+
+  const N=22;               // ring nodes
+  let nodes,R0,K,GAS,DAMP,GRAV,push=0;
+  function reset(){
+    R0=S*0.17;
+    K=0.34;GAS=R0*R0*Math.PI*1.18;DAMP=0.985;GRAV=S*0.00055;
+    const cx=W/2, cy=H*0.18;
+    nodes=[];
+    for(let i=0;i<N;i++){
+      const a=i/N*Math.PI*2;
+      nodes.push({x:cx+Math.cos(a)*R0, y:cy+Math.sin(a)*R0, px:cx+Math.cos(a)*R0+(Math.random()-0.5)*0.6, py:cy+Math.sin(a)*R0});
+    }
+  }
+  size();reset();
+
+  function step(){
+    const len=N;
+    // polygon area + centroid (for pressure direction)
+    let area=0,cx=0,cy=0;
+    for(let i=0;i<len;i++){const a=nodes[i],b=nodes[(i+1)%len];
+      const cr=a.x*b.y-b.x*a.y;area+=cr;cx+=(a.x+b.x)*cr;cy+=(a.y+b.y)*cr;}
+    area*=0.5;cx/=(6*area);cy/=(6*area);
+    const pressure=GAS/Math.max(Math.abs(area),1)-1; // overpressure ratio
+    // edge springs (keep rest perimeter) + pressure normal
+    const rest=2*Math.sin(Math.PI/len)*R0;
+    for(let i=0;i<len;i++){
+      const a=nodes[i],b=nodes[(i+1)%len];
+      let dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
+      const f=(d-rest)/d*K*0.5;
+      a.x+=dx*f;a.y+=dy*f;b.x-=dx*f;b.y-=dy*f;
+      // outward normal of this edge, pushed by internal pressure
+      const nx=dy/d,ny=-dx/d, pf=pressure*d*0.5;
+      a.x+=nx*pf;a.y+=ny*pf;b.x+=nx*pf;b.y+=ny*pf;
+    }
+    // verlet integrate + forces + floor/wall collision
+    const margin=S*0.04;
+    for(let i=0;i<len;i++){
+      const p=nodes[i];
+      let vx=(p.x-p.px)*DAMP, vy=(p.y-p.py)*DAMP;
+      p.px=p.x;p.py=p.y;
+      p.x+=vx; p.y+=vy+GRAV;
+      if(push){ const ddx=p.x-W/2; p.x+=Math.sign(ddx||1)*push*0.6; p.y-=push*0.4; }
+      if(p.y>floorY){p.y=floorY-(p.y-floorY)*0.4; p.px=p.x+vx*0.5;}
+      if(p.x<margin){p.x=margin;p.px=p.x-vx*0.4;}
+      if(p.x>W-margin){p.x=W-margin;p.px=p.x-vx*0.4;}
+    }
+    push*=0.9;
+    // recycle: when settled and low, lob it back up to drop again
+    if(area>0){
+      let lowest=0,vsum=0;
+      for(const p of nodes){lowest=Math.max(lowest,p.y);vsum+=Math.abs(p.y-p.py);}
+      if(lowest>floorY-R0*0.55 && vsum<len*0.5){
+        for(const p of nodes){p.py=p.y+ (Math.random()*0.4+S*0.011); p.px=p.x;}
+      }
+    }
+    return {cx,cy,area};
+  }
+
+  function draw(c){
+    ctx.clearRect(0,0,W,H);
+    // floor wet sheen
+    const fg=ctx.createLinearGradient(0,floorY,0,H);
+    fg.addColorStop(0,'rgba(155,230,90,0.10)');fg.addColorStop(1,'rgba(10,18,8,0)');
+    ctx.fillStyle=fg;ctx.fillRect(0,floorY,W,H-floorY);
+    ctx.strokeStyle='rgba(155,230,90,0.22)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(0,floorY);ctx.lineTo(W,floorY);ctx.stroke();
+    // soft-body silhouette via Catmull-Rom smoothing
+    const len=N;
+    ctx.beginPath();
+    for(let i=0;i<=len;i++){
+      const p0=nodes[(i-1+len)%len],p1=nodes[i%len],p2=nodes[(i+1)%len],p3=nodes[(i+2)%len];
+      if(i===0){ctx.moveTo((p1.x+p2.x)/2,(p1.y+p2.y)/2);}
+      const cp1x=p1.x+(p2.x-p0.x)/6,cp1y=p1.y+(p2.y-p0.y)/6;
+      const cp2x=p2.x-(p3.x-p1.x)/6,cp2y=p2.y-(p3.y-p1.y)/6;
+      ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,p2.x,p2.y);
+    }
+    ctx.closePath();
+    const g=ctx.createRadialGradient(c.cx,c.cy-R0*0.4,R0*0.1,c.cx,c.cy,R0*1.5);
+    g.addColorStop(0,'#d8ff9e');g.addColorStop(0.45,'#9be65a');g.addColorStop(1,'#3f7a23');
+    ctx.fillStyle=g;ctx.shadowColor='rgba(155,230,90,0.5)';ctx.shadowBlur=S*0.04;ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.lineWidth=1.4;ctx.strokeStyle='rgba(216,255,158,0.65)';ctx.stroke();
+    // specular highlight blob
+    ctx.beginPath();
+    ctx.ellipse(c.cx-R0*0.28,c.cy-R0*0.42,R0*0.22,R0*0.12,-0.5,0,Math.PI*2);
+    ctx.fillStyle='rgba(255,255,255,0.45)';ctx.fill();
+  }
+
+  let raf=0;
+  function frame(){ const c=step(); draw(c); raf=requestAnimationFrame(frame); }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  cv.addEventListener('pointerdown',()=>{push=S*0.018;});
+  cv.addEventListener('pointermove',e=>{if(e.buttons)push=S*0.012;});
+  if(reduce){ // settle to a resting splat for one static frame
+    for(let i=0;i<260;i++)step();
+    draw({cx:W/2,cy:floorY-R0*0.5,area:1});
+  }else start();
+})();
+</script>
+</body>
+</html>

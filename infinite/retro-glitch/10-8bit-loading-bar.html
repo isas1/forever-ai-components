@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Pixel-art NOW LOADING screen with a segmented green-to-red progress bar, percent counter and bobbing sprite.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>8-bit loading bar</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#10131c}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{width:100%;height:100%;display:block;image-rendering:pixelated}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;
+    color:#5fe0ff;opacity:.42;letter-spacing:.5px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div class="cap">8-BIT LOADING</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+let W,H,raf,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){W=c.width=200;H=c.height=200;}
+size();x.imageSmoothingEnabled=false;
+// 5x7 mini font for NOW LOADING + percent
+const F={
+'0':['111','101','101','101','111'],'1':['010','110','010','010','111'],
+'2':['111','001','111','100','111'],'3':['111','001','111','001','111'],
+'4':['101','101','111','001','001'],'5':['111','100','111','001','111'],
+'6':['111','100','111','101','111'],'7':['111','001','010','010','010'],
+'8':['111','101','111','101','111'],'9':['111','101','111','001','111'],
+'%':['101','001','010','100','101'],' ':['000','000','000','000','000'],
+'L':['100','100','100','100','111'],'O':['111','101','101','101','111'],
+'A':['111','101','111','101','101'],'D':['110','101','101','101','110'],
+'I':['111','010','010','010','111'],'N':['101','111','111','111','101'],
+'G':['111','100','101','101','111'],'W':['101','101','101','111','101'],
+'.':['000','000','000','000','100']};
+function text(str,px,py,sc,col){
+  let cx=px;for(const ch of str){const g=F[ch]||F[' '];
+    for(let r=0;r<5;r++)for(let q=0;q<3;q++)if(g[r][q]==='1'){
+      x.fillStyle=col;x.fillRect(cx+q*sc,py+r*sc,sc,sc);}
+    cx+=4*sc;}
+}
+let p=0,phase=0,dot=0,frame=0;
+function draw(){
+  x.fillStyle='#10131c';x.fillRect(0,0,W,H);
+  // title
+  let d='.'.repeat(Math.floor(dot)%4);
+  text('NOW LOADING'+d,28,40,2,'#5fe0ff');
+  // bar frame
+  const bx=24,by=92,bw=152,bh=26;
+  x.fillStyle='#283248';x.fillRect(bx-4,by-4,bw+8,bh+8);
+  x.fillStyle='#0a0d14';x.fillRect(bx,by,bw,bh);
+  // chunky fill segments
+  const segs=16,gap=2,sw=(bw-gap*(segs+1))/segs;
+  const filled=Math.floor(p/100*segs);
+  for(let i=0;i<segs;i++){
+    const fx=bx+gap+i*(sw+gap);
+    if(i<filled){
+      const hue=120-(i/segs)*120; // green->red as it fills
+      x.fillStyle='hsl('+hue+',85%,55%)';
+      x.fillRect(fx,by+3,sw,bh-6);
+      x.fillStyle='rgba(255,255,255,.35)';x.fillRect(fx,by+3,sw,3);
+    }else if(i===filled&&Math.floor(frame/6)%2){
+      x.fillStyle='rgba(120,200,255,.4)';x.fillRect(fx,by+3,sw,bh-6);
+    }
+  }
+  // percent
+  const pct=Math.floor(p);
+  text((pct<10?'  ':pct<100?' ':'')+pct+'%',150,138,2,'#ffe23f');
+  // little marching sprite on top of bar
+  const sx=bx+ (p/100)*(bw-12);
+  x.fillStyle='#ff5f8f';
+  const bob=Math.floor(frame/6)%2?0:2;
+  x.fillRect(sx,by-14+bob,8,8);x.fillRect(sx+1,by-6+bob,2,4);x.fillRect(sx+5,by-6+bob,2,4);
+  if(!reduce){
+    p+= (phase===0)? (0.6+Math.random()*1.4) : 0;
+    if(p>=100){p=100;phase=1;if(frame%70===0){/*hold*/}}
+    if(phase===1){frame++;if(frame%70===0){p=0;phase=0;}}
+    dot+=0.06;frame++;
+  }
+  raf=requestAnimationFrame(draw);
+}
+function play(){cancelAnimationFrame(raf);draw();}
+document.addEventListener('visibilitychange',()=>document.hidden?cancelAnimationFrame(raf):play());
+play();
+</script>
+</body>
+</html>

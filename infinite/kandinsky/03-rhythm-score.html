@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Rhythm Score — Wassily Kandinsky. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Rhythm Score</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4efe2;overflow:hidden}
+  #kan03-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kan03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kan03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#16130f;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kan03-stage" role="img" aria-label="A bar of visual music on a loop: a red playhead sweeps three staves of blue cello circles, yellow trumpet triangles and red drum squares, each note flaring as the head crosses it.">
+  <canvas id="kan03-cv"></canvas>
+</div>
+<div class="kan03-cap">The Rhythm Score</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={paper:'#f4efe2',ink:'#16130f',blue:'#1438a8',yellow:'#f7c80b',red:'#d8321b'};
+  const cv=document.getElementById('kan03-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const ROWS=[
+    {c:PAL.blue,  shape:'circ', pat:[1,0,0,1, 0,0,1,0, 1,0,0,1, 0,1,0,0]},
+    {c:PAL.yellow,shape:'tri',  pat:[1,0,1,0, 1,0,1,0, 0,1,0,1, 0,1,0,1]},
+    {c:PAL.red,   shape:'sq',   pat:[1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,1,0]}
+  ];
+  const STEPS=16;
+  let phase=0;
+  const flares=[];
+  let lastStep=-1;
+  function note(ctx,x,y,r,row,energy){
+    ctx.save();ctx.translate(x,y);
+    const k=1+energy*0.6;
+    ctx.fillStyle=row.c;ctx.strokeStyle=PAL.ink;ctx.lineWidth=2;
+    if(row.shape==='circ'){ctx.beginPath();ctx.arc(0,0,r*k,0,7);ctx.fill();ctx.stroke();}
+    else if(row.shape==='tri'){ctx.beginPath();ctx.moveTo(0,-r*k);ctx.lineTo(r*k,r*k*.8);ctx.lineTo(-r*k,r*k*.8);ctx.closePath();ctx.fill();ctx.stroke();}
+    else {ctx.fillRect(-r*k,-r*k,2*r*k,2*r*k);ctx.strokeRect(-r*k,-r*k,2*r*k,2*r*k);}
+    ctx.restore();
+  }
+  let last=performance.now();
+  function draw(now){
+    const dt=(now-last)/1000; last=now;
+    if(!REDUCED) phase += dt*2.2;
+    if(phase>=STEPS) phase-=STEPS;
+    const ctx=S.ctx, W=S.w, H=S.h;
+    ctx.clearRect(0,0,W,H);
+    const padL=14, padR=14, padT=18, padB=18;
+    const gw=W-padL-padR, gh=H-padT-padB;
+    const rowH=gh/ROWS.length;
+    const cellW=gw/STEPS;
+    for(let s=0;s<=STEPS;s++){
+      ctx.beginPath();ctx.lineWidth=(s%4===0)?2:1;
+      ctx.strokeStyle=(s%4===0)?'rgba(22,19,15,.3)':'rgba(22,19,15,.1)';
+      ctx.moveTo(padL+s*cellW,padT);ctx.lineTo(padL+s*cellW,padT+gh);ctx.stroke();
+    }
+    ROWS.forEach((row,ri)=>{
+      const cy=padT+rowH*(ri+0.5);
+      ctx.fillStyle=row.c;ctx.globalAlpha=.85;
+      ctx.fillRect(padL,padT+ri*rowH+4,4,rowH-8);ctx.globalAlpha=1;
+      const r=Math.min(cellW,rowH)*0.30;
+      for(let s=0;s<STEPS;s++){
+        if(!row.pat[s]) continue;
+        const x=padL+(s+0.5)*cellW;
+        let energy=0;
+        for(const f of flares){ if(f.row===ri && f.step===s){ energy=Math.max(energy,1-f.t);} }
+        ctx.globalAlpha=0.32+0.68*energy;
+        note(ctx,x,cy,r*0.8,row,energy);
+        ctx.globalAlpha=1;
+      }
+    });
+    const phx=padL+(phase)*cellW;
+    ctx.strokeStyle=PAL.ink;ctx.lineWidth=3;
+    ctx.beginPath();ctx.moveTo(phx,padT-6);ctx.lineTo(phx,padT+gh+6);ctx.stroke();
+    ctx.fillStyle=PAL.red;ctx.beginPath();ctx.moveTo(phx,padT-6);ctx.lineTo(phx-6,padT-16);ctx.lineTo(phx+6,padT-16);ctx.closePath();ctx.fill();
+    const curStep=Math.floor(phase)%STEPS;
+    if(curStep!==lastStep){
+      lastStep=curStep;
+      ROWS.forEach((row,ri)=>{ if(row.pat[curStep]) flares.push({row:ri,step:curStep,t:0}); });
+    }
+    for(const f of flares) f.t+=dt*2.2;
+    for(let i=flares.length-1;i>=0;i--) if(flares[i].t>=1) flares.splice(i,1);
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

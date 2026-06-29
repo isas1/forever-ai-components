@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A Line Goes Walking — Paul Klee. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A Line Goes Walking</title>
+<style>
+  html,body{margin:0;height:100%;background:#efe7d6;overflow:hidden}
+  #kle02-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kle02-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kle02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2620;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kle02-stage" role="img" aria-label="Paul Klee's line that took a walk: a single ink line wanders the warm paper on its own whim, tracing a whimsical contour from a teal start-dot, then dissolves and sets out afresh.">
+  <canvas id="kle02-cv"></canvas>
+</div>
+<div class="kle02-cap">A Line Goes Walking</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('kle02-cv'); if(!cv) return;
+  const INK='#2a2620', TEAL='#3a8a8c', TERRA='#c96f4a';
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  let pts=[], head, ang, drawn=0, MAX=42, phase='draw', fade=0, acc=0, last=performance.now();
+  function reset(){
+    pts=[]; drawn=0; phase='draw'; fade=0; acc=0;
+    head={x:S.w*(.2+Math.random()*.6), y:S.h*(.2+Math.random()*.6)};
+    ang=Math.random()*Math.PI*2;
+    pts.push({...head});
+  }
+  function place(){
+    ang += (Math.random()-0.5)*1.5;
+    const step=18+Math.random()*34;
+    let nx=head.x+Math.cos(ang)*step, ny=head.y+Math.sin(ang)*step;
+    if(nx<10||nx>S.w-10) ang=Math.PI-ang;
+    if(ny<10||ny>S.h-10) ang=-ang;
+    nx=Math.max(10,Math.min(S.w-10,head.x+Math.cos(ang)*step));
+    ny=Math.max(10,Math.min(S.h-10,head.y+Math.sin(ang)*step));
+    head={x:nx,y:ny}; pts.push({...head}); drawn++;
+    if(drawn>=MAX) phase='fade';
+  }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    S.ctx.clearRect(0,0,S.w,S.h);
+    if(REDUCED){
+      if(phase!=='rest'){ while(drawn<MAX) place(); phase='rest'; }
+    } else if(phase==='draw'){
+      acc+=dt; if(acc>0.16){acc=0; place();}
+    } else if(phase==='fade'){
+      fade+=dt; if(fade>1.7){ reset(); }
+    }
+    const a=phase==='fade'? Math.max(0,1-fade/1.7) : 1;
+    S.ctx.globalAlpha=a;
+    S.ctx.strokeStyle=INK;S.ctx.lineWidth=2.6;S.ctx.lineJoin='round';S.ctx.lineCap='round';
+    S.ctx.beginPath();
+    pts.forEach((p,i)=> i? S.ctx.lineTo(p.x,p.y):S.ctx.moveTo(p.x,p.y));
+    S.ctx.stroke();
+    if(pts.length){
+      S.ctx.fillStyle=TEAL;S.ctx.beginPath();S.ctx.arc(pts[0].x,pts[0].y,6,0,7);S.ctx.fill();
+      S.ctx.strokeStyle=INK;S.ctx.lineWidth=1.6;S.ctx.stroke();
+    }
+    if(pts.length && !REDUCED){
+      const h=pts[pts.length-1];
+      S.ctx.fillStyle=TERRA;S.ctx.beginPath();S.ctx.arc(h.x,h.y,5,0,7);S.ctx.fill();
+      S.ctx.strokeStyle=INK;S.ctx.lineWidth=1.5;S.ctx.stroke();
+    }
+    S.ctx.globalAlpha=1;
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  reset();
+  S.ctx.fillStyle='#efe7d6';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); reset(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

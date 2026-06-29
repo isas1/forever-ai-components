@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Pink and blue charged particles attract and repel via Coulomb forces, forming violet bonds that crystallize and melt as temperature pulses.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Charged Plasma Lattice</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0b0014;}
+  #cpl-c{display:block;width:100%;height:100%;}
+  .cpl-cap{position:fixed;left:9px;bottom:8px;
+       font:600 clamp(9px,2.6vw,11px)/1.2 ui-monospace,"SF Mono",Menlo,monospace;
+       letter-spacing:.14em;color:#a06bff;opacity:.36;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="cpl-c"></canvas>
+<div class="cpl-cap">Charged Plasma Lattice</div>
+<script>
+(function(){
+  const cv=document.getElementById('cpl-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,scale,P=[],N=0;
+  const POS='#ff5c8a',NEG='#5cc8ff'; // warm + cool charges
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    scale=Math.min(W,H)/420;
+    N=Math.round(Math.min(64,Math.max(34,(W*H)/5200)));
+    P=[];
+    for(let i=0;i<N;i++){
+      P.push({x:Math.random()*W,y:Math.random()*H,
+              vx:0,vy:0,q:i%2?1:-1,r:(2.4+Math.random()*1.6)*scale});
+    }
+  }
+  addEventListener('resize',size);size();
+  let t=0,mx=-1,my=-1,mq=0;
+  cv.addEventListener('pointermove',e=>{const b=cv.getBoundingClientRect();mx=e.clientX-b.left;my=e.clientY-b.top;mq=1;});
+  cv.addEventListener('pointerleave',()=>{mq=0;});
+  cv.addEventListener('click',()=>{mq=-mq||1;});
+  function step(temp){
+    // Coulomb: like repels, opposite attracts. temp = thermal jitter.
+    for(let i=0;i<N;i++){
+      const a=P[i];let fx=0,fy=0;
+      for(let j=0;j<N;j++){if(j===i)continue;const b=P[j];
+        let dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy+90;
+        const f=(a.q*b.q)*1400/d2; // +repel like, -attract opposite
+        const inv=1/Math.sqrt(d2);fx+=f*dx*inv;fy+=f*dy*inv;
+      }
+      if(mq){let dx=a.x-mx,dy=a.y-my,d2=dx*dx+dy*dy+200;
+        const f=(a.q*mq)*9000/d2,inv=1/Math.sqrt(d2);fx+=f*dx*inv;fy+=f*dy*inv;}
+      // soft container pull + thermal kick
+      fx+=(W/2-a.x)*0.0009;fy+=(H/2-a.y)*0.0009;
+      fx+=(Math.random()-0.5)*temp*9;fy+=(Math.random()-0.5)*temp*9;
+      a.vx=(a.vx+fx*0.02)*0.86;a.vy=(a.vy+fy*0.02)*0.86;
+    }
+    for(const a of P){a.x+=a.vx;a.y+=a.vy;
+      if(a.x<6){a.x=6;a.vx*=-.6;}if(a.x>W-6){a.x=W-6;a.vx*=-.6;}
+      if(a.y<6){a.y=6;a.vy*=-.6;}if(a.y>H-6){a.y=H-6;a.vy*=-.6;}}
+  }
+  function draw(temp){
+    ctx.fillStyle='rgba(11,0,20,0.30)';ctx.fillRect(0,0,W,H);
+    // bonds between nearby opposite charges = lattice
+    ctx.lineWidth=Math.max(0.6,0.9*scale);
+    for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){
+      const a=P[i],b=P[j];const dx=a.x-b.x,dy=a.y-b.y,d=Math.hypot(dx,dy);
+      const lim=66*scale;
+      if(d<lim&&a.q!==b.q){const al=(1-d/lim)*0.55*(1-temp*0.6);
+        ctx.strokeStyle='rgba(160,107,255,'+al.toFixed(3)+')';
+        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+    }
+    ctx.globalCompositeOperation='lighter';
+    for(const a of P){
+      const col=a.q>0?POS:NEG,rr=a.r*(1+temp*0.4);
+      const g=ctx.createRadialGradient(a.x,a.y,0,a.x,a.y,rr*4);
+      g.addColorStop(0,col);g.addColorStop(.4,col+'55');g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(a.x,a.y,rr*4,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#fff';ctx.globalAlpha=.9;
+      ctx.beginPath();ctx.arc(a.x,a.y,rr*0.5,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+    }
+    ctx.globalCompositeOperation='source-over';
+  }
+  function frame(){
+    t+=0.012;
+    // temperature slowly pulses: crystallize <-> melt
+    const temp=0.5-0.5*Math.cos(t*0.55); // 0..1
+    step(temp);draw(temp);
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ctx.fillStyle='#0b0014';ctx.fillRect(0,0,W,H);
+    for(let k=0;k<260;k++)step(0.04);draw(0.04);}else start();
+})();
+</script>
+</body>
+</html>

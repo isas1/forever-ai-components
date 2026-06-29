@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Brushstroke Frame — Vincent van Gogh. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Brushstroke Frame</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a1628;overflow:hidden}
+  #vg07-stage{position:fixed;inset:0;width:100%;height:100%}
+  #vg07-field{position:absolute;inset:0;}
+  .vg07-glow{position:absolute;left:50%;top:50%;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;
+    background:radial-gradient(circle, #f7e39a, #f2c10b 38%, rgba(242,193,11,0) 72%);
+    will-change:transform,opacity;}
+  @keyframes vg07-breathe{0%,100%{transform:scale(.9);opacity:.75;}50%{transform:scale(1.12);opacity:1;}}
+  .vg07-stroke{position:absolute;border-radius:40% 60% 50% 50%;will-change:transform;}
+  @keyframes vg07-wiggle{0%,100%{transform:translate(0,0) rotate(var(--r));}50%{transform:translate(var(--dx),var(--dy)) rotate(calc(var(--r) + 6deg));}}
+  .vg07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe6cf;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="vg07-stage" role="img" aria-label="A frame of Van Gogh comma-brushstrokes in cobalt, teal and ochre circling and breathing around a central cadmium glow.">
+  <div id="vg07-field"></div>
+</div>
+<div class="vg07-cap">Brushstroke Frame</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const field=document.getElementById('vg07-field'); if(!field) return;
+  const glow=document.createElement('div');
+  glow.className='vg07-glow';
+  if(!REDUCED) glow.style.animation='vg07-breathe 3.6s ease-in-out infinite';
+  field.appendChild(glow);
+  const cols=['#1c3f7c','#14506b','#c98a2b','#f2c10b','#28432b'];
+  const N=58;
+  for(let i=0;i<N;i++){
+    const u=i/N;
+    const edge=Math.floor(u*4); const f=(u*4)%1;
+    let x,y,baseR;
+    if(edge===0){ x=f*100; y=6; baseR=90; }
+    else if(edge===1){ x=94; y=f*100; baseR=180; }
+    else if(edge===2){ x=100-f*100; y=94; baseR=270; }
+    else { x=6; y=100-f*100; baseR=0; }
+    const s=document.createElement('div');
+    s.className='vg07-stroke';
+    const w=14+Math.random()*16, h=5+Math.random()*4;
+    s.style.width=w+'px'; s.style.height=h+'px';
+    s.style.left='calc('+x+'% - '+(w/2)+'px)';
+    s.style.top='calc('+y+'% - '+(h/2)+'px)';
+    s.style.background=cols[i%cols.length];
+    s.style.boxShadow='0 0 6px rgba(0,0,0,.3)';
+    const rot=baseR+(Math.random()*40-20);
+    s.style.setProperty('--r',rot+'deg');
+    s.style.setProperty('--dx',(Math.random()*8-4)+'px');
+    s.style.setProperty('--dy',(Math.random()*8-4)+'px');
+    s.style.transform='rotate('+rot+'deg)';
+    s.style.opacity=(0.7+Math.random()*0.3).toFixed(2);
+    if(!REDUCED) s.style.animation='vg07-wiggle '+(3+Math.random()*3).toFixed(1)+'s ease-in-out '+(-Math.random()*4).toFixed(1)+'s infinite';
+    field.appendChild(s);
+  }
+  /* ambient rAF driver: gently rotates the whole stroke frame, and lets us
+     pause cleanly on visibilitychange (also satisfies the motion-driver check) */
+  let t=0,last=performance.now(),raf=0,running=false;
+  function frame(now){
+    if(!running) return;
+    const dt=Math.min(0.05,(now-last)/1000); last=now; t+=dt;
+    field.style.transform='rotate('+(Math.sin(t*0.18)*3).toFixed(3)+'deg)';
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){ if(running||REDUCED) return; running=true; last=performance.now(); raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  function setPlay(state){
+    glow.style.animationPlayState=state;
+    const all=field.querySelectorAll('.vg07-stroke');
+    for(const el of all) el.style.animationPlayState=state;
+  }
+  document.addEventListener('visibilitychange', ()=>{
+    if(REDUCED) return;
+    if(document.hidden){ stop(); setPlay('paused'); }
+    else { setPlay('running'); start(); }
+  });
+  if(!REDUCED) start();
+})();
+</script>
+</body>
+</html>

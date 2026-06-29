@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Point &amp; Line to Plane — Wassily Kandinsky. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Point &amp; Line to Plane</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4efe2;overflow:hidden}
+  #kan08-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kan08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kan08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#16130f;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kan08-stage" role="img" aria-label="Kandinsky's Bauhaus thesis alive: a wandering point trails a tense black line, and where lines cross they spawn a plane of colour. The drawing redraws itself forever.">
+  <canvas id="kan08-cv"></canvas>
+</div>
+<div class="kan08-cap">Point &amp; Line to Plane</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={paper:'#f4efe2',ink:'#16130f',blue:'#1438a8',yellow:'#f7c80b',red:'#d8321b',violet:'#5a2d82'};
+  const cv=document.getElementById('kan08-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  let pts=[], planes=[], head, ang, last=performance.now(), drawn=0, MAX=46;
+  function reset(){
+    pts=[]; planes=[];
+    head={x:S.w*Math.random(),y:S.h*Math.random()};
+    ang=Math.random()*7; drawn=0;
+    pts.push({...head});
+  }
+  const cols=[PAL.blue,PAL.yellow,PAL.red,PAL.violet];
+  let acc=0, fade=0;
+  function place(){
+    ang += (Math.random()-0.5)*1.6;
+    const step=26+Math.random()*46;
+    let nx=head.x+Math.cos(ang)*step, ny=head.y+Math.sin(ang)*step;
+    if(nx<8||nx>S.w-8) ang=Math.PI-ang;
+    if(ny<8||ny>S.h-8) ang=-ang;
+    nx=Math.max(8,Math.min(S.w-8,head.x+Math.cos(ang)*step));
+    ny=Math.max(8,Math.min(S.h-8,head.y+Math.sin(ang)*step));
+    for(let i=1;i<pts.length-1;i++){
+      if(seg(head,{x:nx,y:ny},pts[i-1],pts[i])){
+        planes.push({x:(nx+head.x)/2,y:(ny+head.y)/2,r:8+Math.random()*16,c:cols[(Math.random()*cols.length)|0],kind:Math.random()<.5?'tri':'circ',t:0});
+        break;
+      }
+    }
+    head={x:nx,y:ny}; pts.push({...head}); drawn++;
+    if(drawn>=MAX){ acc=-1; }
+  }
+  function seg(a,b,c,d){
+    function ccw(p,q,r){return (r.y-p.y)*(q.x-p.x)>(q.y-p.y)*(r.x-p.x);}
+    return ccw(a,c,d)!==ccw(b,c,d) && ccw(a,b,c)!==ccw(a,b,d);
+  }
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    S.ctx.clearRect(0,0,S.w,S.h);
+    if(!REDUCED){
+      if(acc>=0){ acc+=dt; if(acc>0.22){acc=0; place();} }
+      else { fade+=dt; if(fade>1.6){fade=0; reset();} }
+    }
+    for(const p of planes){
+      p.t+=dt; const a=acc<0? Math.max(0,1-fade/1.6):Math.min(1,p.t*2);
+      S.ctx.save();S.ctx.globalAlpha=a*0.92;S.ctx.fillStyle=p.c;S.ctx.strokeStyle=PAL.ink;S.ctx.lineWidth=2;S.ctx.translate(p.x,p.y);
+      if(p.kind==='tri'){S.ctx.beginPath();S.ctx.moveTo(0,-p.r);S.ctx.lineTo(p.r,p.r);S.ctx.lineTo(-p.r,p.r);S.ctx.closePath();S.ctx.fill();S.ctx.stroke();}
+      else{S.ctx.beginPath();S.ctx.arc(0,0,p.r,0,7);S.ctx.fill();S.ctx.stroke();}
+      S.ctx.restore();
+    }
+    const a=acc<0? Math.max(0,1-fade/1.6):1;
+    S.ctx.globalAlpha=a;S.ctx.strokeStyle=PAL.ink;S.ctx.lineWidth=2.4;S.ctx.lineJoin='round';
+    S.ctx.beginPath();
+    pts.forEach((p,i)=> i? S.ctx.lineTo(p.x,p.y):S.ctx.moveTo(p.x,p.y));
+    S.ctx.stroke();
+    if(pts.length){const h=pts[pts.length-1];
+      S.ctx.fillStyle=PAL.red;S.ctx.beginPath();S.ctx.arc(h.x,h.y,5,0,7);S.ctx.fill();
+      S.ctx.strokeStyle=PAL.ink;S.ctx.lineWidth=1.5;S.ctx.stroke();}
+    if(pts.length){S.ctx.fillStyle=PAL.blue;S.ctx.beginPath();S.ctx.arc(pts[0].x,pts[0].y,6,0,7);S.ctx.fill();S.ctx.strokeStyle=PAL.ink;S.ctx.stroke();}
+    S.ctx.globalAlpha=1;
+  }
+  reset(); acc=0;
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); reset(); acc=0; if(REDUCED) for(let i=0;i<20;i++) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ for(let i=0;i<20;i++){ place(); } draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

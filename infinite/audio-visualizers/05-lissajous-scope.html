@@ -1,0 +1,130 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Cyan Lissajous beam loops drift and rotate with a glowing beam head and phosphor trail over a circular scope grid.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Lissajous Scope</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#07080d;display:grid;place-items:center}
+#aav05-c{width:100%;height:100%;display:block}
+.aav05-live{position:fixed;right:8px;top:7px;z-index:2;cursor:pointer;
+  font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;
+  color:#22d3ee;background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.35);
+  border-radius:5px;padding:5px 8px;opacity:.6;transition:opacity .25s,background .25s}
+.aav05-live:hover{opacity:1;background:rgba(34,211,238,.16)}
+.aav05-live.on{color:#07080d;background:#22d3ee;border-color:#22d3ee;opacity:1}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<canvas id="aav05-c"></canvas>
+<button class="aav05-live" id="aav05-live" aria-label="switch to live microphone input">&#9834; live</button>
+<div class="cap">Lissajous Scope</div>
+<script>(function(){
+var cv=document.getElementById('aav05-c'),g=cv.getContext('2d');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,dpr=Math.min(2,window.devicePixelRatio||1);
+function size(){W=cv.clientWidth;H=cv.clientHeight;cv.width=W*dpr;cv.height=H*dpr;g.setTransform(dpr,0,0,dpr,0,0);}
+size();addEventListener('resize',size);
+
+// persistent phosphor trail buffer (offscreen), decays each frame
+var trail=document.createElement('canvas'),tg=trail.getContext('2d');
+function sizeTrail(){trail.width=Math.max(1,W);trail.height=Math.max(1,H);}
+sizeTrail();addEventListener('resize',sizeTrail);
+
+var N=110;                      // points plotted per frame along the figure
+var t=0,seed=Math.random()*99;
+// synth: X and Y channels as sums of sines whose ratio/phase drift via slow LFOs
+function synthXY(p,time){
+  var a=1.0+0.5*Math.sin(time*0.07+seed);      // X frequency ratio, slow drift
+  var b=1.5+0.5*Math.sin(time*0.05+seed*1.7);  // Y frequency ratio
+  var ph=time*0.5;                             // phase precession -> rotating figure
+  var ang=p*Math.PI*2;
+  var x=Math.sin(a*ang+ph)+0.32*Math.sin(a*3*ang+time*0.9);
+  var y=Math.sin(b*ang+ph*0.6)+0.32*Math.sin(b*2*ang+time*0.7);
+  // smoothed noise wobble
+  var n=Math.sin(ang*7+time*1.3)*0.04;
+  return [x+n,y-n];
+}
+
+// live analyser path (set on click)
+var live=null,timeBuf=null;
+function setLive(an,ctx,stream){live={an:an,ctx:ctx,stream:stream};timeBuf=new Uint8Array(an.fftSize);}
+
+function pointAt(p,time){
+  if(live){
+    // XY scope from one channel: x = sample, y = delayed sample (quadrature-ish)
+    var L=timeBuf.length,i=(p*(L-1))|0,j=(i+((L/4)|0))%L;
+    return [(timeBuf[i]-128)/128, (timeBuf[j]-128)/128];
+  }
+  return synthXY(p,time);
+}
+
+var amp=0.5,raf=0,running=true;
+function frame(){
+  raf=0;t+=1/60;
+  if(live)live.an.getByteTimeDomainData(timeBuf);
+  // envelope breathing on synth so brightness/scale feels alive
+  var env=live?1:0.78+0.22*Math.sin(t*0.9)*Math.sin(t*0.31);
+  // decay the phosphor: fade prior frame toward bg
+  tg.globalCompositeOperation='source-over';
+  tg.fillStyle='rgba(7,8,13,0.13)';
+  tg.fillRect(0,0,W,H);
+  // additive draw of the fresh beam stroke
+  tg.globalCompositeOperation='lighter';
+  var cx=W/2,cy=H/2,R=Math.min(W,H)*0.40*env;
+  tg.lineJoin='round';tg.lineCap='round';
+  // core stroke (bright) + halo stroke (wide, dim) for bloom without blur filter
+  for(var pass=0;pass<2;pass++){
+    tg.beginPath();
+    for(var k=0;k<=N;k++){
+      var p=k/N,xy=pointAt(p,t);
+      var X=cx+xy[0]*R,Y=cy-xy[1]*R;
+      if(k===0)tg.moveTo(X,Y);else tg.lineTo(X,Y);
+    }
+    if(pass===0){tg.strokeStyle='rgba(34,211,238,0.10)';tg.lineWidth=Math.max(3,R*0.05);}
+    else{tg.strokeStyle='rgba(190,250,255,0.55)';tg.lineWidth=Math.max(1,R*0.012);}
+    tg.stroke();
+  }
+  // leading dot: the "beam head"
+  var hd=pointAt((t*0.18)%1,t);
+  tg.beginPath();tg.fillStyle='rgba(220,253,255,0.9)';
+  tg.arc(cx+hd[0]*R,cy-hd[1]*R,Math.max(1.4,R*0.018),0,7);tg.fill();
+
+  // composite trail to screen + faint scope grid
+  g.globalCompositeOperation='source-over';
+  g.fillStyle='#07080d';g.fillRect(0,0,W,H);
+  drawGrid(cx,cy,Math.min(W,H)*0.42);
+  g.drawImage(trail,0,0);
+
+  if(running&&!reduce)raf=requestAnimationFrame(frame);
+}
+function drawGrid(cx,cy,r){
+  g.strokeStyle='rgba(34,211,238,0.07)';g.lineWidth=1;
+  g.beginPath();g.moveTo(cx-r,cy);g.lineTo(cx+r,cy);g.moveTo(cx,cy-r);g.lineTo(cx,cy+r);g.stroke();
+  g.beginPath();g.arc(cx,cy,r,0,7);g.stroke();
+  g.strokeStyle='rgba(34,211,238,0.04)';g.beginPath();g.arc(cx,cy,r*0.5,0,7);g.stroke();
+}
+
+function start(){if(!raf&&running&&!reduce)raf=requestAnimationFrame(frame);}
+function vis(){
+  if(document.hidden){running=false;if(raf){cancelAnimationFrame(raf);raf=0;}}
+  else if(!reduce){running=true;start();}
+}
+document.addEventListener('visibilitychange',vis);
+
+// live upgrade: AudioContext only inside click handler
+var btn=document.getElementById('aav05-live');
+btn.addEventListener('click',function(){
+  if(live){return;}
+  var AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
+  var ctx=new AC();
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+    var src=ctx.createMediaStreamSource(stream);
+    var an=ctx.createAnalyser();an.fftSize=2048;an.smoothingTimeConstant=0.2;
+    src.connect(an);                 // NEVER connect to ctx.destination
+    setLive(an,ctx,stream);
+    btn.classList.add('on');btn.innerHTML='&#9834; live';
+  }).catch(function(){btn.innerHTML='&#9834; n/a';});
+});
+
+if(reduce){frame();}else{start();}
+})();</script>
+</body></html>

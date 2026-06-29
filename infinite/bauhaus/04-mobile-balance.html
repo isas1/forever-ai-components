@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A kinetic Calder-style mobile of red, blue and yellow shapes hanging from black balance arms swaying gently in counterpoint.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mobile Balance</title>
+<style>
+  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  #bh04-stage{position:fixed;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<canvas id="bh04-stage" role="img" aria-label="A Bauhaus kinetic mobile: red, blue, and yellow circles, squares, and triangles hang from balancing black arms that sway in counterpoint."></canvas>
+<div class="cap">Mobile Balance</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById('bh04-stage');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var W=0,H=0,S=0,cx=0,cy=0,dpr=1;
+
+  // Palette: Bauhaus primaries + black, on off-dark.
+  var RED='#e63329', BLU='#2746c4', YEL='#f2c029', INK='#0c0c0e', OFF='#e9e4d8';
+
+  // Mobile tree. Each node: a horizontal arm with a left and right hang.
+  // anchor amplitude + phase per arm gives counterpoint sway. Coords in unit space (-1..1), scaled by S.
+  // type: 'C' circle 'S' square 'T' triangle. Leaf nodes have shape; branch nodes recurse.
+  var arms=[
+    // [pivotX,pivotY, len, amp, phase, leftChild, rightChild]
+  ];
+  // Build a small fixed mobile (well under any cap).
+  function leaf(type,color,r){return {leaf:true,type:type,color:color,r:r};}
+  function arm(armLen,drop,amp,phase,L,R){return {leaf:false,armLen:armLen,drop:drop,amp:amp,phase:phase,L:L,R:R};}
+
+  // Composition: asymmetric weights resolved into visual balance.
+  var root=arm(0.62,0.34,0.16,0.0,
+    arm(0.30,0.26,0.26,1.7,
+      leaf('C',RED,0.115),
+      leaf('T',YEL,0.10)),
+    arm(0.34,0.24,0.22,3.4,
+      leaf('S',BLU,0.10),
+      arm(0.20,0.20,0.34,5.1,
+        leaf('C',YEL,0.072),
+        leaf('S',RED,0.066))));
+
+  function resize(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    S=Math.min(W,H);
+    cx=W/2; cy=H/2;
+  }
+
+  function drawShape(node,x,y){
+    var r=node.r*S;
+    ctx.fillStyle=node.color;
+    if(node.type==='C'){
+      ctx.beginPath(); ctx.arc(x,y,r,0,6.2831853); ctx.fill();
+    } else if(node.type==='S'){
+      ctx.save(); ctx.translate(x,y); ctx.rotate(node._rot||0);
+      ctx.fillRect(-r,-r,r*2,r*2);
+      ctx.restore();
+    } else { // triangle, hanging point up
+      ctx.beginPath();
+      ctx.moveTo(x,y-r*1.15);
+      ctx.lineTo(x+r,y+r*0.82);
+      ctx.lineTo(x-r,y+r*0.82);
+      ctx.closePath(); ctx.fill();
+    }
+    // black pin dot at suspension
+    ctx.fillStyle=INK;
+    ctx.beginPath(); ctx.arc(x,y-(node.type==='T'?r*1.15:(node.type==='S'?r:r)),Math.max(1.5,S*0.006),0,6.2831853); ctx.fill();
+  }
+
+  // Recursively position + draw. Returns nothing; draws threads, arms, shapes.
+  // px,py = pivot point of this node's suspension; ang = parent-imposed swing angle.
+  function render(node,px,py,t,swing){
+    if(node.leaf){
+      // hang thread already drawn by parent; place shape below pivot
+      var hang=0.085*S;
+      var sx=px+Math.sin(swing)*hang;
+      var sy=py+Math.cos(swing)*hang;
+      // thread
+      ctx.strokeStyle=OFF; ctx.globalAlpha=0.55; ctx.lineWidth=Math.max(1,S*0.004);
+      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(sx,sy); ctx.stroke();
+      ctx.globalAlpha=1;
+      drawShape(node,sx,sy);
+      return;
+    }
+    // this node's own sway adds to inherited swing (counterpoint via phase)
+    var local=node.amp*Math.sin(t+node.phase);
+    var sw=swing+local;
+    // suspension drop from pivot to the bar
+    var drop=node.drop*S;
+    var bx=px+Math.sin(sw)*drop;
+    var by=py+Math.cos(sw)*drop;
+    // hang thread from pivot to bar
+    ctx.strokeStyle=OFF; ctx.globalAlpha=0.55; ctx.lineWidth=Math.max(1,S*0.004);
+    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(bx,by); ctx.stroke();
+    ctx.globalAlpha=1;
+    // the balance arm: rotates with sw around bar center
+    var half=node.armLen*0.5*S;
+    var c=Math.cos(sw), s=Math.sin(sw);
+    var lx=bx-c*half, ly=by-s*half;
+    var rx=bx+c*half, ry=by+s*half;
+    // black arm
+    ctx.strokeStyle=INK; ctx.lineWidth=Math.max(2,S*0.012); ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(rx,ry); ctx.stroke();
+    // pivot knuckle
+    ctx.fillStyle=INK; ctx.beginPath(); ctx.arc(bx,by,Math.max(2,S*0.011),0,6.2831853); ctx.fill();
+    // children swing in counterpoint to the arm tilt
+    render(node.L,lx,ly,t,sw*0.6+0.0);
+    render(node.R,rx,ry,t,-sw*0.6);
+  }
+
+  function frame(t){
+    ctx.fillStyle='#101012'; ctx.fillRect(0,0,W,H);
+    // static ground tone: an off-dark modular band, never repaints expensively
+    // top anchor point
+    var ax=cx, ay=cy-S*0.40;
+    // ceiling bar (static black anchor block)
+    ctx.fillStyle=INK;
+    ctx.fillRect(ax-S*0.16,ay-S*0.022,S*0.32,S*0.022);
+    // anchor dot
+    ctx.fillStyle=RED;
+    ctx.beginPath(); ctx.arc(ax,ay,Math.max(2,S*0.014),0,6.2831853); ctx.fill();
+    render(root,ax,ay,t,0);
+  }
+
+  var running=true, raf=0, t0=0;
+  function loop(now){
+    if(!running) return;
+    if(!t0) t0=now;
+    var t=(now-t0)*0.00065; // slow, calm — no fast strobing
+    frame(t);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){
+    if(reduce){ resize(); frame(0.45); return; } // one composed static frame
+    running=true; t0=0; raf=requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize',function(){
+    resize();
+    if(reduce){ frame(0.45); }
+  },{passive:true});
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce) return;
+    if(document.hidden){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+    else if(!running){ running=true; t0=0; raf=requestAnimationFrame(loop); }
+  });
+
+  resize();
+  start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Wireframe triangle, square, hexagon and diamond orbit a glowing neon sun on tilted ellipses over a starfield and perspective grid.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Retro Orbit</title>
+<style>
+  html,body{margin:0;height:100%;background:#160a2a;overflow:hidden}
+  #vw04-stage{position:fixed;inset:0;background:
+    radial-gradient(120% 80% at 50% 14%, #2a1457 0%, #1b0c36 46%, #160a2a 100%);
+    overflow:hidden}
+  #vw04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static neon sun halo — never repaints */
+  #vw04-sun{position:absolute;left:50%;top:30%;width:42%;aspect-ratio:1;
+    transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle at 50% 50%,
+      rgba(255,77,166,.55) 0%, rgba(255,77,166,.18) 38%,
+      rgba(34,211,238,.10) 60%, transparent 72%);
+    box-shadow:0 0 90px 24px rgba(255,77,166,.22),
+               0 0 160px 60px rgba(34,211,238,.10)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="vw04-stage" role="img" aria-label="Wireframe geometric shapes orbiting a glowing sun over a starfield in a neon vaporwave scene">
+  <div id="vw04-sun"></div>
+  <canvas id="vw04-c"></canvas>
+</div>
+<div class="cap">Retro Orbit</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('vw04-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,DPR=1,CX=0,CY=0,UNIT=0;
+  var running=false, raf=0, t=0;
+
+  // palette
+  var MAG='#ff4da6', CYAN='#22d3ee', VIO='#a855f7', WHT='#eafbff';
+
+  // starfield (typed arrays, capped well under 110)
+  var NSTAR=90;
+  var sx=new Float32Array(NSTAR), sy=new Float32Array(NSTAR),
+      sr=new Float32Array(NSTAR), sp=new Float32Array(NSTAR);
+  function seedStars(){
+    for(var i=0;i<NSTAR;i++){
+      sx[i]=Math.random(); sy[i]=Math.random();
+      sr[i]=0.3+Math.random()*1.1; sp[i]=0.4+Math.random()*1.6;
+    }
+  }
+  seedStars();
+
+  // orbiting bodies: each is a wireframe shape on its own elliptical, tilted orbit
+  var bodies=[
+    {a:0.78,e:0.42,tilt:-0.32,spd:0.34,ph:0.0, shape:'tri', col:CYAN, sz:0.16, spin:0.9},
+    {a:1.06,e:0.30,tilt: 0.20,spd:-0.24,ph:1.9, shape:'sq',  col:MAG,  sz:0.20, spin:-0.7},
+    {a:1.38,e:0.46,tilt:-0.14,spd:0.17,ph:3.4, shape:'hex', col:VIO,  sz:0.17, spin:0.55},
+    {a:0.52,e:0.20,tilt: 0.40,spd:0.52,ph:5.0, shape:'dia', col:WHT,  sz:0.11, spin:1.3}
+  ];
+
+  function resize(){
+    var r=cv.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,Math.round(r.width*DPR));
+    H=Math.max(1,Math.round(r.height*DPR));
+    cv.width=W; cv.height=H;
+    CX=W*0.5; CY=H*0.30;            // orbit centre = the sun
+    UNIT=Math.min(W,H)*0.28;        // base orbit radius unit
+  }
+
+  // draw one wireframe polygon, centred at (px,py), projected (squashed vertically for 3D feel)
+  function poly(px,py,rad,sides,rot,squash,col,glowAlpha){
+    ctx.beginPath();
+    for(var i=0;i<=sides;i++){
+      var an=rot + i/sides*Math.PI*2;
+      var vx=px+Math.cos(an)*rad;
+      var vy=py+Math.sin(an)*rad*squash;
+      if(i===0) ctx.moveTo(vx,vy); else ctx.lineTo(vx,vy);
+    }
+    ctx.strokeStyle=col;
+    ctx.lineWidth=Math.max(1,UNIT*0.014);
+    ctx.globalAlpha=glowAlpha;
+    ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+
+  function drawBody(b,scaleY){
+    // angle along orbit
+    var ang=b.ph + t*b.spd;
+    // elliptical orbit in orbit-plane, then tilt
+    var ox=Math.cos(ang)*b.a*UNIT;
+    var oy=Math.sin(ang)*b.a*UNIT*b.e;
+    var ct=Math.cos(b.tilt), st=Math.sin(b.tilt);
+    var px=CX + ox*ct - oy*st;
+    var py=CY + ox*st + oy*ct;
+    // depth: front of orbit (oy>0) is nearer -> bigger & brighter
+    var depth=(oy/(b.a*UNIT*b.e)); // -1..1
+    var dz=0.78+0.30*(depth*0.5+0.5);
+    var rad=UNIT*b.sz*dz;
+    var rot=b.ph + t*b.spin;
+    var alpha=0.45+0.45*(depth*0.5+0.5);
+    var sides = b.shape==='tri'?3 : b.shape==='sq'?4 : b.shape==='hex'?6 : 4;
+    var sq = b.shape==='dia'?0.5:0.62;     // vertical squash = perspective tilt
+    // double stroke: faint big halo behind + crisp shape (both static-width, compositor-safe)
+    poly(px,py,rad*1.18,sides,rot,sq,b.col,alpha*0.22);
+    poly(px,py,rad,sides,rot,sq,b.col,alpha);
+    // chrome glint dot at a vertex
+    ctx.beginPath();
+    var ga=rot;
+    ctx.arc(px+Math.cos(ga)*rad,py+Math.sin(ga)*rad*sq,Math.max(1,UNIT*0.02)*dz,0,6.2832);
+    ctx.fillStyle=WHT; ctx.globalAlpha=alpha; ctx.fill(); ctx.globalAlpha=1;
+    return py; // for painter sort
+  }
+
+  // perspective wireframe grid (horizon at sun line) — drawn statically each frame, no layout reads
+  function drawGrid(){
+    var hy=CY+UNIT*0.18;            // horizon
+    ctx.strokeStyle='rgba(34,211,238,0.30)';
+    ctx.lineWidth=Math.max(1,DPR*0.7);
+    var rows=9, i;
+    // horizontal lines receding with scrolling phase
+    var scroll=(t*0.20)%1;
+    for(i=0;i<rows;i++){
+      var f=(i+scroll)/rows;
+      var yy=hy + (H-hy)*f*f;       // ease toward viewer
+      ctx.globalAlpha=0.10+0.22*f;
+      ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(W,yy); ctx.stroke();
+    }
+    // vanishing verticals
+    ctx.globalAlpha=0.16;
+    for(i=-7;i<=7;i++){
+      ctx.beginPath();
+      ctx.moveTo(CX+i*UNIT*0.10, hy);
+      ctx.lineTo(CX+i*UNIT*1.1, H);
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function drawStars(){
+    for(var i=0;i<NSTAR;i++){
+      var x=sx[i]*W, y=sy[i]*H*0.62;     // upper region only
+      // twinkle via opacity only (no layout)
+      var tw=0.35+0.45*(0.5+0.5*Math.sin(t*sp[i]+i*1.7));
+      ctx.globalAlpha=tw;
+      ctx.fillStyle = (i%7===0)?CYAN : (i%5===0)?MAG : WHT;
+      ctx.fillRect(x, y, sr[i]*DPR, sr[i]*DPR);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function frame(){
+    ctx.clearRect(0,0,W,H);
+    drawStars();
+    drawGrid();
+    // painter's order: sort by computed py without allocation -> draw far (top) first.
+    // simple approach: draw all, but split into back (depth behind sun) then front.
+    var k;
+    for(k=0;k<bodies.length;k++){
+      var b=bodies[k];
+      var ang=b.ph+t*b.spd;
+      var oy=Math.sin(ang)*b.a*UNIT*b.e;
+      var ct=Math.cos(b.tilt), st=Math.sin(b.tilt);
+      var ox=Math.cos(ang)*b.a*UNIT;
+      b._py=CY+ox*st+oy*ct;
+      b._back=(oy<0);
+    }
+    for(k=0;k<bodies.length;k++) if(bodies[k]._back) drawBody(bodies[k]);
+    for(k=0;k<bodies.length;k++) if(!bodies[k]._back) drawBody(bodies[k]);
+  }
+
+  var last=0;
+  function loop(now){
+    if(!running) return;
+    if(!last) last=now;
+    var dt=(now-last)/1000; last=now;
+    if(dt>0.05) dt=0.05;            // clamp after tab return
+    t+=dt;
+    frame();
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){ if(running||reduce) return; running=true; last=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  window.addEventListener('resize', function(){ resize(); if(reduce) frame(); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) stop(); else start();
+  });
+
+  resize();
+  if(reduce){ t=2.3; frame(); }     // one composed, legible static frame
+  else start();
+})();
+</script>
+</body>
+</html>

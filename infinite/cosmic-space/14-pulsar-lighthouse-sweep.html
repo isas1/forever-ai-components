@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A central neutron star spins twin teal beams that sweep like a lighthouse, blipping bright as the cone crosses the line of sight.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pulsar Lighthouse Sweep</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#040810;}
+  #plsr-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#5effc4;opacity:.36;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="plsr-c"></canvas>
+<div class="cap">Pulsar Lighthouse Sweep</div>
+<script>
+(function(){
+  const cv=document.getElementById('plsr-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,S;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;S=Math.min(W,H)/400;
+  }
+  addEventListener('resize',size);size();
+  // starfield (fixed)
+  const stars=[];for(let i=0;i<90;i++)stars.push({x:Math.random(),y:Math.random(),m:0.2+Math.random()*0.8});
+  const TILT=-0.42;            // magnetic axis tilt (radians from vertical)
+  const HALF=0.30;             // half-angle of beam cone
+  const PERIOD=2.05;           // spin period (seconds) — metronomic
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',e=>{nudge=0.6;});
+  cv.addEventListener('click',()=>{nudge=1.2;});
+
+  // draw one beam given its spin phase along the line of sight
+  function beam(ang,bright){
+    const len=Math.max(W,H);
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);
+    const g=ctx.createLinearGradient(0,0,0,-len);
+    g.addColorStop(0,'rgba(94,255,196,'+(0.30*bright)+')');
+    g.addColorStop(0.12,'rgba(110,230,255,'+(0.16*bright)+')');
+    g.addColorStop(1,'rgba(94,255,196,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath();ctx.moveTo(0,0);
+    ctx.lineTo(Math.tan(-HALF)*len,-len);
+    ctx.lineTo(Math.tan(HALF)*len,-len);
+    ctx.closePath();ctx.fill();
+    // bright core ray
+    ctx.strokeStyle='rgba(190,255,235,'+(0.5*bright)+')';
+    ctx.lineWidth=1.4*S;ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-len);ctx.stroke();
+    ctx.restore();
+  }
+
+  function frame(){
+    const phase=(t/PERIOD)%1;                 // 0..1 spin phase
+    const spin=phase*Math.PI*2;
+    // line-of-sight alignment: beam axis is TILT; sweep modulates pulse strength
+    // pulse peaks twice per rotation (two beams). Use crossing of vertical (toward viewer top)
+    const losA=TILT+Math.sin(spin)*0.9;       // apparent swing of beam pair
+    const cross=Math.pow(Math.max(0,Math.cos(spin)),18); // sharp blip near alignment
+    const cross2=Math.pow(Math.max(0,-Math.cos(spin)),18);
+    const blip=Math.max(cross,cross2);
+
+    ctx.fillStyle='#040810';ctx.fillRect(0,0,W,H);
+    // stars, faintly pulsing with the blip
+    stars.forEach(s=>{
+      const a=s.m*(0.25+0.25*blip);
+      ctx.fillStyle='rgba(170,210,230,'+a+')';
+      ctx.fillRect(s.x*W,s.y*H,1.1*S,1.1*S);
+    });
+
+    // twin beams (opposite poles)
+    const sw=Math.sin(spin)*0.85;             // horizontal sway of beam axis
+    beam(losA, 0.55+0.45*cross);
+    beam(losA+Math.PI, 0.55+0.45*cross2);
+
+    // neutron star core + magnetosphere glow, brightening on blip
+    const coreR=(7+blip*5)*S;
+    const halo=ctx.createRadialGradient(cx,cy,0,cx,cy,46*S);
+    halo.addColorStop(0,'rgba(94,255,196,'+(0.55+0.4*blip)+')');
+    halo.addColorStop(0.4,'rgba(94,255,196,'+(0.12+0.2*blip)+')');
+    halo.addColorStop(1,'rgba(94,255,196,0)');
+    ctx.fillStyle=halo;ctx.beginPath();ctx.arc(cx,cy,46*S,0,Math.PI*2);ctx.fill();
+    // dipole field lines (subtle), tilted with the axis
+    ctx.save();ctx.translate(cx,cy);ctx.rotate(TILT+sw*0.18);
+    ctx.strokeStyle='rgba(110,200,255,0.10)';ctx.lineWidth=S;
+    for(let k=-2;k<=2;k++){
+      const r=(18+Math.abs(k)*9)*S;
+      ctx.beginPath();ctx.ellipse(0,0,r*0.55,r,0,0,Math.PI*2);ctx.stroke();
+    }
+    ctx.restore();
+    // the star itself
+    ctx.fillStyle='#eafff6';ctx.beginPath();ctx.arc(cx,cy,coreR,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(94,255,196,'+(0.7+0.3*blip)+')';
+    ctx.beginPath();ctx.arc(cx,cy,coreR*0.6,0,Math.PI*2);ctx.fill();
+
+    if(!reduce){
+      const dt=(1/60)*(1+nudge);
+      t+=dt;nudge*=0.92;if(nudge<0.001)nudge=0;
+      raf=requestAnimationFrame(frame);
+    }
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){t=PERIOD*0.0;frame();}else start();
+})();
+</script>
+</body>
+</html>

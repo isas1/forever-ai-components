@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cross & Circle — Kazimir Malevich. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cross &amp; Circle</title>
+<style>
+  html,body{margin:0;height:100%;background:#f0ece2;overflow:hidden}
+  #mal05-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mal05-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mal05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#111;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mal05-stage" role="img" aria-label="Suprematist elements — cross, circle, bar and square in black, red, blue and yellow — are flung in from the nearest edge to find their balance in the white field, composing alone.">
+  <canvas id="mal05-cv"></canvas>
+</div>
+<div class="mal05-cap">Cross &amp; Circle</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={black:'#111111',red:'#d8261c',blue:'#1746a0',yellow:'#f2b705'};
+  const cv=document.getElementById('mal05-cv'); if(!cv) return;
+  const stage=document.getElementById('mal05-stage');
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const cols=[PAL.black,PAL.red,PAL.blue,PAL.yellow];
+  const kinds=['cross','circ','bar','sq'];
+  const forms=[];
+  function fling(tx,ty){
+    const kind=kinds[(Math.random()*kinds.length)|0];
+    const dl=tx,dr=S.w-tx,dt=ty,db=S.h-ty;
+    const m=Math.min(dl,dr,dt,db);
+    let sx,sy;
+    if(m===dl){sx=-S.w*0.2;sy=ty;}
+    else if(m===dr){sx=S.w*1.2;sy=ty;}
+    else if(m===dt){sx=tx;sy=-S.h*0.2;}
+    else {sx=tx;sy=S.h*1.2;}
+    forms.push({sx,sy,tx,ty,x:sx,y:sy, c:cols[(Math.random()*cols.length)|0],
+      kind, sz:Math.min(S.w,S.h)*(0.07+Math.random()*0.05), ratio:3+Math.random()*3,
+      rot:(-0.5+Math.random()), t:0, arrive:0.85+Math.random()*0.4});
+    if(forms.length>9) forms.shift();
+  }
+  function ease(t){return 1-Math.pow(1-t,3);}
+  function pos(ev){const r=cv.getBoundingClientRect();const p=ev.touches?ev.touches[0]:ev;return [p.clientX-r.left,p.clientY-r.top];}
+  stage.style.cursor='crosshair';
+  stage.addEventListener('pointerdown',e=>{const [x,y]=pos(e);fling(x,y);});
+  let last=performance.now(), autoT=0;
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now; autoT+=dt;
+    if(autoT>(REDUCED?3.4:2.2)){autoT=0; fling(S.w*(0.2+Math.random()*0.6),S.h*(0.2+Math.random()*0.6));}
+    const ctx=S.ctx;
+    ctx.fillStyle='#f0ece2'; ctx.fillRect(0,0,S.w,S.h);
+    for(const f of forms){
+      f.t+=dt;
+      const k=ease(Math.min(1,f.t/f.arrive));
+      f.x=f.sx+(f.tx-f.sx)*k; f.y=f.sy+(f.ty-f.sy)*k;
+      let wob=0;
+      if(f.t>f.arrive){ wob=Math.sin((f.t-f.arrive)*9)*Math.exp(-(f.t-f.arrive)*3)*0.06; }
+      ctx.save(); ctx.translate(f.x,f.y); ctx.rotate(f.rot+wob);
+      ctx.fillStyle=f.c; ctx.strokeStyle=PAL.black; ctx.lineWidth=1.5;
+      const z=f.sz;
+      if(f.kind==='cross'){const arm=z*1.1,th=z*0.34; ctx.fillRect(-arm,-th,2*arm,2*th); ctx.fillRect(-th,-arm,2*th,2*arm);}
+      else if(f.kind==='circ'){ctx.beginPath();ctx.arc(0,0,z*0.85,0,7);ctx.fill(); if(f.c!==PAL.black) ctx.stroke();}
+      else if(f.kind==='bar'){const w=z*f.ratio,h=z*0.55; ctx.fillRect(-w/2,-h/2,w,h); if(f.c!==PAL.black) ctx.strokeRect(-w/2,-h/2,w,h);}
+      else{ctx.fillRect(-z*0.75,-z*0.75,z*1.5,z*1.5); if(f.c!==PAL.black) ctx.strokeRect(-z*0.75,-z*0.75,z*1.5,z*1.5);}
+      ctx.restore();
+    }
+  }
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  fling(S.w*0.5,S.h*0.5);
+  S.ctx.fillStyle='#f0ece2'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ for(let i=0;i<3;i++) fling(S.w*(0.3+i*0.2),S.h*0.5); for(let i=0;i<120;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

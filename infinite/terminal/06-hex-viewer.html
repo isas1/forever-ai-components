@@ -1,0 +1,96 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Hex Viewer — Terminal. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hex Viewer</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0a0a0a;font:12px/1.6 ui-monospace,Menlo,"Courier New",monospace}
+.trm-wrap{padding:10px 12px;height:100%;display:flex;flex-direction:column;overflow:hidden}
+.trm-header{color:#3a6a3a;font-size:11px;border-bottom:1px solid #1a2a1a;padding-bottom:4px;margin-bottom:6px}
+.trm-hdr-row{display:grid;grid-template-columns:64px 1fr 18px 1fr;gap:0;color:#2a4a2a;font-size:11px;margin-bottom:3px;border-bottom:1px solid #111}
+.trm-rows{flex:1;overflow:hidden;display:flex;flex-direction:column-reverse;gap:0}
+.trm-row{display:grid;grid-template-columns:64px 1fr 4px 1fr;gap:0;line-height:1.65;animation:trm-slide .2s ease}
+@keyframes trm-slide{from{opacity:0}to{opacity:1}}
+.trm-addr{color:#2a5a4a}
+.trm-hex{color:#00ff41;letter-spacing:.5px}
+.trm-sep{color:#1a2a1a}
+.trm-ascii{color:#4a8a5a;letter-spacing:.5px}
+.trm-null{color:#1e2e1e}
+.trm-hi{color:#ffa500}
+.trm-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#00ff41;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+</style></head><body>
+<div class="trm-wrap">
+  <div class="trm-header">&#x2592; HEX VIEWER — /proc/kcore offset 0x00400000</div>
+  <div class="trm-hdr-row">
+    <span>offset  </span><span>00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f</span><span> </span><span>0123456789abcdef</span>
+  </div>
+  <div class="trm-rows" id="trm-rows"></div>
+</div>
+<div class="trm-cap">hex viewer</div>
+<script>(()=>{
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const rowsEl=document.getElementById('trm-rows');
+  const MAX=12;
+  const PRINTABLE=/[ -~]/;
+
+  // Seed data pools — mix of ELF header, null regions, strings, code-like bytes
+  const pools=[
+    [0x7f,0x45,0x4c,0x46,0x02,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00],
+    [0x02,0x00,0x3e,0x00,0x01,0x00,0x00,0x00,0x40,0x10,0x40,0x00,0x00,0x00,0x00,0x00],
+    [0x48,0x65,0x6c,0x6c,0x6f,0x2c,0x20,0x77,0x6f,0x72,0x6c,0x64,0x21,0x0a,0x00,0x00],
+    [0x55,0x48,0x89,0xe5,0x48,0x83,0xec,0x10,0xbf,0x01,0x00,0x00,0x00,0xe8,0x00,0x00],
+    [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00],
+    [0xff,0xfe,0xfd,0xfc,0xfb,0xfa,0xf9,0xf8,0x0a,0x0d,0x1b,0x5b,0x33,0x32,0x6d,0x00],
+    [0x2f,0x62,0x69,0x6e,0x2f,0x62,0x61,0x73,0x68,0x00,0x50,0x41,0x54,0x48,0x3d,0x2f],
+    [0x90,0x90,0x90,0x48,0x31,0xc0,0x48,0x31,0xff,0x48,0x31,0xf6,0x48,0x31,0xd2,0x0f],
+    [0x6e,0x6f,0x64,0x65,0x20,0x61,0x70,0x70,0x2e,0x6a,0x73,0x20,0x2d,0x2d,0x70,0x6f],
+    [0x72,0x74,0x20,0x33,0x30,0x30,0x30,0x0a,0x00,0x00,0x00,0x00,0x2e,0x74,0x65,0x78],
+  ];
+
+  let offset=0x00400000;
+  let poolIdx=0;
+  let timer=null;
+
+  function fmtAddr(n){return '0x'+n.toString(16).padStart(8,'0');}
+  function fmtByte(b){return b.toString(16).padStart(2,'0');}
+  function fmtAscii(b){
+    if(b===0x00)return '<span class="trm-null">.</span>';
+    if(b===0x0a||b===0x0d)return '<span class="trm-hi">.</span>';
+    const c=String.fromCharCode(b);
+    if(PRINTABLE.test(c))return c==='<'?'&lt;':c==='&'?'&amp;':c;
+    return '<span class="trm-null">.</span>';
+  }
+
+  function addRow(){
+    const bytes=pools[poolIdx%pools.length];
+    // slight random variation
+    const row=bytes.map((b,i)=>(poolIdx%3===1&&i>8)?((b+Math.floor(Math.random()*16))&0xff):b);
+    poolIdx++;
+
+    const el=document.createElement('div');el.className='trm-row';
+
+    const addr=document.createElement('span');addr.className='trm-addr';addr.textContent=fmtAddr(offset)+'  ';
+    const hex=document.createElement('span');hex.className='trm-hex';hex.textContent=row.map(fmtByte).join(' ');
+    const sep=document.createElement('span');sep.className='trm-sep';sep.textContent=' ';
+    const asc=document.createElement('span');asc.className='trm-ascii';asc.innerHTML=row.map(fmtAscii).join('');
+
+    el.appendChild(addr);el.appendChild(hex);el.appendChild(sep);el.appendChild(asc);
+    rowsEl.insertBefore(el,rowsEl.firstChild);
+    while(rowsEl.children.length>MAX)rowsEl.removeChild(rowsEl.lastChild);
+
+    offset+=16;
+    // reset offset occasionally to keep it readable
+    if(offset>0x00410000)offset=0x00400000;
+  }
+
+  function stop(){clearInterval(timer);}
+  function play(){
+    if(reduce){for(let i=0;i<MAX;i++)addRow();return;}
+    for(let i=0;i<MAX;i++)addRow();
+    timer=setInterval(addRow,550);
+  }
+
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  play();
+})();</script>
+</body></html>

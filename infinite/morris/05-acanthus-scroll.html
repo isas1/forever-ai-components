@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Acanthus Scroll — William Morris. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Acanthus Scroll</title>
+<style>
+  html,body{margin:0;height:100%;background:#efe7d2;overflow:hidden}
+  #mor05-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mor05-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mor05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#23301f;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mor05-stage" role="img" aria-label="A continuous William Morris acanthus border — great curling olive and sage leaves doubling back on their own stems with madder buds — scrolling past on a warm cream ground, a gold pen tracing it as if self-drawing.">
+  <canvas id="mor05-cv"></canvas>
+</div>
+<div class="mor05-cap">The Acanthus Scroll</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mor05-cv'); if(!cv) return;
+  const PAL={cream:'#efe7d2',olive:'#6b7233',madder:'#a8392b',sage:'#7d9b6a',gold:'#c2a14a',ink:'#23301f'};
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const unit=170;
+  let scroll=0,pen=0,last=performance.now();
+
+  function acanthusUnit(ctx,u,h){
+    ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+    ctx.strokeStyle=PAL.olive;ctx.lineWidth=5;
+    ctx.beginPath();ctx.moveTo(0,h*0.5);
+    ctx.bezierCurveTo(u*0.25,h*0.1,u*0.5,h*0.9,u*0.75,h*0.5);
+    ctx.bezierCurveTo(u*0.9,h*0.25,u,h*0.4,u,h*0.5);ctx.stroke();
+    function curl(cx,cy,sc,flip){
+      ctx.save();ctx.translate(cx,cy);ctx.scale(sc*flip,sc);
+      ctx.beginPath();ctx.moveTo(0,0);
+      ctx.bezierCurveTo(20,-6,30,-30,14,-44);
+      ctx.bezierCurveTo(2,-52,-18,-44,-16,-26);
+      ctx.bezierCurveTo(-14,-14,-2,-12,2,-22);
+      ctx.bezierCurveTo(4,-30,-4,-34,-8,-28);
+      ctx.strokeStyle=PAL.sage;ctx.lineWidth=3.4;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(0,0);
+      ctx.bezierCurveTo(18,-4,26,-26,12,-40);
+      ctx.bezierCurveTo(4,-30,-2,-32,-10,-24);
+      ctx.bezierCurveTo(-6,-14,-2,-10,0,0);ctx.closePath();
+      ctx.fillStyle='rgba(107,114,51,.55)';ctx.fill();
+      ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.2;ctx.stroke();ctx.restore();
+    }
+    curl(u*0.25,h*0.5,1,1);curl(u*0.72,h*0.5,0.86,-1);
+    ctx.save();ctx.translate(u*0.5,h*0.62);
+    for(let i=0;i<5;i++){ctx.rotate(Math.PI*2/5);ctx.beginPath();ctx.ellipse(0,-7,3.5,6,0,0,7);ctx.fillStyle=PAL.madder;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=.9;ctx.stroke();}
+    ctx.beginPath();ctx.arc(0,0,3.5,0,7);ctx.fillStyle=PAL.gold;ctx.fill();ctx.restore();
+    ctx.restore();
+  }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED){scroll=(scroll+dt*26)%unit;pen=(pen+dt*0.6)%1;}
+    const ctx=S.ctx;ctx.fillStyle=PAL.cream;ctx.fillRect(0,0,S.w,S.h);
+    ctx.strokeStyle='rgba(35,48,31,.3)';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(0,12);ctx.lineTo(S.w,12);ctx.moveTo(0,S.h-12);ctx.lineTo(S.w,S.h-12);ctx.stroke();
+    const bandH=S.h-40;
+    for(let row=0;row<2;row++){
+      const yo=22+row*(bandH/2);
+      const ph=row?unit*0.5:0;
+      ctx.save();ctx.translate(-scroll-ph,yo);
+      const n=Math.ceil(S.w/unit)+2;
+      for(let i=0;i<n;i++){ctx.save();ctx.translate(i*unit,0);acanthusUnit(ctx,unit,bandH/2-6);ctx.restore();}
+      ctx.restore();
+    }
+    if(!REDUCED){
+      const px=pen*S.w;
+      const py=22+(bandH/4)+Math.sin(px/unit*Math.PI*2-scroll/unit*Math.PI*2)*(bandH/8);
+      ctx.beginPath();ctx.arc(px,py,4,0,7);ctx.fillStyle=PAL.gold;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1.4;ctx.stroke();
+    }
+  }
+
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

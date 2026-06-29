@@ -1,0 +1,179 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Ukiyo-e woodblock scene of cranes gliding across flat indigo color bands beneath a coral sun and snow-capped cone.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crane Glide</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  #uk03-stage{position:fixed;inset:0}
+  #uk03-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style></head>
+<body>
+<div id="uk03-stage" role="img" aria-label="Ukiyo-e woodblock scene: cranes gliding across flat indigo, cream and coral color bands beneath a stylised cone and sun">
+  <canvas id="uk03-c"></canvas>
+</div>
+<div class="cap">Crane Glide</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("uk03-c"),ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,DPR=1,running=false,raf=0,t0=0;
+
+  // Ukiyo-e palette
+  var INK="#13202e",INDIGO1="#1f3a5f",INDIGO2="#2e5d86",TEAL="#3f7d8c",
+      CREAM="#e8d5b0",CORAL="#d2603a",ROSE="#c9748a",SUN="#e0a24a",PAPER="#0f1822";
+  // Crane body fill (hoisted: avoid per-frame array allocation in crane())
+  var CRANE_BODY=CREAM;
+
+  // Horizontal color bands (ratios of H), flat planes
+  var bands=[
+    {y0:0.00,y1:0.30,col:INDIGO1},
+    {y0:0.30,y1:0.46,col:INDIGO2},
+    {y0:0.46,y1:0.62,col:TEAL},
+    {y0:0.62,y1:1.00,col:CREAM}
+  ];
+
+  // Cranes: typed flight params (cap well under 110)
+  var N=7, cx=new Float32Array(N),cy=new Float32Array(N),sp=new Float32Array(N),
+      sc=new Float32Array(N),ph=new Float32Array(N),dir=new Float32Array(N),tone=new Int8Array(N);
+  function seedCranes(){
+    for(var i=0;i<N;i++){
+      dir[i]= i%2? -1:1;
+      cx[i]=Math.random();
+      cy[i]=0.12+Math.random()*0.66;
+      sp[i]=0.018+Math.random()*0.03;
+      sc[i]=0.7+Math.random()*0.9;
+      ph[i]=Math.random()*6.28;
+      tone[i]= i%3;
+    }
+  }
+  seedCranes();
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.max(1,Math.round(W*DPR));
+    cv.height=Math.max(1,Math.round(H*DPR));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    if(reduce){drawScene(0);drawCranesStatic();}
+  }
+
+  function drawScene(t){
+    // bokashi-style banding done as flat planes (no per-frame gradient repaint cost beyond fill)
+    for(var b=0;b<bands.length;b++){
+      ctx.fillStyle=bands[b].col;
+      ctx.fillRect(0,bands[b].y0*H,W,(bands[b].y1-bands[b].y0)*H+1);
+    }
+    // sun disc (static, coral) upper-left
+    var sx=W*0.26,sy=H*0.18,sr=Math.min(W,H)*0.11;
+    ctx.fillStyle=CORAL;ctx.beginPath();ctx.arc(sx,sy,sr,0,6.2832);ctx.fill();
+    ctx.fillStyle=ROSE;ctx.globalAlpha=.5;ctx.beginPath();ctx.arc(sx,sy,sr*0.66,0,6.2832);ctx.fill();ctx.globalAlpha=1;
+
+    // Mt-Fuji-like cone (flat, cream cap)
+    var px=W*0.70,base=H*0.62,half=Math.min(W,H)*0.42,peak=base-Math.min(W,H)*0.40;
+    ctx.fillStyle=INK;
+    ctx.beginPath();ctx.moveTo(px-half,base);ctx.lineTo(px,peak);ctx.lineTo(px+half,base);ctx.closePath();ctx.fill();
+    ctx.fillStyle=CREAM;
+    var capw=half*0.22;
+    ctx.beginPath();ctx.moveTo(px-capw,peak+(base-peak)*0.18);
+    ctx.lineTo(px,peak);ctx.lineTo(px+capw,peak+(base-peak)*0.18);
+    ctx.lineTo(px+capw*0.5,peak+(base-peak)*0.30);ctx.lineTo(px,peak+(base-peak)*0.22);
+    ctx.lineTo(px-capw*0.5,peak+(base-peak)*0.30);ctx.closePath();ctx.fill();
+
+    // stylised wave crests on cream foreground (static curl line motif)
+    var fy=H*0.78;
+    ctx.strokeStyle=INDIGO1;ctx.lineWidth=Math.max(1.5,H*0.006);ctx.lineCap="round";
+    var n=Math.ceil(W/70)+1;
+    for(var i=0;i<n;i++){
+      var x=i*70 - ((t*16)%70);
+      ctx.beginPath();
+      ctx.arc(x+35,fy,18,Math.PI,0,false);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x+35,fy+H*0.09,14,Math.PI,0,false);
+      ctx.stroke();
+    }
+  }
+
+  // One crane drawn at unit scale around origin, facing +x; bold outline, flat planes
+  function crane(x,y,s,flap,d){
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.scale(d*s,s);
+    var bw=INK;
+    // body
+    ctx.fillStyle=CRANE_BODY;ctx.strokeStyle=bw;ctx.lineWidth=2.2;ctx.lineJoin="round";
+    ctx.beginPath();
+    ctx.moveTo(-26,2);
+    ctx.quadraticCurveTo(-2,-6,22,0);          // back to neck base
+    ctx.quadraticCurveTo(10,8,-26,8);           // belly
+    ctx.closePath();ctx.fill();ctx.stroke();
+    // long neck + head
+    ctx.beginPath();ctx.moveTo(20,-1);
+    ctx.quadraticCurveTo(40,-14,52,-20);
+    ctx.lineTo(60,-18);                          // beak
+    ctx.lineTo(52,-15);
+    ctx.quadraticCurveTo(40,-9,22,3);
+    ctx.closePath();ctx.fill();ctx.stroke();
+    // red crown dab
+    ctx.fillStyle=CORAL;ctx.beginPath();ctx.arc(51,-21,3.2,0,6.2832);ctx.fill();
+    // tail (dark flight feathers)
+    ctx.fillStyle=INK;ctx.beginPath();
+    ctx.moveTo(-22,2);ctx.lineTo(-40,-2);ctx.lineTo(-40,7);ctx.closePath();ctx.fill();
+    // wings — animated by flap, drawn as two flat planes
+    var up=Math.sin(flap), wy=-18*up-2;
+    // far wing
+    ctx.fillStyle="#cdb98f";ctx.strokeStyle=bw;ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(-6,0);
+    ctx.quadraticCurveTo(-2,wy*0.7,18,wy);
+    ctx.quadraticCurveTo(6,wy*0.45+4,-6,4);ctx.closePath();ctx.fill();ctx.stroke();
+    // near wing
+    ctx.fillStyle=CRANE_BODY;
+    ctx.beginPath();ctx.moveTo(-8,2);
+    ctx.quadraticCurveTo(-4,wy*0.9-2,16,wy-4);
+    ctx.lineTo(20,wy+2);
+    ctx.quadraticCurveTo(4,wy*0.5+6,-8,6);ctx.closePath();ctx.fill();ctx.stroke();
+    // black wing tip
+    ctx.fillStyle=INK;ctx.beginPath();
+    ctx.moveTo(16,wy-4);ctx.lineTo(22,wy-2);ctx.lineTo(18,wy+4);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+
+  function drawCranesStatic(){
+    for(var i=0;i<N;i++){
+      var base=Math.min(W,H)*0.06;
+      crane(cx[i]*W,cy[i]*H, base*sc[i]/26, ph[i], dir[i]);
+    }
+  }
+
+  function frame(ts){
+    if(!running)return;
+    if(!t0)t0=ts;
+    var t=(ts-t0)/1000;
+    drawScene(t);
+    var base=Math.min(W,H)*0.06;
+    for(var i=0;i<N;i++){
+      var x=cx[i]+dir[i]*sp[i]*t*0.06;
+      x=((x%1)+1)%1;
+      var bob=Math.sin(t*2.2+ph[i])*H*0.012;
+      crane(x*W, cy[i]*H+bob, base*sc[i]/26, t*7+ph[i], dir[i]);
+    }
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(running||reduce)return; running=true;t0=0;raf=requestAnimationFrame(frame); }
+  function stop(){ running=false;cancelAnimationFrame(raf); }
+
+  window.addEventListener("resize",resize);
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden)stop(); else start();
+  });
+
+  resize();
+  if(reduce){ drawScene(0);drawCranesStatic(); return; }
+  start();
+})();
+</script>
+</body></html>

@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="GitHub-style 52-week contribution heatmap in green buckets on near-black; cells pop in column by column as a bright leading edge sweeps left">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Heat Calendar</title>
+<style>
+  :root{
+    --ch10-bg:#0a0d12; --ch10-acc:#5ad1a0;
+    --ch10-l0:#10171c; --ch10-l1:#1b3b35; --ch10-l2:#2f7d63; --ch10-l3:#5ad1a0; --ch10-l4:#aef0cf;
+    --ch10-grid:rgba(120,150,160,.10);
+  }
+  html,body{margin:0;height:100%;background:var(--ch10-bg);overflow:hidden}
+  #ch10-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(120% 120% at 28% 18%,#0e141b 0%,var(--ch10-bg) 62%)}
+  #ch10-c{width:88%;height:88%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;
+    opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="ch10-stage">
+    <canvas id="ch10-c" role="img"
+      aria-label="Calendar heatmap: 52 weeks of synthetic daily activity, brighter green cells marking higher intensity, filling left to right in a sweeping wave."></canvas>
+  </div>
+  <div class="cap">Heat Calendar</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("ch10-c"), ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var COLS=52, ROWS=7, N=COLS*ROWS;
+  var dpr=1, W=0, H=0, pad=0, gap=0, cell=0, ox=0, oy=0, lblH=0;
+  // synthetic data: seasonal swell + weekly rhythm + deterministic noise, 0..1
+  var val=new Float32Array(N), appear=new Float32Array(N);
+  (function seed(){
+    var s=20260626;
+    function rnd(){ s=(s*1664525+1013904223)>>>0; return s/4294967296; }
+    for(var w=0;w<COLS;w++){
+      var season=0.5+0.42*Math.sin((w/COLS)*Math.PI*2-1.1); // yearly arc
+      for(var d=0;d<ROWS;d++){
+        var i=w*ROWS+d;
+        var week=(d===0||d===6)?0.42:1; // weekends quieter
+        var v=season*week+(rnd()-0.5)*0.5;
+        v+=Math.exp(-Math.pow((w-COLS*0.7)/4,2))*0.5; // a burst late in year
+        val[i]=v<0?0:v>1?1:v;
+      }
+    }
+  })();
+  var PAL=["--ch10-l0","--ch10-l1","--ch10-l2","--ch10-l3","--ch10-l4"].map(function(n){
+    return getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  });
+  function bucket(v){ return v<.12?0:v<.35?1:v<.6?2:v<.82?3:4; }
+
+  function resize(){
+    var r=cv.getBoundingClientRect();
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,Math.round(r.width*dpr)); H=Math.max(1,Math.round(r.height*dpr));
+    cv.width=W; cv.height=H;
+    pad=Math.round(W*0.04); lblH=Math.round(H*0.10);
+    var availW=W-pad*2, availH=H-pad*2-lblH;
+    cell=Math.floor(Math.min(availW/(COLS+(COLS-1)*0.16), availH/(ROWS+(ROWS-1)*0.16)));
+    if(cell<2)cell=2;
+    gap=Math.max(1,Math.round(cell*0.16));
+    var gw=COLS*cell+(COLS-1)*gap, gh=ROWS*cell+(ROWS-1)*gap;
+    ox=Math.round((W-gw)/2); oy=Math.round(pad+lblH+(availH-gh)/2);
+  }
+
+  function roundRect(x,y,s,rad){
+    ctx.beginPath();
+    ctx.moveTo(x+rad,y);
+    ctx.arcTo(x+s,y,x+s,y+s,rad);
+    ctx.arcTo(x+s,y+s,x,y+s,rad);
+    ctx.arcTo(x,y+s,x,y,rad);
+    ctx.arcTo(x,y,x+s,y,rad);
+    ctx.closePath();
+  }
+
+  function draw(prog){
+    // prog 0..1 sweep position; cells appear[i] is their own eased fill 0..1
+    ctx.clearRect(0,0,W,H);
+    var rad=Math.max(1,cell*0.22);
+    // months ticks (top label band) — static, no per-frame layout reads
+    ctx.fillStyle="rgba(174,240,207,.16)";
+    var th=Math.max(1,Math.round(cell*0.12));
+    for(var m=0;m<12;m++){
+      var wx=ox+Math.round(m*(COLS/12))*(cell+gap);
+      ctx.fillRect(wx, oy-Math.round(gap*2.5)-th, cell, th);
+    }
+    // the sweep highlight column position
+    var sweepX=prog*(COLS+2)-1;
+    for(var w=0;w<COLS;w++){
+      var x=ox+w*(cell+gap);
+      for(var d=0;d<ROWS;d++){
+        var i=w*ROWS+d;
+        var a=appear[i];
+        if(a<=0) continue;
+        var y=oy+d*(cell+gap);
+        var b=bucket(val[i]*a);
+        ctx.globalAlpha=0.18+0.82*a;
+        ctx.fillStyle=PAL[b];
+        // pop scale on arrival via inset
+        var grow=a<1?(1-a):0;
+        var inset=grow*cell*0.5;
+        roundRect(x+inset,y+inset,cell-inset*2,rad);
+        ctx.fill();
+      }
+      // leading edge accent line
+      var dist=Math.abs(w-sweepX);
+      if(dist<1.4){
+        ctx.globalAlpha=(1-dist/1.4)*0.55;
+        ctx.fillStyle=PAL[4];
+        ctx.fillRect(x-Math.round(gap*0.7),oy-gap,Math.max(1,Math.round(cell*0.12)),ROWS*(cell+gap));
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function setAll(t){ for(var i=0;i<N;i++) appear[i]=t; }
+
+  if(reduce){ resize(); setAll(1); draw(1); return; }
+
+  var running=true, raf=0, t0=0, DUR=4200;
+  function frame(ts){
+    if(!running) return;
+    if(!t0) t0=ts;
+    var loop=((ts-t0)%(DUR+900))/DUR; // brief hold after full
+    var prog=loop>1?1:loop;
+    var head=prog*(COLS+2); // column-wise wavefront
+    for(var w=0;w<COLS;w++){
+      var lead=head-w;
+      var a=lead<=0?0:lead>=1.6?1:lead/1.6;
+      // ease-out cubic
+      a=1-Math.pow(1-a,3);
+      for(var d=0;d<ROWS;d++) appear[w*ROWS+d]=a;
+    }
+    if(loop>1) setAll(1);
+    draw(prog);
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){ if(!running){running=true; t0=0; raf=requestAnimationFrame(frame);} }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  resize();
+  window.addEventListener("resize",function(){ resize(); if(!running) draw(1); });
+  document.addEventListener("visibilitychange",function(){ document.hidden?stop():start(); });
+  raf=requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

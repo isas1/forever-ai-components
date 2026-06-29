@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A pointillist riverbank at dusk built from thousands of breathing dots that softly shimmer via optical color mixing.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seurat Shimmer</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  #po02-stage{position:fixed;inset:0;background:#0d0f14}
+  #po02-c{width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="po02-stage" role="img" aria-label="A pointillist riverbank at dusk, built from thousands of breathing colored dots that optically shimmer.">
+  <canvas id="po02-c"></canvas>
+</div>
+<div class="cap">Seurat Shimmer</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var stage = document.getElementById('po02-stage');
+  var cv = document.getElementById('po02-c');
+  var ctx = cv.getContext('2d');
+
+  var W=0,H=0,dpr=1,BW=0,BH=0;
+  // Buffer renders at capped resolution then scales to fill; single blit/frame.
+  var img=null, buf32=null, acc=null;
+  // Divisionist palette: warm complements optically mixing against cool ground.
+  var PAL = [
+    [240,168,48],  // accent saffron (sky highlight)
+    [232,120,64],  // orange
+    [206,84,96],   // rose madder
+    [120,96,168],  // violet (shadow)
+    [64,108,176],  // cobalt water
+    [72,150,160],  // teal
+    [108,170,96],  // foliage green
+    [196,190,96],  // ochre-yellow grass
+    [228,210,180]  // pale light
+  ];
+
+  // Dot field: typed arrays, allocation-free loop. Rendered into ONE ImageData
+  // and blitted once per frame (no per-dot ctx path fills) — the typed-array +
+  // single-blit escape hatch that lets the field stay dense.
+  var N=0, px,py, baseR, ph, amp, col;
+
+  function build(){
+    // density scaled to buffer area; positions live in buffer-pixel space.
+    var target = Math.min(2600, Math.round((BW*BH)/520));
+    N = target;
+    px=new Float32Array(N); py=new Float32Array(N);
+    baseR=new Float32Array(N);
+    ph=new Float32Array(N); amp=new Float32Array(N); col=new Uint8Array(N);
+    var i=0;
+    while(i<N){
+      var x=Math.random()*BW, y=Math.random()*BH;
+      var ny=y/BH;          // 0 top .. 1 bottom
+      var horizon=0.46;
+      var p;                 // palette weighting by zone -> the scene
+      if(ny<horizon){        // sky: saffron->rose->violet gradient up high
+        var t=ny/horizon;
+        p = t<0.4? pick(0,8) : (t<0.75? pick(2,1) : pick(3,2));
+        if(Math.random()<0.10) p=4;
+      } else if(ny<horizon+0.30){ // water band: cobalt/teal with sky reflections
+        p = Math.random()<0.34? pick(0,8) : pick(4,5);
+        if(Math.random()<0.12) p=2;
+      } else {               // grassy bank: green/ochre with violet shadow
+        var s=(ny-(horizon+0.30))/0.24;
+        p = s<0.5? pick(6,7) : pick(3,6);
+        if(Math.random()<0.14) p=7;
+      }
+      px[i]=x; py[i]=y;
+      var m=Math.min(BW,BH);
+      baseR[i]=0.0016*m+Math.random()*0.0042*m;
+      col[i]=p;
+      ph[i]=Math.random()*6.283;
+      amp[i]=0.35+Math.random()*0.5;
+      i++;
+    }
+  }
+  function pick(a,b){ return Math.random()<0.5?a:b; }
+
+  function size(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    // Buffer resolution: cap longest edge so a single ImageData stays cheap.
+    // CSS stretches the canvas to fill the stage (soft scale suits dots).
+    var capE=560;
+    var sc=Math.min(1, capE/Math.max(1,Math.max(W,H)));
+    BW=Math.max(1,Math.round(W*sc));
+    BH=Math.max(1,Math.round(H*sc));
+    cv.width=BW; cv.height=BH;
+    ctx.setTransform(1,0,0,1,0,0);
+    img=ctx.createImageData(BW,BH);
+    buf32=new Uint32Array(img.data.buffer);
+    acc=new Float32Array(BW*BH*3); // r,g,b additive accumulation
+    build();
+  }
+
+  // Render the whole dot field into a single ImageData via additive splatting,
+  // then blit once. No per-dot canvas path fills.
+  function draw(t){
+    var ac=acc, bw=BW, bh=BH, n=N, k;
+    // ground wash so gaps read as deep ground, not pure black
+    var GR=13, GG=15, GB=20; // #0d0f14
+    var len=bw*bh*3;
+    for(k=0;k<len;k+=3){ ac[k]=GR; ac[k+1]=GG; ac[k+2]=GB; }
+    var i=0;
+    for(;i<n;i++){
+      var c=col[i], r=PAL[c], cr=r[0], cg=r[1], cb=r[2];
+      // breathing: per-dot phase, slow global drift -> shimmer
+      var b=0.55+0.45*amp[i]*Math.sin(t*0.0013 + ph[i] + px[i]*0.004 + py[i]*0.003);
+      if(b<0) b=0; else if(b>1) b=1;
+      var rad=baseR[i]*(0.78+0.4*b);
+      if(rad<0.6) rad=0.6;
+      var inten=0.30+0.55*b;      // additive weight (matches old alpha curve)
+      var cx=px[i], cy=py[i];
+      var x0=cx-rad, x1=cx+rad, y0=cy-rad, y1=cy+rad;
+      var ix0=x0<0?0:(x0|0), iy0=y0<0?0:(y0|0);
+      var ix1=x1>bw-1?bw-1:(x1|0), iy1=y1>bh-1?bh-1:(y1|0);
+      var inv=1/(rad*rad);
+      for(var yy=iy0;yy<=iy1;yy++){
+        var dy=yy-cy, dy2=dy*dy, row=yy*bw;
+        for(var xx=ix0;xx<=ix1;xx++){
+          var dx=xx-cx, d2=dx*dx+dy2;
+          if(d2>rad*rad) continue;
+          var f=(1-d2*inv);     // soft falloff, ~1 at center -> 0 at edge
+          f=f*f*inten;          // gaussian-ish, weighted by breathing
+          var o=(row+xx)*3;
+          ac[o]+=cr*f; ac[o+1]+=cg*f; ac[o+2]+=cb*f;
+        }
+      }
+    }
+    // tonemap accumulation -> RGBA (clamp), single blit
+    var b32=buf32, p=0;
+    for(k=0;k<len;k+=3){
+      var R=ac[k]; if(R>255)R=255;
+      var G=ac[k+1]; if(G>255)G=255;
+      var B=ac[k+2]; if(B>255)B=255;
+      // ABGR for little-endian Uint32 view
+      b32[p++]=(255<<24)|((B|0)<<16)|((G|0)<<8)|(R|0);
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  var running=true, raf=0, last=0;
+  function loop(now){
+    if(!running) return;
+    draw(now);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function start(){
+    if(reduce){ draw(1200); return; }
+    if(!running){ running=true; raf=requestAnimationFrame(loop); }
+  }
+
+  size();
+  window.addEventListener('resize', function(){
+    size();
+    if(reduce) draw(1200);
+  });
+  document.addEventListener('visibilitychange', function(){
+    if(reduce) return;
+    if(document.hidden){ running=false; if(raf) cancelAnimationFrame(raf); }
+    else if(!running){ running=true; raf=requestAnimationFrame(loop); }
+  });
+
+  if(reduce){ draw(1200); }
+  else { raf=requestAnimationFrame(loop); }
+})();
+</script>
+</body>
+</html>

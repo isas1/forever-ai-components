@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="A Sierpinski triangle fractal endlessly zooms into itself with rainbow-cycling colors in a seamless self-similar loop.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sierpinski Zoom</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#120c06}
+  #c{display:block;width:100%;height:100%}
+  #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
+       color:#ffc46b;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">sierpinski zoom</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  let W,H,DPR,zoom=0,boost=0;
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  function tri(x,y,size,depth,t){
+    if(depth<=0||size<3){
+      const hue=(t*0.03+size*0.5+depth*40)%360;
+      ctx.fillStyle='hsl('+hue+','+(70)+'%,'+(55)+'%)';
+      ctx.beginPath();
+      ctx.moveTo(x,y-size*0.577);
+      ctx.lineTo(x-size*0.5,y+size*0.289);
+      ctx.lineTo(x+size*0.5,y+size*0.289);
+      ctx.closePath();ctx.fill();
+      return;
+    }
+    const h=size*0.5;
+    tri(x,y-h*0.577,h,depth-1,t);
+    tri(x-h*0.5,y+h*0.289,h,depth-1,t);
+    tri(x+h*0.5,y+h*0.289,h,depth-1,t);
+  }
+  function draw(t){
+    ctx.fillStyle='#120c06';ctx.fillRect(0,0,W,H);
+    const s=Math.min(W,H);
+    // continuous zoom: scale grows, wraps every doubling -> seamless self-similar loop
+    const period=6000;
+    const z=((zoom)%period)/period;
+    const scale=Math.pow(2,z);
+    ctx.save();ctx.translate(W/2,H/2+s*0.08);
+    ctx.scale(scale,scale);
+    ctx.rotate(Math.sin(t*0.0004)*0.05);
+    tri(0,0,s*0.62,6,t);
+    ctx.restore();
+  }
+  let raf,last=0;
+  function loop(t){const dt=t-last;last=t;
+    if(!reduce){zoom+=dt*(1+boost);boost*=0.95;draw(t);}
+    raf=requestAnimationFrame(loop);}
+  function start(){cancelAnimationFrame(raf);last=performance.now();raf=requestAnimationFrame(loop);}
+  addEventListener('resize',resize);
+  cv.addEventListener('pointerdown',()=>boost=3);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
+  resize();if(reduce)draw(0);else start();
+})();
+</script>
+</body>
+</html>

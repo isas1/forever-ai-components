@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Scrolling green/red candlestick stock chart with wicks, gridlines and a dashed last-price line plus live price label.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Candlestick Ticker</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0f0d;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  canvas{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
+    color:#9aa7a0;opacity:.45;text-transform:uppercase}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">candles</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let W,H,DPR; const UP='#2fd47a',DN='#ff5a6e';
+  const N=22; let candles=[], price=50;
+  function mk(){
+    const o=price; let c=o+(Math.random()-0.48)*7; c=Math.max(8,Math.min(92,c));
+    const hi=Math.max(o,c)+Math.random()*4, lo=Math.min(o,c)-Math.random()*4;
+    price=c; return {o,c,hi:Math.min(99,hi),lo:Math.max(1,lo)};
+  }
+  function init(){candles=[];price=50;for(let i=0;i<N+1;i++)candles.push(mk());}
+  function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  let last=0,acc=0,shift=0;
+  function draw(t){
+    if(document.hidden){last=t;return raf()}
+    const dt=Math.min(64,t-last);last=t;
+    if(!reduce){acc+=dt;shift=acc/1100;
+      if(shift>=1){acc-=1100;shift=0;candles.shift();candles.push(mk());}}
+    else shift=0;
+    ctx.clearRect(0,0,W,H);
+    const padL=W*0.05,padR=W*0.05,top=H*0.14,bot=H*0.86;
+    const slot=(W-padL-padR)/N, cw=slot*0.56;
+    // y maps 0..100 price
+    const py=v=>bot-(bot-top)*(v/100);
+    // grid
+    ctx.strokeStyle='#ffffff0d';ctx.lineWidth=1;
+    for(let i=0;i<5;i++){const y=top+(bot-top)*i/4;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke();}
+    ctx.save();
+    ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();
+    for(let i=0;i<candles.length;i++){
+      const k=candles[i];
+      const x=padL+slot*(i-shift)+slot/2;
+      if(x<padL-slot||x>W-padR+slot)continue;
+      const up=k.c>=k.o, col=up?UP:DN;
+      // wick
+      ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,cw*0.12);
+      ctx.beginPath();ctx.moveTo(x,py(k.hi));ctx.lineTo(x,py(k.lo));ctx.stroke();
+      // body
+      const yo=py(k.o),yc=py(k.c);
+      const by=Math.min(yo,yc), bh=Math.max(1.5,Math.abs(yc-yo));
+      ctx.fillStyle=col;
+      rr(x-cw/2,by,cw,bh,Math.min(2,cw/3));ctx.fill();
+    }
+    ctx.restore();
+    // last price line + dot (rightmost full candle)
+    const lastK=candles[candles.length-2];
+    const ly=py(lastK.c);
+    ctx.strokeStyle=(lastK.c>=lastK.o?UP:DN)+'aa';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.moveTo(padL,ly);ctx.lineTo(W-padR,ly);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#fff';ctx.textAlign='right';ctx.textBaseline='bottom';
+    ctx.font='700 '+(H*0.1)+'px ui-monospace,monospace';
+    ctx.fillText(lastK.c.toFixed(2),W-padR,ly-3);
+    raf();
+  }
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  function raf(){requestAnimationFrame(draw)}
+  addEventListener('resize',resize);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
+  cv.addEventListener('pointerdown',init);
+  resize();init();raf();
+})();
+</script>
+</body>
+</html>

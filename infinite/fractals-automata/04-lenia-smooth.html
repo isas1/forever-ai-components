@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Lenia smooth-life automaton: glowing organic indigo-to-teal blobs glide and pulse across a dark field with a soft radial glow.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lenia</title>
+<style>
+  html,body{margin:0;height:100%;background:#06070b}
+  #fr04-stage{position:fixed;inset:0;overflow:hidden;background:
+    radial-gradient(120% 120% at 50% 40%, #0c0e18 0%, #06070b 70%);
+    display:grid;place-items:center}
+  /* static glow — never repaints */
+  #fr04-glow{position:absolute;width:78%;height:78%;border-radius:50%;
+    background:radial-gradient(circle, rgba(155,140,255,.16) 0%, rgba(96,210,200,.06) 45%, transparent 70%);
+    pointer-events:none}
+  #fr04-c{width:100%;height:100%;display:block;
+    image-rendering:auto;
+    mix-blend-mode:screen;
+    will-change:transform}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fr04-stage" role="img" aria-label="Lenia smooth-life cellular automaton: glowing organic blobs gliding and pulsing across a dark field">
+  <div id="fr04-glow"></div>
+  <canvas id="fr04-c"></canvas>
+</div>
+<div class="cap">Lenia</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('fr04-c');
+  var ctx = cv.getContext('2d', {alpha:true});
+
+  // --- sim grid (small, typed arrays) ---
+  var N = 96;                       // grid edge
+  var NN = N*N;
+  var A = new Float32Array(NN);     // state field
+  var B = new Float32Array(NN);     // next field
+  // precomputed annular kernel offsets + weights
+  var R = 12;                       // kernel radius
+  var kw = []; var ksum = 0;
+  (function(){
+    for(var dy=-R;dy<=R;dy++)for(var dx=-R;dx<=R;dx++){
+      var d = Math.sqrt(dx*dx+dy*dy)/R;
+      if(d>1) continue;
+      // smooth bump shell (peak at r~0.5)
+      var s = d/0.5;
+      var w = Math.exp(-(s-1)*(s-1)*4.5);
+      if(w<0.02) continue;
+      kw.push(w); ksum+=w;
+    }
+  })();
+  var KLEN = kw.length;
+  for(var i=0;i<KLEN;i++) kw[i]/=ksum;
+
+  // growth mapping (Lenia smooth-life): bell around mu
+  var MU=0.15, SIG=0.03, DT=0.1;
+  function bell(x){ var t=(x-MU)/SIG; return 2*Math.exp(-t*t*0.5)-1; }
+
+  // seed a few orbium-ish gaussian patches
+  function seed(){
+    for(var i=0;i<NN;i++) A[i]=0;
+    var spots=[[0.30,0.42,9],[0.66,0.36,11],[0.50,0.68,10]];
+    for(var s=0;s<spots.length;s++){
+      var cx=spots[s][0]*N, cy=spots[s][1]*N, rr=spots[s][2];
+      for(var y=-rr;y<=rr;y++)for(var x=-rr;x<=rr;x++){
+        var gx=(((cx+x)|0)%N+N)%N, gy=(((cy+y)|0)%N+N)%N;
+        var dd=(x*x+y*y)/(rr*rr);
+        if(dd<=1) A[gy*N+gx] += 0.85*Math.exp(-dd*1.6)*(0.6+0.4*Math.random());
+      }
+    }
+    for(i=0;i<NN;i++) if(A[i]>1)A[i]=1;
+  }
+  seed();
+
+  // split kernel offsets into dx/dy for wrap-correct sampling
+  var koffX=new Int8Array(KLEN), koffY=new Int8Array(KLEN);
+  (function(){
+    var idx=0;
+    for(var dy=-R;dy<=R;dy++)for(var dx=-R;dx<=R;dx++){
+      var d=Math.sqrt(dx*dx+dy*dy)/R; if(d>1)continue;
+      var s=d/0.5; var w=Math.exp(-(s-1)*(s-1)*4.5); if(w<0.02)continue;
+      koffX[idx]=dx; koffY[idx]=dy; idx++;
+    }
+  })();
+
+  // toroidal Lenia step (allocation-free)
+  function step(){
+    var x,y,k,sum,idx,nx,ny;
+    for(y=0;y<N;y++){
+      for(x=0;x<N;x++){
+        sum=0;
+        for(k=0;k<KLEN;k++){
+          ny=y+koffY[k]; if(ny<0)ny+=N; else if(ny>=N)ny-=N;
+          nx=x+koffX[k]; if(nx<0)nx+=N; else if(nx>=N)nx-=N;
+          sum+=A[ny*N+nx]*kw[k];
+        }
+        idx=y*N+x;
+        var v=A[idx]+DT*bell(sum);
+        B[idx]= v<0?0:(v>1?1:v);
+      }
+    }
+    var t=A;A=B;B=t;
+  }
+
+  // --- render: single ImageData blit at grid res, CSS scales up ---
+  var img = ctx.createImageData(N,N);
+  var data = img.data;
+  // accent palette ramp: deep indigo -> #9b8cff -> teal highlight
+  var RAMP=256, rampR=new Uint8Array(RAMP), rampG=new Uint8Array(RAMP), rampB=new Uint8Array(RAMP);
+  (function(){
+    function lerp(a,b,t){return a+(b-a)*t;}
+    var stops=[
+      [0.00,  6,  7, 11],
+      [0.30, 48, 36,110],
+      [0.62,155,140,255],
+      [0.85,140,224,212],
+      [1.00,232,238,255]
+    ];
+    for(var i=0;i<RAMP;i++){
+      var t=i/(RAMP-1),a=stops[0],b=stops[stops.length-1];
+      for(var j=0;j<stops.length-1;j++){ if(t>=stops[j][0]&&t<=stops[j+1][0]){a=stops[j];b=stops[j+1];break;} }
+      var lt=(t-a[0])/(b[0]-a[0]||1);
+      rampR[i]=lerp(a[1],b[1],lt)|0; rampG[i]=lerp(a[2],b[2],lt)|0; rampB[i]=lerp(a[3],b[3],lt)|0;
+    }
+  })();
+
+  function draw(){
+    var p=0;
+    for(var i=0;i<NN;i++){
+      var v=A[i]; if(v<0)v=0; else if(v>1)v=1;
+      var ci=(v*255)|0;
+      data[p]=rampR[ci]; data[p+1]=rampG[ci]; data[p+2]=rampB[ci];
+      data[p+3]=(v*255)|0;
+      p+=4;
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  function size(){
+    var stage=document.getElementById('fr04-stage');
+    var w=stage.clientWidth, h=stage.clientHeight;
+    var d=Math.min(2,window.devicePixelRatio||1);
+    // canvas backing = grid res; scale to box via CSS already (width/height 100%)
+    cv.width=N; cv.height=N;
+    ctx.imageSmoothingEnabled=true;
+    void w; void h; void d;
+  }
+  size();
+
+  if(reduce){
+    for(var w=0;w<40;w++) step();   // settle to a developed frame
+    draw();
+    return;
+  }
+
+  var running=true, raf=0, acc=0, last=0, STEP=1000/22; // sim ~22Hz
+  function loop(ts){
+    if(!running) return;
+    if(!last) last=ts;
+    var dt=ts-last; last=ts; if(dt>120)dt=120;
+    acc+=dt;
+    var did=false;
+    while(acc>=STEP){ step(); acc-=STEP; did=true; }
+    if(did) draw();
+    raf=requestAnimationFrame(loop);
+  }
+  raf=requestAnimationFrame(loop);
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; cancelAnimationFrame(raf); }
+    else if(!running){ running=true; last=0; raf=requestAnimationFrame(loop); }
+  });
+  var rt;
+  window.addEventListener('resize',function(){ clearTimeout(rt); rt=setTimeout(size,150); });
+})();
+</script>
+</body>
+</html>

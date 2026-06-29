@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A Constructivist black-and-red megaphone emits expanding concentric red and paper shout-rings across a diagonal field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Megaphone</title>
+<style>
+  :root{--cv05-bg:#0c0c0d;--cv05-red:#d11f1f;--cv05-ink:#0c0c0d;--cv05-paper:#f2ece0}
+  html,body{margin:0;height:100%}
+  body{background:var(--cv05-bg);overflow:hidden;font-family:"Archivo Black","Helvetica Neue",Arial Narrow,sans-serif}
+  #cv05-stage{position:fixed;inset:0;width:100%;height:100%}
+  #cv05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="cv05-stage" role="img" aria-label="Constructivist megaphone emitting concentric red and white shout-rings across a dynamic diagonal field.">
+  <canvas id="cv05-c"></canvas>
+</div>
+<div class="cap">Megaphone</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("cv05-stage");
+  var cv=document.getElementById("cv05-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var BG="#0c0c0d",RED="#d11f1f",PAPER="#f2ece0",INK="#0c0c0d";
+
+  var W=0,H=0,DPR=1,S=0,cx=0,cy=0;
+  // megaphone apex (mouth pivot) in scene coords, ring origin
+  var ox=0,oy=0,ang=-0.36; // emission axis angle (radians from +x), tilted up-right
+
+  // ring pool — fixed size, no per-frame allocation
+  var N=7, rad=new Float32Array(N), live=new Uint8Array(N);
+  var maxR=0, speed=0, spawnGap=0, sinceSpawn=0;
+
+  function resize(){
+    W=stage.clientWidth; H=stage.clientHeight;
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);
+    cx=W*0.5; cy=H*0.5;
+    // megaphone bell mouth sits left-of-center; rings emit toward upper right
+    ox=cx - S*0.04; oy=cy + S*0.02;
+    maxR=Math.hypot(W,H)*0.62;
+    speed=S*0.0016;
+    spawnGap=1.0; // seconds
+    for(var i=0;i<N;i++){live[i]=0;rad[i]=0;}
+    sinceSpawn=spawnGap;
+  }
+
+  // ---- static scene: drawn once into an offscreen pattern via direct path each frame
+  // We redraw the whole frame each tick (cheap geometry, transform/opacity only constraint
+  // applies to CSS keyframes; canvas repaint of vector shapes is fine and allocation-free).
+
+  function drawMegaphone(){
+    // Constructivist horn: black slab cone + red inner, hard diagonals
+    var len=S*0.34, mouthR=S*0.20, throatR=S*0.045;
+    ctx.save();
+    ctx.translate(ox,oy);
+    ctx.rotate(ang);
+    // handle / stem (black bar going down-left)
+    ctx.fillStyle=INK;
+    ctx.fillRect(-len-S*0.18,-throatR*0.5,S*0.20,throatR);
+    // cone body (paper edge then red fill then black rim) — opaque layered slabs
+    // outer black silhouette
+    ctx.beginPath();
+    ctx.moveTo(0,-mouthR);
+    ctx.lineTo(0,mouthR);
+    ctx.lineTo(-len,throatR);
+    ctx.lineTo(-len,-throatR);
+    ctx.closePath();
+    ctx.fillStyle=INK; ctx.fill();
+    // red inner cone, inset
+    ctx.beginPath();
+    ctx.moveTo(-S*0.012,-mouthR*0.86);
+    ctx.lineTo(-S*0.012,mouthR*0.86);
+    ctx.lineTo(-len*0.92,throatR*0.7);
+    ctx.lineTo(-len*0.92,-throatR*0.7);
+    ctx.closePath();
+    ctx.fillStyle=RED; ctx.fill();
+    // paper mouth rim ellipse — bold lip
+    ctx.beginPath();
+    ctx.ellipse(0,0,S*0.018,mouthR,0,0,Math.PI*2);
+    ctx.fillStyle=PAPER; ctx.fill();
+    // dark mouth hole
+    ctx.beginPath();
+    ctx.ellipse(-S*0.006,0,S*0.011,mouthR*0.78,0,0,Math.PI*2);
+    ctx.fillStyle=BG; ctx.fill();
+    ctx.restore();
+  }
+
+  function drawDiagonals(){
+    // suprematist field: a few hard diagonal bars anchoring composition
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(-0.36);
+    ctx.fillStyle=PAPER;
+    ctx.globalAlpha=0.10;
+    ctx.fillRect(-W,-S*0.62,W*2.4,S*0.012);
+    ctx.fillRect(-W,S*0.50,W*2.4,S*0.012);
+    ctx.globalAlpha=1;
+    // one bold red wedge bar lower-left
+    ctx.fillStyle=RED;
+    ctx.fillRect(-W*0.9,S*0.34,W*1.1,S*0.05);
+    ctx.restore();
+  }
+
+  function ringAt(r){
+    // concentric arc fan radiating from the mouth along emission axis
+    // alpha fades with radius; alternate red / paper
+    var t=r/maxR; if(t>=1)return;
+    var a=(1-t); a=a*a; // ease-out fade
+    var spread=0.78; // half-angle of the shout cone (radians)
+    ctx.save();
+    ctx.translate(ox,oy);
+    ctx.rotate(ang);
+    ctx.beginPath();
+    ctx.arc(0,0,r,-spread,spread);
+    ctx.lineWidth=Math.max(2,S*0.018*(0.5+0.5*(1-t)));
+    ctx.globalAlpha=a*0.92;
+    ctx.strokeStyle=(((r/(maxR/N))|0)%2)?PAPER:RED;
+    ctx.lineCap="butt";
+    ctx.stroke();
+    ctx.globalAlpha=1;
+    ctx.restore();
+  }
+
+  function clear(){ ctx.fillStyle=BG; ctx.fillRect(0,0,W,H); }
+
+  function composeStatic(){
+    clear();
+    drawDiagonals();
+  }
+
+  function drawFrame(){
+    composeStatic();
+    for(var i=0;i<N;i++){ if(live[i]) ringAt(rad[i]); }
+    drawMegaphone();
+  }
+
+  function drawOneFrame(){
+    // reduced-motion: a single resolved frame with a fan of static rings
+    composeStatic();
+    for(var k=1;k<=N;k++){ ringAt(maxR*(k/(N+1))); }
+    drawMegaphone();
+  }
+
+  var last=0, running=false, raf=0;
+  function tick(ts){
+    if(!running)return;
+    var dt=last?(ts-last)/1000:0; last=ts;
+    if(dt>0.05)dt=0.05; // clamp after tab-return
+    sinceSpawn+=dt;
+    if(sinceSpawn>=spawnGap){
+      sinceSpawn-=spawnGap;
+      for(var i=0;i<N;i++){ if(!live[i]){ live[i]=1; rad[i]=throat(); break; } }
+    }
+    for(var j=0;j<N;j++){
+      if(live[j]){ rad[j]+=speed*60*dt; if(rad[j]>=maxR){ live[j]=0; rad[j]=0; } }
+    }
+    drawFrame();
+    raf=requestAnimationFrame(tick);
+  }
+  function throat(){ return S*0.06; }
+
+  function start(){ if(running||reduce)return; running=true; last=0; raf=requestAnimationFrame(tick); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function boot(){
+    resize();
+    if(reduce){ drawOneFrame(); return; }
+    drawFrame();
+    start();
+  }
+
+  window.addEventListener("resize",function(){ resize(); if(reduce){drawOneFrame();} else {drawFrame();} },{passive:true});
+  document.addEventListener("visibilitychange",function(){ if(document.hidden){stop();} else {start();} });
+
+  boot();
+})();
+</script>
+</body>
+</html>

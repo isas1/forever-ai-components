@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A bright gold scan bar sweeps down outlined letters, developing them into solid glowing fill with a hot edge, like a darkroom print emerging">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Line Wipe Sweep</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#12060c;}
+  #lws-c{display:block;width:100%;height:100%;}
+  .lws-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#ffd166;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="lws-c"></canvas>
+<div class="lws-cap">Line Wipe Sweep</div>
+<script>
+(function(){
+  const cv=document.getElementById('lws-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG='#12060c',ACC='#ffd166';
+  const words=["DEVELOP","REVEAL","IMPRINT","EXPOSE"];
+  let W,H,DPR,word=words[0],wi=0,fs,baseY,top,bot;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    fs=Math.min(W/(word.length*0.66),H*0.42);
+    ctx.font='900 '+fs+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
+    baseY=H/2+fs*0.34;            // baseline
+    top=baseY-fs*0.74; bot=baseY+fs*0.20; // glyph cap..baseline band
+  }
+  addEventListener('resize',function(){size();});
+  // sweep position in px, plus afterglow trail markers
+  let y=0,hold=0,raf=0,nudge=0;
+  function reset(){ word=words[wi]; size(); y=top-fs*0.5; hold=0; }
+  cv.addEventListener('pointermove',function(){ nudge=Math.min(nudge+0.6,2.4); });
+  cv.addEventListener('click',function(){ wi=(wi+1)%words.length; reset(); });
+
+  function drawWord(sweepY){
+    ctx.font='900 '+fs+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
+    ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    const cx=W/2, txt=word;
+    // 1) outline (un-developed) of full word
+    ctx.lineWidth=Math.max(1.2,fs*0.018);
+    ctx.strokeStyle='rgba(255,209,102,0.30)';
+    ctx.lineJoin='round';
+    ctx.strokeText(txt,cx,baseY);
+    // 2) solid fill, clipped to area ABOVE the sweep line (already developed)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0,0,W,Math.max(0,sweepY));
+    ctx.clip();
+    ctx.fillStyle=ACC;
+    ctx.shadowColor='rgba(255,209,102,0.55)';
+    ctx.shadowBlur=fs*0.10;
+    ctx.fillText(txt,cx,baseY);
+    ctx.restore();
+    ctx.shadowBlur=0;
+    // 3) hot edge where fill meets outline: a thin re-stroke clipped to a band at the line
+    if(sweepY>top-2 && sweepY<bot+fs*0.3){
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0,sweepY-fs*0.06,W,fs*0.12);
+      ctx.clip();
+      ctx.fillStyle='#fff7e0';
+      ctx.shadowColor=ACC; ctx.shadowBlur=fs*0.18;
+      ctx.fillText(txt,cx,baseY);
+      ctx.restore();
+      ctx.shadowBlur=0;
+    }
+  }
+
+  function frame(){
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    // active band for the scan bar
+    const start=top-fs*0.5, end=bot+fs*0.5;
+    drawWord(y);
+    // the scan bar itself (bright horizontal line + glow), spanning text width
+    const cx=W/2, halfW=Math.min(W*0.42, word.length*fs*0.34);
+    if(y>start-4 && y<end+4){
+      const g=ctx.createLinearGradient(cx-halfW,0,cx+halfW,0);
+      g.addColorStop(0,'rgba(255,209,102,0)');
+      g.addColorStop(.5,'#fff3cf');
+      g.addColorStop(1,'rgba(255,209,102,0)');
+      ctx.strokeStyle=g; ctx.lineWidth=Math.max(2,fs*0.03);
+      ctx.shadowColor=ACC; ctx.shadowBlur=fs*0.4;
+      ctx.beginPath(); ctx.moveTo(cx-halfW,y); ctx.lineTo(cx+halfW,y); ctx.stroke();
+      ctx.shadowBlur=0;
+      // faint scan ticks above/below the bar
+      ctx.strokeStyle='rgba(255,209,102,0.12)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(cx-halfW,y-fs*0.07); ctx.lineTo(cx+halfW,y-fs*0.07);
+      ctx.stroke();
+    }
+    if(!reduce){
+      const spd=fs*(0.012+nudge*0.02);
+      nudge*=0.93;
+      if(y<end){ y+=spd; }
+      else { hold++; if(hold>70){ wi=(wi+1)%words.length; reset(); } }
+    }
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){ if(!raf && !reduce) raf=requestAnimationFrame(frame); }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  reset();
+  if(reduce){
+    // static resting frame: word fully developed
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    y=bot+fs; drawWord(y);
+  } else { start(); }
+})();
+</script>
+</body>
+</html>

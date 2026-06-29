@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Teal concentric-ring pressure pad that dimples inward under press, pulses while held, and shows a live grams-of-force readout.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pressure Pad</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#08131a;}
+  #pp-c{display:block;width:100%;height:100%;cursor:pointer;}
+  .pp-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.16em;color:#34e0d0;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="pp-c"></canvas>
+<div class="pp-cap">Pressure Pad</div>
+<script>
+(function(){
+  const cv=document.getElementById('pp-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const AC='#34e0d0', BG='#08131a';
+  let W,H,DPR,cx,cy,R;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;R=Math.min(W,H)*0.34;
+  }
+  addEventListener('resize',size);size();
+
+  let t=0, press=0, target=0, hover=0;
+  cv.addEventListener('pointerdown',()=>{target=1;});
+  addEventListener('pointerup',()=>{target=0;});
+  cv.addEventListener('pointermove',()=>{hover=1;});
+  cv.addEventListener('pointerleave',()=>{hover=0;target=0;});
+
+  function rings(depth){
+    // concentric pressure rings: tighter spacing under load
+    const n=7;
+    for(let i=n;i>=1;i--){
+      const base=i/n;
+      const sq=base*(1-0.42*depth);            // rings pull inward under force
+      const rr=R*(0.18+sq*0.92);
+      const a=(0.10+0.30*(1-base))*(0.5+0.5*depth);
+      ctx.beginPath();ctx.arc(cx,cy,rr,0,Math.PI*2);
+      ctx.strokeStyle=AC;ctx.globalAlpha=a;ctx.lineWidth=1+depth*1.4*(1-base);
+      ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function frame(){
+    t+=reduce?0:1;
+    // pulse drive when held, spring + overshoot on release
+    if(!reduce){
+      const pulse=target>0.5? 0.78+0.22*Math.sin(t*0.10):0;
+      target>0.5 ? press+= (pulse-press)*0.16 : press+= (0-press)*0.085;
+      if(target<0.5 && press<0.04 && press>0) press*=0.6; // settle
+    }else{ press=0.55; }
+    const depth=press; // 0..~1
+    // overshoot: rebound membrane wobble after release
+    const wob=(target<0.5 && depth<0.5)? Math.sin(t*0.22)*depth*0.0 : 0;
+
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+
+    // pad bezel
+    const padR=R*1.18;
+    ctx.beginPath();ctx.arc(cx,cy,padR,0,Math.PI*2);
+    ctx.strokeStyle=AC;ctx.globalAlpha=0.16;ctx.lineWidth=1.4;ctx.stroke();
+    ctx.globalAlpha=0.05;ctx.fillStyle=AC;ctx.fill();ctx.globalAlpha=1;
+
+    // dimpled center — radial gradient that deepens with force
+    const dim=R*(0.30+depth*0.16);
+    const g=ctx.createRadialGradient(cx,cy-depth*4,2,cx,cy,dim);
+    g.addColorStop(0, `rgba(52,224,208,${0.06+depth*0.34})`);
+    g.addColorStop(0.55,`rgba(52,224,208,${0.03+depth*0.12})`);
+    g.addColorStop(1,'rgba(52,224,208,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,dim,0,Math.PI*2);ctx.fill();
+
+    rings(depth);
+
+    // center node
+    const cr=R*(0.10-depth*0.035);
+    ctx.beginPath();ctx.arc(cx,cy-depth*3,cr,0,Math.PI*2);
+    ctx.fillStyle=AC;ctx.globalAlpha=0.28+depth*0.6;ctx.fill();ctx.globalAlpha=1;
+
+    // crosshair guide
+    ctx.strokeStyle=AC;ctx.globalAlpha=0.10+hover*0.12;ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(cx-padR,cy);ctx.lineTo(cx-R*0.5,cy);
+    ctx.moveTo(cx+R*0.5,cy);ctx.lineTo(cx+padR,cy);
+    ctx.moveTo(cx,cy-padR);ctx.lineTo(cx,cy-R*0.5);
+    ctx.moveTo(cx,cy+R*0.5);ctx.lineTo(cx,cy+padR);
+    ctx.stroke();ctx.globalAlpha=1;
+
+    // live grams-of-force readout
+    const grams=Math.round(depth*840);
+    const fs=Math.max(13,Math.min(34,R*0.20));
+    ctx.font=`600 ${fs}px ui-monospace,SFMono-Regular,Menlo,monospace`;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=AC;ctx.globalAlpha=0.55+depth*0.45;
+    ctx.fillText(grams, cx, cy+padR+fs*0.95);
+    ctx.font=`600 ${fs*0.38}px ui-monospace,SFMono-Regular,Menlo,monospace`;
+    ctx.globalAlpha=0.4;
+    ctx.fillText('GRAMS · FORCE', cx, cy+padR+fs*1.75);
+    ctx.globalAlpha=1;
+
+    if(!reduce) raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){frame();}else start();
+})();
+</script>
+</body>
+</html>

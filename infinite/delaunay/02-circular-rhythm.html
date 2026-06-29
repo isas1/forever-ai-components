@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Circular Rhythm — Robert Delaunay. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Circular Rhythm</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0d11;overflow:hidden}
+  #del02-stage{position:fixed;inset:0;width:100%;height:100%}
+  #del02-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .del02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3f0e8;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="del02-stage" role="img" aria-label="A generative field after Delaunay's circular forms: many colour discs of varying size pulse in rhythm, swelling and fading like light breathing.">
+  <canvas id="del02-cv"></canvas>
+</div>
+<div class="del02-cap">Circular Rhythm</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('del02-cv'); if(!cv) return;
+  const PAL={paper:'#f3f0e8'};
+  const SPECTRUM=['#e23b2e','#f08a24','#f4c81e','#2fa86a','#1f6fd0','#7b3fa0'];
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  let discs=[];
+  function seed(){
+    discs=[];
+    const N=26;
+    for(let i=0;i<N;i++){
+      discs.push({
+        x:Math.random(), y:Math.random(),
+        base:10+Math.random()*46,
+        c:SPECTRUM[(Math.random()*SPECTRUM.length)|0],
+        ph:Math.random()*Math.PI*2,
+        sp:0.5+Math.random()*1.4,
+        ring:Math.random()<0.4
+      });
+    }
+  }
+  seed();
+  let t=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle='#0c0d11';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    for(const d of discs){
+      const puls=0.55+0.45*Math.sin(t*d.sp+d.ph);
+      const r=d.base*(0.5+0.7*puls);
+      const x=d.x*W, y=d.y*H;
+      const g=ctx.createRadialGradient(x,y,0,x,y,r);
+      g.addColorStop(0, d.c);
+      g.addColorStop(0.7, d.c);
+      g.addColorStop(1, 'rgba(20,21,26,0)');
+      ctx.globalAlpha=0.42+0.4*puls;
+      ctx.fillStyle=g;
+      ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fill();
+      if(d.ring){
+        ctx.globalAlpha=0.5*puls;
+        ctx.strokeStyle=PAL.paper;ctx.lineWidth=1.5;
+        ctx.beginPath();ctx.arc(x,y,r*1.18,0,7);ctx.stroke();
+      }
+    }
+    ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha=1;
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#0c0d11';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); seed(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

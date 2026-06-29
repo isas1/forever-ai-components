@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Border Weaver — Alphonse Mucha. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Border Weaver</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4ecd8;overflow:hidden}
+  #muc03-stage{position:fixed;inset:0;width:100%;height:100%}
+  #muc03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .muc03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#5b4632;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="muc03-stage" role="img" aria-label="An ornamental Nouveau frieze drawing itself: mirrored top and bottom bands of gold and sage scrolls, beads and lilies trace stroke by stroke as the decorator's pen never lifts, then resets and draws again.">
+  <canvas id="muc03-cv"></canvas>
+</div>
+<div class="muc03-cap">Border Weaver</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={peach:'#e7b98f',sage:'#8a9a5b',gold:'#c4a14e',rose:'#c98c8c',teal:'#2c5d63',line:'#5b4632'};
+  const cv=document.getElementById('muc03-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  function petal(ctx,len,wid){
+    ctx.beginPath();ctx.moveTo(0,0);
+    ctx.bezierCurveTo(wid,-len*0.4,wid,-len*0.8,0,-len);
+    ctx.bezierCurveTo(-wid,-len*0.8,-wid,-len*0.4,0,0);
+    ctx.closePath();
+  }
+  let S=fitCanvas(cv);
+  let t=0,last=performance.now();
+  function bandPath(ctx,y,dir,reveal,W){
+    const unit=70;
+    const n=Math.ceil(W/unit)+1;
+    const amp=16*dir;
+    ctx.lineWidth=2.2;ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.beginPath();
+    let started=false;
+    const total=n*unit;
+    const shown=total*reveal;
+    for(let x=0;x<=shown;x+=4){
+      const ph=(x/unit)*Math.PI*2;
+      const yy=y+Math.sin(ph)*amp;
+      if(!started){ctx.moveTo(x,yy);started=true;} else ctx.lineTo(x,yy);
+    }
+    ctx.strokeStyle=PAL.gold;ctx.stroke();
+    ctx.beginPath();started=false;
+    for(let x=0;x<=shown;x+=4){
+      const ph=(x/unit)*Math.PI*2;
+      const yy=y+Math.sin(ph+Math.PI)*amp*0.5;
+      if(!started){ctx.moveTo(x,yy);started=true;} else ctx.lineTo(x,yy);
+    }
+    ctx.strokeStyle=PAL.sage;ctx.lineWidth=1.4;ctx.stroke();
+    for(let i=0;i<n;i++){
+      const cxp=i*unit+unit*0.5;
+      if(cxp>shown) break;
+      const cyp=y+Math.sin((cxp/unit)*Math.PI*2)*amp;
+      ctx.save();ctx.translate(cxp,cyp);
+      ctx.fillStyle=i%2?PAL.rose:PAL.peach;ctx.strokeStyle=PAL.line;ctx.lineWidth=0.7;
+      for(let p=-1;p<=1;p++){
+        ctx.save();ctx.rotate(p*0.6+(dir<0?Math.PI:0));
+        petal(ctx,13,4);ctx.fill();ctx.stroke();ctx.restore();
+      }
+      ctx.fillStyle=PAL.gold;ctx.beginPath();ctx.arc(0,0,2.4,0,7);ctx.fill();
+      ctx.restore();
+      const bx=i*unit;
+      if(bx<=shown){
+        const by=y+Math.sin((bx/unit)*Math.PI*2)*amp;
+        ctx.fillStyle=PAL.teal;ctx.beginPath();ctx.arc(bx,by,2.6,0,7);ctx.fill();
+      }
+    }
+  }
+  function draw(now){
+    const dt=(now-last)/1000;last=now;
+    if(!REDUCED) t+=dt;
+    const W=S.w,H=S.h;
+    S.ctx.clearRect(0,0,W,H);
+    S.ctx.fillStyle='#f4ecd8';S.ctx.fillRect(0,0,W,H);
+    S.ctx.strokeStyle='rgba(196,161,78,0.18)';S.ctx.lineWidth=1;
+    S.ctx.beginPath();S.ctx.moveTo(0,H*0.5);S.ctx.lineTo(W,H*0.5);S.ctx.stroke();
+    const cycle=6;
+    const phase=REDUCED?1:((t%(cycle+2))/cycle);
+    const reveal=Math.min(1,phase);
+    bandPath(S.ctx,H*0.22,1,reveal,W);
+    bandPath(S.ctx,H*0.78,-1,reveal,W);
+    S.ctx.strokeStyle='rgba(91,70,50,0.3)';S.ctx.lineWidth=1;
+    [H*0.40,H*0.60].forEach(yy=>{
+      S.ctx.beginPath();const sw=W*reveal;
+      S.ctx.moveTo(0,yy);S.ctx.lineTo(sw,yy);S.ctx.stroke();
+    });
+    if(!REDUCED && reveal<1){
+      const hx=W*reveal;
+      S.ctx.fillStyle=PAL.gold;
+      [H*0.22,H*0.78].forEach(yy=>{S.ctx.beginPath();S.ctx.arc(hx,yy,3.2,0,7);S.ctx.fill();});
+    }
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#f4ecd8';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED) draw(performance.now());},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

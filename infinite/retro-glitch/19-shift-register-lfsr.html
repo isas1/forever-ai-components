@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Animated 16-bit LFSR diagram: lit bit cells shift right, XOR tap wires feed a pulse along the feedback rail with hex clock readout.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shift Register LFSR</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0f0a;}
+  #lfsr-c{display:block;width:100%;height:100%;}
+  .lfsr-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.16em;color:#a6ff00;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="lfsr-c"></canvas>
+<div class="lfsr-cap">Shift Register LFSR</div>
+<script>
+(function(){
+  const cv=document.getElementById('lfsr-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const BG='#0a0f0a',AC='#a6ff00';
+  const N=16,TAPS=[15,13,12,10];           // maximal-length 16-bit LFSR (Fibonacci)
+  let W,H,DPR,cell,gap,ox,oy,cellY,wireY,railY;
+  let bits=[],reg=0xACE1,scroll=0,tick=0,pulse=0,fb=0;
+  for(let i=0;i<N*3;i++)bits.push((Math.random()*2)|0);
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    const margin=Math.max(W*0.05,12);
+    cell=Math.min((W-margin*2)/N,H*0.16);
+    gap=cell*0.18; ox=(W-(cell*N))/2; cellY=H*0.5-cell/2;
+    oy=cellY; wireY=cellY-cell*0.55; railY=cellY+cell+cell*0.5;
+  }
+  addEventListener('resize',size);size();
+  function clock(){
+    let b=0;for(const t of TAPS)b^=(reg>>(t-1))&1;
+    reg=((reg<<1)|b)&0xFFFF;
+    bits.push(reg&1); if(bits.length>N*3)bits.shift();
+    fb=b; pulse=1;
+  }
+  cv.addEventListener('pointermove',()=>{if(!reduce){scroll+=0.6;}});
+  cv.addEventListener('click',()=>{if(!reduce){clock();scroll+=1;}});
+  function draw(){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    const tapX=[];
+    // feedback rail (bottom) — runs from output back to input
+    ctx.strokeStyle='rgba(166,255,0,'+(0.10+pulse*0.35)+')';
+    ctx.lineWidth=Math.max(1,cell*0.04);
+    ctx.beginPath();
+    ctx.moveTo(ox+cell*N-cell*0.5,oy+cell+gap);
+    ctx.lineTo(ox+cell*N-cell*0.5,railY);
+    ctx.lineTo(ox+cell*0.5,railY);
+    ctx.lineTo(ox+cell*0.5,oy+cell+gap);
+    ctx.stroke();
+    // pulse packet travelling along feedback rail
+    if(pulse>0.02){
+      const railLen=(cell*N-cell);
+      const p=1-pulse;                       // 0..1 along the rail
+      let px,py;
+      if(p<0.12){px=ox+cell*N-cell*0.5;py=(oy+cell+gap)+(railY-(oy+cell+gap))*(p/0.12);}
+      else if(p<0.88){px=(ox+cell*N-cell*0.5)-((p-0.12)/0.76)*railLen;py=railY;}
+      else{px=ox+cell*0.5;py=railY-(railY-(oy+cell+gap))*((p-0.88)/0.12);}
+      ctx.fillStyle=AC;
+      ctx.globalAlpha=0.25;ctx.beginPath();ctx.arc(px,py,cell*0.22,0,7);ctx.fill();
+      ctx.globalAlpha=1;ctx.beginPath();ctx.arc(px,py,cell*0.12,0,7);ctx.fill();
+    }
+    // tap wires (top) — XOR feed from tapped cells to feedback node
+    for(const t of TAPS){
+      const idx=((N-t)+ (scroll|0))%N;       // visual position of tap
+      const cxp=ox+idx*cell+cell/2;
+      tapX.push(cxp);
+      ctx.strokeStyle='rgba(166,255,0,'+(0.12+pulse*0.28)+')';
+      ctx.lineWidth=Math.max(1,cell*0.03);
+      ctx.beginPath();
+      ctx.moveTo(cxp,oy-gap);ctx.lineTo(cxp,wireY);
+      ctx.stroke();
+      ctx.fillStyle='rgba(166,255,0,'+(0.5+pulse*0.5)+')';
+      ctx.beginPath();ctx.arc(cxp,wireY,cell*0.06,0,7);ctx.fill();
+    }
+    // XOR bus line across the taps
+    if(tapX.length){
+      const minx=Math.min.apply(0,tapX),maxx=Math.max.apply(0,tapX);
+      ctx.strokeStyle='rgba(166,255,0,'+(0.18+pulse*0.3)+')';
+      ctx.beginPath();ctx.moveTo(minx,wireY);ctx.lineTo(maxx,wireY);ctx.stroke();
+      // XOR symbol
+      const xx=ox+cell*0.5,xy=wireY;
+      ctx.beginPath();ctx.arc(xx,xy,cell*0.13,0,7);
+      ctx.strokeStyle=AC;ctx.globalAlpha=0.6+pulse*0.4;ctx.stroke();ctx.globalAlpha=1;
+    }
+    // bit cells (the shift register)
+    const start=bits.length-N;
+    const sub=(scroll%1);
+    for(let i=0;i<N;i++){
+      const v=bits[start+i];
+      const x=ox+i*cell+gap/2;
+      ctx.strokeStyle='rgba(166,255,0,0.22)';ctx.lineWidth=1;
+      ctx.strokeRect(x+0.5,oy+0.5,cell-gap-1,cell-1);
+      if(v){
+        const a=0.35+0.55*Math.max(0,1-Math.abs(i-(N-1-sub))/2.2);
+        const m=cell*0.18;
+        // fake bloom: faint enlarged copy behind, then the solid cell (no shadowBlur)
+        ctx.fillStyle=AC;ctx.globalAlpha=a*0.3;
+        ctx.fillRect(x+m-cell*0.06,oy+m-cell*0.06,cell-gap-m*2+cell*0.12,cell-m*2+cell*0.12);
+        ctx.globalAlpha=a;
+        ctx.fillRect(x+m,oy+m,cell-gap-m*2,cell-m*2);
+        ctx.globalAlpha=1;
+      }else{
+        ctx.fillStyle='rgba(166,255,0,0.05)';
+        const m=cell*0.18;
+        ctx.fillRect(x+m,oy+m,cell-gap-m*2,cell-m*2);
+      }
+    }
+    // emitted stream to the right of the register, fading
+    const py=oy+cell+gap*0.4+cell*0.30;
+    const sx=ox+cell*N+cell*0.1;
+    for(let i=0;i<10;i++){
+      const v=bits[bits.length-1-i];
+      const bx=sx - i*cell*0.34 - sub*cell*0.34;
+      const a=v?(0.5*(1-i/10)):(0.06*(1-i/10));
+      ctx.fillStyle=AC;
+      if(v){ctx.globalAlpha=a*0.3;ctx.fillRect(bx-cell*0.05,py-cell*0.05,cell*0.32,cell*0.32);}
+      ctx.globalAlpha=a;
+      ctx.fillRect(bx,py,cell*0.22,cell*0.22);
+      ctx.globalAlpha=1;
+    }
+    // clock readout
+    ctx.fillStyle='rgba(166,255,0,'+(0.25+pulse*0.2)+')';
+    ctx.font=(cell*0.34|0)+'px ui-monospace,Menlo,monospace';
+    ctx.textBaseline='top';
+    ctx.fillText('0x'+reg.toString(16).toUpperCase().padStart(4,'0'),ox,railY+cell*0.2);
+    ctx.textAlign='right';
+    ctx.fillText('CLK '+tick,ox+cell*N,railY+cell*0.2);
+    ctx.textAlign='left';
+  }
+  let raf=0,acc=0,last=0;
+  function frame(ts){
+    if(!last)last=ts;const dt=Math.min(ts-last,60);last=ts;
+    scroll+=dt*0.0016;pulse*=Math.pow(0.9,dt*0.06);
+    acc+=dt;
+    if(acc>=420){acc-=420;clock();tick++;}
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce){last=0;raf=requestAnimationFrame(frame);}}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){pulse=0.4;draw();}else start();
+})();
+</script>
+</body>
+</html>

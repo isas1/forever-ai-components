@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A swarm of lime-green triangular boids flocks with alignment, cohesion and separation, fleeing the cursor on a dark canvas.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boids Flocking</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0e0a}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#a3e635;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Boids Flocking</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,b=[],reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);init();}
+function init(){b=[];const n=Math.min(60,Math.round(W*H/4200));
+  for(let i=0;i<n;i++)b.push({x:Math.random()*W,y:Math.random()*H,
+    vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,h:90+Math.random()*60});}
+addEventListener('resize',size);size();
+let pointer={x:-999,y:-999,flee:false};
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();pointer.x=e.clientX-r.left;pointer.y=e.clientY-r.top;});
+cv.addEventListener('pointerleave',()=>{pointer.x=-999;pointer.y=-999;});
+const R=34,Rs=18,maxS=2.6;
+function step(){
+  x.fillStyle='rgba(10,14,10,0.28)';x.fillRect(0,0,W,H);
+  for(const o of b){
+    let ax=0,ay=0,cx=0,cy=0,sx=0,sy=0,n=0;
+    for(const p of b){if(p===o)continue;const dx=p.x-o.x,dy=p.y-o.y,d=Math.hypot(dx,dy);
+      if(d<R){ax+=p.vx;ay+=p.vy;cx+=p.x;cy+=p.y;n++;if(d<Rs&&d>0){sx-=dx/d;sy-=dy/d;}}}
+    if(n){o.vx+=((ax/n)-o.vx)*0.04;o.vy+=((ay/n)-o.vy)*0.04;
+      o.vx+=((cx/n)-o.x)*0.0009;o.vy+=((cy/n)-o.y)*0.0009;}
+    o.vx+=sx*0.05;o.vy+=sy*0.05;
+    const pdx=o.x-pointer.x,pdy=o.y-pointer.y,pd=Math.hypot(pdx,pdy);
+    if(pd<90&&pd>0){o.vx+=pdx/pd*0.5;o.vy+=pdy/pd*0.5;}
+    const sp=Math.hypot(o.vx,o.vy);if(sp>maxS){o.vx*=maxS/sp;o.vy*=maxS/sp;}
+    o.x+=o.vx;o.y+=o.vy;
+    if(o.x<0)o.x+=W;if(o.x>W)o.x-=W;if(o.y<0)o.y+=H;if(o.y>H)o.y-=H;
+    const a=Math.atan2(o.vy,o.vx);
+    x.save();x.translate(o.x,o.y);x.rotate(a);
+    x.fillStyle='hsl('+o.h+',80%,62%)';
+    x.beginPath();x.moveTo(5,0);x.lineTo(-3,3);x.lineTo(-3,-3);x.closePath();x.fill();
+    x.restore();
+  }
+}
+let raf;function loop(){step();raf=requestAnimationFrame(loop);}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+function stop(){cancelAnimationFrame(raf);raf=0;}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+play();
+</script>
+</body>
+</html>

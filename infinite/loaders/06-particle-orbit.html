@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Canvas spinner of 18 glowing iris, cyan and magenta particles orbiting a white core on elliptical trailing paths.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Particle Orbit</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#08090d}
+body{
+  background-image:
+    radial-gradient(60vw 40vw at 15% -10%,rgba(124,92,255,.16),transparent 60%),
+    radial-gradient(50vw 40vw at 90% 0%,rgba(34,211,238,.16),transparent 55%);
+}
+#c06{display:block;width:100%;height:100%}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c06" role="img" aria-label="Canvas particle spinner"></canvas>
+<div class="cap">Particle Orbit</div>
+<script>
+(function(){
+  var canvas=document.getElementById('c06'), ctx=canvas.getContext('2d');
+  if(!ctx) return;
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var DPR,W,H,cx,cy,base;
+  var COLORS=['#7c5cff','#22d3ee','#ff5ca8'], N=18, parts=[];
+  for(var i=0;i<N;i++){
+    parts.push({ang:(i/N)*Math.PI*2,radiusF:.34+(i%3)*.15,speed:.012+(i%3)*.006,
+      sizeF:.018+(i%4)*.006,color:COLORS[i%COLORS.length]});
+  }
+  // Pre-render a soft glow sprite per colour once, instead of paying for
+  // ctx.shadowBlur (a gaussian blur) on every particle every frame.
+  var sprites={};
+  function makeSprite(color,rad){
+    var pad=rad+12, d=pad*2, c=document.createElement('canvas');
+    c.width=c.height=Math.ceil(d);
+    var g=c.getContext('2d');
+    var grd=g.createRadialGradient(pad,pad,0,pad,pad,pad);
+    grd.addColorStop(0,color);
+    grd.addColorStop(0.45,color);
+    grd.addColorStop(1,'rgba(0,0,0,0)');
+    g.globalAlpha=1;g.fillStyle=grd;g.beginPath();g.arc(pad,pad,pad,0,Math.PI*2);g.fill();
+    return {c:c,pad:pad};
+  }
+  function size(){
+    DPR=Math.min(2,devicePixelRatio||1);
+    W=canvas.clientWidth;H=canvas.clientHeight;
+    canvas.width=W*DPR;canvas.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;base=Math.min(W,H)*0.5;
+    // rebuild sprites sized to the current geometry
+    sprites={};
+    for(var c=0;c<COLORS.length;c++){
+      for(var m=0;m<4;m++){
+        var rad=Math.max(2,base*(.018+m*.006));
+        sprites[COLORS[c]+'|'+m]=makeSprite(COLORS[c],rad);
+      }
+    }
+  }
+  addEventListener('resize',size);size();
+  function draw(){
+    ctx.fillStyle='rgba(8,9,13,0.28)';ctx.fillRect(0,0,W,H);
+    for(var k=0;k<parts.length;k++){
+      var p=parts[k];p.ang+=p.speed;
+      var wobble=Math.sin(p.ang*3)*(base*0.05);
+      var r=base*p.radiusF+wobble;
+      var x=cx+Math.cos(p.ang)*r, y=cy+Math.sin(p.ang)*(r*0.62);
+      var sp=sprites[p.color+'|'+(k%4)];
+      ctx.drawImage(sp.c,x-sp.pad,y-sp.pad,sp.pad*2,sp.pad*2);
+    }
+    ctx.beginPath();ctx.arc(cx,cy,Math.max(4,base*0.04),0,Math.PI*2);
+    ctx.fillStyle='#f4f6fb';ctx.fill();
+  }
+  var raf;
+  function loop(){draw();raf=requestAnimationFrame(loop);}
+  function play(){if(!raf&&!document.hidden){if(reduce){ctx.fillStyle='#08090d';ctx.fillRect(0,0,W,H);draw();return;}loop();}}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():play();});
+  play();
+})();
+</script>
+</body>
+</html>

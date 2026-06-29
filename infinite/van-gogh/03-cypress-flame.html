@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cypress Flame — Vincent van Gogh. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cypress Flame</title>
+<style>
+  html,body{margin:0;height:100%;background:#13335a;overflow:hidden}
+  #vg03-stage{position:fixed;inset:0;width:100%;height:100%}
+  #vg03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .vg03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe6cf;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="vg03-stage" role="img" aria-label="A Van Gogh cypress as a dark green flame, its silhouette writhing and twisting upward on a seamless loop against an evening cobalt sky.">
+  <canvas id="vg03-cv"></canvas>
+</div>
+<div class="vg03-cap">Cypress Flame</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('vg03-cv'); if(!cv) return;
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+
+  let S=fitCanvas(cv);
+  let t=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h, cx=W*0.5;
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#13335a');g.addColorStop(0.6,'#1c3f7c');g.addColorStop(1,'#2a3d5c');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#9c7a35';ctx.globalAlpha=.35;ctx.fillRect(0,H*0.86,W,H*0.14);ctx.globalAlpha=1;
+    const baseY=H*0.94, topY=H*0.06;
+    const segs=46;
+    function silhouette(side){
+      ctx.beginPath();
+      ctx.moveTo(cx, baseY);
+      for(let i=0;i<=segs;i++){
+        const u=i/segs;
+        const y=baseY+(topY-baseY)*u;
+        const width=(1-u)*W*0.16 + 6;
+        const wob=Math.sin(t*1.6 + u*9 + side*0.6)*width*0.5
+                 +Math.sin(t*0.9 + u*16)*width*0.25;
+        const x=cx + side*(width + wob*0.5) + Math.sin(t*1.1+u*6)*8*(0.4+u);
+        ctx.lineTo(x,y);
+      }
+      ctx.lineTo(cx, topY);
+      ctx.closePath();
+    }
+    ctx.fillStyle='#1d3320';
+    silhouette(1); ctx.fill();
+    silhouette(-1); ctx.fill();
+    ctx.lineCap='round';
+    for(let i=0;i<segs;i+=1){
+      const u=i/segs;
+      const y=baseY+(topY-baseY)*u;
+      const width=(1-u)*W*0.16+6;
+      const sway=Math.sin(t*1.6+u*9)*width*0.5;
+      const x=cx+sway*0.3+Math.sin(t*1.1+u*6)*8*(0.4+u);
+      ctx.strokeStyle = i%3? 'rgba(40,67,43,.9)':'rgba(74,107,58,.85)';
+      ctx.lineWidth=3;
+      ctx.beginPath();
+      ctx.moveTo(x,y);
+      ctx.lineTo(x+Math.sin(t*2+u*12)*6, y-(baseY-topY)/segs*1.4);
+      ctx.stroke();
+    }
+    ctx.fillStyle='rgba(201,138,43,.5)';
+    ctx.beginPath();ctx.arc(cx+Math.sin(t*1.1+6)*8, topY+10, 5, 0,7);ctx.fill();
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

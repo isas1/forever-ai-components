@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Waterfall chart whose cumulative green and pink bars rise in staggered sequence from a running baseline, threaded by dashed connectors to a">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Waterfall</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0d12;overflow:hidden}
+  #ch08-stage{position:fixed;inset:0;display:block}
+  #ch08-c{position:absolute;inset:0;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ch08-stage" role="img" aria-label="An animated waterfall chart. Cumulative bars rise and fall from a running baseline, threaded by connector lines, settling on a final total bar.">
+  <canvas id="ch08-c"></canvas>
+</div>
+<div class="cap">Waterfall</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("ch08-c"),cx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var BG="#0a0d12",ACC="#5ad1a0",UP="#5ad1a0",DOWN="#e06a8b",TOTAL="#d7e0e6",GRID="rgba(215,224,230,0.10)",AX="rgba(215,224,230,0.22)";
+  // synthetic ledger: start, deltas, then an implicit total
+  var STEP=[ {l:"BASE",v:42,t:0}, {l:"Q1",v:26,t:1}, {l:"FEES",v:-14,t:1}, {l:"GROW",v:31,t:1}, {l:"CHURN",v:-19,t:1}, {l:"BONUS",v:17,t:1}, {l:"TOTAL",v:0,t:2} ];
+  var W=0,H=0,DPR=1,pad,plotL,plotR,plotT,plotB,bw,gap,maxV,run=true,raf=0,t0=0;
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);
+    cx.setTransform(DPR,0,0,DPR,0,0);
+    pad=Math.max(14,Math.min(W,H)*0.085);
+    plotL=pad*1.15;plotR=W-pad*0.7;plotT=pad*0.95;plotB=H-pad*1.25;
+    var n=STEP.length;gap=(plotR-plotL)/n*0.30;
+    bw=((plotR-plotL)-gap*(n-1))/n;
+    // compute cumulative extent
+    var c=0,mx=0;
+    for(var i=0;i<n;i++){
+      if(STEP[i].t===2){STEP[i].cum=c;STEP[i].base=0;STEP[i].top=c;}
+      else if(STEP[i].t===0){STEP[i].base=0;STEP[i].top=STEP[i].v;c=STEP[i].v;STEP[i].cum=c;}
+      else{var nc=c+STEP[i].v;STEP[i].base=Math.min(c,nc);STEP[i].top=Math.max(c,nc);c=nc;STEP[i].cum=c;}
+      if(STEP[i].top>mx)mx=STEP[i].top;
+    }
+    maxV=mx*1.12;
+  }
+  function yOf(v){return plotB-(v/maxV)*(plotB-plotT);}
+  function xOf(i){return plotL+i*(bw+gap);}
+
+  function easeOut(x){return 1-Math.pow(1-x,3);}
+
+  function frame(now){
+    if(!run)return;
+    if(!t0)t0=now;
+    var T=(now-t0)/1000;
+    draw(T);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function draw(T){
+    var n=STEP.length;
+    cx.clearRect(0,0,W,H);
+    cx.fillStyle=BG;cx.fillRect(0,0,W,H);
+
+    // gridlines (4 horizontal)
+    cx.lineWidth=1;cx.strokeStyle=GRID;cx.beginPath();
+    for(var g=1;g<=4;g++){var gy=plotT+(plotB-plotT)*(g/5);cx.moveTo(plotL,gy);cx.lineTo(plotR,gy);}
+    cx.stroke();
+    // baseline axis
+    cx.strokeStyle=AX;cx.lineWidth=1.5;cx.beginPath();
+    cx.moveTo(plotL,plotB+0.5);cx.lineTo(plotR,plotB+0.5);
+    cx.moveTo(plotL-0.5,plotT);cx.lineTo(plotL-0.5,plotB);cx.stroke();
+
+    // staggered reveal: each bar gets a window
+    var perBar=0.62,stride=0.42,loop=stride*n+1.7;
+    var cycle=reduce?9e9:(T%loop);
+
+    var lblFont=Math.max(8,Math.round(bw*0.34));
+    cx.textAlign="center";
+
+    var prevConnX=0,prevConnY=0,havePrev=false;
+
+    for(var i=0;i<n;i++){
+      var s=STEP[i];
+      var local=reduce?1:Math.min(1,Math.max(0,(cycle-i*stride)/perBar));
+      var e=easeOut(local);
+      var x=xOf(i);
+      var yTop=yOf(s.top),yBase=yOf(s.base);
+      var fullH=yBase-yTop;
+      var col=s.t===0?TOTAL:(s.t===2?TOTAL:(s.v>=0?UP:DOWN));
+
+      // grown bar: rises from base toward top (or from top->base if it's a decrease for downward feel)
+      var growH=fullH*e;
+      var drawY,grows;
+      if(s.t===1 && s.v<0){ // decreases descend from the previous cumulative line
+        drawY=yTop; // top stays, height grows downward already from top
+      }
+      var by=yBase-growH;
+
+      // static soft plate behind bar (no per-frame shadow repaint; flat fill)
+      // bar fill
+      cx.fillStyle=col;
+      cx.globalAlpha=0.92;
+      rr(x,by,bw,growH,Math.min(3,bw*0.12));
+      cx.fill();
+      cx.globalAlpha=1;
+      // crisp top cap line
+      if(e>0.02){
+        cx.fillStyle="rgba(255,255,255,0.85)";
+        cx.fillRect(x,by-0.5,bw,1.6);
+      }
+      // total bar gets a hatch baseline marker
+      if(s.t===2&&e>0.5){
+        cx.strokeStyle=ACC;cx.lineWidth=1;cx.globalAlpha=0.6;
+        cx.beginPath();
+        for(var hx=x;hx<x+bw;hx+=5){cx.moveTo(hx,yBase);cx.lineTo(hx-4,yBase+4);}
+        cx.stroke();cx.globalAlpha=1;
+      }
+
+      // connector from previous cumulative top to this bar's start
+      var connY=yOf(s.cum);
+      if(havePrev && local>0){
+        var cAlpha=Math.min(1,local*1.6)*0.55;
+        cx.strokeStyle="rgba(215,224,230,"+cAlpha.toFixed(3)+")";
+        cx.lineWidth=1.2;cx.setLineDash([4,3]);
+        cx.beginPath();cx.moveTo(prevConnX,prevConnY);cx.lineTo(x,prevConnY);cx.stroke();
+        cx.setLineDash([]);
+      }
+      prevConnX=x+bw;prevConnY=connY;havePrev=true;
+
+      // value chip on settled bars
+      if(local>0.85){
+        var va=Math.min(1,(local-0.85)/0.15);
+        cx.globalAlpha=va;
+        cx.fillStyle=col;
+        var vstr=(s.t===2?Math.round(s.cum):(s.t===0?"+"+s.v:(s.v>=0?"+"+s.v:String(s.v))));
+        cx.font="700 "+lblFont+"px ui-monospace,Menlo,monospace";
+        cx.fillText(vstr,x+bw/2,by-7);
+        cx.globalAlpha=1;
+      }
+      // category label
+      cx.fillStyle="rgba(215,224,230,0.55)";
+      cx.font="600 "+lblFont+"px ui-monospace,Menlo,monospace";
+      cx.fillText(s.l,x+bw/2,plotB+lblFont+6);
+    }
+
+    // a travelling scan tick that traces the running total line (compositor-cheap single dot)
+    if(!reduce){
+      var head=Math.min(n-1,cycle/stride);
+      var hi=Math.floor(head),hf=head-hi;
+      if(hi<n){
+        var ax=xOf(hi)+bw+gap*hf, ay=yOf(STEP[Math.min(n-1,hi)].cum);
+        cx.fillStyle=ACC;cx.globalAlpha=0.9;
+        cx.beginPath();cx.arc(ax,ay,2.6,0,6.283);cx.fill();cx.globalAlpha=1;
+      }
+    }
+  }
+
+  function rr(x,y,w,h,r){
+    if(h<0){y+=h;h=-h;}
+    r=Math.min(r,w/2,h/2);
+    cx.beginPath();
+    cx.moveTo(x+r,y);
+    cx.arcTo(x+w,y,x+w,y+h,r);
+    cx.arcTo(x+w,y+h,x,y+h,r);
+    cx.arcTo(x,y+h,x,y,r);
+    cx.arcTo(x,y,x+w,y,r);
+    cx.closePath();
+  }
+
+  function start(){run=true;t0=0;raf=requestAnimationFrame(frame);}
+  function stop(){run=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  function init(){size();if(reduce){draw(1);return;}start();}
+
+  window.addEventListener("resize",function(){size();if(reduce)draw(1);},{passive:true});
+  document.addEventListener("visibilitychange",function(){
+    if(reduce)return;
+    if(document.hidden)stop();else if(!run)start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

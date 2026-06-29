@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="VHS test-pattern color bars with horizontal slice jitter, tear, rolling tracking bar and chroma-split REC text on magenta-tinted black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VHS tracking distortion</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#100614}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+  canvas{width:100%;height:100%;display:block}
+  .noise{position:fixed;inset:0;pointer-events:none;opacity:.07;mix-blend-mode:screen;
+    background-image:repeating-radial-gradient(circle at 50% 50%,#fff 0,#000 1px,#fff 2px)}
+  .cap{position:fixed;right:8px;bottom:7px;font:600 10px ui-monospace,Menlo,monospace;
+    color:#ff5fd0;opacity:.4;letter-spacing:.5px;pointer-events:none}
+  .play{position:fixed;left:10px;top:9px;font:700 11px ui-monospace,monospace;
+    color:#fff;opacity:.55;letter-spacing:1px;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<div class="noise"></div>
+<div class="play">▶ PLAY  SP</div>
+<div class="cap">VHS TRACKING</div>
+<script>
+const c=document.getElementById('c'),x=c.getContext('2d');
+let W,H,t=0,raf,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){W=c.width=Math.floor(innerWidth*.55);H=c.height=Math.floor(innerHeight*.55);}
+addEventListener('resize',size);size();
+const bands=['#ff3fb0','#3fd8ff','#ffe23f','#7dff7d','#b06bff'];
+function draw(){
+  x.fillStyle='#140820';x.fillRect(0,0,W,H);
+  // soft color bars (test pattern)
+  const bw=W/bands.length;
+  for(let i=0;i<bands.length;i++){
+    x.fillStyle=bands[i];x.globalAlpha=.42;
+    x.fillRect(i*bw,H*0.18,bw,H*0.5);
+  }
+  x.globalAlpha=1;
+  // scanline shifting via horizontal slices
+  // shift horizontal slices by copying canvas-to-self (GPU drawImage, no CPU pixel readback)
+  const slices=46;
+  for(let s=0;s<slices;s++){
+    const sy=Math.floor(s/slices*H), sh=Math.ceil(H/slices)+1;
+    const jitter=Math.sin(s*0.6+t*4)*2 + (Math.random()<0.04?(Math.random()*40-20):0);
+    const tear=(s>slices*0.6&&s<slices*0.6+3)?Math.sin(t*5)*W*0.4:0;
+    const off=jitter+tear;
+    if(off){x.drawImage(c,0,sy,W,sh,off,sy,W,sh);}
+  }
+  // chroma offset ghost text
+  x.font='bold '+Math.round(H*0.12)+'px ui-monospace,monospace';x.textAlign='center';x.textBaseline='middle';
+  const cx=W/2,cy=H*0.82,wob=Math.sin(t*3)*4;
+  x.globalAlpha=.8;x.fillStyle='#ff2f7f';x.fillText('REC ●',cx-3+wob,cy);
+  x.fillStyle='#2fffe0';x.fillText('REC ●',cx+3-wob,cy);
+  x.fillStyle='#fff';x.globalAlpha=.85;x.fillText('REC ●',cx,cy);x.globalAlpha=1;
+  // rolling tracking bar
+  const by=((t*0.13)%1)*H;
+  x.fillStyle='rgba(255,255,255,.12)';x.fillRect(0,by,W,H*0.06);
+  x.fillStyle='rgba(0,0,0,.25)';x.fillRect(0,by+H*0.06,W,H*0.02);
+  t+=reduce?0:0.03;
+  raf=requestAnimationFrame(draw);
+}
+function play(){cancelAnimationFrame(raf);draw();}
+function stop(){cancelAnimationFrame(raf);}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+play();
+</script>
+</body>
+</html>

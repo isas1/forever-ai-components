@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Teal split-flap letter reels spin and brake to lock onto each glyph of a word with motion-blur streaks and a flash on the dark green canvas.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ticker Tape Fall</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#07120f;}
+  #ttf-c{display:block;width:100%;height:100%;}
+  .ttf-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#2ec4b6;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="ttf-c"></canvas>
+<div class="ttf-cap">Ticker Tape Fall</div>
+<script>
+(function(){
+  const cv=document.getElementById('ttf-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ALPHA="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const WORDS=["DESCEND","CASCADE","FALLING","GRAVITY"];
+  let W,H,DPR,cell,fs,ox,oy,word,reels,wi=0,phase=0;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    build();
+  }
+  function build(){
+    word=WORDS[wi];
+    const n=word.length;
+    cell=Math.min(H/(n+1.4),W*0.62);
+    fs=cell*0.82;
+    ox=W/2;
+    oy=(H-cell*n)/2+cell*0.5;
+    reels=[];
+    for(let i=0;i<n;i++){
+      const tgt=ALPHA.indexOf(word[i]);
+      reels.push({
+        tgt:tgt,
+        pos:0,            // scroll offset in glyph units (fractional)
+        vel:34+Math.random()*10,
+        lockAt:0.9+i*0.62,// staggered brake time (seconds)
+        locked:false,
+        flash:0
+      });
+    }
+    phase=0;
+  }
+  function glyph(idx){ idx=((idx%26)+26)%26; return ALPHA[idx]; }
+
+  let raf=0,last=0,hold=0;
+  cv.addEventListener('pointermove',()=>{ reels&&reels.forEach(r=>{ if(!r.locked) r.vel+=2.2; }); });
+  cv.addEventListener('click',()=>{ wi=(wi+1)%WORDS.length; build(); });
+
+  function frame(ts){
+    if(!last)last=ts;
+    let dt=(ts-last)/1000; last=ts; if(dt>0.05)dt=0.05;
+    phase+=dt;
+    // trail / fade
+    ctx.fillStyle='rgba(7,18,15,0.34)';ctx.fillRect(0,0,W,H);
+
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    const ff='700 '+fs.toFixed(1)+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
+    let allLocked=true;
+    for(let i=0;i<reels.length;i++){
+      const r=reels[i], cy=oy+i*cell;
+      // physics: spin then brake onto target
+      if(!r.locked){
+        allLocked=false;
+        if(phase<r.lockAt){
+          r.pos+=r.vel*dt;
+        } else {
+          // ease the residual distance to the target glyph (pos integer == tgt at frac 0)
+          // we want final pos so that round(pos) maps to tgt; track a target pos.
+          if(r.targetPos===undefined){
+            const base=Math.ceil(r.pos)+6+i; // a few more spins
+            // choose nearest pos >= base whose glyph index == tgt offset alignment
+            // glyph shown = glyph(floor(pos)+? ) -> define display index = -floor(pos) mod 26 below
+            r.targetPos=base;
+            // adjust so the resting glyph equals tgt
+            const restIdx=((-Math.round(base))%26+26)%26;
+            let diff=((r.tgt-restIdx)%26+26)%26;
+            r.targetPos=base+diff;
+          }
+          const remain=r.targetPos-r.pos;
+          if(remain<=0.001){
+            r.pos=r.targetPos; r.locked=true; r.flash=1;
+          } else {
+            // critically-damped-ish approach
+            const step=Math.max(remain*0.12, 0.55)*(dt*60);
+            r.pos+=Math.min(step,remain);
+          }
+        }
+      }
+      if(r.flash>0) r.flash=Math.max(0,r.flash-dt*2.4);
+
+      const fp=r.pos%1;                 // fractional scroll within a cell
+      const speed=r.locked?0:(phase<r.lockAt?r.vel:Math.max(0,(r.targetPos-r.pos)*7));
+      const blur=Math.min(1,speed/26);  // motion-blur amount
+
+      // draw the reel: a few glyphs scrolling downward through the cell window
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(ox-cell*0.62,cy-cell*0.5,cell*1.24,cell);
+      ctx.clip();
+      ctx.font=ff;
+      for(let k=-2;k<=2;k++){
+        const showIdx=Math.floor(r.pos)+k;
+        const ch=glyph(-showIdx);
+        const gy=cy + (k+fp)*cell;
+        if(gy<cy-cell*0.9||gy>cy+cell*0.9) continue;
+        const center=1-Math.min(1,Math.abs(gy-cy)/(cell*0.62));
+        if(r.locked){
+          ctx.globalAlpha=k===0?1:0;
+          ctx.shadowColor='rgba(46,196,182,'+(0.55+r.flash*0.4)+')';
+          ctx.shadowBlur=(10+r.flash*22);
+          ctx.fillStyle='#d8fff7';
+        } else {
+          // moving glyph: dim, streaked
+          ctx.globalAlpha=(0.16+center*0.7)*(1-blur*0.45);
+          ctx.shadowColor='rgba(46,196,182,0.5)';
+          ctx.shadowBlur=6+blur*4;
+          ctx.fillStyle='#2ec4b6';
+        }
+        // motion-blur streaks: stamp ghosts along the travel direction
+        if(!r.locked && blur>0.08){
+          const streak=blur*cell*0.5;
+          ctx.shadowBlur=2;
+          for(let s=1;s<=3;s++){
+            ctx.globalAlpha=(0.10+center*0.22)*(1-s/4)*(1-blur*0.2);
+            ctx.fillText(ch,ox,gy - streak*(s/3));
+          }
+          ctx.globalAlpha=0.16+center*0.62;
+          ctx.shadowBlur=6+blur*4;
+        }
+        ctx.fillText(ch,ox,gy);
+      }
+      ctx.restore();
+      ctx.shadowBlur=0;ctx.globalAlpha=1;
+
+      // lock indicator: a thin accent baseline that snaps in
+      if(r.locked||r.flash>0){
+        ctx.strokeStyle='rgba(46,196,182,'+(0.18+r.flash*0.5)+')';
+        ctx.lineWidth=1;
+        const lw=fs*0.34;
+        ctx.beginPath();
+        ctx.moveTo(ox-lw,cy+cell*0.42);ctx.lineTo(ox+lw,cy+cell*0.42);ctx.stroke();
+      }
+    }
+
+    if(allLocked){
+      hold+=dt;
+      if(hold>2.6){ hold=0; wi=(wi+1)%WORDS.length; build(); }
+    } else hold=0;
+
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){ if(!raf&&!reduce){ last=0; raf=requestAnimationFrame(frame);} }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  addEventListener('resize',size);
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  size();
+  if(reduce){
+    // single resting frame: every reel locked on target
+    ctx.fillStyle='#07120f';ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font='700 '+fs.toFixed(1)+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
+    for(let i=0;i<reels.length;i++){
+      const cy=oy+i*cell;
+      ctx.shadowColor='rgba(46,196,182,0.6)';ctx.shadowBlur=12;
+      ctx.fillStyle='#d8fff7';ctx.fillText(word[i],ox,cy);
+      ctx.shadowBlur=0;
+      ctx.strokeStyle='rgba(46,196,182,0.2)';ctx.lineWidth=1;
+      const lw=fs*0.34;ctx.beginPath();
+      ctx.moveTo(ox-lw,cy+cell*0.42);ctx.lineTo(ox+lw,cy+cell*0.42);ctx.stroke();
+    }
+  } else start();
+})();
+</script>
+</body>
+</html>

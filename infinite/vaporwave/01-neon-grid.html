@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Magenta-and-cyan wireframe grid scrolls toward a banded sunset and slitted retro sun over a starfield, classic vaporwave canvas.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Neon Grid</title>
+<style>
+  html,body{margin:0;height:100%;background:#160a2a;overflow:hidden}
+  #vw01-stage{position:fixed;inset:0;background:#160a2a}
+  #vw01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .vw01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+  <div id="vw01-stage" role="img" aria-label="A neon magenta and cyan wireframe grid scrolling toward a banded sunset over a chrome horizon, vaporwave style.">
+    <canvas id="vw01-c"></canvas>
+  </div>
+  <div class="vw01-cap">Neon Grid</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("vw01-c"),ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,DPR=1,horizon=0,sunR=0,running=false,raf=0,scroll=0;
+  // cached static gradients (rebuilt only on resize, never per frame)
+  var skyGrad=null, sunGrad=null;
+  // palette
+  var BG="#160a2a", MAG="#ff3df0", CYA="#22d3ee";
+  // starfield (capped, typed)
+  var SN=70, sx=new Float32Array(SN), sy=new Float32Array(SN), ss=new Float32Array(SN);
+  (function seed(){var i,r=99;function rnd(){r=(r*1103515245+12345)&0x7fffffff;return r/0x7fffffff;}
+    for(i=0;i<SN;i++){sx[i]=rnd();sy[i]=rnd();ss[i]=0.6+rnd()*1.8;}})();
+  var GROWS=14, GCOLS=16; // grid density caps
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,Math.round(W*DPR)); cv.height=Math.max(1,Math.round(H*DPR));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    horizon=H*0.50; sunR=Math.min(W,H)*0.30;
+    buildGradients();
+  }
+
+  function buildGradients(){
+    // banded sunset (static)
+    skyGrad=ctx.createLinearGradient(0,0,0,horizon);
+    skyGrad.addColorStop(0,"#1a0c33"); skyGrad.addColorStop(0.55,"#3a1559");
+    skyGrad.addColorStop(0.8,"#7a1d6b"); skyGrad.addColorStop(1,"#ff7a3d");
+    // sun radial (static)
+    var cx=W*0.5, cy=horizon, r=sunR;
+    sunGrad=ctx.createRadialGradient(cx,cy-r*0.25,r*0.1,cx,cy,r);
+    sunGrad.addColorStop(0,"#fff2c2"); sunGrad.addColorStop(0.45,"#ffcf5c");
+    sunGrad.addColorStop(0.75,MAG); sunGrad.addColorStop(1,"rgba(255,61,240,0)");
+  }
+
+  function sky(){
+    // static banded sunset above horizon (cached gradient)
+    ctx.fillStyle=skyGrad; ctx.fillRect(0,0,W,horizon);
+    // stars (upper portion only)
+    var i,px,py;
+    ctx.fillStyle="#dffaff";
+    for(i=0;i<SN;i++){ py=sy[i]*horizon*0.7; px=sx[i]*W;
+      ctx.globalAlpha=0.25+ss[i]*0.28; ctx.fillRect(px,py,ss[i],ss[i]); }
+    ctx.globalAlpha=1;
+  }
+
+  function sun(){
+    var cx=W*0.5, cy=horizon, r=sunR;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0,0,W,horizon); ctx.clip();
+    ctx.fillStyle=sunGrad; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+    // retro scan slits over the sun (static positions, drawn as bg-colored bars)
+    ctx.fillStyle=BG;
+    var b,by,bh,base=cy-r;
+    for(b=0;b<7;b++){ bh=2+b*0.9; by=base+r*1.05*(b/6.5)+ (r*0.18); ctx.fillRect(cx-r,by,r*2,bh); }
+    ctx.restore();
+  }
+
+  function gridFloor(){
+    var cx=W*0.5, top=horizon, bot=H, span=W*1.35;
+    ctx.lineWidth=1;
+    // horizontal lines: perspective rows scrolling toward viewer
+    var i,t,y,lw,a;
+    for(i=0;i<GROWS;i++){
+      // phase 0..1, recede with scroll
+      t=((i+scroll)%GROWS)/GROWS; // 0 near horizon -> 1 near viewer
+      var tt=t*t; // ease perspective
+      y=top+(bot-top)*tt;
+      lw=span*(0.06+tt*0.94);
+      a=0.12+tt*0.7;
+      ctx.strokeStyle="rgba(34,211,238,"+a.toFixed(3)+")";
+      ctx.beginPath(); ctx.moveTo(cx-lw,y); ctx.lineTo(cx+lw,y); ctx.stroke();
+    }
+    // vanishing verticals (static, magenta)
+    var halfw=span;
+    ctx.strokeStyle="rgba(255,61,240,0.55)";
+    for(i=-GCOLS;i<=GCOLS;i++){
+      var fx=cx+(i/GCOLS)*halfw; // far x at bottom
+      ctx.beginPath(); ctx.moveTo(cx,top); ctx.lineTo(fx,bot); ctx.stroke();
+    }
+    // horizon glow line (static)
+    ctx.strokeStyle="rgba(223,250,255,0.9)";
+    ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,top); ctx.lineTo(W,top); ctx.stroke();
+    ctx.lineWidth=1;
+  }
+
+  function frame(){
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    sky(); sun(); gridFloor();
+  }
+
+  function tick(){
+    if(!running) return;
+    scroll+=0.035; if(scroll>=GROWS) scroll-=GROWS;
+    frame();
+    raf=requestAnimationFrame(tick);
+  }
+
+  function start(){ if(running) return; running=true; raf=requestAnimationFrame(tick); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size(); frame();
+    if(reduce) return; // one static on-brand frame, no loop
+    start();
+  }
+
+  window.addEventListener("resize",function(){ size(); if(!running) frame(); });
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Semicircular gauge on dark amber bg with green-yellow-red arc segments, glowing white needle sweeping and a live 0-100 percentage readout.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Radial Gauge Needle</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1410;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  canvas{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
+    color:#ffb347;opacity:.4;text-transform:uppercase}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">gauge</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let W,H,DPR;
+  const A0=Math.PI*0.78, A1=Math.PI*2.22; // sweep
+  let cur=reduce?0.68:0.3,tgt=0.68,phase=0;
+  function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  let last=0;
+  function draw(t){
+    if(document.hidden){last=t;return raf()}
+    last=t;
+    if(!reduce){
+      phase+=0.02;
+      tgt=0.5+0.42*Math.sin(phase)+0.06*Math.sin(phase*3.7);
+      tgt=Math.max(0,Math.min(1,tgt));
+      cur+=(tgt-cur)*0.1;
+    } else cur=tgt;
+    ctx.clearRect(0,0,W,H);
+    const cx=W/2,cy=H*0.6, R=Math.min(W,H)*0.36, lw=R*0.16;
+    // colored arc segments
+    const segs=[['#3ee08f',0,0.5],['#ffd24d',0.5,0.8],['#ff5d5d',0.8,1]];
+    ctx.lineWidth=lw;ctx.lineCap='butt';
+    for(const[c,a,b] of segs){
+      ctx.strokeStyle=c+'cc';ctx.beginPath();
+      ctx.arc(cx,cy,R,A0+(A1-A0)*a,A0+(A1-A0)*b);ctx.stroke();
+    }
+    // ticks
+    ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;
+    for(let i=0;i<=10;i++){const a=A0+(A1-A0)*i/10;
+      ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*(R+lw*0.6),cy+Math.sin(a)*(R+lw*0.6));
+      ctx.lineTo(cx+Math.cos(a)*(R+lw*0.95),cy+Math.sin(a)*(R+lw*0.95));ctx.stroke();}
+    // needle
+    const na=A0+(A1-A0)*cur;
+    ctx.strokeStyle='#fff';ctx.lineWidth=Math.max(2,R*0.05);ctx.lineCap='round';
+    ctx.shadowColor='#ffb347';ctx.shadowBlur=10;
+    ctx.beginPath();ctx.moveTo(cx-Math.cos(na)*R*0.18,cy-Math.sin(na)*R*0.18);
+    ctx.lineTo(cx+Math.cos(na)*R*0.92,cy+Math.sin(na)*R*0.92);ctx.stroke();ctx.shadowBlur=0;
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(cx,cy,R*0.1,0,7);ctx.fill();
+    ctx.fillStyle='#ffb347';ctx.beginPath();ctx.arc(cx,cy,R*0.05,0,7);ctx.fill();
+    // value
+    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font='700 '+(R*0.34)+'px ui-monospace,monospace';
+    ctx.fillText(Math.round(cur*100),cx,cy+R*0.5);
+    raf();
+  }
+  function raf(){requestAnimationFrame(draw)}
+  addEventListener('resize',resize);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
+  resize();raf();
+})();
+</script>
+</body>
+</html>

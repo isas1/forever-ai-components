@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Amber monospace letters spelling BOUNCE drop and spring on a baseline rail with squash-stretch and shadow puddles in a staggered ripple.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Baseline Bounce</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#18120a;}
+  #bb-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;right:10px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+       letter-spacing:.14em;color:#ff9f1c;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="bb-c"></canvas>
+<div class="cap">Baseline Bounce</div>
+<script>
+(function(){
+  const cv=document.getElementById('bb-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const WORD="BOUNCE", N=WORD.length;
+  const BG="#18120a", ACC="#ff9f1c";
+  let W,H,DPR,fs,base,advW;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    fs=Math.min(W/(N*0.78), H*0.42);
+    ctx.font="800 "+fs+"px ui-monospace,'SFMono-Regular',Menlo,monospace";
+    ctx.textAlign="center";ctx.textBaseline="alphabetic";
+    advW=fs*0.66;                      // per-letter advance
+    base=H*0.62;                       // resting baseline
+  }
+  addEventListener('resize',size);size();
+
+  // spring state per letter
+  const L=[];
+  for(let i=0;i<N;i++) L.push({y:0,v:0,ph:0});
+  const PERIOD=2.4;                    // seconds for a wave to cross + rest
+  const LAG=0.13;                      // stagger per letter (the travelling ripple)
+  let t=0,last=0,nudge=0;
+
+  cv.addEventListener('pointermove',e=>{
+    const x=(e.offsetX)/W, i=Math.round(x*(N-1));
+    if(i>=0&&i<N){ L[i].v-=fs*3.2; }   // kick a letter up
+    nudge=0.5;
+  });
+  cv.addEventListener('click',()=>{ for(let i=0;i<N;i++) L[i].v-=fs*(1.6+i*0.2); });
+
+  function impulse(i,time){
+    // each letter gets a launch impulse once per period, staggered L->R
+    const local=((time - i*LAG)%PERIOD+PERIOD)%PERIOD;
+    return local;
+  }
+
+  function step(dt){
+    for(let i=0;i<N;i++){
+      const lt=impulse(i,t);
+      // fire a fresh upward kick at the top of each letter's cycle
+      if(lt < dt){ L[i].v = -fs*2.7; }
+      const o=L[i];
+      // critically-ish damped spring back to baseline (y=0 rest)
+      const k=140, c=11;
+      o.v += (-k*o.y - c*o.v)*dt;
+      o.y += o.v*dt;
+    }
+    nudge*=0.9;
+  }
+
+  function draw(){
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    const totW=advW*(N-1);
+    const x0=W/2 - totW/2;
+
+    // ground rail — the springy baseline
+    ctx.strokeStyle="rgba(255,159,28,0.16)";
+    ctx.lineWidth=Math.max(1,fs*0.012);
+    ctx.beginPath();
+    for(let i=0;i<N;i++){
+      const x=x0+advW*i, y=base+Math.max(0,L[i].y)*0.18;
+      if(i===0)ctx.moveTo(x-advW*0.6,base); ctx.lineTo(x,y);
+    }
+    ctx.lineTo(x0+totW+advW*0.6,base);
+    ctx.stroke();
+
+    for(let i=0;i<N;i++){
+      const o=L[i];
+      const x=x0+advW*i;
+      const y=base+o.y;
+      // squash on impact (y near rest, moving down/up fast near floor),
+      // stretch while airborne (rising fast)
+      let sx=1,sy=1;
+      const speed=o.v/(fs*3);
+      if(o.y>-fs*0.05 && o.v>fs*0.3){          // slamming into baseline -> squash
+        const sq=Math.min(0.42, o.v/(fs*4));
+        sx=1+sq; sy=1-sq;
+      } else if(o.v<0){                         // launching upward -> stretch
+        const st=Math.min(0.3, -o.v/(fs*5));
+        sx=1-st*0.7; sy=1+st;
+      }
+      const height=-o.y/(fs*2.6);               // 0 floor .. ~1 apex
+      // shadow puddle on the baseline
+      const sw=advW*0.34*(1-Math.min(0.55,height*0.6));
+      ctx.fillStyle="rgba(0,0,0,0.35)";
+      ctx.beginPath();
+      ctx.ellipse(x,base+fs*0.04,sw,Math.max(1.5,sw*0.22),0,0,Math.PI*2);ctx.fill();
+
+      ctx.save();
+      ctx.translate(x,y);
+      ctx.scale(sx,sy);
+      // hot accent when high, deeper amber at rest
+      const hot=Math.min(1,height*1.4);
+      const r=Math.round(255), g=Math.round(120+39*hot), b=Math.round(10+18*hot);
+      ctx.fillStyle="rgb("+r+","+g+","+b+")";
+      ctx.shadowColor=ACC;
+      ctx.shadowBlur=fs*(0.12+0.5*hot);
+      ctx.fillText(WORD[i],0,0);
+      ctx.restore();
+    }
+  }
+
+  function frame(now){
+    if(!last)last=now;
+    let dt=(now-last)/1000; last=now;
+    if(dt>0.05)dt=0.05;
+    t+=dt;
+    step(dt);
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce){last=0;raf=requestAnimationFrame(frame);}}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+
+  if(reduce){
+    // one static resting frame
+    for(let i=0;i<N;i++){L[i].y=0;L[i].v=0;}
+    draw();
+  } else start();
+})();
+</script>
+</body>
+</html>

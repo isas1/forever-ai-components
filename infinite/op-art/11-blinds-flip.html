@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Stack of horizontal venetian-blind slats flips open in a traveling wave, surfacing a hidden white disc carried on their back faces.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blinds Flip</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
+  #op11-stage{position:fixed;inset:0;background:#0a0a0a}
+  #op11-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="op11-stage" role="img" aria-label="Op art: a stack of horizontal venetian-blind slats slowly flips open in a traveling wave; the front faces are blank while the back faces carry a hidden circle, which surfaces as the blinds turn.">
+  <canvas id="op11-c"></canvas>
+</div>
+<div class="cap">Blinds Flip</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("op11-c");
+  var ctx=cv.getContext("2d",{alpha:false});
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  var W=0,H=0,DPR=1;
+  var SLATS=22;              // number of blind slats (capped well under 110)
+  var slatH=0;               // nominal slat height (css->device px)
+  var midX=0,midY=0,R=0;     // hidden circle: center + radius
+  var TAU=Math.PI*2;
+
+  function resize(){
+    var s=cv.clientWidth||cv.parentNode.clientWidth;
+    var h=cv.clientHeight||cv.parentNode.clientHeight;
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,Math.round(s*DPR));
+    H=Math.max(1,Math.round(h*DPR));
+    cv.width=W; cv.height=H;
+    slatH=H/SLATS;
+    midX=W*0.5; midY=H*0.5;
+    R=Math.min(W,H)*0.30;     // the hidden disc
+  }
+  resize();
+
+  // Precomputed fill-style strings keyed by quantized |cos(angle)| (0..1).
+  // This keeps the rAF loop allocation-free: no toFixed + string concat per
+  // slat per frame. We snap |c| to LUTQ+1 buckets and reuse the cached strings.
+  var LUTQ=64;
+  var frontFill=new Array(LUTQ+1);  // FRONT face panel: rgba white, litF
+  var backFill=new Array(LUTQ+1);   // BACK face panel: rgba white, litB
+  (function(){
+    for(var q=0;q<=LUTQ;q++){
+      var ac=q/LUTQ;                 // |cos(angle)| in [0,1]
+      var litF=0.78+0.16*ac;        // brighter when square-on (c>=0)
+      var litB=0.10+0.10*ac;        // dim back, slightly lit edge-on (-c)
+      frontFill[q]="rgba(255,255,255,"+(Math.round(litF*1000)/1000)+")";
+      backFill[q]="rgba(255,255,255,"+(Math.round(litB*1000)/1000)+")";
+    }
+  })();
+
+  // Each slat is a horizontal band. We model it as a rigid panel hinged on its
+  // own horizontal centre line, flipping about the X axis. cos(angle) scales
+  // its drawn height (foreshortening); the sign of cos tells us which face we
+  // see. FRONT face: pure blank slat (just a thin edge). BACK face: carries a
+  // slice of a hidden circle, so as the wave of flips passes the disc surfaces.
+  // A slow phase offset down the stack makes the flip travel like a real blind.
+
+  function draw(time){
+    var t=time*0.001;
+    ctx.fillStyle="#0a0a0a";
+    ctx.fillRect(0,0,W,H);
+
+    // global open/close breathing — slow, seizure-safe (never a full strobe)
+    var open=0.5-0.5*Math.cos(t*0.34);   // 0..1, eased
+    for(var i=0;i<SLATS;i++){
+      var cy=(i+0.5)*slatH;              // hinge line of this slat
+      // travelling-wave phase down the stack
+      var ph=i*0.42;
+      // flip angle: rests near closed, opens through ~+/- range. Kept smooth.
+      var ang=open*Math.sin(t*0.7 - ph)*1.35 + (open-0.5)*0.9;
+      var c=Math.cos(ang);
+      var ac=c<0?-c:c;                    // |cos|
+      var facing=c>=0;                    // true => front face toward viewer
+      var qi=(ac*LUTQ+0.5)|0;             // quantized index into fill LUTs
+      var hh=ac*slatH*0.5;                // foreshortened half-height
+      if(hh<0.4) hh=0.4;                  // never vanish completely (a sliver edge)
+      var yTop=cy-hh, yBot=cy+hh;
+
+      if(facing){
+        // FRONT FACE — blank slat. A flat white panel with a soft top highlight
+        // and a darker lower lip, so the blind reads as a physical surface.
+        ctx.fillStyle=frontFill[qi];      // cached: brighter when square-on
+        ctx.fillRect(0,yTop,W,yBot-yTop);
+        // lower lip shadow (static gradient feel via flat fill, no blur)
+        ctx.fillStyle="rgba(10,10,10,0.30)";
+        ctx.fillRect(0,yBot-hh*0.34,W,hh*0.34);
+      } else {
+        // BACK FACE — dark slat carrying its horizontal slice of the disc.
+        ctx.fillStyle=backFill[qi];       // cached: dim back, slightly lit edge-on
+        ctx.fillRect(0,yTop,W,yBot-yTop);
+        // disc slice: where this slat's hinge row crosses the circle, paint a
+        // bright chord. The chord half-width comes from the true row position cy
+        // (so the assembled discs across slats form one coherent circle).
+        var dy=cy-midY;
+        if(Math.abs(dy)<R){
+          var halfChord=Math.sqrt(R*R-dy*dy);
+          ctx.fillStyle="rgba(255,255,255,0.95)";
+          ctx.fillRect(midX-halfChord,yTop,halfChord*2,yBot-yTop);
+          // a thin black ring edge inside the disc for an op-art crispness
+          var inner=R*0.62;
+          if(Math.abs(dy)<inner){
+            var ih=Math.sqrt(inner*inner-dy*dy);
+            ctx.fillStyle="#0a0a0a";
+            ctx.fillRect(midX-ih,yTop,ih*2,yBot-yTop);
+            var core=R*0.30;
+            if(Math.abs(dy)<core){
+              var ch=Math.sqrt(core*core-dy*dy);
+              ctx.fillStyle="rgba(255,255,255,0.95)";
+              ctx.fillRect(midX-ch,yTop,ch*2,yBot-yTop);
+            }
+          }
+        }
+      }
+      // hairline seam between slats — static low contrast, no flashing
+      ctx.fillStyle="rgba(10,10,10,0.55)";
+      ctx.fillRect(0,cy+slatH*0.5-1,W,1);
+    }
+  }
+
+  if(reduce){
+    // settle to a calm, legible mid-flip frame so the disc is partly revealed.
+    draw(900);
+    return;
+  }
+
+  var running=true,raf=0;
+  function loop(ts){ if(!running)return; draw(ts); raf=requestAnimationFrame(loop); }
+  raf=requestAnimationFrame(loop);
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ running=false; if(raf)cancelAnimationFrame(raf); }
+    else if(!running){ running=true; raf=requestAnimationFrame(loop); }
+  });
+
+  var rt;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ resize(); if(reduce)draw(900); },120);
+  });
+})();
+</script>
+</body>
+</html>

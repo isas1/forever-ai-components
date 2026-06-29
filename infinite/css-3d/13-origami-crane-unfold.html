@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A paper origami crane on a cream ground continuously folds and unfolds in 3D, rising and rotating with a soft breathing rhythm.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Origami Crane Unfold</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#f4efe6;}
+  .ocu-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    perspective:760px;perspective-origin:50% 44%;}
+  .ocu-scene{position:relative;width:0;height:0;transform-style:preserve-3d;will-change:transform;}
+  .ocu-h{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d;
+    transform-origin:0 0;}
+  .ocu-f{position:absolute;left:0;top:0;transform-origin:0 0;backface-visibility:visible;
+    clip-path:var(--clip);background:var(--paper);}
+  .ocu-f::after{content:"";position:absolute;inset:0;clip-path:var(--clip);
+    background:#5d3f22;opacity:var(--sh,0);}
+  .ocu-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+    letter-spacing:.2em;color:#c1432a;opacity:.34;text-transform:uppercase;
+    pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<div class="ocu-stage"><div class="ocu-scene" id="ocuScene"></div></div>
+<div class="ocu-cap">Origami Crane Unfold</div>
+<script>
+(function(){
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const scene=document.getElementById('ocuScene');
+  const U=120;                         // base unit px
+  const P1='#efe2c9', P2='#e3cfa6', P3='#d8bf90'; // paper light->dark sides
+  const ACC='#c1432a';
+
+  // clip presets on a U x U box (origin top-left of box at hinge corner)
+  const CLIP={
+    R:'polygon(0 0,100% 50%,0 100%)',     // points right
+    L:'polygon(100% 0,0 50%,100% 100%)',  // points left
+    UP:'polygon(0 100%,50% 0,100% 100%)', // points up
+    DN:'polygon(0 0,100% 0,50% 100%)',    // points down
+    NE:'polygon(0 0,100% 0,0 100%)',      // right-tri, hyp facing NE
+    NW:'polygon(0 0,100% 0,100% 100%)'    // right-tri, hyp facing NW
+  };
+
+  // hinge node: a div that rotates; children inherit. fold drives angle.
+  // spec: {ax:'X'|'Y'|'Z', a0:flatAngle, a1:foldedAngle, tx,ty,tz: pre-translate}
+  const hinges=[];
+  function H(parent,spec){
+    const el=document.createElement('div');el.className='ocu-h';
+    parent.appendChild(el);
+    hinges.push({el,...spec});
+    return el;
+  }
+  // attach a face (does not rotate; just a panel placed in the hinge frame)
+  const faces=[];
+  function F(parent,clip,paper,w,h,xf){
+    const f=document.createElement('div');f.className='ocu-f';
+    f.style.setProperty('--clip',CLIP[clip]);
+    f.style.setProperty('--paper',paper);
+    f.style.width=w+'px';f.style.height=h+'px';
+    if(xf)f.style.transform=xf;
+    parent.appendChild(f);
+    // the face's owning hinge = last hinge whose el is this parent (for depth shading)
+    const owner=hinges.find(hh=>hh.el===parent);
+    faces.push({el:f,owner});
+    return f;
+  }
+
+  // ---------- build the crane (symmetric). resting pose = folded(1) ----------
+  // body sits at scene origin; a small lift hinge gives the whole bird a tilt.
+  const root=H(scene,{ax:'X',a0:0,a1:0,tx:0,ty:0,tz:0});
+
+  // central body diamond: two triangles meeting at a vertical keel
+  F(root,'UP',P1,U,U,`translate(${-U/2}px,${-U*0.55}px)`);
+  F(root,'DN',P2,U,U,`translate(${-U/2}px,${-U*0.05}px)`);
+
+  // WINGS — one builder, mirrored by sx (+1 right, -1 left)
+  function wing(sx){
+    // primary wing fold: opens up & out from the keel. flat=0, folded raises it.
+    const w=H(root,{ax:'Y',a0:0,a1:sx>0?-58:58,tx:0,ty:-U*0.18,tz:0});
+    // the wing panel — a long triangle sweeping outward
+    const wf=F(w,sx>0?'R':'L',P2,U*1.15,U*0.92,
+      sx>0?`translate(0,${-U*0.46}px)`:`translate(${-U*1.15}px,${-U*0.46}px)`);
+    // wing-tip secondary fold (the crease that lifts the outer wing)
+    const tip=H(w,{ax:'X',a0:0,a1:-48,tx:sx*U*0.78,ty:-U*0.04,tz:0});
+    F(tip,sx>0?'R':'L',P3,U*0.5,U*0.5,
+      sx>0?`translate(0,${-U*0.25}px)`:`translate(${-U*0.5}px,${-U*0.25}px)`);
+  }
+  wing(1);wing(-1);
+
+  // NECK — rises from the front of the keel, folds upward
+  const neck=H(root,{ax:'X',a0:0,a1:-72,tx:0,ty:-U*0.5,tz:U*0.02});
+  F(neck,'UP',P1,U*0.34,U*0.9,`translate(${-U*0.17}px,${-U*0.9}px)`);
+  // HEAD — folds forward off the neck (the crane's hooked head/beak)
+  const head=H(neck,{ax:'X',a0:0,a1:64,tx:0,ty:-U*0.9,tz:0});
+  F(head,'L',P2,U*0.4,U*0.34,`translate(${-U*0.34}px,${-U*0.17}px)`);
+  // BEAK — sharp accent fold
+  const beak=H(head,{ax:'X',a0:0,a1:-40,tx:-U*0.3,ty:0,tz:0});
+  F(beak,'L',ACC,U*0.2,U*0.16,`translate(${-U*0.2}px,${-U*0.08}px)`);
+
+  // TAIL — at the rear of the keel, folds up into the classic crane tail spike
+  const tail=H(root,{ax:'X',a0:0,a1:54,tx:0,ty:U*0.42,tz:-U*0.02});
+  F(tail,'DN',P3,U*0.42,U*0.95,`translate(${-U*0.21}px,0)`);
+  const tail2=H(tail,{ax:'X',a0:0,a1:-30,tx:0,ty:U*0.7,tz:0});
+  F(tail2,'DN',P2,U*0.28,U*0.5,`translate(${-U*0.14}px,0)`);
+
+  // ---------- animation ----------
+  function apply(fold){
+    for(const h of hinges){
+      const a=h.a0+(h.a1-h.a0)*fold;
+      const t=`translate3d(${h.tx||0}px,${h.ty||0}px,${h.tz||0}px) rotate${h.ax}(${a.toFixed(2)}deg)`;
+      h.el.style.transform=t;
+    }
+    // depth-as-light: a face dims in proportion to how steeply its hinge has folded
+    for(const fc of faces){
+      const ang=fc.owner?Math.abs(fc.owner.a0+(fc.owner.a1-fc.owner.a0)*fold):0;
+      const sh=0.05+0.4*(1-Math.cos(ang*Math.PI/180))*0.5; // 1-cos -> away from light
+      fc.el.style.setProperty('--sh',Math.min(0.46,sh).toFixed(3));
+    }
+  }
+
+  let t=0,phase=Math.PI,spin=26,target=26,raf=0;
+  addEventListener('pointermove',e=>{target=26+(e.clientX/innerWidth-0.5)*40;});
+  addEventListener('click',()=>{phase+=Math.PI*0.6;}); // nudge the breath
+  function frame(){
+    t+=0.01;phase+=0.0075;
+    const s=Math.cos(phase)*0.5+0.5;        // 0..1
+    const fold=s*s*(3-2*s);                  // smoothstep dwell at flat & full
+    spin+=(target-spin)*0.045;
+    const yaw=spin+Math.sin(t*0.45)*7;
+    const tilt=-18+Math.sin(t*0.7)*3;
+    const lift=(-U*0.05)+ -U*0.32*fold;      // bird rises as it forms
+    scene.style.transform=`translateY(${lift}px) rotateX(${tilt}deg) rotateY(${yaw}deg)`;
+    apply(fold);
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+
+  function fit(){
+    const k=Math.min(innerWidth,innerHeight)/440;
+    scene.style.scale=Math.max(0.46,Math.min(1.5,k)).toFixed(3);
+  }
+  addEventListener('resize',fit);fit();
+
+  if(reduce){
+    apply(1);
+    scene.style.transform=`translateY(${-U*0.37}px) rotateX(-18deg) rotateY(26deg)`;
+  }else start();
+})();
+</script>
+</body>
+</html>

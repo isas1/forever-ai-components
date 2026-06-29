@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Five glowing gravitational bodies orbit and sling each other on deep space, trailing colored comet tails; pointer perturbs the dance.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>N-Body Waltz</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#05060f;}
+  #nbw-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.16em;color:#7aa2ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="nbw-c"></canvas>
+<div class="cap">N-Body Waltz</div>
+<script>
+(function(){
+  const cv=document.getElementById('nbw-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,S;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;S=Math.min(W,H)/520;
+  }
+  addEventListener('resize',size);size();
+
+  // colour palette around accent #7aa2ff
+  const PAL=[
+    {c:'#bcd2ff',g:'#7aa2ff'},
+    {c:'#ffd9a8',g:'#ff9d4d'},
+    {c:'#a8ffe6',g:'#39d6a8'},
+    {c:'#e2bcff',g:'#a06bff'},
+    {c:'#ffb4c8',g:'#ff5e86'}
+  ];
+  const N=5, G=1400, SOFT=900, TLEN=46;
+  let B=[];
+  function seed(){
+    B=[];
+    for(let i=0;i<N;i++){
+      const a=Math.PI*2*i/N+0.3, r=70+Math.random()*40;
+      const m=10+Math.random()*22;
+      B.push({
+        x:Math.cos(a)*r, y:Math.sin(a)*r,
+        vx:-Math.sin(a)*0.9, vy:Math.cos(a)*0.9,
+        m:m, rad:2+Math.pow(m,0.42)*0.9,
+        pal:PAL[i%PAL.length], tr:[]
+      });
+    }
+    // zero net momentum + center
+    let px=0,py=0,mx=0,my=0,M=0;
+    B.forEach(b=>{px+=b.vx*b.m;py+=b.vy*b.m;mx+=b.x*b.m;my+=b.y*b.m;M+=b.m;});
+    B.forEach(b=>{b.vx-=px/M/b.m*0;b.vy-=py/M/b.m*0;b.x-=mx/M;b.y-=my/M;});
+    px=0;py=0;B.forEach(b=>{px+=b.vx*b.m;py+=b.vy*b.m;});
+    B.forEach(b=>{b.vx-=px/M;b.vy-=py/M;});
+  }
+  seed();
+
+  let kick=0;
+  cv.addEventListener('pointermove',e=>{
+    const r=cv.getBoundingClientRect();
+    const mx=(e.clientX-r.left-cx)/S, my=(e.clientY-r.top-cy)/S;
+    B.forEach(b=>{
+      const dx=b.x-mx, dy=b.y-my, d2=dx*dx+dy*dy+400, d=Math.sqrt(d2);
+      const f=2600/d2; b.vx+=dx/d*f; b.vy+=dy/d*f;
+    });
+    kick=1;
+  });
+  cv.addEventListener('click',()=>{seed();kick=1;});
+
+  function step(dt){
+    // accelerations
+    for(let i=0;i<N;i++){let bi=B[i];bi.ax=0;bi.ay=0;}
+    for(let i=0;i<N;i++){
+      for(let j=i+1;j<N;j++){
+        const bi=B[i],bj=B[j];
+        let dx=bj.x-bi.x, dy=bj.y-bi.y;
+        const d2=dx*dx+dy*dy+SOFT, inv=1/Math.sqrt(d2), f=G/d2;
+        const fx=dx*inv*f, fy=dy*inv*f;
+        bi.ax+=fx*bj.m; bi.ay+=fy*bj.m;
+        bj.ax-=fx*bi.m; bj.ay-=fy*bi.m;
+      }
+    }
+    let cmx=0,cmy=0,M=0;
+    for(let i=0;i<N;i++){
+      const b=B[i];
+      b.vx+=b.ax*dt; b.vy+=b.ay*dt;
+      b.x+=b.vx*dt; b.y+=b.vy*dt;
+      cmx+=b.x*b.m;cmy+=b.y*b.m;M+=b.m;
+    }
+    // soft recenter so the dance never drifts off-frame
+    cmx/=M;cmy/=M;
+    const bound=Math.min(W,H)/S*0.45;
+    for(let i=0;i<N;i++){
+      const b=B[i];
+      b.x-=cmx*0.04; b.y-=cmy*0.04;
+      // gentle leash if a body slings too far
+      const d=Math.hypot(b.x,b.y);
+      if(d>bound){const pull=(d-bound)*0.0009; b.vx-=b.x/d*pull*d; b.vy-=b.y/d*pull*d;}
+      b.tr.push(b.x,b.y);
+      if(b.tr.length>TLEN*2)b.tr.splice(0,b.tr.length-TLEN*2);
+    }
+  }
+
+  function draw(){
+    ctx.fillStyle='rgba(5,6,15,0.30)';ctx.fillRect(0,0,W,H);
+    ctx.save();ctx.translate(cx,cy);ctx.scale(S,S);
+    ctx.globalCompositeOperation='lighter';
+    // tails
+    ctx.lineCap='round';
+    for(let i=0;i<N;i++){
+      const b=B[i], tr=b.tr, n=tr.length/2;
+      for(let k=1;k<n;k++){
+        const t=k/n;
+        ctx.strokeStyle=b.pal.g;
+        ctx.globalAlpha=t*t*0.5;
+        ctx.lineWidth=(0.4+t*2.2);
+        ctx.beginPath();
+        ctx.moveTo(tr[(k-1)*2],tr[(k-1)*2+1]);
+        ctx.lineTo(tr[k*2],tr[k*2+1]);
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha=1;
+    // bodies with glow
+    for(let i=0;i<N;i++){
+      const b=B[i];
+      const gr=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.rad*5.5);
+      gr.addColorStop(0,b.pal.c);
+      gr.addColorStop(0.28,b.pal.g);
+      gr.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=gr;ctx.globalAlpha=0.85;
+      ctx.beginPath();ctx.arc(b.x,b.y,b.rad*5.5,0,6.2832);ctx.fill();
+      ctx.fillStyle=b.pal.c;ctx.globalAlpha=1;
+      ctx.beginPath();ctx.arc(b.x,b.y,b.rad,0,6.2832);ctx.fill();
+    }
+    ctx.restore();ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+  }
+
+  let raf=0;
+  function frame(){
+    kick*=0.92;
+    const sub=3, dt=0.55;
+    for(let s=0;s<sub;s++)step(dt);
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){
+    ctx.fillStyle='#05060f';ctx.fillRect(0,0,W,H);
+    for(let s=0;s<140;s++)step(0.55);
+    draw();
+  }else start();
+})();
+</script>
+</body>
+</html>

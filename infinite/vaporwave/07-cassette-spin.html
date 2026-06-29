@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Two chrome cassette reels spin with dashed cyan-and-magenta tape flowing between them over a neon vaporwave grid and starfield.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cassette Reels</title>
+<style>
+  html,body{margin:0;height:100%;background:#160a2a;overflow:hidden}
+  #vw07-stage{position:fixed;inset:0;overflow:hidden;background:
+    radial-gradient(130% 90% at 50% 8%, #311760 0%, #1d0d3a 50%, #160a2a 100%)}
+  #vw07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static neon glow behind the reels — never repaints */
+  #vw07-glow{position:absolute;left:50%;top:48%;width:78%;aspect-ratio:2.1/1;
+    transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 50%,
+      rgba(34,211,238,.20) 0%, rgba(255,77,166,.16) 42%, transparent 70%);
+    box-shadow:0 0 100px 30px rgba(34,211,238,.12),
+               0 0 150px 70px rgba(255,77,166,.08)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="vw07-stage" role="img" aria-label="Two abstract chrome cassette reels spinning with tape flowing between them over a neon vaporwave grid and starfield">
+  <div id="vw07-glow"></div>
+  <canvas id="vw07-c"></canvas>
+</div>
+<div class="cap">Cassette Reels</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('vw07-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,DPR=1,CX=0,CY=0,U=0,GAP=0,RR=0;
+  var running=false, raf=0, t=0;
+
+  var MAG='#ff4da6', CYAN='#22d3ee', VIO='#a855f7', WHT='#eafbff';
+
+  // starfield (typed arrays, capped under 110)
+  var NS=80;
+  var sx=new Float32Array(NS), sy=new Float32Array(NS),
+      sr=new Float32Array(NS), sp=new Float32Array(NS);
+  for(var i=0;i<NS;i++){ sx[i]=Math.random(); sy[i]=Math.random();
+    sr[i]=0.3+Math.random()*1.0; sp[i]=0.5+Math.random()*1.8; }
+
+  function resize(){
+    var r=cv.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,Math.round(r.width*DPR));
+    H=Math.max(1,Math.round(r.height*DPR));
+    cv.width=W; cv.height=H;
+    CX=W*0.5; CY=H*0.44;
+    U=Math.min(W,H);
+    GAP=U*0.27;                 // half-distance between reel centres
+    RR=U*0.19;                  // reel outer radius
+  }
+
+  function drawStars(){
+    for(var i=0;i<NS;i++){
+      var x=sx[i]*W, y=sy[i]*H*0.52;
+      var tw=0.30+0.45*(0.5+0.5*Math.sin(t*sp[i]+i*1.7));
+      ctx.globalAlpha=tw;
+      ctx.fillStyle=(i%7===0)?CYAN:(i%5===0)?MAG:WHT;
+      ctx.fillRect(x,y,sr[i]*DPR,sr[i]*DPR);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function drawGrid(){
+    var hy=CY+U*0.28;
+    ctx.strokeStyle='rgba(34,211,238,0.28)';
+    ctx.lineWidth=Math.max(1,DPR*0.7);
+    var rows=9,i, scroll=(t*0.22)%1;
+    for(i=0;i<rows;i++){
+      var f=(i+scroll)/rows, yy=hy+(H-hy)*f*f;
+      ctx.globalAlpha=0.08+0.20*f;
+      ctx.beginPath(); ctx.moveTo(0,yy); ctx.lineTo(W,yy); ctx.stroke();
+    }
+    ctx.globalAlpha=0.14;
+    for(i=-8;i<=8;i++){
+      ctx.beginPath(); ctx.moveTo(CX+i*U*0.085,hy); ctx.lineTo(CX+i*U*1.05,H); ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // one spinning reel: chrome hub + radial spokes + wound-tape rim
+  function drawReel(px,ang,col,wind){
+    var rim=RR, hub=RR*0.30;
+    // wound tape band (thickness reflects how full the reel is) — static-width strokes
+    var band=hub+ (rim-hub)*wind;
+    ctx.lineWidth=Math.max(1.5,U*0.012);
+    // outer rim ring
+    ctx.beginPath(); ctx.arc(px,CY,rim,0,6.2832);
+    ctx.strokeStyle=col; ctx.globalAlpha=0.9; ctx.stroke();
+    // tape spool fill ring
+    ctx.beginPath(); ctx.arc(px,CY,band,0,6.2832);
+    ctx.strokeStyle=col; ctx.globalAlpha=0.30; ctx.lineWidth=Math.max(2,(band-hub)); ctx.stroke();
+    ctx.lineWidth=Math.max(1.5,U*0.012);
+    // hub circle
+    ctx.beginPath(); ctx.arc(px,CY,hub,0,6.2832);
+    ctx.strokeStyle=WHT; ctx.globalAlpha=0.85; ctx.stroke();
+    // three radial spokes (window into the reel) rotating
+    ctx.globalAlpha=0.8; ctx.strokeStyle=col;
+    for(var s=0;s<3;s++){
+      var a=ang+s*2.0944;
+      ctx.beginPath();
+      ctx.moveTo(px+Math.cos(a)*hub*0.9, CY+Math.sin(a)*hub*0.9);
+      ctx.lineTo(px+Math.cos(a)*rim*0.92, CY+Math.sin(a)*rim*0.92);
+      ctx.stroke();
+    }
+    // chrome glint dot riding the rim
+    ctx.beginPath();
+    ctx.arc(px+Math.cos(ang*0.5)*band, CY+Math.sin(ang*0.5)*band, Math.max(1.5,U*0.016),0,6.2832);
+    ctx.fillStyle=WHT; ctx.globalAlpha=0.9; ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  // tape ribbon flowing between the two reels, dipping low like a real cassette path
+  function drawTape(){
+    var lx=CX-GAP, rx=CX+GAP;
+    var dip=CY+RR*1.35;                 // lowest point of the slack span
+    var flow=(t*1.1);                   // moving dashes = tape direction
+    ctx.lineWidth=Math.max(2,U*0.018);
+    ctx.lineCap='round';
+    ctx.strokeStyle=CYAN; ctx.globalAlpha=0.55;
+    ctx.setLineDash([U*0.05,U*0.035]);
+    ctx.lineDashOffset=-flow*U*0.08;
+    ctx.beginPath();
+    ctx.moveTo(lx, CY+RR*0.6);
+    ctx.quadraticCurveTo(CX, dip, rx, CY+RR*0.6);
+    ctx.stroke();
+    // a brighter magenta strand just above for depth
+    ctx.strokeStyle=MAG; ctx.globalAlpha=0.45;
+    ctx.lineDashOffset=-flow*U*0.08+U*0.04;
+    ctx.beginPath();
+    ctx.moveTo(lx, CY+RR*0.46);
+    ctx.quadraticCurveTo(CX, dip-U*0.03, rx, CY+RR*0.46);
+    ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha=1; ctx.lineCap='butt';
+  }
+
+  function frame(){
+    ctx.clearRect(0,0,W,H);
+    drawStars();
+    drawGrid();
+    drawTape();
+    // left reel unwinds (loses tape), right reel winds (gains) — breathing wind levels
+    var osc=0.5+0.45*Math.sin(t*0.5);
+    var spin=t*2.2;
+    drawReel(CX-GAP, spin, MAG, 0.95-0.5*osc);
+    drawReel(CX+GAP, spin, CYAN, 0.45+0.5*osc);
+  }
+
+  var last=0;
+  function loop(now){
+    if(!running) return;
+    if(!last) last=now;
+    var dt=(now-last)/1000; last=now;
+    if(dt>0.05) dt=0.05;
+    t+=dt; frame();
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){ if(running||reduce) return; running=true; last=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  window.addEventListener('resize', function(){ resize(); if(reduce) frame(); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) stop(); else start();
+  });
+
+  resize();
+  if(reduce){ t=1.0; frame(); }
+  else start();
+})();
+</script>
+</body>
+</html>

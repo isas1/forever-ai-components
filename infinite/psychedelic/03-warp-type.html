@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The word WARP in bold serif rippling and bulging over swirling magenta-teal lava blobs in Fillmore-poster gradient hues.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Warp Type</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  #ps03-stage{position:fixed;inset:0;display:block;width:100%;height:100%;
+    background:
+      radial-gradient(120% 90% at 50% 42%, #1a0b2e 0%, #0a0612 70%),
+      #0a0612;}
+  #ps03-c{position:absolute;inset:0;width:100%;height:100%;
+    /* static glow, never repainted */
+    filter:none;}
+  /* glow lives as a fixed pseudo-layer, not animated */
+  #ps03-stage::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(60% 45% at 50% 46%, rgba(255,61,166,.16), transparent 70%);
+    mix-blend-mode:screen;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ps03-stage" role="img" aria-label="Psychedelic warped lettering spelling Warp, bulging and rippling over swirling magenta and teal lava-lamp blobs.">
+  <canvas id="ps03-c"></canvas>
+</div>
+<div class="cap">Warp Type</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("ps03-stage");
+  var cv=document.getElementById("ps03-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // Fillmore-poster palette, swirled complementary hues
+  var palette=[ "#ff3da6","#ff7a1a","#ffd23f","#3ad1c8","#7b2ff7","#ff3da6" ];
+
+  // cached layout
+  var W=0,H=0,DPR=1,S=0,cx=0,cy=0;
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,Math.round(W*DPR));
+    cv.height=Math.max(1,Math.round(H*DPR));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);
+    cx=W*0.5; cy=H*0.5;
+  }
+  resize();
+
+  var word="WARP";
+  // pre-pick blob seeds (<=6 blobs, well under cap)
+  var NB=6, bx=new Float32Array(NB), by=new Float32Array(NB),
+      br=new Float32Array(NB), bsp=new Float32Array(NB), bph=new Float32Array(NB), bc=new Int8Array(NB);
+  for(var i=0;i<NB;i++){
+    bx[i]=(i*0.173+0.12)%1; by[i]=(i*0.31+0.18)%1;
+    br[i]=0.22+0.10*((i*0.47)%1); bsp[i]=0.10+0.06*((i*0.29)%1);
+    bph[i]=i*1.7; bc[i]=i%palette.length;
+  }
+
+  function hexA(h,a){
+    var n=parseInt(h.slice(1),16);
+    return "rgba("+((n>>16)&255)+","+((n>>8)&255)+","+(n&255)+","+a+")";
+  }
+
+  // Precomputed per-blob gradients + max radii, rebuilt only on resize.
+  // Each gradient is anchored at (0,0); the loop translates the canvas to
+  // the blob's position rather than allocating a new gradient each frame.
+  var bGrad=new Array(NB), bRmax=new Float32Array(NB);
+  function buildBlobs(){
+    for(var i=0;i<NB;i++){
+      var rmax=br[i]*S*1.02; // covers the 0.9+0.12 radius breathing range
+      if(rmax<1) rmax=1;
+      bRmax[i]=rmax;
+      var g=ctx.createRadialGradient(0,0,0,0,0,rmax);
+      var col=palette[bc[i]];
+      g.addColorStop(0,col); g.addColorStop(0.45,hexA(col,0.28)); g.addColorStop(1,"rgba(0,0,0,0)");
+      bGrad[i]=g;
+    }
+  }
+
+  function blobLayer(t){
+    // slow lava-lamp blobs as additive radial fills (drawn, not filter-animated)
+    ctx.globalCompositeOperation="screen";
+    ctx.globalAlpha=0.42;
+    for(var i=0;i<NB;i++){
+      var px=cx + Math.sin(t*bsp[i]+bph[i])*S*0.20 + (bx[i]-0.5)*W*0.7;
+      var py=cy + Math.cos(t*bsp[i]*0.8+bph[i]*1.3)*S*0.18 + (by[i]-0.5)*H*0.7;
+      var r=br[i]*S*(0.9+0.12*Math.sin(t*0.5+bph[i]));
+      // translate to blob centre and scale the cached unit gradient to r
+      var s=r/bRmax[i];
+      ctx.setTransform(DPR*s,0,0,DPR*s,px*DPR,py*DPR);
+      ctx.fillStyle=bGrad[i];
+      ctx.beginPath(); ctx.arc(0,0,bRmax[i],0,6.283185); ctx.fill();
+    }
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    ctx.globalAlpha=1; ctx.globalCompositeOperation="source-over";
+  }
+
+  // warped lettering: draw word per-column slices with a sine vertical warp + bulge scale
+  var slice=6; // px column width in css px (wider slice = far fewer drawImage calls)
+  var off; // offscreen text cache
+  var offW=0,offH=0,fsz=0;
+  function buildText(){
+    fsz=Math.round(S*0.30);
+    off=document.createElement("canvas");
+    var pad=Math.round(fsz*0.4);
+    var octx=off.getContext("2d");
+    octx.font="900 "+fsz+"px Georgia, 'Times New Roman', serif";
+    var m=octx.measureText(word);
+    offW=Math.ceil(m.width)+pad*2;
+    offH=Math.ceil(fsz*1.4)+pad*2;
+    off.width=Math.round(offW*DPR); off.height=Math.round(offH*DPR);
+    octx.setTransform(DPR,0,0,DPR,0,0);
+    octx.font="900 "+fsz+"px Georgia, 'Times New Roman', serif";
+    octx.textBaseline="middle"; octx.textAlign="center";
+    // gradient fill across the word, complementary sweep
+    var grad=octx.createLinearGradient(0,0,offW,0);
+    grad.addColorStop(0,"#ffd23f"); grad.addColorStop(0.4,"#ff3da6");
+    grad.addColorStop(0.7,"#7b2ff7"); grad.addColorStop(1,"#3ad1c8");
+    octx.fillStyle=grad;
+    octx.lineJoin="round";
+    octx.strokeStyle="rgba(10,6,18,0.9)"; octx.lineWidth=fsz*0.045;
+    octx.strokeText(word,offW/2,offH/2);
+    octx.fillText(word,offW/2,offH/2);
+  }
+  buildText();
+  buildBlobs();
+
+  function drawWarp(t){
+    // place word centered; slice it into vertical columns and warp each
+    var dw=Math.min(W*0.86, offW);
+    var sc=dw/offW;
+    var dh=offH*sc;
+    var x0=cx-dw/2, y0=cy-dh/2;
+    var cols=Math.ceil(dw/slice);
+    var srcStep=offW/cols;
+    for(var ci=0;ci<cols;ci++){
+      var sx=ci*srcStep;
+      var dx=x0+ci*slice;
+      var u=ci/cols;
+      // ripple: vertical offset + per-column bulge (scaleY)
+      var ph=u*6.2831853;
+      var yoff=Math.sin(t*0.9 + ph*2.2)*dh*0.085
+              +Math.sin(t*0.45 + ph*1.0)*dh*0.05;
+      var bulge=1 + 0.18*Math.sin(t*0.8 + ph*1.6)
+                  + 0.10*Math.sin(t*0.33 + ph*0.5);
+      var dhh=dh*bulge;
+      ctx.drawImage(off,
+        sx*DPR,0, srcStep*DPR, offH*DPR,
+        dx, y0+yoff-(dhh-dh)/2, slice+0.6, dhh);
+    }
+  }
+
+  function frame(t){ // t in seconds
+    ctx.clearRect(0,0,W,H);
+    blobLayer(t);
+    drawWarp(t);
+  }
+
+  var running=true, raf=0, start=0;
+  function loop(ms){
+    if(!running) return;
+    if(!start) start=ms;
+    frame((ms-start)/1000);
+    raf=requestAnimationFrame(loop);
+  }
+
+  function startLoop(){ if(!raf){ start=0; raf=requestAnimationFrame(loop);} }
+  function stopLoop(){ running=false; if(raf){cancelAnimationFrame(raf);raf=0;} }
+
+  window.addEventListener("resize",function(){
+    resize(); buildText(); buildBlobs();
+    if(reduce){ frame(2.2); }
+  });
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden){ running=false; if(raf){cancelAnimationFrame(raf);raf=0;} }
+    else { running=true; startLoop(); }
+  });
+
+  if(reduce){
+    // one calm, legible, on-brand static frame
+    frame(2.2);
+    return;
+  }
+  running=true; startLoop();
+})();
+</script>
+</body>
+</html>

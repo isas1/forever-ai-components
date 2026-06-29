@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Equilibrium Engine — Piet Mondrian. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Equilibrium Engine</title>
+<style>
+  html,body{margin:0;height:100%;background:#f7f4ec;overflow:hidden}
+  #mon07-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mon07-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mon07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#15110d;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mon07-stage" role="img" aria-label="A Mondrian grid whose black lines glide on springs toward shifting targets while primary blocks recolour, a centre-of-mass marker forever seeking dynamic equilibrium.">
+  <canvas id="mon07-cv"></canvas>
+</div>
+<div class="mon07-cap">Equilibrium Engine</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mon07-cv'); if(!cv) return;
+  const C={white:'#f7f4ec',black:'#15110d',red:'#d6191e',blue:'#1d3bd1',yellow:'#f6c700',grey:'#b9b6ab'};
+  const PRIMARIES=[C.red,C.blue,C.yellow];
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h};
+  }
+  const rand=(a,b)=>a+Math.random()*(b-a);
+  function spring(p){return {p,v:0,target:p};}
+  let S=fitCanvas(cv),vx=[],hx=[],blocks=[],last=performance.now(),retime=0;
+  function retarget(){vx.forEach(s=>s.target=rand(.15,.85));hx.forEach(s=>s.target=rand(.2,.8));}
+  function rebalance(){
+    blocks.forEach(b=>b.want=C.white);
+    const sh=blocks.slice().sort(()=>Math.random()-.5),k=Math.min(blocks.length,4+(Math.random()*2|0));
+    for(let n=0;n<k;n++)sh[n].want=PRIMARIES[n%3];
+    if(blocks.length>6&&Math.random()<.5&&sh[k])sh[k].want=C.grey;
+  }
+  function buildBlocks(){
+    blocks=[];
+    const cols=[0,...vx.map(s=>s.p).sort((a,b)=>a-b),1],rows=[0,...hx.map(s=>s.p).sort((a,b)=>a-b),1];
+    for(let i=0;i<cols.length-1;i++)for(let j=0;j<rows.length-1;j++)blocks.push({i,j,color:C.white,want:C.white});
+    rebalance();
+  }
+  function setup(){
+    S=fitCanvas(cv);
+    vx=[spring(.25),spring(.5),spring(.72)];hx=[spring(.34),spring(.66)];
+    retarget();buildBlocks();
+  }
+  function draw(now){
+    const dt=Math.min(40,now-last);last=now;const ctx=S.ctx,W=S.w,H=S.h;
+    const k=REDUCED?0.02:0.06,damp=0.78;
+    [...vx,...hx].forEach(s=>{const f=(s.target-s.p)*k;s.v=(s.v+f)*damp;s.p+=s.v;});
+    blocks.forEach(b=>{if(b.color!==b.want)b.color=b.want;});
+    retime+=dt;
+    if(retime>(REDUCED?4000:2200)){retime=0;retarget();if(Math.random()<.6)rebalance();}
+    ctx.fillStyle=C.white;ctx.fillRect(0,0,W,H);
+    const cols=[0,...vx.map(s=>s.p).slice().sort((a,b)=>a-b),1],rows=[0,...hx.map(s=>s.p).slice().sort((a,b)=>a-b),1];
+    let bi=0;
+    for(let i=0;i<cols.length-1;i++)for(let j=0;j<rows.length-1;j++){
+      const b=blocks[bi++];if(!b)continue;
+      if(b.color!==C.white){ctx.fillStyle=b.color;ctx.fillRect(cols[i]*W,rows[j]*H,(cols[i+1]-cols[i])*W,(rows[j+1]-rows[j])*H);}
+    }
+    ctx.fillStyle=C.black;const TH=7;
+    ctx.fillRect(0,0,W,TH);ctx.fillRect(0,H-TH,W,TH);ctx.fillRect(0,0,TH,H);ctx.fillRect(W-TH,0,TH,H);
+    vx.forEach(s=>ctx.fillRect(Math.round(s.p*W-TH/2),0,TH,H));
+    hx.forEach(s=>ctx.fillRect(0,Math.round(s.p*H-TH/2),W,TH));
+    let mx=0,my=0,mass=0;bi=0;
+    for(let i=0;i<cols.length-1;i++)for(let j=0;j<rows.length-1;j++){
+      const b=blocks[bi++];if(!b||b.color===C.white)continue;
+      const a=(cols[i+1]-cols[i])*(rows[j+1]-rows[j]);
+      mx+=((cols[i]+cols[i+1])/2)*a;my+=((rows[j]+rows[j+1])/2)*a;mass+=a;
+    }
+    if(mass>0){mx/=mass;my/=mass;ctx.fillStyle=C.black;ctx.fillRect(mx*W-6,my*H-6,12,12);ctx.fillStyle=C.yellow;ctx.fillRect(mx*W-3,my*H-3,6,6);}
+  }
+
+  let raf=0,running=false;
+  function loop(){if(!running)return;draw(performance.now());raf=requestAnimationFrame(loop);}
+  function start(){if(running)return;running=true;last=performance.now();raf=requestAnimationFrame(loop);}
+  function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+
+  setup();
+  let _rt;
+  window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{setup();if(REDUCED)draw(performance.now());},150);},{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(REDUCED)return;if(document.hidden)stop();else start();});
+
+  if(REDUCED){for(let i=0;i<30;i++)draw(performance.now());}
+  else start();
+})();
+</script>
+</body>
+</html>

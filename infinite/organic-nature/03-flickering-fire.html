@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Rising additive-blended embers form a flickering orange flame with a hot glowing base on near-black; cursor fans the fire sideways.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flickering Fire</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#160a06}
+  #c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
+       letter-spacing:.08em;text-transform:uppercase;color:#ffc78a;opacity:.34;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Flickering Fire</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+let W,H,DPR,t=0,raf,P=[];
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
+addEventListener('resize',size);size();
+let baseX,baseY,fanX=0;
+function reset(){baseX=W/2;baseY=H*0.82;}
+addEventListener('resize',reset);
+cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();fanX=((e.clientX-r.left)/W-0.5)*2;});
+cv.addEventListener('pointerleave',()=>fanX=0);
+function spawn(){
+  const spread=W*0.07;
+  P.push({x:baseX+(Math.random()-0.5)*spread, y:baseY+Math.random()*6,
+    vx:(Math.random()-0.5)*0.4, vy:-(1+Math.random()*1.4),
+    life:1, sz:8+Math.random()*14, seed:Math.random()*7});
+}
+function frame(){
+  reset();
+  t+=0.02;
+  x.globalCompositeOperation='source-over';
+  x.fillStyle='rgba(22,10,6,0.28)';x.fillRect(0,0,W,H);
+  if(!reduce){const cnt=W<260?3:5;for(let i=0;i<cnt;i++)spawn();}
+  else if(P.length<30){spawn();}
+  x.globalCompositeOperation='lighter';
+  for(let i=P.length-1;i>=0;i--){
+    const p=P[i];
+    if(!reduce){
+      p.x+=p.vx + Math.sin(t*2+p.seed)*0.5 + fanX*1.2*(1-p.life*0);
+      p.y+=p.vy*(0.6+ (1-p.life)*0.6);
+      p.vy*=0.99;p.life-=0.016+ (p.y<H*0.45?0.01:0);
+    } else p.life-=0.02;
+    if(p.life<=0){P.splice(i,1);continue;}
+    const l=p.life;
+    const r=p.sz*(0.4+l*0.9);
+    const g=x.createRadialGradient(p.x,p.y,0,p.x,p.y,r);
+    // hot core to ember
+    const a=l*0.5;
+    g.addColorStop(0,`rgba(255,250,210,${a})`);
+    g.addColorStop(0.4,`rgba(255,160,40,${a*0.8})`);
+    g.addColorStop(1,`rgba(200,40,10,0)`);
+    x.fillStyle=g;x.beginPath();x.arc(p.x,p.y,r,0,7);x.fill();
+  }
+  if(P.length>120)P.splice(0,P.length-120);
+  // glow base
+  x.globalCompositeOperation='lighter';
+  const bg=x.createRadialGradient(baseX,baseY,0,baseX,baseY,W*0.25);
+  bg.addColorStop(0,'rgba(255,120,30,0.25)');bg.addColorStop(1,'rgba(255,120,30,0)');
+  x.fillStyle=bg;x.fillRect(0,0,W,H);
+  x.globalCompositeOperation='source-over';
+  raf=requestAnimationFrame(frame);
+}
+raf=requestAnimationFrame(frame);
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Duality — Hilma af Klint. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Duality</title>
+<style>
+  html,body{margin:0;height:100%;background:#ece4d4;overflow:hidden}
+  #afk01-stage{position:fixed;inset:0;width:100%;height:100%}
+  #afk01-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .afk01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2730;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="afk01-stage" role="img" aria-label="Two great concentric circles — one warm rose, one cool blue — overlap and breathe in af Klint's pastel diagram of opposites, a luminous vesica glowing where they meet.">
+  <canvas id="afk01-cv"></canvas>
+</div>
+<div class="afk01-cap">The Duality</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('afk01-cv'); if(!cv) return;
+  const PAL={cream:'#f3eee4',ink:'#2a2730',blue:'#a9c8e0',rose:'#e3a9bd',yellow:'#ecd58a'};
+  function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), last=performance.now(), t=0;
+  function rings(ctx,cx,cy,R,col){
+    const N=7;
+    for(let i=N;i>=1;i--){
+      const r=R*(i/N);
+      ctx.strokeStyle=rgba(col,0.18+0.5*(i/N));ctx.lineWidth=1.6;
+      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
+    }
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R);
+    g.addColorStop(0,rgba(col,0.34));g.addColorStop(1,rgba(col,0));
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.fill();
+  }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.clearRect(0,0,W,H);
+    const cy=H*0.5;
+    const breath=Math.sin(t*0.7)*0.5+0.5;
+    const R=Math.min(W*0.32,H*0.42);
+    const sep=R*(0.62-0.10*breath);
+    const cxW=W*0.5-sep, cxC=W*0.5+sep, mid=W*0.5;
+    rings(ctx,cxW,cy,R,PAL.rose);
+    rings(ctx,cxC,cy,R,PAL.blue);
+    ctx.save();
+    ctx.beginPath();ctx.arc(cxW,cy,R,0,Math.PI*2);ctx.clip();
+    const vg=ctx.createRadialGradient(mid,cy,0,mid,cy,R*0.9);
+    const glow=0.30+0.30*breath;
+    vg.addColorStop(0,rgba(PAL.yellow,glow));
+    vg.addColorStop(0.5,rgba(PAL.cream,glow*0.6));
+    vg.addColorStop(1,rgba(PAL.cream,0));
+    ctx.fillStyle=vg;
+    ctx.beginPath();ctx.arc(cxC,cy,R,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+    ctx.fillStyle=rgba(PAL.ink,0.7);
+    ctx.beginPath();ctx.arc(mid,cy,3.5,0,Math.PI*2);ctx.fill();
+  }
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

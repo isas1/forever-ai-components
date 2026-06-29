@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Semicircular system-load gauge whose violet needle eases and overshoots to settle on shifting values, with arc fill and status label.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Status Gauge</title>
+<style>
+  :root{
+    --pg11-bg:#0b0d12; --pg11-accent:#7c5cff; --pg11-accent2:#b6a6ff;
+    --pg11-track:#1b2030; --pg11-ink:#e9ecf6; --pg11-dim:#5a6178;
+  }
+  html,body{margin:0;height:100%;background:var(--pg11-bg)}
+  *{box-sizing:border-box}
+  .pg11-stage{
+    position:fixed;inset:0;display:grid;place-items:center;
+    background:
+      radial-gradient(120% 100% at 50% 8%, #12152044 0%, #0b0d1200 60%),
+      var(--pg11-bg);
+    font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--pg11-ink);
+  }
+  .pg11-wrap{position:relative;width:min(86vmin,640px);aspect-ratio:1/1;display:grid;place-items:center}
+  #pg11-svg{width:100%;height:100%;overflow:visible}
+  .pg11-needle{transform-box:fill-box;transform-origin:50% 100%;will-change:transform}
+  .pg11-tick{stroke:var(--pg11-dim)}
+  .pg11-tick.maj{stroke:var(--pg11-ink);opacity:.85}
+  .pg11-readout{
+    position:absolute;left:0;right:0;top:60%;text-align:center;
+    font-variant-numeric:tabular-nums;letter-spacing:.02em;
+  }
+  .pg11-val{font-size:clamp(34px,11vmin,84px);font-weight:700;line-height:.9}
+  .pg11-val .pct{font-size:.42em;font-weight:600;color:var(--pg11-accent2);margin-left:.12em;vertical-align:.55em}
+  .pg11-label{margin-top:.5em;font-size:clamp(9px,2.1vmin,13px);font-weight:600;
+    letter-spacing:.34em;text-transform:uppercase;color:var(--pg11-dim)}
+  .pg11-status{display:inline-block;margin-top:.7em;font-size:clamp(8px,1.7vmin,11px);
+    font-weight:600;letter-spacing:.18em;text-transform:uppercase;
+    padding:.35em .8em;border:1px solid var(--pg11-track);border-radius:2px;
+    color:var(--pg11-accent2)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div class="pg11-stage">
+  <div class="pg11-wrap" role="progressbar" aria-label="Status gauge" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="pg11-bar">
+    <svg id="pg11-svg" viewBox="0 0 400 400" aria-hidden="true">
+      <defs>
+        <!-- static glow: never repaints -->
+        <radialGradient id="pg11-core" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#b6a6ff"/>
+          <stop offset="55%" stop-color="#7c5cff"/>
+          <stop offset="100%" stop-color="#3a2f7a"/>
+        </radialGradient>
+        <linearGradient id="pg11-arc" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#3a2f7a"/>
+          <stop offset="55%" stop-color="#7c5cff"/>
+          <stop offset="100%" stop-color="#b6a6ff"/>
+        </linearGradient>
+      </defs>
+      <!-- track arc: 180deg sweep, center 200,250 radius 150 -->
+      <path d="M50 250 A150 150 0 0 1 350 250" fill="none" stroke="var(--pg11-track)" stroke-width="14" stroke-linecap="round"/>
+      <!-- progress arc (stroke-dashoffset animated, dimensionless = compositor-safe enough; we update via JS sparingly) -->
+      <path id="pg11-prog" d="M50 250 A150 150 0 0 1 350 250" fill="none" stroke="url(#pg11-arc)" stroke-width="14" stroke-linecap="round" pathLength="1000" stroke-dasharray="1000" stroke-dashoffset="1000"/>
+      <g id="pg11-ticks"></g>
+      <!-- hub -->
+      <circle cx="200" cy="250" r="22" fill="#10131d" stroke="var(--pg11-track)" stroke-width="2"/>
+      <circle cx="200" cy="250" r="9" fill="url(#pg11-core)"/>
+      <!-- needle: vertical, pivots at hub (250) -->
+      <g class="pg11-needle" id="pg11-needle">
+        <path d="M200 250 L195 132 L200 120 L205 132 Z" fill="url(#pg11-arc)"/>
+        <circle cx="200" cy="120" r="4" fill="#b6a6ff"/>
+      </g>
+    </svg>
+    <div class="pg11-readout">
+      <div class="pg11-val"><span id="pg11-num">0</span><span class="pct">%</span></div>
+      <div class="pg11-label">System Load</div>
+      <div class="pg11-status" id="pg11-st">Measuring</div>
+    </div>
+  </div>
+</div>
+<div class="cap">Status Gauge</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var needle = document.getElementById('pg11-needle');
+  var prog   = document.getElementById('pg11-prog');
+  var numEl  = document.getElementById('pg11-num');
+  var stEl   = document.getElementById('pg11-st');
+  var bar    = document.getElementById('pg11-bar');
+  var ticksG = document.getElementById('pg11-ticks');
+
+  // build ticks once (no per-frame layout)
+  var SWEEP = 180, START = -90; // needle angle range: -90deg (left) .. +90deg (right)
+  var i, a, rad, x1, y1, x2, y2, maj, len, ns="http://www.w3.org/2000/svg";
+  for(i=0;i<=20;i++){
+    maj = (i%5===0);
+    a = (START + SWEEP*(i/20));
+    rad = (a-90) * Math.PI/180;        // 0% sits at left (180deg in screen space)
+    len = maj?16:9;
+    x1 = 200 + Math.cos(rad)*(132);
+    y1 = 250 + Math.sin(rad)*(132);
+    x2 = 200 + Math.cos(rad)*(132-len);
+    y2 = 250 + Math.sin(rad)*(132-len);
+    var ln = document.createElementNS(ns,'line');
+    ln.setAttribute('x1',x1.toFixed(1)); ln.setAttribute('y1',y1.toFixed(1));
+    ln.setAttribute('x2',x2.toFixed(1)); ln.setAttribute('y2',y2.toFixed(1));
+    ln.setAttribute('stroke-width', maj?'2.5':'1.5');
+    ln.setAttribute('class','pg11-tick'+(maj?' maj':''));
+    ticksG.appendChild(ln);
+  }
+
+  var ARCLEN = 1000;
+
+  function paint(p){            // p in 0..1
+    var ang = START + SWEEP*p;                 // -90..+90 deg
+    needle.style.transform = 'rotate('+ang.toFixed(2)+'deg)';
+    prog.style.strokeDashoffset = (ARCLEN*(1-p)).toFixed(1);
+    var v = Math.round(p*100);
+    numEl.textContent = v;
+    bar.setAttribute('aria-valuenow', v);
+    var s = v<40?'Nominal':(v<75?'Elevated':(v<92?'High Load':'Critical'));
+    if(stEl.textContent!==s) stEl.textContent = s;
+  }
+
+  // a small, honest sequence of determinate targets
+  var targets = [0.73, 0.31, 0.88, 0.52, 0.96, 0.18, 0.64];
+  var ti = 0, cur = 0, from = 0, to = targets[0];
+  var DUR = 1700, HOLD = 900;
+  var t0 = null, phase = 0; // 0=easing 1=holding
+  var raf = 0, running = false;
+
+  // easeOutBack-ish settle: overshoots once then lands (the needle "finds" the value)
+  function ease(t){
+    var c1=1.70158, c3=c1+1;
+    return 1 + c3*Math.pow(t-1,3) + c1*Math.pow(t-1,2);
+  }
+
+  function frame(ts){
+    if(t0===null) t0=ts;
+    var e = ts - t0;
+    if(phase===0){
+      var t = e/DUR;
+      if(t>=1){ t=1; cur=to; phase=1; t0=ts; }
+      else cur = from + (to-from)*ease(t);
+      paint(cur);
+    } else {
+      if(e>=HOLD){
+        ti=(ti+1)%targets.length;
+        from=to; to=targets[ti]; phase=0; t0=ts;
+      }
+    }
+    if(running) raf = requestAnimationFrame(frame);
+  }
+
+  function start(){ if(running) return; running=true; t0=null; raf=requestAnimationFrame(frame); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  if(reduce){
+    // settle on one honest, legible frame
+    paint(0.73);
+    return;
+  }
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) stop(); else start();
+  });
+
+  // begin
+  paint(0);
+  start();
+})();
+</script>
+</body>
+</html>

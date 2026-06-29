@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A row of five stars fills green from a clipped well with spring stagger, with success, denied-shake, and empty states and a status readout.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Star Rating</title>
+<style>
+  :root{
+    --fb11-bg:#0b0d12; --fb11-ac:#34d399; --fb11-ac2:#10b981;
+    --fb11-empty:#1b2230; --fb11-edge:#283142;
+    --fb11-err:#f0556a; --fb11-dim:#5a6678;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--fb11-bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+  #fb11-stage{
+    position:fixed;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:clamp(14px,5vh,34px);
+  }
+  #fb11-stage:focus{outline:none}
+  #fb11-stage:focus-visible #fb11-row{outline:2px solid var(--fb11-ac);outline-offset:14px;border-radius:6px}
+  #fb11-row{display:flex;gap:clamp(8px,3.2vw,20px)}
+  .fb11-star{
+    width:clamp(26px,11vw,64px);height:clamp(26px,11vw,64px);
+    display:block;overflow:visible;cursor:pointer;
+    transform:scale(1);transition:transform .18s cubic-bezier(.34,1.56,.64,1);
+  }
+  /* the fill diamond rides up from a clipped well */
+  .fb11-fillg{transform:translateY(112px);transition:none}
+  .fb11-pt{fill:var(--fb11-edge);transition:fill .22s ease}
+  .fb11-on .fb11-pt{fill:var(--fb11-ac2)}
+  .fb11-err .fb11-pt{fill:var(--fb11-err)}
+  /* status readout */
+  #fb11-tag{
+    font:700 clamp(9px,2.6vw,13px)/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.22em;text-transform:uppercase;
+    display:flex;align-items:center;gap:9px;color:var(--fb11-dim);
+    transition:color .25s ease;height:14px;
+  }
+  #fb11-tag b{font-weight:700;transition:opacity .2s}
+  #fb11-dot{
+    width:8px;height:8px;border-radius:50%;background:var(--fb11-dim);
+    box-shadow:0 0 16px 1px transparent;transition:transform .3s cubic-bezier(.34,1.56,.64,1);
+  }
+  .fb11-good #fb11-dot{background:var(--fb11-ac);box-shadow:0 0 16px 1px rgba(52,211,153,.55);transform:scale(1.25)}
+  .fb11-good #fb11-tag{color:var(--fb11-ac)}
+  .fb11-bad #fb11-dot{background:var(--fb11-err);box-shadow:0 0 16px 1px rgba(240,85,106,.5)}
+  .fb11-bad #fb11-tag{color:var(--fb11-err)}
+  /* shake for denied */
+  @keyframes fb11-shake{
+    0%,100%{transform:translateX(0)}
+    18%{transform:translateX(-7px)}38%{transform:translateX(6px)}
+    58%{transform:translateX(-4px)}78%{transform:translateX(3px)}
+  }
+  .fb11-shake{animation:fb11-shake .5s cubic-bezier(.36,.07,.19,.97)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition:none!important}
+    .fb11-fillg{transform:translateY(0)!important}
+  }
+</style>
+</head>
+<body>
+  <div id="fb11-stage" role="slider" tabindex="0"
+       aria-label="Star rating, 0 to 5" aria-valuemin="0" aria-valuemax="5" aria-valuenow="0">
+    <div id="fb11-row"></div>
+    <div id="fb11-tag" role="status" aria-live="polite"><span id="fb11-dot"></span><b id="fb11-txt">RATE</b></div>
+  </div>
+  <div class="cap">Star Rating</div>
+<script>
+(function(){
+  "use strict";
+  var NS="http://www.w3.org/2000/svg";
+  var stage=document.getElementById("fb11-stage"),
+      row=document.getElementById("fb11-row"),
+      tag=document.getElementById("fb11-tag"),
+      txt=document.getElementById("fb11-txt"),
+      reduce=matchMedia("(prefers-reduced-motion:reduce)").matches,
+      N=5, stars=[], fills=[], val=0;
+
+  // 5-point star path, viewBox 0..100, base at bottom
+  function starPath(){
+    var pts=[],cx=50,cy=52,R=46,r=18.5;
+    for(var i=0;i<10;i++){
+      var a=-Math.PI/2 + i*Math.PI/5, rad=(i%2?r:R);
+      pts.push((cx+rad*Math.cos(a)).toFixed(1)+","+(cy+rad*Math.sin(a)).toFixed(1));
+    }
+    return pts.join(" ");
+  }
+  var PATH=starPath();
+  for(var i=0;i<N;i++){
+    var svg=document.createElementNS(NS,"svg");
+    svg.setAttribute("class","fb11-star");svg.setAttribute("viewBox","0 0 100 104");
+    svg.setAttribute("aria-hidden","true");
+    // empty well
+    var base=document.createElementNS(NS,"polygon");
+    base.setAttribute("points",PATH);base.setAttribute("class","fb11-pt");
+    base.setAttribute("fill","var(--fb11-empty)");
+    // clip so fill stays inside star
+    var cid="fb11-clip"+i, cp=document.createElementNS(NS,"clipPath");
+    cp.setAttribute("id",cid);
+    var cpoly=document.createElementNS(NS,"polygon");cpoly.setAttribute("points",PATH);
+    cp.appendChild(cpoly);
+    var g=document.createElementNS(NS,"g");
+    g.setAttribute("clip-path","url(#"+cid+")");g.setAttribute("class","fb11-fillg");
+    var fillpoly=document.createElementNS(NS,"polygon");
+    fillpoly.setAttribute("points",PATH);fillpoly.setAttribute("class","fb11-pt");
+    g.appendChild(fillpoly);
+    svg.appendChild(cp);svg.appendChild(base);svg.appendChild(g);
+    row.appendChild(svg);
+    stars.push(svg);fills.push(g);
+    (function(idx){ svg.addEventListener("pointerenter",function(){user();preview(idx+1);}); })(i);
+    (function(idx){ svg.addEventListener("pointerdown",function(){user();commit(idx+1);}); })(i);
+  }
+  row.addEventListener("pointerleave",function(){ if(mode!=="bad") render(val,true); });
+
+  // render: light up [0..n), spring stagger via per-star delay
+  var STEP=0.07;
+  function render(n,withDelay,err){
+    for(var i=0;i<N;i++){
+      var on=i<n;
+      stars[i].classList.toggle("fb11-on",on&&!err);
+      stars[i].classList.toggle("fb11-err",on&&err);
+      var d=(withDelay&&on)?(i*STEP):0;
+      if(reduce){ fills[i].style.transform=on?"translateY(0)":"translateY(112px)"; continue; }
+      fills[i].style.transition="transform .42s cubic-bezier(.34,1.6,.5,1) "+d+"s";
+      fills[i].style.transform=on?"translateY(0)":"translateY(112px)";
+      stars[i].style.transitionDelay=(on?d:0)+"s";
+      stars[i].style.transform=on?"scale(1.12)":"scale(1)";
+      if(on){ (function(s,dd){ setTimeout(function(){s.style.transform="scale(1)";},(dd+0.18)*1000); })(stars[i],d); }
+    }
+  }
+  function preview(n){ if(mode==="bad")return; for(var i=0;i<N;i++){var on=i<n;stars[i].classList.toggle("fb11-on",on);
+    if(reduce){fills[i].style.transform=on?"translateY(0)":"translateY(112px)";continue;}
+    fills[i].style.transition="transform .26s cubic-bezier(.34,1.5,.6,1)";
+    fills[i].style.transform=on?"translateY(0)":"translateY(112px)";} }
+
+  var mode="rate";
+  function setTag(t,m){ txt.textContent=t; mode=m||"rate";
+    stage.classList.toggle("fb11-good",m==="good");
+    stage.classList.toggle("fb11-bad",m==="bad"); }
+
+  function commit(n){
+    val=n; stage.setAttribute("aria-valuenow",n);
+    if(n>=4){ render(n,true); setTag(n+".0  SAVED","good"); }
+    else{ render(n,true); setTag(n+".0  RATED","good"); }
+  }
+  function deny(){
+    render(0,false); setTag("LOCKED — DENIED","bad");
+    stars.forEach(function(s){s.classList.add("fb11-err");});
+    row.classList.remove("fb11-shake"); void row.offsetWidth; row.classList.add("fb11-shake");
+    setTimeout(function(){ stars.forEach(function(s){s.classList.remove("fb11-err");}); },520);
+  }
+  function empty(){ val=0;stage.setAttribute("aria-valuenow",0);render(0,false);setTag("NO RATING","rate"); }
+
+  // ---- self-demo: cycle success -> denied -> empty -> success ----
+  var SEQ=[
+    {f:function(){commit(3);},t:1500},
+    {f:function(){commit(5);},t:1700},
+    {f:function(){deny();},t:1500},
+    {f:function(){empty();},t:1300},
+    {f:function(){commit(4);},t:1800}
+  ], si=0, timer=null, idle=true, idleAt=0;
+
+  function tick(){
+    if(!idle)return;
+    SEQ[si].f(); var wait=SEQ[si].t; si=(si+1)%SEQ.length;
+    timer=setTimeout(tick,wait);
+  }
+  function startDemo(){ idle=true; clearTimeout(timer); empty(); timer=setTimeout(tick,700); }
+  function user(){
+    idle=false; clearTimeout(timer); idleAt=Date.now();
+    if(stage.classList.contains("fb11-bad"))setTag("RATE","rate");
+  }
+
+  // hand back to demo after idle
+  var watch=null;
+  function watchIdle(){
+    if(watch)return;
+    watch=setInterval(function(){
+      if(!idle && Date.now()-idleAt>3200){ clearInterval(watch);watch=null; startDemo(); }
+    },500);
+  }
+  ["pointerdown","pointerenter","keydown"].forEach(function(e){stage.addEventListener(e,function(){user();watchIdle();});});
+
+  // keyboard
+  stage.addEventListener("keydown",function(e){
+    var k=e.key;
+    if(k==="ArrowRight"||k==="ArrowUp"){e.preventDefault();commit(Math.min(N,val+1));}
+    else if(k==="ArrowLeft"||k==="ArrowDown"){e.preventDefault(); val>1?commit(val-1):empty();}
+    else if(k>="1"&&k<="5"){e.preventDefault();commit(+k);}
+    else if(k==="0"||k==="Backspace"){e.preventDefault();empty();}
+    else if(k==="Enter"||k===" "){e.preventDefault();deny();}
+  });
+
+  // reduced motion: one static legible frame
+  if(reduce){ render(4,false); setTag("4.0  RATED","good"); val=4; stage.setAttribute("aria-valuenow",4); return; }
+
+  // pause on hidden
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ clearTimeout(timer); if(watch){clearInterval(watch);watch=null;} }
+    else if(idle){ clearTimeout(timer); timer=setTimeout(tick,600); }
+  });
+
+  startDemo();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Network Trace — Terminal. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Network Trace</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:12px/1.65 ui-monospace,Menlo,"Courier New",monospace}
+.trm-wrap{padding:10px 12px;height:100%;display:flex;flex-direction:column;overflow:hidden}
+.trm-header{color:#e2e8f0;margin-bottom:6px;font-size:11px;border-bottom:1px solid #1e2a1e;padding-bottom:4px}
+.trm-cmd{color:#4ade80;margin-bottom:4px}
+.trm-table{flex:1;overflow:hidden}
+.trm-row{display:grid;grid-template-columns:28px 110px 1fr 54px;gap:4px;white-space:pre;line-height:1.7}
+.trm-row.trm-hdr{color:#3a5a3a;font-size:11px;border-bottom:1px solid #1a2a1a;margin-bottom:2px}
+.trm-hop{color:#3a6a8a}
+.trm-ip{color:#e2e8f0}
+.trm-host{color:#4a7a6a;overflow:hidden;text-overflow:ellipsis}
+.trm-ms-ok{color:#4ade80}
+.trm-ms-med{color:#ffa500}
+.trm-ms-hi{color:#ff5555}
+.trm-ms-to{color:#444}
+.trm-footer{color:#2a4a2a;font-size:11px;margin-top:4px}
+.trm-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#4ade80;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+</style></head><body>
+<div class="trm-wrap">
+  <div class="trm-header">&#x25b6; NETWORK TRACE</div>
+  <div class="trm-cmd" id="trm-cmd">traceroute 8.8.8.8</div>
+  <div class="trm-table">
+    <div class="trm-row trm-hdr"><span>hop</span><span>address</span><span>hostname</span><span>ms</span></div>
+    <div id="trm-rows"></div>
+  </div>
+  <div class="trm-footer" id="trm-footer"></div>
+</div>
+<div class="trm-cap">network trace</div>
+<script>(()=>{
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const rowsEl=document.getElementById('trm-rows');
+  const footer=document.getElementById('trm-footer');
+
+  const hops=[
+    {ip:'192.168.1.1',  host:'gateway.local',          base:1},
+    {ip:'10.10.0.1',    host:'isp-edge.net',            base:8},
+    {ip:'72.14.209.1',  host:'be3.cr2.chi2.google.com', base:12},
+    {ip:'108.170.246.1',host:'ae0.cr4.ord2.google.com', base:14},
+    {ip:'',             host:'',                        base:0,  timeout:true},
+    {ip:'142.250.69.14',host:'lga25s77-in-f14.1e100.net',base:18},
+    {ip:'8.8.8.8',      host:'dns.google',              base:19},
+  ];
+
+  let state=[];  // {hop, ip, host, ms, visible, timeout}
+  let hi=0;
+  let timer=null;
+  let updateTimer=null;
+
+  function msClass(ms){
+    if(ms===null)return 'trm-ms-to';
+    if(ms<20)return 'trm-ms-ok';
+    if(ms<60)return 'trm-ms-med';
+    return 'trm-ms-hi';
+  }
+  function fmtMs(ms){return ms===null?'* * *':ms+'ms';}
+  function randMs(base){return base+Math.round((Math.random()-0.4)*base*0.4+Math.random()*3);}
+
+  function render(){
+    rowsEl.innerHTML='';
+    state.forEach(r=>{
+      if(!r.visible)return;
+      const row=document.createElement('div');row.className='trm-row';
+      const h=document.createElement('span');h.className='trm-hop';h.textContent=String(r.hop).padStart(2,' ');
+      const ip=document.createElement('span');ip.className='trm-ip';ip.textContent=r.timeout?'*':r.ip;
+      const ho=document.createElement('span');ho.className='trm-host';ho.textContent=r.timeout?'* * *':r.host;
+      const ms=document.createElement('span');ms.className=msClass(r.timeout?null:r.ms);ms.textContent=fmtMs(r.timeout?null:r.ms);
+      row.appendChild(h);row.appendChild(ip);row.appendChild(ho);row.appendChild(ms);
+      rowsEl.appendChild(row);
+    });
+    if(state.length===hops.length){
+      const last=state[state.length-1];
+      footer.textContent=last.timeout?'trace complete (destination unreachable)':'trace complete — '+last.ms+'ms to destination';
+    }
+  }
+
+  function addNextHop(){
+    if(hi>=hops.length){
+      clearInterval(timer);
+      if(!reduce)updateTimer=setInterval(()=>{
+        state.forEach(r=>{if(!r.timeout)r.ms=randMs(hops[r.hop-1].base);});
+        render();
+      },500);
+      return;
+    }
+    const h=hops[hi];
+    state.push({hop:hi+1,ip:h.ip,host:h.host,ms:randMs(h.base),visible:true,timeout:!!h.timeout});
+    hi++;
+    render();
+  }
+
+  function reset(){
+    clearInterval(timer);clearInterval(updateTimer);
+    state=[];hi=0;footer.textContent='';rowsEl.innerHTML='';
+  }
+
+  function stop(){clearInterval(timer);clearInterval(updateTimer);}
+  function play(){
+    reset();
+    if(reduce){hops.forEach((_,i)=>addNextHop());return;}
+    timer=setInterval(addNextHop,600);
+    // restart loop after pause
+    setTimeout(function loop(){
+      if(!document.hidden){reset();timer=setInterval(()=>{addNextHop();if(hi>=hops.length){clearInterval(timer);updateTimer=setInterval(()=>{state.forEach(r=>{if(!r.timeout)r.ms=randMs(hops[r.hop-1].base);});render();},500);setTimeout(loop,4000);}},600);}else setTimeout(loop,1000);
+    },hops.length*600+4000);
+  }
+
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  play();
+})();</script>
+</body></html>

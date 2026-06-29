@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A tree whose canopy is thousands of vibrating complementary orange and blue dots in divisionist pointillist style.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Divisionist Tree</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  #po05-stage{position:fixed;inset:0;background:#0d0f14}
+  #po05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="po05-stage" role="img" aria-label="A tree whose canopy is built from thousands of vibrating dots of complementary orange and blue, in the divisionist pointillist style">
+  <canvas id="po05-c"></canvas>
+</div>
+<div class="cap">Divisionist Tree</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('po05-c');
+  var ctx = cv.getContext('2d');
+  var stage = document.getElementById('po05-stage');
+  var W=0,H=0,DPR=1;
+
+  // Divisionist palette: warm accents vs cool complements (optical mix on #0d0f14).
+  // pairs of [r,g,b] chosen so neighbours are complementary and vibrate.
+  var PAL = [
+    [240,168, 48],  // accent orange
+    [247,205,108],  // warm light
+    [214,107, 46],  // burnt orange
+    [ 70,118,196],  // cobalt (complement)
+    [ 92,166,210],  // cerulean
+    [ 46, 84,140],  // deep blue
+    [196, 76,118],  // magenta spark
+    [120,176, 96]   // foliage green
+  ];
+
+  // Dot field. Capped, generated once on resize into typed arrays.
+  var MAX=2600;
+  var px=new Float32Array(MAX), py=new Float32Array(MAX);
+  var pr=new Float32Array(MAX), pc=new Int16Array(MAX);
+  var ph=new Float32Array(MAX);     // phase for vibration
+  var pw=new Float32Array(MAX);     // warm(1)/cool(0) flag for complement pairing
+  var N=0;
+
+  function rnd(s){ // tiny deterministic-ish noise per build
+    return Math.random();
+  }
+
+  function build(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,Math.round(stage.clientWidth*DPR));
+    H=Math.max(1,Math.round(stage.clientHeight*DPR));
+    cv.width=W; cv.height=H;
+    var cx=W*0.5, baseY=H*0.92, S=Math.min(W,H);
+    var canopyCY=H*0.40, canopyR=S*0.34;
+    N=0;
+    // Canopy: cluster of lobes, dots denser toward centres of lobes.
+    var lobes=[
+      [cx, canopyCY, canopyR*1.00],
+      [cx-canopyR*0.62, canopyCY+canopyR*0.18, canopyR*0.66],
+      [cx+canopyR*0.62, canopyCY+canopyR*0.14, canopyR*0.70],
+      [cx-canopyR*0.30, canopyCY-canopyR*0.46, canopyR*0.58],
+      [cx+canopyR*0.34, canopyCY-canopyR*0.40, canopyR*0.55]
+    ];
+    var canopyDots=Math.min(MAX-360, Math.round(S*S/520));
+    for(var i=0;i<canopyDots && N<MAX;i++){
+      var L=lobes[(Math.random()*lobes.length)|0];
+      // gaussian-ish toward lobe centre
+      var a=Math.random()*6.283, rr=(Math.random()+Math.random())*0.5*L[2];
+      var x=L[0]+Math.cos(a)*rr, y=L[1]+Math.sin(a)*rr*0.9;
+      if(y>baseY) continue;
+      px[N]=x; py[N]=y;
+      pr[N]=(S*0.0052)*(0.6+Math.random()*0.9);
+      // warm toward top-left (light source), cool in shadow pockets
+      var lit=(canopyCY-y)/canopyR + (cx-x)/canopyR*0.5 + (Math.random()-0.5)*0.9;
+      var warm = lit>0.0;
+      pw[N]= warm?1:0;
+      // pick palette index biased by warm/cool to create complement vibration
+      var idx;
+      if(warm) idx=[0,1,2,6][(Math.random()*4)|0];
+      else idx=[3,4,5,7][(Math.random()*4)|0];
+      pc[N]=idx;
+      ph[N]=Math.random()*6.283;
+      N++;
+    }
+    // Trunk + main boughs: short brown/violet divisionist strokes as dots.
+    var trunkTop=canopyCY+canopyR*0.55;
+    var tw=S*0.030;
+    var trunkDots=Math.min(MAX-N, 300);
+    for(var t=0;t<trunkDots && N<MAX;t++){
+      var f=t/trunkDots;
+      var ty=trunkTop + f*(baseY-trunkTop);
+      var flare=1+f*1.7;
+      var bend=Math.sin(f*1.6)*tw*0.6;
+      var tx=cx+bend + (Math.random()-0.5)*tw*flare;
+      px[N]=tx; py[N]=ty;
+      pr[N]=(S*0.0050)*(0.7+Math.random()*0.7);
+      var warm2=Math.random()<0.5;
+      pw[N]=warm2?1:0;
+      pc[N]= warm2 ? [2,6,0][(Math.random()*3)|0] : [5,3][(Math.random()*2)|0];
+      ph[N]=Math.random()*6.283;
+      N++;
+    }
+  }
+
+  // Pre-blur additive accumulation buffer for soft optical mixing.
+  var img=null, data=null;
+  function ensureBuf(){
+    if(!img || img.width!==W || img.height!==H){
+      img=ctx.createImageData(W,H);
+      data=img.data;
+    }
+  }
+
+  function splat(x,y,r,R,G,B,k){
+    // additive square-ish soft splat into data; small radius keeps it cheap
+    var x0=Math.max(0,(x-r)|0), x1=Math.min(W-1,(x+r)|0);
+    var y0=Math.max(0,(y-r)|0), y1=Math.min(H-1,(y+r)|0);
+    var inv=1/(r*r);
+    for(var yy=y0; yy<=y1; yy++){
+      var dy=yy-y; var dy2=dy*dy; var row=yy*W;
+      for(var xx=x0; xx<=x1; xx++){
+        var dx=xx-x; var d2=dx*dx+dy2;
+        if(d2>r*r) continue;
+        var f=(1-d2*inv)*k;
+        var o=(row+xx)<<2;
+        var nr=data[o]+R*f; data[o]= nr>255?255:nr;
+        var ng=data[o+1]+G*f; data[o+1]= ng>255?255:ng;
+        var nb=data[o+2]+B*f; data[o+2]= nb>255?255:nb;
+        data[o+3]=255;
+      }
+    }
+  }
+
+  var BG=[13,15,20];
+  function clearBuf(){
+    for(var i=0;i<data.length;i+=4){
+      data[i]=BG[0]; data[i+1]=BG[1]; data[i+2]=BG[2]; data[i+3]=255;
+    }
+  }
+
+  function frame(time){
+    ensureBuf();
+    clearBuf();
+    var t=time*0.001;
+    for(var i=0;i<N;i++){
+      var rgb=PAL[pc[i]];
+      // vibration: tiny positional jitter + brightness pulse, complement-keyed
+      var w=pw[i];
+      var pulse=0.62 + 0.38*Math.sin(t*(1.4 + (w?0.6:-0.4)) + ph[i]);
+      var jx=Math.sin(t*1.7+ph[i])*pr[i]*0.45;
+      var jy=Math.cos(t*1.5+ph[i]*1.3)*pr[i]*0.45;
+      splat(px[i]+jx, py[i]+jy, pr[i], rgb[0], rgb[1], rgb[2], 0.95*pulse);
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  function frameStatic(){
+    ensureBuf();
+    clearBuf();
+    for(var i=0;i<N;i++){
+      var rgb=PAL[pc[i]];
+      splat(px[i], py[i], pr[i], rgb[0], rgb[1], rgb[2], 0.8);
+    }
+    ctx.putImageData(img,0,0);
+  }
+
+  var running=false, rafId=0;
+  function loop(t){ if(!running) return; frame(t); rafId=requestAnimationFrame(loop); }
+  function start(){ if(running||reduce) return; running=true; rafId=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(rafId) cancelAnimationFrame(rafId); rafId=0; }
+
+  function init(){
+    build(); ensureBuf();
+    if(reduce){ frameStatic(); return; }
+    start();
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){
+      var wasRun=running; stop();
+      build(); img=null; ensureBuf();
+      if(reduce){ frameStatic(); } else { start(); }
+    },120);
+  });
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden) stop();
+    else if(!reduce) start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

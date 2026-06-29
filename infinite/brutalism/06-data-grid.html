@@ -1,0 +1,131 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Data Grid — Neo-Brutalism. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Grid</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#fffbe6;display:flex;align-items:center;justify-content:center}
+.bru-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#000;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+.bru-grid-wrap{
+  border:3px solid #000;
+  box-shadow:6px 6px 0 #000;
+  overflow:hidden;
+  display:inline-block;
+  background:#fff;
+}
+.bru-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  border-top:2px solid #000;
+  border-left:2px solid #000;
+}
+.bru-grid-head{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  background:#000;
+}
+.bru-gh{
+  font:700 .6rem/1 "Arial Black","Arial",Impact,system-ui,sans-serif;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:#fff;
+  padding:6px 8px;
+  border-right:1px solid #333;
+  text-align:center;
+}
+.bru-gh:last-child{border-right:none;}
+.bru-cell{
+  font:700 1rem/1 ui-monospace,"Courier New",monospace;
+  color:#000;
+  padding:9px 10px;
+  border-right:2px solid #000;
+  border-bottom:2px solid #000;
+  text-align:right;
+  min-width:60px;
+  background:#fff;
+  transition:background .12s,color .12s;
+}
+.bru-cell.bru-flash-cyan{background:#00e5ff;color:#000;}
+.bru-cell.bru-flash-lime{background:#b8ff57;color:#000;}
+.bru-cell.bru-flash-red{background:#ff2d00;color:#fff;}
+.bru-cell.bru-status{
+  text-align:center;
+  font:700 .7rem/1 "Arial Black","Arial",Impact,system-ui,sans-serif;
+  letter-spacing:.06em;
+}
+</style></head><body>
+<div class="bru-grid-wrap">
+  <div class="bru-grid-head">
+    <div class="bru-gh">NODE</div>
+    <div class="bru-gh">LOAD</div>
+    <div class="bru-gh">STATUS</div>
+  </div>
+  <div class="bru-grid" id="bruGrid"></div>
+</div>
+<div class="bru-cap">DATA GRID</div>
+<script>(()=>{
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const grid=document.getElementById('bruGrid');
+  const nodes=['A1','A2','A3','B1','B2'];
+  const statuses=['OK','OK','WARN','OK','ERR','OK'];
+  const cells=[];
+  let interval=null;
+
+  function rndLoad(){return (Math.random()*99+1).toFixed(1)+'%';}
+  function rndStatus(){return statuses[Math.floor(Math.random()*statuses.length)];}
+  function flashClass(s){
+    if(s==='ERR')return 'bru-flash-red';
+    if(s==='WARN')return 'bru-flash-lime';
+    return Math.random()<.25?'bru-flash-cyan':'';
+  }
+
+  // build 5 rows (node, load, status)
+  for(let i=0;i<5;i++){
+    const n=document.createElement('div');n.className='bru-cell';n.textContent=nodes[i];
+    const l=document.createElement('div');l.className='bru-cell';l.textContent=rndLoad();
+    const s=document.createElement('div');s.className='bru-cell bru-status';s.textContent='OK';
+    grid.appendChild(n);grid.appendChild(l);grid.appendChild(s);
+    cells.push({node:n,load:l,status:s});
+  }
+  // 6th row: totals
+  const tl=document.createElement('div');tl.className='bru-cell';tl.textContent='TOT';
+  const tv=document.createElement('div');tv.className='bru-cell';tv.textContent='--';
+  const ts=document.createElement('div');ts.className='bru-cell bru-status';ts.textContent='RUN';
+  grid.appendChild(tl);grid.appendChild(tv);grid.appendChild(ts);
+
+  function update(){
+    let total=0;
+    let hasErr=false,hasWarn=false;
+    cells.forEach(c=>{
+      const lv=parseFloat(rndLoad());
+      total+=lv;
+      const sv=rndStatus();
+      if(sv==='ERR')hasErr=true;
+      if(sv==='WARN')hasWarn=true;
+      const fc=flashClass(sv);
+      c.load.className='bru-cell'+(fc?' '+fc:'');
+      c.load.textContent=lv.toFixed(1)+'%';
+      c.status.className='bru-cell bru-status'+(sv==='ERR'?' bru-flash-red':sv==='WARN'?' bru-flash-lime':'');
+      c.status.textContent=sv;
+    });
+    tv.textContent=(total/cells.length).toFixed(1)+'%';
+    const gs=hasErr?'ERR':hasWarn?'WARN':'RUN';
+    ts.className='bru-cell bru-status'+(gs==='ERR'?' bru-flash-red':gs==='WARN'?' bru-flash-lime':' bru-flash-cyan');
+    ts.textContent=gs;
+    // clear flash after 300ms
+    setTimeout(()=>{
+      cells.forEach(c=>{
+        if(!c.load.className.includes('bru-flash-red')&&!c.load.className.includes('bru-flash-lime')){
+          c.load.className='bru-cell';
+        }
+      });
+      if(gs==='RUN'){ts.className='bru-cell bru-status';}
+    },300);
+  }
+
+  function stop(){clearInterval(interval);interval=null;}
+  function play(){stop();if(!reduce){interval=setInterval(update,800);}update();}
+
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  play();
+})();</script>
+</body></html>

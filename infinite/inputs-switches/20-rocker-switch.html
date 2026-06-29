@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Photoreal I/O rocker switch in warm metal that clunks between on and off with specular tilt and a glowing amber LED witness light.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rocker Switch</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d1a16;}
+  #rk-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#ff7849;opacity:.36;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="rk-c"></canvas>
+<div class="cap">Rocker Switch</div>
+<script>
+(function(){
+  const cv=document.getElementById('rk-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,S,raf=0;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);
+  }
+  addEventListener('resize',size);size();
+
+  // state: tilt in [-1(off,down-left) .. +1(on,down-right)], target snaps between -1 and +1
+  let tilt=-1,vel=0,target=-1,nextFlip=0,led=0;
+  function flip(){target=-target;}
+  cv.addEventListener('pointerdown',flip);
+  cv.addEventListener('pointermove',e=>{ // hover hint: bias toward pointer half
+    const x=e.offsetX; if(x>W*0.62)target=1; else if(x<W*0.38)target=-1;
+  });
+
+  const rr=(x,y,w,h,r)=>{ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();};
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle='#1d1a16';ctx.fillRect(0,0,W,H);
+    const cx=W/2,cy=H/2;
+    const pw=S*0.50,ph=S*0.66,bz=S*0.05; // plate(width,height), bezel
+    // mounting plate (recessed metal frame)
+    ctx.save();ctx.translate(cx,cy);
+    rr(-pw/2-bz,-ph/2-bz,pw+2*bz,ph+2*bz,S*0.05);
+    ctx.fillStyle='#2a251e';ctx.fill();
+    ctx.lineWidth=Math.max(1,S*0.006);ctx.strokeStyle='#0f0d0a';ctx.stroke();
+    // inner well (dark cavity the rocker sits in)
+    rr(-pw/2,-ph/2,pw,ph,S*0.035);
+    ctx.fillStyle='#100e0b';ctx.fill();
+    // ambient cavity gradient for depth
+    let cg=ctx.createLinearGradient(0,-ph/2,0,ph/2);
+    cg.addColorStop(0,'rgba(0,0,0,0.55)');cg.addColorStop(.5,'rgba(0,0,0,0)');cg.addColorStop(1,'rgba(0,0,0,0.55)');
+    ctx.fillStyle=cg;ctx.fill();
+
+    const t=tilt; // -1..1
+    // each half pivots about center horizontal axis. Foreshorten the depressed half.
+    // top half compresses when tilt<0 (top pushed in), bottom compresses when tilt>0
+    const fold=S*0.012;
+    const topY=-ph*0.5, midY=0, botY=ph*0.5;
+    const topDepth=(1-t)*0.5;   // 0..1 how depressed the top is
+    const botDepth=(1+t)*0.5;
+    // perspective: depressed half shifts inner edge & darkens
+    const topInset=topDepth*fold*2.2, botInset=botDepth*fold*2.2;
+
+    // ---- bottom half (ON / "I") ----
+    ctx.save();
+    ctx.beginPath();
+    rr(-pw/2,midY,pw,ph*0.5,S*0.03);ctx.clip();
+    // face plane shifted by depression
+    let bg=ctx.createLinearGradient(0,midY+botInset,0,botY);
+    const blit=0.10+botDepth*0.0+ (1-botDepth)*0.0;
+    if(botDepth>0.5){ // depressed -> hard shadow, dim
+      bg.addColorStop(0,'#0e0c0a');bg.addColorStop(.5,'#1a1611');bg.addColorStop(1,'#221c15');
+    }else{ // raised -> specular pop
+      bg.addColorStop(0,'#3a322a');bg.addColorStop(.45,'#48402f');bg.addColorStop(1,'#241f18');
+    }
+    ctx.fillStyle=bg;ctx.fillRect(-pw/2,midY,pw,ph*0.5);
+    // specular streak on raised half
+    if(botDepth<0.5){
+      const sp=(0.5-botDepth)*2; // 0..1
+      let sg=ctx.createLinearGradient(0,midY+ph*0.12,0,midY+ph*0.30);
+      sg.addColorStop(0,'rgba(255,200,150,0)');
+      sg.addColorStop(.5,'rgba(255,225,190,'+(0.30*sp)+')');
+      sg.addColorStop(1,'rgba(255,200,150,0)');
+      ctx.fillStyle=sg;ctx.fillRect(-pw/2,midY,pw,ph*0.5);
+    }
+    // hard cast shadow at the fold when depressed
+    if(botDepth>0.5){
+      const sh=(botDepth-0.5)*2;
+      let hs=ctx.createLinearGradient(0,midY,0,midY+ph*0.20);
+      hs.addColorStop(0,'rgba(0,0,0,'+(0.70*sh)+')');hs.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=hs;ctx.fillRect(-pw/2,midY,pw,ph*0.5);
+    }
+    // engraved "I" mark
+    ctx.lineWidth=Math.max(1.4,S*0.010);
+    ctx.strokeStyle=botDepth>0.5?'rgba(255,120,73,0.85)':'rgba(255,255,255,0.16)';
+    ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(0,midY+ph*0.20);ctx.lineTo(0,midY+ph*0.32);ctx.stroke();
+    ctx.restore();
+
+    // ---- top half (OFF / "O") ----
+    ctx.save();
+    ctx.beginPath();
+    rr(-pw/2,topY,pw,ph*0.5,S*0.03);ctx.clip();
+    let tg=ctx.createLinearGradient(0,topY,0,midY-topInset);
+    if(topDepth>0.5){
+      tg.addColorStop(0,'#221c15');tg.addColorStop(.5,'#1a1611');tg.addColorStop(1,'#0e0c0a');
+    }else{
+      tg.addColorStop(0,'#241f18');tg.addColorStop(.55,'#48402f');tg.addColorStop(1,'#3a322a');
+    }
+    ctx.fillStyle=tg;ctx.fillRect(-pw/2,topY,pw,ph*0.5);
+    if(topDepth<0.5){
+      const sp=(0.5-topDepth)*2;
+      let sg=ctx.createLinearGradient(0,topY+ph*0.20,0,topY+ph*0.38);
+      sg.addColorStop(0,'rgba(255,200,150,0)');
+      sg.addColorStop(.5,'rgba(255,225,190,'+(0.30*sp)+')');
+      sg.addColorStop(1,'rgba(255,200,150,0)');
+      ctx.fillStyle=sg;ctx.fillRect(-pw/2,topY,pw,ph*0.5);
+    }
+    if(topDepth>0.5){
+      const sh=(topDepth-0.5)*2;
+      let hs=ctx.createLinearGradient(0,midY,0,midY-ph*0.20);
+      hs.addColorStop(0,'rgba(0,0,0,'+(0.70*sh)+')');hs.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=hs;ctx.fillRect(-pw/2,midY-ph*0.20,pw,ph*0.20);
+    }
+    // engraved "O" mark
+    ctx.lineWidth=Math.max(1.4,S*0.010);
+    ctx.strokeStyle=topDepth>0.5?'rgba(255,120,73,0.85)':'rgba(255,255,255,0.16)';
+    ctx.beginPath();ctx.arc(0,midY-ph*0.26,ph*0.055,0,Math.PI*2);ctx.stroke();
+    ctx.restore();
+
+    // fulcrum seam — the dark line where the two halves meet
+    let seam=ctx.createLinearGradient(0,-S*0.02,0,S*0.02);
+    seam.addColorStop(0,'rgba(0,0,0,0)');seam.addColorStop(.5,'rgba(0,0,0,0.85)');seam.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=seam;ctx.fillRect(-pw/2,-S*0.022,pw,S*0.044);
+    // tiny accent glint riding the seam toward the raised side
+    ctx.fillStyle='rgba(255,120,73,'+(0.22+0.25*Math.abs(t))+')';
+    rr(-pw/2+S*0.02, (t>0?-1:1)*S*0.006-S*0.0015, pw-S*0.04, S*0.003, S*0.0015);ctx.fill();
+
+    ctx.restore(); // plate translate
+
+    // ---- LED witness light (below plate) ----
+    const ly=cy+ph/2+bz+S*0.075, lr=S*0.030;
+    // warm filament curve: led 0..1, ease for filament glow ramp
+    const fil=led*led*(3-2*led); // smoothstep brightness
+    // socket
+    ctx.save();ctx.translate(cx,ly);
+    ctx.beginPath();ctx.arc(0,0,lr*1.5,0,Math.PI*2);
+    ctx.fillStyle='#0c0a08';ctx.fill();
+    ctx.lineWidth=Math.max(1,S*0.004);ctx.strokeStyle='#2a241c';ctx.stroke();
+    // glow halo
+    if(fil>0.01){
+      let gh=ctx.createRadialGradient(0,0,lr*0.2,0,0,lr*4.2);
+      gh.addColorStop(0,'rgba(255,150,90,'+(0.55*fil)+')');
+      gh.addColorStop(.4,'rgba(255,120,73,'+(0.28*fil)+')');
+      gh.addColorStop(1,'rgba(255,120,73,0)');
+      ctx.fillStyle=gh;ctx.beginPath();ctx.arc(0,0,lr*4.2,0,Math.PI*2);ctx.fill();
+    }
+    // lens
+    let lg=ctx.createRadialGradient(-lr*0.3,-lr*0.3,lr*0.1,0,0,lr);
+    const r=Math.round(40+215*fil),g=Math.round(28+150*fil),b=Math.round(22+60*fil);
+    lg.addColorStop(0,'rgb('+Math.min(255,r+40)+','+Math.min(255,g+50)+','+Math.min(255,b+40)+')');
+    lg.addColorStop(.6,'rgb('+r+','+g+','+b+')');
+    lg.addColorStop(1,'rgb('+Math.round(r*0.4)+','+Math.round(g*0.4)+','+Math.round(b*0.4)+')');
+    ctx.fillStyle=lg;ctx.beginPath();ctx.arc(0,0,lr,0,Math.PI*2);ctx.fill();
+    // specular dot
+    ctx.fillStyle='rgba(255,255,255,'+(0.30+0.5*fil)+')';
+    ctx.beginPath();ctx.arc(-lr*0.32,-lr*0.34,lr*0.22,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  }
+
+  let last=0;
+  function frame(ts){
+    if(!last)last=ts;const dt=Math.min(40,ts-last)/16.67;last=ts;
+    // spring toward target with a weighted clunk (overshoot + settle)
+    const k=0.20,damp=0.74;
+    vel+=(target-tilt)*k*dt; vel*=Math.pow(damp,dt); tilt+=vel*dt;
+    if(Math.abs(target-tilt)<0.001&&Math.abs(vel)<0.001){tilt=target;vel=0;}
+    // LED confesses the ON state (target/tilt>0). Warm filament fade.
+    const want=tilt>0?1:0;
+    led+=(want-led)*0.06*dt;
+    // autonomous toggling when no recent interaction
+    if(ts>nextFlip){flip();nextFlip=ts+2600+Math.random()*900;}
+    draw();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf){last=0;nextFlip=performance.now()+1800;raf=requestAnimationFrame(frame);}}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){tilt=-1;target=-1;led=0;draw();}else start();
+})();
+</script>
+</body>
+</html>

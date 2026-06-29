@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Nine amber-toned ranked lines crossing between BEFORE and AFTER axes, easing into new rank orders each loop with labeled endpoints.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slope Chart Crossing</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1a1410;}
+  #scc{display:block;width:100%;height:100%;}
+  .scc-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
+       letter-spacing:.14em;color:#f0a830;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="scc"></canvas>
+<div class="scc-cap">Slope Chart Crossing</div>
+<script>
+(function(){
+  const cv=document.getElementById('scc'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const N=9;                       // series
+  const NAMES="ABCDEFGHI";
+  let W,H,DPR,padX,padY,colL,colR,scale;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    scale=Math.min(W,H)/360;
+    padX=Math.max(34,W*0.22);
+    padY=Math.max(18,H*0.10);
+    colL=padX; colR=W-padX;
+  }
+  addEventListener('resize',size);size();
+
+  // each series owns a rank (0..N-1) on left and right; on each loop right reorders
+  const ser=[];
+  for(let i=0;i<N;i++) ser.push({i, l:i, rFrom:i, rTo:i, hue:i});
+  function shuffleRight(){
+    for(const s of ser) s.l = s.rTo;          // last loop's right becomes this loop's left
+    const order=ser.map(s=>s.i);
+    for(let k=order.length-1;k>0;k--){const j=(Math.random()*(k+1))|0;[order[k],order[j]]=[order[j],order[k]];}
+    order.forEach((id,rank)=>{ser[id].rFrom=ser[id].l; ser[id].rTo=rank;});
+  }
+  shuffleRight();
+
+  function yFor(rank){ return padY + (H-2*padY)*(rank/(N-1)); }
+  // smootherstep
+  function ease(t){t=t<0?0:t>1?1:t;return t*t*t*(t*(t*6-15)+10);}
+
+  let t=0, loopDur=170, hold=46, phase=0, nudge=0;
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.4,3);});
+  cv.addEventListener('click',()=>{phase=loopDur;});
+
+  function col(h,a){ // warm palette anchored on accent #f0a830
+    const ang=(h/N)*120-50;                 // -50..70 deg around amber
+    const hue=34+ang*0.5;
+    return 'hsla('+hue+','+(58+(h%2)*12)+'%,'+(56+(h%3)*6)+'%,'+a+')';
+  }
+
+  function draw(){
+    const sp = reduce?0:(1+nudge);
+    nudge*=0.9;
+    phase+=sp; t+=sp;
+    if(phase>=loopDur){ phase=0; shuffleRight(); }
+    const p = ease((phase-hold/2)/(loopDur-hold)); // 0 hold start, ease through
+
+    ctx.fillStyle='#1a1410';ctx.fillRect(0,0,W,H);
+
+    // axis ticks (faint) — position is the only encoding, so mark the slots
+    ctx.strokeStyle='rgba(240,168,48,0.10)';ctx.lineWidth=1;
+    for(let r=0;r<N;r++){const y=yFor(r);
+      ctx.beginPath();ctx.moveTo(colL,y);ctx.lineTo(colL-6*scale,y);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(colR,y);ctx.lineTo(colR+6*scale,y);ctx.stroke();
+    }
+    ctx.strokeStyle='rgba(240,168,48,0.22)';
+    ctx.beginPath();ctx.moveTo(colL,padY-8*scale);ctx.lineTo(colL,H-padY+8*scale);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(colR,padY-8*scale);ctx.lineTo(colR,H-padY+8*scale);ctx.stroke();
+
+    // segments
+    ctx.lineCap='round';
+    for(const s of ser){
+      const yL=yFor(s.l);
+      const yR=yFor(s.rFrom+(s.rTo-s.rFrom)*p);
+      const rise=Math.abs((s.rTo)-(s.l));
+      const up = s.rTo < s.l;                 // moved up (smaller rank)
+      const a = 0.30 + Math.min(rise,4)/4*0.55;
+      ctx.strokeStyle=col(s.hue, a);
+      ctx.lineWidth=(1.1 + Math.min(rise,5)*0.55)*scale;
+      ctx.beginPath();ctx.moveTo(colL,yL);ctx.lineTo(colR,yR);ctx.stroke();
+      // endpoint dots
+      ctx.fillStyle=col(s.hue,0.95);
+      ctx.beginPath();ctx.arc(colL,yL,(2+ (up?1:0))*scale,0,7);ctx.fill();
+      ctx.beginPath();ctx.arc(colR,yR,(2+ (rise>=3?1:0))*scale,0,7);ctx.fill();
+      // labels
+      ctx.font=(9.5*scale)+'px ui-monospace,monospace';
+      ctx.fillStyle=col(s.hue,0.9);
+      ctx.textAlign='right';ctx.textBaseline='middle';
+      ctx.fillText(NAMES[s.i],colL-10*scale,yL);
+      ctx.textAlign='left';
+      ctx.fillText(NAMES[s.i],colR+10*scale,yR);
+    }
+
+    // column captions
+    ctx.fillStyle='rgba(240,168,48,0.38)';
+    ctx.font='600 '+(9*scale)+'px ui-monospace,monospace';
+    ctx.textBaseline='alphabetic';
+    ctx.textAlign='center';
+    ctx.fillText('BEFORE',colL,padY-14*scale);
+    ctx.fillText('AFTER',colR,padY-14*scale);
+
+    raf=requestAnimationFrame(draw);
+  }
+
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(draw);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){phase=loopDur*0.5;draw();stop();}else start();
+})();
+</script>
+</body>
+</html>

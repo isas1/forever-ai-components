@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A green sparkline traces itself across a faint full path, led by a haloed white moving dot, then regenerates a new random series.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sparkline Moving Dot</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0c1512;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  canvas{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
+    color:#3ee08f;opacity:.4;text-transform:uppercase}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">sparkline</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let W,H,DPR; const COL='#3ee08f';
+  const N=28; let pts=[];
+  function gen(){pts=[];let v=0.5;for(let i=0;i<N;i++){v+=(Math.random()-0.5)*0.35;v=Math.max(0.1,Math.min(0.9,v));pts.push(v);}}
+  function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  let last=0,prog=0;
+  function draw(t){
+    if(document.hidden){last=t;return raf()}
+    const dt=Math.min(64,t-last);last=t;
+    if(!reduce)prog+=dt/4200; else prog=0.999;
+    if(prog>=1){prog=0;gen();}
+    ctx.clearRect(0,0,W,H);
+    const padL=W*0.08,padR=W*0.08,top=H*0.22,bot=H*0.78;
+    const px=i=>padL+(W-padL-padR)*i/(N-1);
+    const py=v=>bot-(bot-top)*v;
+    // baseline
+    ctx.strokeStyle='#ffffff10';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(padL,(top+bot)/2);ctx.lineTo(W-padR,(top+bot)/2);ctx.stroke();
+    // full faint line
+    ctx.beginPath();for(let i=0;i<N;i++){const x=px(i),y=py(pts[i]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+    ctx.strokeStyle=COL+'2a';ctx.lineWidth=1.5;ctx.stroke();
+    // animated traced portion
+    const fp=prog*(N-1), idx=Math.floor(fp), fr=fp-idx;
+    ctx.beginPath();ctx.moveTo(px(0),py(pts[0]));
+    for(let i=1;i<=idx;i++)ctx.lineTo(px(i),py(pts[i]));
+    let dx,dy;
+    if(idx<N-1){dx=px(idx)+(px(idx+1)-px(idx))*fr;dy=py(pts[idx])+(py(pts[idx+1])-py(pts[idx]))*fr;ctx.lineTo(dx,dy);}
+    else{dx=px(N-1);dy=py(pts[N-1]);}
+    ctx.strokeStyle=COL;ctx.lineWidth=2.4;ctx.shadowColor=COL;ctx.shadowBlur=7;ctx.stroke();ctx.shadowBlur=0;
+    // moving dot
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(dx,dy,4,0,7);ctx.fill();
+    ctx.strokeStyle=COL;ctx.lineWidth=2;ctx.beginPath();ctx.arc(dx,dy,7,0,7);ctx.stroke();
+    raf();
+  }
+  function raf(){requestAnimationFrame(draw)}
+  addEventListener('resize',resize);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
+  cv.addEventListener('pointerdown',()=>{prog=0;gen();});
+  resize();gen();raf();
+})();
+</script>
+</body>
+</html>

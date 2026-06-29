@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Contrast Pairs — Robert Delaunay. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contrast Pairs</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0d11;overflow:hidden}
+  #del06-stage{position:fixed;inset:0;width:100%;height:100%}
+  #del06-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .del06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3f0e8;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="del06-stage" role="img" aria-label="Complementary halves rotate against one another, red against green, blue against orange, the law of simultaneous contrast turned into a slow mechanism of light.">
+  <canvas id="del06-cv"></canvas>
+</div>
+<div class="del06-cap">Contrast Pairs</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('del06-cv'); if(!cv) return;
+  const PAL={paper:'#f3f0e8',red:'#e23b2e',orange:'#f08a24',yellow:'#f4c81e',green:'#2fa86a',blue:'#1f6fd0',violet:'#7b3fa0'};
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const PAIRS=[[PAL.red,PAL.green],[PAL.blue,PAL.orange],[PAL.violet,PAL.yellow]];
+  let t=0,last=performance.now();
+  function half(ctx,cx,cy,r,a0,col){
+    ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,a0,a0+Math.PI);ctx.closePath();
+    ctx.fillStyle=col;ctx.fill();
+  }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    ctx.fillStyle='#0c0d11';ctx.fillRect(0,0,W,H);
+    const cols=PAIRS.length;
+    const cellW=W/cols;
+    PAIRS.forEach((p,i)=>{
+      const cx=cellW*(i+0.5), cy=H/2;
+      const r=Math.min(cellW,H)*0.40;
+      const a=t*(0.5+i*0.25)*(i%2?-1:1);
+      ctx.save();
+      half(ctx,cx,cy,r,a,p[0]);
+      half(ctx,cx,cy,r,a+Math.PI,p[1]);
+      ctx.globalAlpha=0.4+0.4*Math.abs(Math.sin(t*2+i));
+      ctx.strokeStyle=PAL.paper;ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(cx+Math.cos(a)*r,cy+Math.sin(a)*r);
+      ctx.lineTo(cx+Math.cos(a+Math.PI)*r,cy+Math.sin(a+Math.PI)*r);
+      ctx.stroke();
+      ctx.globalAlpha=1;
+      ctx.strokeStyle='rgba(13,14,18,.6)';ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.stroke();
+      ctx.restore();
+    });
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#0c0d11';S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

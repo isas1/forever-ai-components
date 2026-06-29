@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A jittered grid of paired complementary dots oscillates apart so the eye fuses a shimmering amber hue over deep blue.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vibrato Field</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  #po10-stage{position:fixed;inset:0;background:#0d0f14}
+  #po10-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="po10-stage" role="img" aria-label="Pointillist field of paired colored dots that optically mix into a vibrating amber hue, drifting like sustained vibrato across a deep blue ground.">
+  <canvas id="po10-c"></canvas>
+</div>
+<div class="cap">Vibrato Field</div>
+<script>
+(function(){
+  "use strict";
+  var c=document.getElementById("po10-c"),x=c.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,DPR=1,running=true,raf=0,t=0;
+
+  // Divisionist palette: each "vibrato" cell pairs two complementary tints
+  // that the eye fuses into a singing intermediate hue (Seurat/Signac idiom).
+  var PAIRS=[
+    ["#f0a830","#9a3fb0"], // amber  / violet  -> warm glow
+    ["#e8542e","#2a7fb8"], // vermilion / cobalt
+    ["#f0c235","#3a55a8"], // gold   / ultramarine
+    ["#d83a6a","#3fae8e"], // rose   / viridian
+    ["#f0a830","#2a7fb8"]  // amber  / cobalt -> the signature vibrato
+  ];
+
+  // capped dot field, packed into typed arrays (<=110 dots)
+  var N=108;
+  var px=new Float32Array(N), py=new Float32Array(N);
+  var ca=new Array(N), cb=new Array(N);     // the two paired colors
+  var ph=new Float32Array(N), rad=new Float32Array(N), amp=new Float32Array(N);
+  var ax=new Float32Array(N), ay=new Float32Array(N); // per-dot drift axis
+
+  function seed(){
+    // hex-ish jitter grid so dots read as a deliberate field, not random noise
+    var cols=12, rows=Math.ceil(N/cols), i=0;
+    for(var r=0;r<rows;r++){
+      for(var col=0;col<cols && i<N;col++,i++){
+        var gx=(col+0.5)/cols + (r%2?0.5/cols:0);
+        var gy=(r+0.5)/rows;
+        px[i]=gx; py[i]=gy;
+        var jx=(Math.sin(i*12.9898)*43758.5453)%1;
+        var jy=(Math.sin(i*78.233)*12543.123)%1;
+        px[i]+=(jx-0.5)*0.045; py[i]+=(jy-0.5)*0.06;
+        var p=PAIRS[i%PAIRS.length];
+        ca[i]=p[0]; cb[i]=p[1];
+        ph[i]=i*0.7;
+        rad[i]=0.34+0.5*((jx+1)%1); // relative dot size
+        amp[i]=0.5+0.5*((jy+1)%1);
+        var ang=i*2.39996; // golden-angle drift directions
+        ax[i]=Math.cos(ang); ay[i]=Math.sin(ang);
+      }
+    }
+  }
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=c.clientWidth; H=c.clientHeight;
+    c.width=Math.max(1,Math.round(W*DPR));
+    c.height=Math.max(1,Math.round(H*DPR));
+    x.setTransform(DPR,0,0,DPR,1*0+0,0);
+  }
+
+  function dot(cx,cy,r,col){
+    x.beginPath();
+    x.arc(cx,cy,r,0,6.2831853);
+    x.fillStyle=col;
+    x.fill();
+  }
+
+  function frame(now){
+    if(!running) return;
+    t=now*0.001;
+    // ground: deep blue-black wash, painted once per frame (no layout reads)
+    x.globalCompositeOperation="source-over";
+    x.fillStyle="#0d0f14";
+    x.fillRect(0,0,W,H);
+    // faint cool underpainting toward the lower field (static gradient, drawn flat)
+    x.globalCompositeOperation="lighter";
+    var base=Math.min(W,H);
+    var unit=base*0.030; // dot scale relative to frame -> legible 180..640px
+    for(var i=0;i<N;i++){
+      var cxv=px[i]*W, cyv=py[i]*H;
+      // vibrato: the paired dots oscillate apart along their axis,
+      // so the optical mix shimmers between the two complements
+      var v=Math.sin(t*1.6+ph[i]); // -1..1, slow (<3Hz) -> seizure safe
+      var sep=unit*(0.55+0.85*amp[i])*v;
+      var drift=Math.sin(t*0.32+ph[i]*0.5)*unit*0.6;
+      var ox=ax[i]*sep + ay[i]*drift*0.3;
+      var oy=ay[i]*sep - ax[i]*drift*0.3;
+      var r=unit*(0.6+rad[i]*0.7);
+      // additive complements -> eye fuses to a luminous vibrating hue
+      dot(cxv+ox, cyv+oy, r, ca[i]);
+      dot(cxv-ox, cyv-oy, r, cb[i]);
+      // small neutral anchor dot keeps the field grounded (Divisionist tessera)
+      dot(cxv, cyv, r*0.42, "#1c2740");
+    }
+    x.globalCompositeOperation="source-over";
+    raf=requestAnimationFrame(frame);
+  }
+
+  function drawOneFrame(){
+    // reduced-motion: one calm, balanced, on-brand frame (no vibration)
+    x.globalCompositeOperation="source-over";
+    x.fillStyle="#0d0f14";
+    x.fillRect(0,0,W,H);
+    x.globalCompositeOperation="lighter";
+    var base=Math.min(W,H), unit=base*0.030;
+    for(var i=0;i<N;i++){
+      var cxv=px[i]*W, cyv=py[i]*H, r=unit*(0.6+rad[i]*0.7);
+      var sep=unit*(0.55+0.85*amp[i])*0.35; // settled, small offset
+      dot(cxv+ax[i]*sep, cyv+ay[i]*sep, r, ca[i]);
+      dot(cxv-ax[i]*sep, cyv-ay[i]*sep, r, cb[i]);
+      dot(cxv, cyv, r*0.42, "#1c2740");
+    }
+    x.globalCompositeOperation="source-over";
+  }
+
+  function start(){
+    if(raf) cancelAnimationFrame(raf);
+    raf=requestAnimationFrame(frame);
+  }
+
+  seed();
+  resize();
+  window.addEventListener("resize",function(){
+    resize();
+    if(reduce) drawOneFrame();
+  });
+
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+    else if(!running){ running=true; start(); }
+  });
+
+  if(reduce){ drawOneFrame(); return; }
+  start();
+})();
+</script>
+</body>
+</html>

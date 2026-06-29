@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Lamplit Room — Vincent van Gogh. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Lamplit Room</title>
+<style>
+  html,body{margin:0;height:100%;background:#1a2b1c;overflow:hidden}
+  #vg08-stage{position:fixed;inset:0;width:100%;height:100%}
+  #vg08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .vg08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe6cf;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="vg08-stage" role="img" aria-label="A warm Van Gogh interior: gas-lamp halos pulse and overlap in a deep amber-and-green colour field as motes of light drift through the dusk.">
+  <canvas id="vg08-cv"></canvas>
+</div>
+<div class="vg08-cap">The Lamplit Room</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('vg08-cv'); if(!cv) return;
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+
+  let S=fitCanvas(cv);
+  let lamps=[], motes=[], t=0, last=performance.now();
+  function build(){
+    lamps=[];
+    const L=4+((S.w/360)|0);
+    for(let i=0;i<L;i++){
+      lamps.push({x:(i+0.5)/L*S.w + (Math.random()*40-20), y:S.h*(0.30+Math.random()*0.34),
+        r:Math.min(S.w,S.h)*(0.18+Math.random()*0.10), ph:Math.random()*6.28, sp:0.7+Math.random()*0.8});
+    }
+    motes=[];
+    const M=Math.min(70, Math.round(S.w/14));
+    for(let i=0;i<M;i++){
+      motes.push({x:Math.random()*S.w,y:Math.random()*S.h, r:0.6+Math.random()*1.8,
+        vx:(Math.random()-0.5)*0.25, vy:-(0.05+Math.random()*0.25), ph:Math.random()*6.28});
+    }
+  }
+  build();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h;
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#1a2b1c');g.addColorStop(0.5,'#3a2c12');g.addColorStop(1,'#5a3a10');
+    ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    for(const L of lamps){
+      const pulse=0.62+0.38*Math.sin(t*L.sp+L.ph);
+      const r=L.r*(0.92+0.12*pulse);
+      const lg=ctx.createRadialGradient(L.x,L.y,0,L.x,L.y,r);
+      lg.addColorStop(0,'rgba(247,227,154,'+(0.55*pulse)+')');
+      lg.addColorStop(0.25,'rgba(242,193,11,'+(0.30*pulse)+')');
+      lg.addColorStop(0.6,'rgba(201,138,43,'+(0.12*pulse)+')');
+      lg.addColorStop(1,'rgba(201,138,43,0)');
+      ctx.fillStyle=lg;ctx.beginPath();ctx.arc(L.x,L.y,r,0,7);ctx.fill();
+      ctx.fillStyle='rgba(247,231,176,'+(0.8*pulse)+')';
+      ctx.beginPath();ctx.arc(L.x,L.y,L.r*0.06,0,7);ctx.fill();
+    }
+    for(const m of motes){
+      if(!REDUCED){ m.x+=m.vx; m.y+=m.vy; }
+      if(m.y<-4){ m.y=H+4; m.x=Math.random()*W; }
+      if(m.x<-4)m.x=W+4; if(m.x>W+4)m.x=-4;
+      const tw=0.4+0.6*Math.abs(Math.sin(t*1.5+m.ph));
+      ctx.fillStyle='rgba(247,227,154,'+(0.5*tw)+')';
+      ctx.beginPath();ctx.arc(m.x,m.y,m.r,0,7);ctx.fill();
+    }
+    ctx.globalCompositeOperation='source-over';
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); build(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

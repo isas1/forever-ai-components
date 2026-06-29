@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Purple cylindrical thumbwheel with curved ribs you fling and scrub; flywheel friction, detent ticks, and a FRAME counter readout.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Thumbwheel Scrubber</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#161229;}
+  #tws-c{display:block;width:100%;height:100%;cursor:ew-resize;touch-action:none;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
+       letter-spacing:.16em;color:#a78bfa;opacity:.36;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="tws-c"></canvas>
+<div class="cap">Thumbwheel Scrubber</div>
+<script>
+(function(){
+  const cv=document.getElementById('tws-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ACC='#a78bfa', BG='#161229';
+  let W,H,DPR,cx,cy,wW,wH;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;
+    wW=Math.min(W*0.74,540);wH=Math.min(H*0.30,150);wH=Math.min(wH,wW*0.34);
+  }
+  addEventListener('resize',size);size();
+
+  const PITCH=0.30;            // radians between ribs
+  let ang=0, vel=reduce?0:1.9; // angular position & velocity
+  let lastTick=Math.round(ang/PITCH);
+  let pulse=0, frameIdx=0;
+  let drag=null, lastX=0, lastT=0;
+
+  function detent(a){          // soft pull toward nearest rib as it slows
+    const n=Math.round(a/PITCH), tgt=n*PITCH;
+    return (tgt-a)*0.06*Math.max(0,1-Math.abs(vel)/0.18);
+  }
+
+  function frame(){
+    // physics
+    if(!drag){
+      vel*=0.975;                       // flywheel friction
+      ang+=vel;
+      if(Math.abs(vel)<0.22) ang+=detent(ang);
+      if(Math.abs(vel)<0.0009) vel=0;
+    }
+    pulse*=0.86;
+    const tick=Math.round(ang/PITCH);
+    if(tick!==lastTick){ pulse=1; frameIdx+=(tick-lastTick); lastTick=tick; }
+
+    // bg
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    const speed=Math.min(Math.abs(vel),2.4);
+    const blur=Math.min(speed/0.9,1);    // 0 crisp -> 1 smeared
+
+    // --- bezel / housing ---
+    const bx=cx-wW/2-12, by=cy-wH/2-12, bw=wW+24, bh=wH+24, br=14;
+    rr(bx,by,bw,bh,br);
+    let bz=ctx.createLinearGradient(0,by,0,by+bh);
+    bz.addColorStop(0,'#241d42');bz.addColorStop(.5,'#1b1635');bz.addColorStop(1,'#100c20');
+    ctx.fillStyle=bz;ctx.fill();
+    ctx.lineWidth=1;ctx.strokeStyle='rgba(167,139,250,0.18)';ctx.stroke();
+
+    // --- wheel well (clip) ---
+    ctx.save();
+    rr(cx-wW/2,cy-wH/2,wW,wH,9);ctx.clip();
+    // dark cylinder base
+    let cy0=ctx.createLinearGradient(0,cy-wH/2,0,cy+wH/2);
+    cy0.addColorStop(0,'#0c0a18');cy0.addColorStop(.5,'#221a44');cy0.addColorStop(1,'#0a0816');
+    ctx.fillStyle=cy0;ctx.fillRect(cx-wW/2,cy-wH/2,wW,wH);
+
+    // --- ribs: cylinder projection, x = sin(angle) ---
+    const R=wW/2/0.96;                   // virtual radius -> fills well width
+    const start=Math.floor((ang-Math.PI/2)/PITCH), end=Math.ceil((ang+Math.PI/2)/PITCH);
+    for(let i=start;i<=end;i++){
+      let ph=i*PITCH-ang;                // -pi/2..pi/2 visible
+      const c=Math.cos(ph);
+      if(c<=0.02) continue;              // back of cylinder
+      const x=cx+Math.sin(ph)*R;
+      const w=Math.max(0.6, c*PITCH*R*0.62);  // rib gets thin near edges
+      // shading: bright crest in centre of each rib, dark valleys at edges
+      const lum=c*c;                     // limb darkening
+      const tickHit=(i===lastTick);
+      // motion smear: widen & fade ribs with speed
+      const a=(1-blur*0.55)*(0.25+0.75*lum);
+      let g=ctx.createLinearGradient(x-w,0,x+w,0);
+      g.addColorStop(0,'rgba(8,6,18,'+(0.9*lum).toFixed(3)+')');
+      g.addColorStop(0.5,'rgba('+(120+90*lum)+','+(105+80*lum)+','+(190+55*lum)+','+a.toFixed(3)+')');
+      g.addColorStop(1,'rgba(8,6,18,'+(0.9*lum).toFixed(3)+')');
+      ctx.fillStyle=g;
+      ctx.fillRect(x-w, cy-wH/2, w*2, wH);
+      // crest highlight line
+      if(blur<0.9){
+        ctx.fillStyle='rgba(214,200,255,'+((1-blur)*0.5*lum).toFixed(3)+')';
+        ctx.fillRect(x-0.5, cy-wH/2+wH*0.12, 1, wH*0.76);
+      }
+      // haptic flash on the rib crossing the centre detent
+      if(tickHit && pulse>0.02){
+        ctx.fillStyle='rgba(167,139,250,'+(pulse*0.5).toFixed(3)+')';
+        ctx.fillRect(x-w*1.4, cy-wH/2, w*2.8, wH);
+      }
+    }
+
+    // top sheen + bottom shadow across the well
+    let sh=ctx.createLinearGradient(0,cy-wH/2,0,cy+wH/2);
+    sh.addColorStop(0,'rgba(255,255,255,0.10)');
+    sh.addColorStop(0.18,'rgba(255,255,255,0)');
+    sh.addColorStop(0.82,'rgba(0,0,0,0)');
+    sh.addColorStop(1,'rgba(0,0,0,0.42)');
+    ctx.fillStyle=sh;ctx.fillRect(cx-wW/2,cy-wH/2,wW,wH);
+
+    // left/right edge vignette (cylinder curvature)
+    let ev=ctx.createLinearGradient(cx-wW/2,0,cx+wW/2,0);
+    ev.addColorStop(0,'rgba(8,6,18,0.85)');ev.addColorStop(0.12,'rgba(8,6,18,0)');
+    ev.addColorStop(0.88,'rgba(8,6,18,0)');ev.addColorStop(1,'rgba(8,6,18,0.85)');
+    ctx.fillStyle=ev;ctx.fillRect(cx-wW/2,cy-wH/2,wW,wH);
+    ctx.restore();
+
+    // --- centre index marker (the detent the wheel ticks past) ---
+    const mh=wH*0.5+10;
+    ctx.fillStyle='rgba(167,139,250,'+(0.5+pulse*0.5).toFixed(3)+')';
+    tri(cx,cy-wH/2-4,5);                 // top notch
+    tri(cx,cy+wH/2+4,-5);               // bottom notch
+    ctx.strokeStyle='rgba(167,139,250,'+(0.32+pulse*0.55).toFixed(3)+')';
+    ctx.lineWidth=1.4;
+    ctx.beginPath();ctx.moveTo(cx,cy-mh);ctx.lineTo(cx,cy+mh);ctx.stroke();
+    if(pulse>0.04){
+      ctx.strokeStyle='rgba(214,200,255,'+(pulse*0.7).toFixed(3)+')';
+      ctx.lineWidth=2.6;ctx.beginPath();ctx.moveTo(cx,cy-mh);ctx.lineTo(cx,cy+mh);ctx.stroke();
+    }
+
+    // --- frame counter readout ---
+    const fs=Math.max(11,Math.min(wH*0.34,22));
+    ctx.font='700 '+fs+'px ui-monospace,Menlo,monospace';
+    ctx.textAlign='center';ctx.textBaseline='alphabetic';
+    const lbl=(frameIdx<0?'-':'')+String(Math.abs(frameIdx)).padStart(4,'0');
+    ctx.fillStyle='rgba(167,139,250,'+(0.6+pulse*0.4).toFixed(3)+')';
+    ctx.fillText('FRAME '+lbl, cx, by-9);
+    // tiny velocity caption
+    ctx.font='600 '+Math.max(8,fs*0.5)+'px ui-monospace,Menlo,monospace';
+    ctx.fillStyle='rgba(167,139,250,0.30)';
+    ctx.fillText(vel===0?'AT REST':'COASTING', cx, by+bh+fs+4);
+    ctx.textAlign='left';
+
+    if(!reduce) raf=requestAnimationFrame(frame);
+  }
+
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  function tri(x,y,s){ctx.beginPath();ctx.moveTo(x-5,y);ctx.lineTo(x+5,y);ctx.lineTo(x,y+s);ctx.closePath();ctx.fill();}
+
+  // --- interaction: grab & fling the wheel ---
+  function pos(e){const r=cv.getBoundingClientRect();return e.clientX-r.left;}
+  cv.addEventListener('pointerdown',e=>{
+    drag={x:pos(e)};lastX=drag.x;lastT=performance.now();vel=0;
+    cv.setPointerCapture(e.pointerId);
+  });
+  cv.addEventListener('pointermove',e=>{
+    if(!drag)return;
+    const x=pos(e),now=performance.now(),dt=Math.max(now-lastT,8);
+    const R=wW/2/0.96;
+    const dAng=-(x-lastX)/R*1.4;         // drag right -> wheel rolls forward
+    ang+=dAng; vel=dAng*(16/dt);         // carry momentum
+    lastX=x;lastT=now;
+  });
+  function release(){if(drag){drag=null;}}
+  cv.addEventListener('pointerup',release);
+  cv.addEventListener('pointercancel',release);
+  cv.addEventListener('pointerleave',release);
+
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){vel=0;ang=0;lastTick=0;frame();}else start();
+})();
+</script>
+</body>
+</html>

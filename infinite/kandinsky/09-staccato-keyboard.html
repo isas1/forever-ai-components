@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Staccato Keyboard — Wassily Kandinsky. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Staccato Keyboard</title>
+<style>
+  html,body{margin:0;height:100%;background:#f4efe2;overflow:hidden}
+  #kan09-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kan09-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kan09-keys{position:absolute;left:0;right:0;bottom:0;height:34px;display:flex;border-top:2px solid #16130f;}
+  .kan09-key{flex:1;border-right:1px solid #16130f;}
+  .kan09-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#16130f;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kan09-stage" role="img" aria-label="The wall plays itself: sharp coloured forms — circles, triangles, squares, arcs and lines — leap up from a row of Baubaus keys and arc back down, a violin's staccato made visible.">
+  <canvas id="kan09-cv"></canvas>
+  <div class="kan09-keys" id="kan09-keys"></div>
+</div>
+<div class="kan09-cap">The Staccato Keyboard</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={paper:'#f4efe2',ink:'#16130f',blue:'#1438a8',yellow:'#f7c80b',red:'#d8321b',green:'#1f7a4d',violet:'#5a2d82'};
+  const cv=document.getElementById('kan09-cv'); if(!cv) return;
+  const keysWrap=document.getElementById('kan09-keys');
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const KEYS=[
+    {c:PAL.blue,  shape:'circ'},
+    {c:PAL.yellow,shape:'tri'},
+    {c:PAL.red,   shape:'sq'},
+    {c:PAL.violet,shape:'arc'},
+    {c:PAL.green, shape:'line'},
+    {c:PAL.ink,   shape:'tri'},
+    {c:PAL.blue,  shape:'sq'},
+    {c:PAL.yellow,shape:'circ'}
+  ];
+  const keyEls=[];
+  KEYS.forEach((k)=>{
+    const key=document.createElement('div');key.className='kan09-key';
+    key.style.background=k.c;key.style.opacity='.9';
+    keysWrap.appendChild(key);keyEls.push(key);
+  });
+  function flash(i){ const key=keyEls[i]; if(!key) return; key.style.opacity='.4';setTimeout(()=>key.style.opacity='.9',110); }
+  const shapes=[];
+  function press(i){
+    const k=KEYS[i];
+    const x=(i+0.5)/KEYS.length*S.w;
+    shapes.push({x, y:S.h-44, vy:-(260+Math.random()*160), c:k.c, shape:k.shape,
+      sz:16+Math.random()*22, rot:Math.random()*7, spin:(Math.random()-.5)*8, t:0});
+    flash(i);
+  }
+  const loopSeq=[0,2,4,1,7,2,5,3,0,2,6,1];
+  let li=0, autoT=0, last=performance.now();
+  function blob(ctx,s){
+    ctx.save();ctx.translate(s.x,s.y);ctx.rotate(s.rot);
+    ctx.fillStyle=s.c;ctx.strokeStyle=s.c===PAL.ink?PAL.yellow:PAL.ink;ctx.lineWidth=2.5;
+    const z=s.sz;
+    if(s.shape==='circ'){ctx.beginPath();ctx.arc(0,0,z,0,7);ctx.fill();ctx.stroke();}
+    else if(s.shape==='tri'){ctx.beginPath();ctx.moveTo(0,-z);ctx.lineTo(z,z*.8);ctx.lineTo(-z,z*.8);ctx.closePath();ctx.fill();ctx.stroke();}
+    else if(s.shape==='sq'){ctx.fillRect(-z,-z,2*z,2*z);ctx.strokeRect(-z,-z,2*z,2*z);}
+    else if(s.shape==='arc'){ctx.lineWidth=5;ctx.strokeStyle=s.c;ctx.beginPath();ctx.arc(0,0,z,.4,3.6);ctx.stroke();}
+    else{ctx.lineWidth=4;ctx.strokeStyle=s.c;ctx.beginPath();ctx.moveTo(-z,0);ctx.lineTo(z,0);ctx.stroke();}
+    ctx.restore();
+  }
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED){autoT+=dt; if(autoT>0.42){autoT=0; press(loopSeq[li%loopSeq.length]); li++;}}
+    S.ctx.clearRect(0,0,S.w,S.h);
+    S.ctx.strokeStyle='rgba(22,19,15,.12)';S.ctx.lineWidth=1;
+    for(let g=1;g<5;g++){const y=(S.h-44)*g/5;S.ctx.beginPath();S.ctx.moveTo(0,y);S.ctx.lineTo(S.w,y);S.ctx.stroke();}
+    for(const s of shapes){
+      s.t+=dt; s.vy+=520*dt; s.y+=s.vy*dt; s.rot+=s.spin*dt;
+      if(s.y>S.h+60) s.dead=true;
+      const a=s.t<0.1? s.t/0.1:1;
+      S.ctx.globalAlpha=Math.min(1,a);
+      blob(S.ctx,s);
+      S.ctx.globalAlpha=1;
+    }
+    for(let i=shapes.length-1;i>=0;i--) if(shapes[i].dead) shapes.splice(i,1);
+    if(shapes.length>60) shapes.splice(0,shapes.length-60);
+  }
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ for(let i=0;i<KEYS.length;i++) press(i); for(let k=0;k<30;k++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

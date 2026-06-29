@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A glowing amber rope sags and sways under invisible rolling weights on dark brown, simulated with verlet physics; drag to disturb it.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Verlet Rope Bridge</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#161108;}
+  #vrb-c{display:block;width:100%;height:100%;cursor:crosshair;}
+  .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.16em;color:#f0c248;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="vrb-c"></canvas>
+<div class="cap">Verlet Rope Bridge</div>
+<script>
+(function(){
+  const cv=document.getElementById('vrb-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,N,pts,rest,pegL,pegR;
+  const GRAV=0.32, ITER=14, DAMP=0.985;
+  const weights=[]; // invisible rolling loads
+
+  function build(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    N=Math.max(22,Math.round(W/14));
+    const padX=W*0.10, y0=H*0.30;
+    pegL={x:padX,y:y0}; pegR={x:W-padX,y:y0+H*0.06};
+    pts=[];
+    for(let i=0;i<N;i++){
+      const t=i/(N-1);
+      const x=pegL.x+(pegR.x-pegL.x)*t;
+      const y=pegL.y+(pegR.y-pegL.y)*t;
+      pts.push({x,y,px:x,py:y});
+    }
+    rest=Math.hypot(pegR.x-pegL.x,pegR.y-pegL.y)/(N-1)*1.06;
+  }
+  addEventListener('resize',build);build();
+
+  function dropWeight(at){
+    weights.push({i:at,pos:0,vel:0.4+Math.random()*0.7,mass:1.6+Math.random()*2.6,life:1});
+  }
+  let timer=0;
+  function tick(){
+    // spawn occasional invisible loads that roll across
+    if(timer<=0){ dropWeight(reduce?0:(2+Math.random()*(N-4)|0)); timer=120+Math.random()*150; }
+    timer--;
+    // verlet integrate
+    for(let i=1;i<N-1;i++){
+      const p=pts[i];
+      let vx=(p.x-p.px)*DAMP, vy=(p.y-p.py)*DAMP;
+      p.px=p.x; p.py=p.y;
+      p.x+=vx; p.y+=vy+GRAV;
+    }
+    // apply rolling weights as downward impulses
+    for(let w of weights){
+      w.pos+=w.vel; w.i=w.pos|0;
+      if(w.i<1||w.i>=N-1){ w.life=0; continue; }
+      const p=pts[w.i], frac=w.pos-w.i;
+      p.y+=w.mass*(1-frac);
+      if(w.i+1<N-1) pts[w.i+1].y+=w.mass*frac;
+    }
+    for(let k=weights.length-1;k>=0;k--) if(!weights[k].life) weights.splice(k,1);
+    // constraint relaxation
+    for(let it=0;it<ITER;it++){
+      pegL.y=pts[0].y=pegL.y; pts[0].x=pegL.x; pts[0].y=pegL.y;
+      pts[N-1].x=pegR.x; pts[N-1].y=pegR.y;
+      for(let i=0;i<N-1;i++){
+        const a=pts[i],b=pts[i+1];
+        let dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||0.001;
+        const diff=(d-rest)/d*0.5;
+        const ox=dx*diff,oy=dy*diff;
+        const wa=(i===0)?0:1, wb=(i+1===N-1)?0:1, tot=wa+wb||1;
+        a.x+=ox*(wa/tot); a.y+=oy*(wa/tot);
+        b.x-=ox*(wb/tot); b.y-=oy*(wb/tot);
+      }
+    }
+  }
+
+  function draw(){
+    // trail fade
+    ctx.fillStyle='rgba(22,17,8,0.30)';ctx.fillRect(0,0,W,H);
+    // rope as glowing strand + shadow
+    ctx.lineCap='round';ctx.lineJoin='round';
+    // soft under-glow
+    ctx.strokeStyle='rgba(240,194,72,0.10)';ctx.lineWidth=7;
+    ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+    for(let i=1;i<N;i++){const m=(pts[i-1].x+pts[i].x)/2,n=(pts[i-1].y+pts[i].y)/2;ctx.quadraticCurveTo(pts[i-1].x,pts[i-1].y,m,n);}
+    ctx.stroke();
+    // main rope, velocity-tinted segments
+    for(let i=1;i<N;i++){
+      const a=pts[i-1],b=pts[i];
+      const sp=Math.min(1,(Math.abs(b.y-b.py)+Math.abs(a.y-a.py))*0.16);
+      const r=240, g=194-sp*60, bl=72+sp*30;
+      ctx.strokeStyle='rgb('+r+','+(g|0)+','+(bl|0)+')';
+      ctx.globalAlpha=0.55+sp*0.45;
+      ctx.lineWidth=2+sp*1.6;
+      ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    // pegs
+    for(const pg of [pegL,pegR]){
+      ctx.fillStyle='#f0c248';ctx.beginPath();ctx.arc(pg.x,pg.y,4.5,0,7);ctx.fill();
+      ctx.strokeStyle='rgba(240,194,72,0.35)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(pg.x,pg.y,8,0,7);ctx.stroke();
+    }
+    // bright node where a weight presses
+    for(const w of weights){
+      if(w.i<1||w.i>=N-1)continue;
+      const p=pts[w.i];
+      const gr=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,10);
+      gr.addColorStop(0,'rgba(255,238,190,0.9)');gr.addColorStop(1,'rgba(240,194,72,0)');
+      ctx.fillStyle=gr;ctx.beginPath();ctx.arc(p.x,p.y,10,0,7);ctx.fill();
+    }
+  }
+
+  cv.addEventListener('pointermove',e=>{
+    const x=e.offsetX, t=(x-pegL.x)/(pegR.x-pegL.x);
+    const i=Math.round(t*(N-1));
+    if(i>0&&i<N-1){pts[i].y+=4;pts[i].x+=(e.movementX||0)*0.3;}
+  });
+  cv.addEventListener('pointerdown',e=>{
+    const i=Math.round(((e.offsetX-pegL.x)/(pegR.x-pegL.x))*(N-1));
+    dropWeight(Math.max(1,Math.min(N-2,i)));
+  });
+
+  let raf=0;
+  function frame(){ if(!reduce)tick(); draw(); raf=requestAnimationFrame(frame); }
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{if(reduce)return;document.hidden?stop():start();});
+  if(reduce){
+    ctx.fillStyle='#161108';ctx.fillRect(0,0,W,H);
+    for(let s=0;s<260;s++)tick(); // settle to a resting sag
+    weights.length=0; for(let s=0;s<40;s++)tick();
+    draw();
+  } else start();
+})();
+</script>
+</body>
+</html>

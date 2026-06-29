@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="An 8x8 grid of triangle pairs flips edge-on in a diagonal wave, revealing new Bauhaus primaries on each facet against near-black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Triangulate</title>
+<style>
+  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  #bh12-stage{position:fixed;inset:0;background:#101012}
+  #bh12-c{display:block;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="bh12-stage" role="img" aria-label="A modular grid of triangles flipping between Bauhaus primary colors in a diagonal wave.">
+  <canvas id="bh12-c"></canvas>
+</div>
+<div class="cap">Triangulate</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('bh12-stage');
+  var cv=document.getElementById('bh12-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // Bauhaus palette: red, blue, yellow, black/off-dark face shading.
+  var FACE=[
+    ['#e63329','#b3271f'], // red  (lit, shaded)
+    ['#1f54b3','#163c80'], // blue
+    ['#f0c419','#c79e10'], // yellow
+    ['#16161a','#0c0c0f']  // near-black
+  ];
+  var BG='#101012';
+
+  // Grid of triangle pairs. Cap cells well under budget.
+  var COLS=8, ROWS=8; // 64 cells, each = 2 triangles -> 128 tris drawn, no per-frame objects
+  var W=0,H=0,DPR=1,cell=0,ox=0,oy=0;
+
+  // Per-cell phase offset (diagonal wave) + base color index. Typed arrays, set once.
+  var N=COLS*ROWS;
+  var phase=new Float32Array(N);
+  var baseHue=new Uint8Array(N);
+  (function init(){
+    var i=0;
+    for(var r=0;r<ROWS;r++){
+      for(var c=0;c<COLS;c++){
+        phase[i]=(c+r)*0.55;            // diagonal travelling wave
+        baseHue[i]=(c*2+r*3)&3;          // structured primary distribution
+        i++;
+      }
+    }
+  })();
+
+  function resize(){
+    var w=stage.clientWidth, h=stage.clientHeight;
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,Math.round(w*DPR));
+    H=Math.max(1,Math.round(h*DPR));
+    cv.width=W; cv.height=H;
+    var span=Math.min(W,H);
+    cell=Math.floor(span/COLS);
+    ox=Math.floor((W-cell*COLS)/2);
+    oy=Math.floor((H-cell*ROWS)/2);
+  }
+
+  // Draw one cell as two right triangles split on a diagonal.
+  // flip in [0,1]: 0 = lit faces forward, ~0.5 = edge-on (thin), 1 = back faces.
+  function drawCell(cx,cy,s,hue,flip){
+    // Edge-on compression along X via cos -> simulates a physical flip about vertical axis.
+    var ang=flip*Math.PI;          // 0..PI
+    var sx=Math.cos(ang);          // 1 -> -1
+    var lit=sx>=0;
+    var w=Math.abs(sx)*s;          // visible width
+    var x0=cx+(s-w)/2;
+    var x1=x0+w;
+    var y0=cy, y1=cy+s;
+    // face brightness: front face uses lit color, back uses shaded; thin edge = dark seam
+    var pair=FACE[hue];
+    var col=lit?pair[0]:pair[1];
+    // upper-left triangle
+    ctx.fillStyle=col;
+    ctx.beginPath();
+    ctx.moveTo(x0,y0); ctx.lineTo(x1,y0); ctx.lineTo(x0,y1);
+    ctx.closePath(); ctx.fill();
+    // lower-right triangle gets the opposite shade for facet contrast
+    ctx.fillStyle=lit?pair[1]:pair[0];
+    ctx.beginPath();
+    ctx.moveTo(x1,y0); ctx.lineTo(x1,y1); ctx.lineTo(x0,y1);
+    ctx.closePath(); ctx.fill();
+  }
+
+  function frame(t){
+    // clear
+    ctx.fillStyle=BG;
+    ctx.fillRect(0,0,W,H);
+    var spd=0.0011*t;
+    var i=0;
+    for(var r=0;r<ROWS;r++){
+      var cy=oy+r*cell;
+      for(var c=0;c<COLS;c++){
+        var cx=ox+c*cell;
+        // travelling wave -> normalized flip 0..1 (full rotation feel, slow = seizure-safe)
+        var ph=spd - phase[i];
+        var f=(Math.sin(ph)+1)*0.5;       // 0..1 smooth, no strobing
+        // advance color one step each half-flip so faces reveal new primaries
+        var step=(ph/Math.PI)|0;
+        var hue=(baseHue[i]+step)&3;
+        drawCell(cx,cy,cell,hue,f);
+        i++;
+      }
+    }
+  }
+
+  function drawStatic(){
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    var i=0;
+    for(var r=0;r<ROWS;r++){
+      var cy=oy+r*cell;
+      for(var c=0;c<COLS;c++){
+        var cx=ox+c*cell;
+        var f=(Math.sin(-phase[i])+1)*0.5;
+        drawCell(cx,cy,cell,baseHue[i]&3,f);
+        i++;
+      }
+    }
+  }
+
+  var raf=0, running=false;
+  function loop(t){ if(!running)return; frame(t); raf=requestAnimationFrame(loop); }
+  function start(){ if(running)return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function boot(){
+    resize();
+    if(reduce){ drawStatic(); return; }
+    start();
+  }
+
+  window.addEventListener('resize',function(){
+    resize();
+    if(reduce){ drawStatic(); }
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden) stop(); else start();
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A glowing purple gradient blob slowly morphing between smooth organic shapes while gently rotating, with a soft radial halo.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Blob Morph</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0b0d12;display:grid;place-items:center}
+.ssa02-stage{position:relative;width:min(82vmin,560px);height:min(82vmin,560px)}
+.ssa02-stage svg{width:100%;height:100%;display:block;overflow:visible}
+#ssa02-blob{filter:drop-shadow(0 0 28px rgba(124,92,255,.42))}
+.ssa02-halo{opacity:.5}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#7c5cff;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+@media (prefers-reduced-motion:reduce){.ssa02-rot{animation:none!important}}
+.ssa02-rot{transform-box:fill-box;transform-origin:center;animation:ssa02-spin 38s linear infinite}
+@keyframes ssa02-spin{to{transform:rotate(360deg)}}
+</style></head><body>
+<div class="ssa02-stage" id="ssa02-stage" role="img" aria-label="An organic blob slowly morphing between smooth shapes">
+<svg viewBox="-150 -150 300 300" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<radialGradient id="ssa02-fill" cx="38%" cy="32%" r="78%">
+<stop offset="0%" stop-color="#b9a8ff"/>
+<stop offset="42%" stop-color="#7c5cff"/>
+<stop offset="100%" stop-color="#3a1f8a"/>
+</radialGradient>
+<radialGradient id="ssa02-glow" cx="50%" cy="50%" r="50%">
+<stop offset="0%" stop-color="#7c5cff" stop-opacity=".34"/>
+<stop offset="70%" stop-color="#7c5cff" stop-opacity="0"/>
+</radialGradient>
+</defs>
+<circle class="ssa02-halo" cx="0" cy="0" r="148" fill="url(#ssa02-glow)"/>
+<g class="ssa02-rot">
+<path id="ssa02-blob" fill="url(#ssa02-fill)"/>
+</g>
+</svg>
+</div>
+<div class="cap">Blob Morph</div>
+<script>(function(){
+  var path=document.getElementById('ssa02-blob');
+  var svg=document.querySelector('#ssa02-stage svg');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var N=9, R=104, TAU=Math.PI*2;
+  // Hand-tuned blob "personalities": per-vertex radius multipliers (length N).
+  var shapes=[
+    [1.00,0.78,1.14,0.86,1.06,0.74,1.18,0.82,0.98],
+    [0.86,1.16,0.80,1.10,0.78,1.20,0.84,1.04,0.92],
+    [1.20,0.92,1.02,1.18,0.84,0.96,1.10,0.78,1.14],
+    [0.92,1.06,0.74,0.98,1.22,0.82,0.94,1.16,0.80],
+    [1.10,0.84,1.20,0.78,1.02,1.14,0.76,1.08,0.96]
+  ];
+  // angular phase per vertex so points slowly drift, not just radius
+  var ang=new Array(N), drift=new Array(N);
+  for(var i=0;i<N;i++){ang[i]=i/N*TAU; drift[i]=(i%2?1:-1)*0.16;}
+  var pts=new Array(N);
+  function ease(t){return t*t*(3-2*t);} // smoothstep
+  // Catmull-Rom through points -> cubic bezier "d", closed loop
+  function build(){
+    var d='M'+pts[0][0].toFixed(2)+' '+pts[0][1].toFixed(2);
+    for(var i=0;i<N;i++){
+      var p0=pts[(i-1+N)%N],p1=pts[i],p2=pts[(i+1)%N],p3=pts[(i+2)%N];
+      var c1x=p1[0]+(p2[0]-p0[0])/6, c1y=p1[1]+(p2[1]-p0[1])/6;
+      var c2x=p2[0]-(p3[0]-p1[0])/6, c2y=p2[1]-(p3[1]-p1[1])/6;
+      d+='C'+c1x.toFixed(2)+' '+c1y.toFixed(2)+','+c2x.toFixed(2)+' '+c2y.toFixed(2)+','+p2[0].toFixed(2)+' '+p2[1].toFixed(2);
+    }
+    return d+'Z';
+  }
+  function frame(mults,wob){
+    for(var i=0;i<N;i++){
+      var r=R*mults[i]*(1+0.05*Math.sin(wob*1.7+i*1.9));
+      var a=ang[i]+drift[i]*Math.sin(wob*0.8+i);
+      pts[i]=[Math.cos(a)*r,Math.sin(a)*r];
+    }
+    path.setAttribute('d',build());
+  }
+  if(reduce){frame(shapes[0],0);return;}
+  var raf=0,t0=0,DUR=4200; // ms per shape transition
+  function loop(now){
+    if(!t0)t0=now;
+    var el=now-t0, idx=Math.floor(el/DUR)%shapes.length, nxt=(idx+1)%shapes.length;
+    var k=ease((el%DUR)/DUR);
+    var a=shapes[idx],b=shapes[nxt],m=new Array(N);
+    for(var i=0;i<N;i++)m[i]=a[i]+(b[i]-a[i])*k;
+    frame(m, now*0.001);
+    raf=requestAnimationFrame(loop);
+  }
+  raf=requestAnimationFrame(loop);
+  function vis(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0;} if(svg.pauseAnimations)svg.pauseAnimations();}
+    else{if(svg.unpauseAnimations)svg.unpauseAnimations(); if(!raf){t0=0;raf=requestAnimationFrame(loop);}}
+  }
+  document.addEventListener('visibilitychange',vis);
+})();</script>
+</body></html>

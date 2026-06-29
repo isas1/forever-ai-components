@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Tinder-style draggable card stack with emoji faces, LIKE/NOPE stamps, and a fling-away gesture revealing the next card.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swipe Cards</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1c1430;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  #wrap{position:fixed;inset:0;display:grid;place-items:center;cursor:grab;touch-action:none}
+  #stage{position:relative;width:54%;max-width:180px;aspect-ratio:.74}
+  .card{position:absolute;inset:0;border-radius:18px;display:grid;place-items:center;color:#fff;font-size:42px;box-shadow:0 14px 34px rgba(0,0,0,.4);will-change:transform}
+  .stamp{position:absolute;top:12px;font-size:13px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:6px;border:2px solid;opacity:0}
+  .like{right:12px;color:#42e6a4;border-color:#42e6a4;transform:rotate(12deg)}
+  .nope{left:12px;color:#ff5c7a;border-color:#ff5c7a;transform:rotate(-12deg)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div id="wrap"><div id="stage"></div></div>
+<div class="cap">Swipe stack</div>
+<script>
+const stage=document.getElementById('stage'),wrap=document.getElementById('wrap');
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const data=[['#ff8e5c','🌮'],['#5cc8ff','🐧'],['#c45cff','🎸'],['#5cffa0','🌴'],['#ffd45c','🍋']];
+let idx=0,cards=[];
+function build(){
+  stage.innerHTML='';cards=[];
+  for(let i=2;i>=0;i--){
+    const d=data[(idx+i)%data.length];
+    const c=document.createElement('div');c.className='card';c.style.background='linear-gradient(150deg,'+d[0]+','+shade(d[0])+')';
+    c.innerHTML='<span>'+d[1]+'</span><div class="stamp like">LIKE</div><div class="stamp nope">NOPE</div>';
+    const s=1-i*.06,y=i*10;c.style.transform='translateY('+y+'px) scale('+s+')';c.style.zIndex=10-i;c.dataset.depth=i;
+    stage.appendChild(c);cards.unshift(c);
+  }
+}
+function shade(h){return h.replace(/^#/,'#').slice(0,1)+h.slice(1);}
+function top(){return cards.find(c=>c.dataset.depth==='0');}
+let drag=null,sx=0,dx=0;
+function setT(c,x,extra){const r=x/12;c.style.transform='translate('+x+'px,0) rotate('+r+'deg)'+(extra||'');}
+function down(e){const t=top();if(!t)return;drag=t;sx=(e.touches?e.touches[0].clientX:e.clientX);dx=0;wrap.style.cursor='grabbing';stop();}
+function move(e){if(!drag)return;const x=(e.touches?e.touches[0].clientX:e.clientX);dx=x-sx;setT(drag,dx);
+  drag.querySelector('.like').style.opacity=Math.max(0,Math.min(1,dx/60));
+  drag.querySelector('.nope').style.opacity=Math.max(0,Math.min(1,-dx/60));}
+function up(){if(!drag)return;wrap.style.cursor='grab';if(Math.abs(dx)>50){fling(dx>0?1:-1);}else{drag.style.transition='transform .3s';setT(drag,0);drag.querySelector('.like').style.opacity=0;drag.querySelector('.nope').style.opacity=0;setTimeout(()=>{if(drag)drag.style.transition='';drag=null;loop();},300);}else drag=null;}
+function fling(dir){const c=drag||top();if(!c)return;drag=null;
+  c.animate([{transform:c.style.transform||'translate(0,0)'},{transform:'translate('+dir*400+'px,-40px) rotate('+dir*30+'deg)',opacity:0}],{duration:420,easing:'ease-in'}).onfinish=()=>{idx=(idx+1)%data.length;build();loop();};
+}
+wrap.addEventListener('mousedown',down);wrap.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
+wrap.addEventListener('touchstart',down,{passive:true});wrap.addEventListener('touchmove',move,{passive:true});wrap.addEventListener('touchend',up);
+let timer;
+function loop(){stop();if(reduce)return;timer=setTimeout(()=>{if(!drag){drag=top();fling(Math.random()>.5?1:-1);}},2000);}
+function stop(){clearTimeout(timer);}
+document.addEventListener('visibilitychange',()=>{document.hidden?stop():loop();});
+build();loop();
+</script>
+</body>
+</html>

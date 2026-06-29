@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Animated treemap of labelled rounded cells that smoothly resize and re-partition on each data update, breathing in alpha to encode shifting">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Treemap</title>
+<style>
+  :root{
+    --ch03-bg:#0a0d12; --ch03-acc:#5ad1a0;
+    --ch03-c0:#5ad1a0; --ch03-c1:#3a9c97; --ch03-c2:#2f6f8f;
+    --ch03-c3:#6f5ad1; --ch03-c4:#d18f5a; --ch03-c5:#c45a86;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%}
+  body{background:var(--ch03-bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+  .ch03-stage{position:fixed;inset:0;display:block}
+  #ch03-c{width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div class="ch03-stage" role="img"
+  aria-label="Animated treemap: a rectangle subdivides into nested cells sized by value; on each data update the cells smoothly resize and re-partition, growing and shrinking to encode shifting proportions.">
+  <canvas id="ch03-c"></canvas>
+</div>
+<div class="cap">Treemap</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv=document.getElementById('ch03-c'), ctx=cv.getContext('2d');
+  var PAL=['--ch03-c0','--ch03-c1','--ch03-c2','--ch03-c3','--ch03-c4','--ch03-c5'].map(function(v){
+    return getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  });
+  var W=0,H=0,DPR=1,PAD=0;
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    PAD=Math.max(10,Math.round(Math.min(W,H)*0.07));
+    layout();
+  }
+  window.addEventListener('resize',resize);
+
+  // ---- synthetic dataset: N categories, values drift over time ----
+  var N=7;
+  var vals=new Float64Array(N), targ=new Float64Array(N);
+  var seed=20260626;
+  function rnd(){ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }
+  function reseed(){ for(var i=0;i<N;i++){ targ[i]=0.4+rnd()*rnd()*6; } }
+  for(var i=0;i<N;i++){ vals[i]=0.4+rnd()*rnd()*6; }
+  reseed();
+
+  // cell rects (current + target), animated via lerp toward squarified target
+  var cx=new Float64Array(N), cy=new Float64Array(N), cw=new Float64Array(N), chh=new Float64Array(N);
+  var tx=new Float64Array(N), ty=new Float64Array(N), tw=new Float64Array(N), th=new Float64Array(N);
+  var order=new Int32Array(N); for(i=0;i<N;i++) order[i]=i;
+
+  // slice-dice: balance each split near half the value sum (keeps cells squarish)
+  function computeTarget(){
+    // sort indices by current target value desc
+    var ord=Array.prototype.slice.call(order).sort(function(a,b){ return targ[b]-targ[a]; });
+    var tot=0; for(var q=0;q<N;q++) tot+=targ[q];
+    recurse(ord,0,N,PAD,PAD,W-2*PAD,H-2*PAD,tot,0);
+  }
+  function recurse(ord,s,e,x,y,w,h,sum,depth){
+    var n=e-s;
+    if(n<=0) return;
+    if(n===1){ var k=ord[s]; tx[k]=x;ty[k]=y;tw[k]=w;th[k]=h; return; }
+    // split set into two groups near half the sum (balances squareness)
+    var half=sum/2, acc=0, mid=s;
+    for(var ii=s;ii<e;ii++){ if(acc+targ[ord[ii]]/2>=half && ii>s){ break; } acc+=targ[ord[ii]]; mid=ii+1; }
+    if(mid<=s) mid=s+1; if(mid>=e) mid=e-1;
+    var sumA=0; for(var a=s;a<mid;a++) sumA+=targ[ord[a]];
+    var frac=sumA/sum;
+    var g=Math.max(1.5,Math.min(w,h)*0.018); // gutter
+    if(w>=h){
+      var wa=(w-g)*frac;
+      recurse(ord,s,mid,x,y,wa,h,sumA,depth+1);
+      recurse(ord,mid,e,x+wa+g,y,w-wa-g,h,sum-sumA,depth+1);
+    }else{
+      var ha=(h-g)*frac;
+      recurse(ord,s,mid,x,y,w,ha,sumA,depth+1);
+      recurse(ord,mid,e,x,y+ha+g,w,h-ha-g,sum-sumA,depth+1);
+    }
+  }
+
+  function layout(){
+    computeTarget();
+    if(initLay){ for(var k=0;k<N;k++){ cx[k]=tx[k];cy[k]=ty[k];cw[k]=tw[k];chh[k]=th[k]; } }
+  }
+  var initLay=true;
+
+  // hex helpers for static depth tint (computed once, no per-frame filter)
+  function hex2rgb(h){ h=h.replace('#',''); return [parseInt(h.substr(0,2),16),parseInt(h.substr(2,2),16),parseInt(h.substr(4,2),16)]; }
+  var PR=PAL.map(hex2rgb);
+
+  var lastSwitch=0, period=2600, running=true, raf=0, t0=0;
+
+  function roundRect(x,y,w,h,r){
+    r=Math.min(r,w*0.5,h*0.5); if(r<0)r=0;
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  }
+
+  function draw(now){
+    var dt=now-t0; t0=now;
+    if(now-lastSwitch>period){ lastSwitch=now; reseed(); computeTarget(); }
+    // ease current values toward target value (drives label) + rects toward target rect
+    var k,e=Math.min(1,(dt||16)/170);
+    for(k=0;k<N;k++){
+      vals[k]+=(targ[k]-vals[k])*e;
+      cx[k]+=(tx[k]-cx[k])*e; cy[k]+=(ty[k]-cy[k])*e;
+      cw[k]+=(tw[k]-cw[k])*e; chh[k]+=(th[k]-chh[k])*e;
+    }
+    render(now);
+    if(running) raf=requestAnimationFrame(draw);
+  }
+
+  function render(now){
+    ctx.clearRect(0,0,W,H);
+    var r=Math.max(2,Math.min(W,H)*0.012);
+    var fontPx=Math.max(9,Math.round(Math.min(W,H)*0.032));
+    ctx.textBaseline='top';
+    for(var k=0;k<N;k++){
+      var x=cx[k],y=cy[k],w=cw[k],h=chh[k];
+      if(w<1||h<1) continue;
+      var p=PR[k%PR.length];
+      // subtle breathing alpha keyed to value rank (transform-cheap, alpha only)
+      var pulse= now? (0.86+0.14*Math.sin(now*0.0014+k*1.1)) : 1;
+      ctx.fillStyle='rgba('+p[0]+','+p[1]+','+p[2]+','+(0.18*pulse).toFixed(3)+')';
+      roundRect(x,y,w,h,r); ctx.fill();
+      // crisp border
+      ctx.lineWidth=1.25;
+      ctx.strokeStyle='rgba('+p[0]+','+p[1]+','+p[2]+',0.85)';
+      ctx.stroke();
+      // inner value bar — fills proportion of cell height, encodes share again subtly
+      var inset=Math.max(3,Math.min(w,h)*0.10);
+      var bw=w-inset*2;
+      if(bw>6 && h>fontPx*2){
+        // label
+        ctx.fillStyle='rgba('+p[0]+','+p[1]+','+p[2]+',0.95)';
+        ctx.font='700 '+fontPx+'px ui-monospace,Menlo,monospace';
+        var lbl=String.fromCharCode(65+k);
+        ctx.fillText(lbl,x+inset,y+inset);
+        // value readout
+        ctx.fillStyle='rgba(230,240,238,0.55)';
+        ctx.font='600 '+Math.max(8,fontPx*0.7)+'px ui-monospace,Menlo,monospace';
+        ctx.fillText(vals[k].toFixed(1),x+inset,y+inset+fontPx*1.05);
+      }
+    }
+  }
+
+  function drawOneFrame(){
+    initLay=true; layout();
+    render(0);
+  }
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){ running=false; if(raf) cancelAnimationFrame(raf); }
+    else if(!reduce){ if(!running){ running=true; t0=performance.now(); lastSwitch=t0; raf=requestAnimationFrame(draw); } }
+  });
+
+  function boot(){
+    resize();
+    if(reduce){ drawOneFrame(); return; }
+    initLay=true; layout(); initLay=false;
+    t0=performance.now(); lastSwitch=t0;
+    raf=requestAnimationFrame(draw);
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

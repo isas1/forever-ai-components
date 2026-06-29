@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Four labeled multicolor progress bars (ingest, transcode, index, publish) filling at staggered rates with a live N/4 complete counter.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Multi-Track</title>
+<style>
+  :root{
+    --pg08-bg:#0b0d12;
+    --pg08-accent:#7c5cff;
+    --pg08-c1:#7c5cff;
+    --pg08-c2:#22d3a6;
+    --pg08-c3:#ffb347;
+    --pg08-c4:#ff5c8a;
+    --pg08-track:#171b26;
+    --pg08-ink:#eef0f7;
+    --pg08-mute:#6f768c;
+  }
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    background:var(--pg08-bg); color:var(--pg08-ink);
+    font:500 14px/1.3 ui-sans-serif,system-ui,Inter,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  #pg08-stage{
+    position:fixed; inset:0; display:grid; place-items:center;
+    padding:clamp(16px,6vmin,52px);
+  }
+  #pg08-card{
+    width:min(82vmin,540px); display:flex; flex-direction:column;
+    gap:clamp(11px,3vmin,20px);
+  }
+  .pg08-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+  .pg08-title{
+    font:600 clamp(10px,2.3vmin,12px)/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.24em; text-transform:uppercase; color:var(--pg08-mute);
+  }
+  .pg08-tot{
+    font:600 clamp(11px,2.6vmin,14px)/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.06em; color:var(--pg08-ink); font-variant-numeric:tabular-nums;
+  }
+  .pg08-tot b{color:var(--pg08-mute); font-weight:600}
+  /* one row per track */
+  .pg08-row{display:grid; grid-template-columns:1fr auto; align-items:center;
+    column-gap:clamp(8px,2vmin,14px); row-gap:6px}
+  .pg08-name{
+    grid-column:1; font:600 clamp(9px,2vmin,11px)/1 ui-monospace,Menlo,monospace;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--pg08-mute);
+  }
+  .pg08-val{
+    grid-column:2; text-align:right; font-variant-numeric:tabular-nums;
+    font:600 clamp(9px,2vmin,11px)/1 ui-monospace,Menlo,monospace;
+    color:var(--pg08-ink); letter-spacing:.04em;
+  }
+  .pg08-val.done{color:var(--c)}
+  .pg08-bar{
+    grid-column:1 / -1; position:relative; height:clamp(7px,2vmin,11px);
+    border-radius:999px; background:var(--pg08-track);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.045);
+    overflow:hidden;
+  }
+  .pg08-fill{
+    position:absolute; inset:0; border-radius:inherit;
+    transform-origin:left center; transform:scaleX(0);
+    background:linear-gradient(90deg,color-mix(in srgb,var(--c) 72%,#000) 0%,var(--c) 100%);
+    box-shadow:0 0 14px -3px var(--c);
+    will-change:transform;
+  }
+  /* static tick marks at 25/50/75 — never repaint */
+  .pg08-bar::after{
+    content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+    background:repeating-linear-gradient(90deg,transparent 0,transparent calc(25% - 1px),
+      rgba(11,13,18,.85) calc(25% - 1px),rgba(11,13,18,.85) 25%);
+  }
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="pg08-stage">
+    <div id="pg08-card" role="img" aria-label="Four parallel progress tracks completing at different rates">
+      <div class="pg08-head">
+        <span class="pg08-title">Multi-Track</span>
+        <span class="pg08-tot" id="pg08-tot">0<b>/4 complete</b></span>
+      </div>
+      <div id="pg08-rows"></div>
+    </div>
+  </div>
+  <div class="cap">Multi-Track</div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var rows = document.getElementById('pg08-rows');
+  var totEl = document.getElementById('pg08-tot');
+
+  // four tracks: name, color, completion rate (units/sec), with stagger
+  var TRACKS = [
+    {n:'INGEST',    c:'var(--pg08-c1)', rate:0.260, t0:0.00},
+    {n:'TRANSCODE', c:'var(--pg08-c2)', rate:0.170, t0:0.30},
+    {n:'INDEX',     c:'var(--pg08-c3)', rate:0.340, t0:0.55},
+    {n:'PUBLISH',   c:'var(--pg08-c4)', rate:0.115, t0:0.10}
+  ];
+
+  // build DOM once
+  var fills = [], vals = [], prog = [], done = [];
+  for(var i=0;i<TRACKS.length;i++){
+    var t = TRACKS[i];
+    var row = document.createElement('div');
+    row.className = 'pg08-row';
+    row.setAttribute('role','progressbar');
+    row.setAttribute('aria-label', t.n);
+    row.setAttribute('aria-valuemin','0');
+    row.setAttribute('aria-valuemax','100');
+    row.setAttribute('aria-valuenow','0');
+    row.style.setProperty('--c', t.c);
+
+    var name = document.createElement('span');
+    name.className = 'pg08-name'; name.textContent = t.n;
+    var val = document.createElement('span');
+    val.className = 'pg08-val'; val.textContent = '0%';
+    var bar = document.createElement('div');
+    bar.className = 'pg08-bar';
+    var fill = document.createElement('div');
+    fill.className = 'pg08-fill';
+    bar.appendChild(fill);
+
+    row.appendChild(name); row.appendChild(val); row.appendChild(bar);
+    rows.appendChild(row);
+
+    fills.push(fill); vals.push(val); prog.push(0); done.push(false);
+    TRACKS[i].row = row;
+  }
+
+  function render(){
+    var nDone = 0;
+    for(var i=0;i<TRACKS.length;i++){
+      var p = prog[i];
+      var pct = (p*100)|0;
+      fills[i].style.transform = 'scaleX(' + p.toFixed(4) + ')';
+      vals[i].textContent = pct + '%';
+      TRACKS[i].row.setAttribute('aria-valuenow', pct);
+      var d = p >= 1;
+      if(d){
+        nDone++;
+        if(!done[i]){ done[i]=true; vals[i].classList.add('done'); vals[i].textContent='DONE'; }
+      }
+    }
+    totEl.firstChild.nodeValue = String(nDone);
+  }
+
+  if(reduce){
+    // single honest static frame: staggered, partway, none misleadingly full
+    prog[0]=0.78; prog[1]=0.46; prog[2]=1.00; prog[3]=0.33;
+    render();
+    return;
+  }
+
+  var running = true, raf = 0, last = 0, t = 0;
+  // loop duration cap; after all reach 100% hold, then reset for the demo cycle
+  var HOLD = 1.6, holdT = 0, holding = false;
+
+  function reset(){
+    for(var i=0;i<TRACKS.length;i++){ prog[i]=0; done[i]=false;
+      vals[i].classList.remove('done'); }
+    t = 0; holding = false; holdT = 0;
+  }
+
+  function frame(now){
+    if(!running) return;
+    if(!last) last = now;
+    var dt = (now - last) / 1000; last = now;
+    if(dt > 0.05) dt = 0.05; // clamp tab-switch jumps
+
+    if(holding){
+      holdT += dt;
+      if(holdT >= HOLD){ reset(); }
+    } else {
+      t += dt;
+      var allDone = true;
+      for(var i=0;i<TRACKS.length;i++){
+        var tk = TRACKS[i];
+        var local = t - tk.t0;
+        if(local > 0){
+          // ease-out: fast start, settle near 100 (no spring, honest)
+          var p = prog[i] + tk.rate * dt * (0.35 + 0.65*(1 - prog[i]));
+          prog[i] = p > 1 ? 1 : p;
+        }
+        if(prog[i] < 1) allDone = false;
+      }
+      if(allDone){ holding = true; holdT = 0; }
+    }
+    render();
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){
+      running = false;
+      if(raf){ cancelAnimationFrame(raf); raf = 0; }
+    } else if(!running){
+      running = true; last = 0;
+      raf = requestAnimationFrame(frame);
+    }
+  });
+})();
+</script>
+</body>
+</html>

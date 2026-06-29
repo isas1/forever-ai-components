@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Wind among the Leaves — Katsushika Hokusai. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wind among the Leaves</title>
+<style>
+  html,body{margin:0;height:100%;background:#aecbe4;overflow:hidden}
+  #hok07-stage{position:fixed;inset:0;width:100%;height:100%;background:linear-gradient(160deg,#aecbe4,#f3ead6 70%)}
+  #hok07-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .hok07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#1b3a6b;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="hok07-stage" role="img" aria-label="Wind among the leaves: ochre leaves and pale paper scraps stream on a flowing wind-field, tumbling and spinning across a sky-to-washi wash like Hokusai's gust at Ejiri.">
+  <canvas id="hok07-cv"></canvas>
+</div>
+<div class="hok07-cap">Wind among the Leaves</div>
+<script>
+(function(){
+  "use strict";
+  var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cv=document.getElementById('hok07-cv'); if(!cv) return;
+  var ctx=cv.getContext('2d');
+  var W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
+  var parts=[], t=0;
+  var palette=["#c98a3c","#d96a7a","#1b3a6b","#cda85a","#2e5c9a"];
+
+  function size(){
+    var r=cv.getBoundingClientRect(); W=Math.max(2,r.width); H=Math.max(2,r.height);
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0); seed();
+  }
+  function newLeaf(anywhere){
+    return {x:anywhere?Math.random()*W:-20, y:Math.random()*H, sz:5+Math.random()*9, rot:Math.random()*6.28,
+      vr:(Math.random()-0.5)*0.2, col:palette[(Math.random()*palette.length)|0],
+      kind:Math.random()<0.35?"paper":"leaf", spd:0.6+Math.random()*0.8};
+  }
+  function seed(){ parts=[]; var n=Math.min(110,Math.floor(W*0.10)); for(var i=0;i<n;i++) parts.push(newLeaf(true)); }
+  function field(x,y){ return Math.sin(y*0.012+t*0.6)*0.8 + Math.sin(x*0.008-t*0.4)*0.5 + Math.sin((x+y)*0.006+t)*0.3; }
+  function leafShape(p){
+    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+    ctx.fillStyle=p.col; ctx.strokeStyle="rgba(26,23,20,0.6)"; ctx.lineWidth=1;
+    if(p.kind==="paper"){
+      ctx.beginPath(); ctx.rect(-p.sz*0.7,-p.sz*0.5,p.sz*1.4,p.sz);
+      ctx.fillStyle="rgba(243,234,214,0.95)"; ctx.fill(); ctx.stroke();
+    } else {
+      ctx.beginPath(); ctx.moveTo(0,-p.sz); ctx.quadraticCurveTo(p.sz*0.8,0,0,p.sz); ctx.quadraticCurveTo(-p.sz*0.8,0,0,-p.sz); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0,-p.sz); ctx.lineTo(0,p.sz); ctx.strokeStyle="rgba(26,23,20,0.4)"; ctx.stroke();
+    }
+    ctx.restore();
+  }
+  function draw(){
+    t+=0.01;
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle="rgba(111,159,207,0.25)"; ctx.lineWidth=1;
+    for(var s=0;s<6;s++){
+      var yy=(s/6)*H+Math.sin(t+s)*10;
+      ctx.beginPath();
+      for(var xx=0;xx<W;xx+=12){ var ang=field(xx,yy); var oy=yy+Math.sin(ang)*8; if(xx===0)ctx.moveTo(xx,oy); else ctx.lineTo(xx,oy); }
+      ctx.stroke();
+    }
+    for(var i=0;i<parts.length;i++){
+      var p=parts[i]; var ang=field(p.x,p.y);
+      p.x += (1.4+Math.cos(ang)*0.6)*p.spd*1.6;
+      p.y += Math.sin(ang)*1.4*p.spd + Math.sin(t*2+i)*0.3;
+      p.rot += p.vr+0.01;
+      leafShape(p);
+      if(p.x>W+30||p.y>H+30||p.y<-30) parts[i]=newLeaf(false);
+    }
+  }
+
+  var raf=0, running=false;
+  function loop(){ if(!running) return; draw(); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  size();
+  var _rt;
+  window.addEventListener('resize', function(){ clearTimeout(_rt); _rt=setTimeout(function(){ size(); if(REDUCED) draw(); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', function(){ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(); } else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A row of stacked zigzag chevron bars in clashing Memphis colors springs and ripples up and down against a confetti-speckled background.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Zigzag Bounce</title>
+<style>
+  :root{
+    --mp03-bg:#141019;
+    --mp03-teal:#36d6c3;
+    --mp03-pink:#ff4f9a;
+    --mp03-yellow:#ffd23e;
+    --mp03-blue:#3b6dff;
+    --mp03-orange:#ff7a2f;
+  }
+  html,body{margin:0;height:100%}
+  body{background:var(--mp03-bg)}
+  .mp03-stage{
+    position:fixed;inset:0;overflow:hidden;background:var(--mp03-bg);
+    display:flex;align-items:center;justify-content:center;
+    font-family:ui-monospace,Menlo,monospace;
+  }
+  /* static confetti speckle (no repaint) */
+  .mp03-stage::before{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+    background:
+      radial-gradient(circle at 14% 22%, var(--mp03-yellow) 0 2.4px, transparent 3px),
+      radial-gradient(circle at 82% 16%, var(--mp03-pink) 0 2.4px, transparent 3px),
+      radial-gradient(circle at 30% 84%, var(--mp03-blue) 0 2.4px, transparent 3px),
+      radial-gradient(circle at 70% 72%, var(--mp03-orange) 0 2.4px, transparent 3px),
+      radial-gradient(circle at 50% 8%, var(--mp03-teal) 0 1.8px, transparent 3px);
+  }
+  /* squiggle accents in corners (static) */
+  .mp03-squig{position:absolute;width:54px;height:18px;opacity:.85;pointer-events:none}
+  .mp03-squig.a{top:18px;left:16px;color:var(--mp03-pink)}
+  .mp03-squig.b{bottom:42px;right:18px;color:var(--mp03-yellow);transform:rotate(180deg)}
+
+  .mp03-field{
+    position:relative;width:88%;max-width:560px;aspect-ratio:1/1;
+    display:flex;align-items:flex-end;justify-content:center;gap:4.5%;
+  }
+  /* each bar is a stack of zigzag chevrons; only transform animates */
+  .mp03-bar{
+    position:relative;width:13%;height:0;flex:0 0 auto;
+    will-change:transform;
+    transform:translateY(0);
+    animation:mp03-bounce 1100ms cubic-bezier(.18,1.5,.32,1) infinite;
+  }
+  .mp03-zig{
+    position:absolute;left:0;width:100%;
+    /* zigzag silhouette via clip-path chevron */
+    clip-path:polygon(0 35%,50% 0,100% 35%,100% 100%,50% 65%,0 100%);
+    box-shadow:0 0 14px rgba(54,214,195,.18); /* static glow, no repaint */
+  }
+  @keyframes mp03-bounce{
+    0%,100%{transform:translateY(2%)}
+    46%{transform:translateY(-58%)}
+    62%{transform:translateY(-52%)}
+  }
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    .mp03-bar{transform:translateY(-26%)!important}
+  }
+</style>
+</head>
+<body>
+  <div class="mp03-stage" role="img" aria-label="Memphis-style zigzag bars bouncing in springy rhythm against a confetti-speckled background">
+    <svg class="mp03-squig a" viewBox="0 0 54 18" fill="none" aria-hidden="true">
+      <path d="M2 9 Q9 1 16 9 T30 9 T44 9 T58 9" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+    </svg>
+    <div class="mp03-field" id="mp03-field" aria-hidden="true"></div>
+    <svg class="mp03-squig b" viewBox="0 0 54 18" fill="none" aria-hidden="true">
+      <path d="M2 9 Q9 1 16 9 T30 9 T44 9 T58 9" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="cap">Zigzag Bounce</div>
+
+<script>
+(function(){
+  "use strict";
+  var field=document.getElementById("mp03-field");
+  if(!field) return;
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  var palette=["--mp03-teal","--mp03-pink","--mp03-yellow","--mp03-blue","--mp03-orange"];
+  var N=7;                 // bar count (well under cap)
+  var chevHeights=[100,72,118,86,130,78,108]; // intrinsic bar heights in px-ish units
+  var phases=[0,0.32,0.14,0.46,0.08,0.38,0.22];
+
+  // Build bars + their stacked zigzag chevrons once. No per-frame allocation.
+  for(var i=0;i<N;i++){
+    var bar=document.createElement("div");
+    bar.className="mp03-bar";
+    bar.style.height=chevHeights[i]+"px";
+    // stagger the spring with negative delay so they ripple
+    bar.style.animationDelay=(-phases[i]*1100)+"ms";
+    if(reduce) bar.style.animation="none";
+
+    // stack 2-3 clashing chevrons per bar (Memphis color blocking)
+    var segs=2+(i%2);
+    var segH=chevHeights[i]/segs;
+    for(var s=0;s<segs;s++){
+      var z=document.createElement("div");
+      z.className="mp03-zig";
+      var c=palette[(i+s)%palette.length];
+      z.style.background="var("+c+")";
+      z.style.height=(segH*1.32)+"px";   // overlap so chevrons interlock
+      z.style.bottom=(s*segH)+"px";
+      z.style.zIndex=String(segs-s);
+      bar.appendChild(z);
+    }
+    field.appendChild(bar);
+  }
+
+  // Pause/resume the CSS animation on tab visibility (single control point).
+  function setState(state){
+    var bars=field.children, j;
+    for(j=0;j<bars.length;j++){ bars[j].style.animationPlayState=state; }
+  }
+  if(!reduce){
+    document.addEventListener("visibilitychange",function(){
+      setState(document.hidden?"paused":"running");
+    });
+  }
+})();
+</script>
+</body>
+</html>

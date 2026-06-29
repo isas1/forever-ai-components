@@ -1,0 +1,151 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Cyan concentric rings and radial particles bloom outward on bass beats from a breathing center dot, synth-driven with optional live mic.">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Beat Bloom</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#07080d;display:grid;place-items:center}
+#aav07-c{display:block;width:100%;height:100%}
+.aav07-live{position:fixed;right:8px;top:8px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.35);
+  border-radius:999px;padding:5px 9px;letter-spacing:.06em;cursor:pointer;opacity:.55;
+  transition:opacity .25s,background .25s;user-select:none}
+.aav07-live:hover{opacity:1;background:rgba(34,211,238,.18)}
+.aav07-live[data-on="1"]{background:#22d3ee;color:#07080d;opacity:1}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<canvas id="aav07-c" role="img" aria-label="Concentric rings blooming on bass peaks"></canvas>
+<button class="aav07-live" id="aav07-live" data-on="0" aria-label="Switch to live microphone input">&#9834; live</button>
+<div class="cap">Beat Bloom</div>
+<script>(function(){
+var cv=document.getElementById('aav07-c'),ctx=cv.getContext('2d'),btn=document.getElementById('aav07-live');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,cx=0,cy=0,R=0,dpr=1,raf=0,running=true,t0=performance.now();
+var ACC='#22d3ee';
+function size(){
+  dpr=Math.min(2,window.devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;cv.width=W*dpr;cv.height=H*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);cx=W/2;cy=H/2;R=Math.min(W,H)*0.5;
+}
+window.addEventListener('resize',size);size();
+
+// rings + particles (pre-allocated, capped)
+var NR=5,rings=[];for(var i=0;i<NR;i++)rings.push({r:0,a:0});
+var NP=64,P=[];for(var j=0;j<NP;j++)P.push({a:0,life:0,sp:0,ang:Math.random()*6.283,sz:0});
+
+// envelope follower state
+var env=0,thr=0.12,bloom=0,cool=0,lastHit=0;
+
+// ---- synth signal: sum of sines + slow LFO envelopes + smoothed noise ----
+var ph=[0,0,0,0],nz=0;
+function synthLevel(now){
+  var s=now/1000;
+  // a slow, breathing kick pattern at ~108bpm with swing-ish LFO gating
+  var beat=s*1.8;                          // beats
+  var gate=Math.pow(Math.max(0,Math.sin(beat*Math.PI)),6); // sharp pulse near each beat
+  var sub=0.5+0.5*Math.sin(s*0.37);        // slow loudness LFO
+  ph[0]+=0.12;ph[1]+=0.047;ph[2]+=0.21;
+  var body=0.55*Math.sin(ph[0])+0.3*Math.sin(ph[1])+0.15*Math.sin(ph[2]);
+  nz+=( (Math.random()*2-1) - nz)*0.15;    // smoothed noise
+  var lvl=gate*(0.6+0.4*sub)+0.06*Math.abs(body)+0.04*Math.abs(nz);
+  return lvl;
+}
+
+// ---- live audio path ----
+var live=false,an=null,freq=null;
+btn.addEventListener('click',function(){
+  if(live)return;
+  try{
+    var AC=window.AudioContext||window.webkitAudioContext;var ac=new AC();
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
+      var src=ac.createMediaStreamSource(stream);
+      an=ac.createAnalyser();an.fftSize=512;an.smoothingTimeConstant=0.6;
+      freq=new Uint8Array(an.frequencyBinCount);
+      src.connect(an);            // NEVER connect to destination (feedback)
+      live=true;btn.setAttribute('data-on','1');
+    }).catch(function(){btn.style.opacity=.3;});
+  }catch(e){btn.style.opacity=.3;}
+});
+function liveLevel(){
+  an.getByteFrequencyData(freq);
+  // bass band = lowest ~1/8 of bins
+  var n=Math.max(1,(freq.length>>3)),s=0;for(var i=0;i<n;i++)s+=freq[i];
+  return (s/n)/255;
+}
+
+function spawn(strength){
+  // ripple the rings outward
+  for(var i=0;i<NR;i++){rings[i].a=Math.min(1,rings[i].a+0.9);rings[i].r=R*0.06;}
+  // emit a handful of particles, scaled by strength
+  var k=Math.round(6+strength*8);
+  for(var j=0,c=0;j<NP&&c<k;j++){if(P[j].life<=0){var p=P[j];
+    p.life=1;p.ang=Math.random()*6.283;p.sp=(0.55+Math.random()*0.7)*(0.6+strength);
+    p.sz=1.6+Math.random()*2.2;c++;}}
+}
+
+function step(now){
+  if(!running)return;
+  var lvl=live?liveLevel():synthLevel(now);
+  // envelope follower: fast attack, slow release
+  env+= (lvl-env)*(lvl>env?0.6:0.06);
+  // adaptive threshold trails the envelope
+  thr+= (env-thr)*0.02;
+  var fire= env> thr*1.55 && env>0.18 && (now-lastHit)>140;
+  cool*=0.92;
+  if(fire&&cool<0.4){spawn(Math.min(1,(env-thr)/0.4));lastHit=now;cool=1;bloom=Math.min(1,bloom+0.6);}
+  bloom*=0.94;
+
+  ctx.clearRect(0,0,W,H);
+  // calm core: a steady breathing dot
+  var breathe=0.5+0.5*Math.sin(now/1400);
+  ctx.fillStyle='rgba(34,211,238,'+(0.10+0.10*breathe)+')';
+  ctx.beginPath();ctx.arc(cx,cy,R*(0.05+0.02*breathe)+bloom*R*0.04,0,6.283);ctx.fill();
+
+  // expanding rings
+  for(var i=0;i<NR;i++){var rg=rings[i];
+    if(rg.a>0.002){
+      rg.r+= (R*0.9-rg.r)*0.045 + 0.6;     // ease outward
+      rg.a*=0.955;
+      ctx.lineWidth=1.2+rg.a*1.6;
+      ctx.strokeStyle='rgba(34,211,238,'+(rg.a*0.7)+')';
+      ctx.beginPath();ctx.arc(cx,cy,rg.r,0,6.283);ctx.stroke();
+    }
+  }
+
+  // particles
+  for(var j=0;j<NP;j++){var p=P[j];if(p.life>0){
+    p.life-=0.018;var d=(1-p.life)*R*0.92*p.sp;
+    var px=cx+Math.cos(p.ang)*d,py=cy+Math.sin(p.ang)*d;
+    ctx.fillStyle='rgba(34,211,238,'+(p.life*0.9)+')';
+    ctx.beginPath();ctx.arc(px,py,p.sz*(0.4+p.life*0.8),0,6.283);ctx.fill();
+  }}
+
+  // subtle energy halo on bloom
+  if(bloom>0.02){
+    ctx.strokeStyle='rgba(34,211,238,'+(bloom*0.25)+')';
+    ctx.lineWidth=1;
+    ctx.beginPath();ctx.arc(cx,cy,R*0.34+bloom*R*0.1,0,6.283);ctx.stroke();
+  }
+
+  raf=requestAnimationFrame(step);
+}
+
+function staticFrame(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='rgba(34,211,238,.18)';
+  ctx.beginPath();ctx.arc(cx,cy,R*0.06,0,6.283);ctx.fill();
+  ctx.lineWidth=1.2;
+  for(var i=1;i<=3;i++){ctx.strokeStyle='rgba(34,211,238,'+(0.32/i)+')';
+    ctx.beginPath();ctx.arc(cx,cy,R*0.22*i,0,6.283);ctx.stroke();}
+}
+
+if(reduce){staticFrame();}else{raf=requestAnimationFrame(step);}
+
+function vis(){
+  if(reduce)return;
+  if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  else if(!running){running=true;raf=requestAnimationFrame(step);}
+}
+document.addEventListener('visibilitychange',vis);
+})();</script>
+</body></html>

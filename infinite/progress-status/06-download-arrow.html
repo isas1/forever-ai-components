@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Glowing violet download-arrow icon whose stroke fills with the live transfer percentage, settling into a tray and flipping to COMPLETE.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Download Fill</title>
+<style>
+  :root{
+    --pg06-bg:#0b0d12;
+    --pg06-accent:#7c5cff;
+    --pg06-accent-2:#a78bfa;
+    --pg06-track:#1b1e2b;
+    --pg06-ink:#e7e3ff;
+  }
+  html,body{margin:0;height:100%;background:var(--pg06-bg)}
+  .pg06-stage{
+    position:fixed;inset:0;display:grid;place-items:center;
+    background:var(--pg06-bg);
+    font-family:ui-monospace,Menlo,SFMono-Regular,monospace;
+    overflow:hidden;
+  }
+  .pg06-wrap{
+    width:46vmin;height:46vmin;max-width:300px;max-height:300px;
+    display:grid;place-items:center;position:relative;
+  }
+  .pg06-svg{width:100%;height:100%;display:block;overflow:visible}
+  /* static glow — never repaints */
+  .pg06-arrow-glow{filter:drop-shadow(0 0 14px rgba(124,92,255,.55))}
+  .pg06-track{fill:none;stroke:var(--pg06-track);stroke-width:5}
+  .pg06-fill{fill:none;stroke:var(--pg06-accent);stroke-width:5;stroke-linecap:round}
+  .pg06-tip{fill:var(--pg06-accent-2)}
+  /* readout */
+  .pg06-read{
+    position:absolute;left:50%;top:50%;
+    transform:translate(-50%,-50%);
+    color:var(--pg06-ink);text-align:center;pointer-events:none;
+    will-change:transform,opacity;
+  }
+  .pg06-pct{font-size:clamp(20px,7.2vmin,46px);font-weight:600;letter-spacing:.02em;line-height:1}
+  .pg06-lbl{margin-top:.5em;font-size:clamp(8px,2.2vmin,12px);letter-spacing:.22em;color:var(--pg06-accent-2);opacity:.8}
+  .pg06-done .pg06-lbl{color:#7bffcf}
+  /* baseline tray the arrow lands in */
+  .pg06-tray{fill:none;stroke:var(--pg06-track);stroke-width:5;stroke-linecap:round}
+  .pg06-tray-fill{fill:none;stroke:var(--pg06-accent);stroke-width:5;stroke-linecap:round;opacity:0}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div class="pg06-stage">
+  <div class="pg06-wrap" id="pg06-wrap"
+       role="progressbar" aria-label="Download Fill progress"
+       aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+    <svg class="pg06-svg" viewBox="0 0 120 120" aria-hidden="true">
+      <g class="pg06-arrow-glow">
+        <!-- arrow outline as a single path: shaft down + chevron head -->
+        <path class="pg06-track" id="pg06-track"
+              d="M60 14 L60 78 M38 58 L60 80 L82 58"/>
+        <path class="pg06-fill" id="pg06-fill"
+              d="M60 14 L60 78 M38 58 L60 80 L82 58"/>
+      </g>
+      <!-- landing tray -->
+      <path class="pg06-tray" d="M34 100 L86 100"/>
+      <path class="pg06-tray-fill" id="pg06-tray-fill" d="M34 100 L86 100"/>
+    </svg>
+    <div class="pg06-read" id="pg06-read">
+      <div class="pg06-pct" id="pg06-pct">0%</div>
+      <div class="pg06-lbl" id="pg06-lbl">TRANSFER</div>
+    </div>
+  </div>
+</div>
+<div class="cap">Download Fill</div>
+<script>
+(function(){
+  "use strict";
+  var wrap=document.getElementById('pg06-wrap');
+  var fill=document.getElementById('pg06-fill');
+  var trayFill=document.getElementById('pg06-tray-fill');
+  var pctEl=document.getElementById('pg06-pct');
+  var lblEl=document.getElementById('pg06-lbl');
+  var readEl=document.getElementById('pg06-read');
+
+  var LEN=fill.getTotalLength();
+  var TRAYLEN=trayFill.getTotalLength();
+  fill.style.strokeDasharray=LEN;
+  trayFill.style.strokeDasharray=TRAYLEN;
+  fill.style.strokeDashoffset=LEN;
+  trayFill.style.strokeDashoffset=TRAYLEN;
+
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  function paint(p){            /* p: 0..1 honest determinate progress */
+    var pct=Math.round(p*100);
+    fill.style.strokeDashoffset=(LEN*(1-p)).toFixed(2);
+    pctEl.textContent=pct+'%';
+    wrap.setAttribute('aria-valuenow',pct);
+    if(p>=1){
+      trayFill.style.opacity='1';
+      trayFill.style.strokeDashoffset='0';
+      lblEl.textContent='COMPLETE';
+      wrap.classList.add('pg06-done');
+    }else{
+      trayFill.style.opacity='0';
+      trayFill.style.strokeDashoffset=TRAYLEN;
+      lblEl.textContent='TRANSFER';
+      wrap.classList.remove('pg06-done');
+    }
+  }
+
+  if(reduce){ paint(0.66); return; }
+
+  /* eased determinate progress with brief hold-at-done, then reset — honest transfer loop */
+  var DURATION=3200, HOLD=1100, RESET=420, running=true, raf=0, t0=0;
+  function easeOutCubic(x){ var u=1-x; return 1-u*u*u; }
+
+  function frame(now){
+    if(!running)return;
+    if(!t0)t0=now;
+    var el=now-t0;
+    var total=DURATION+HOLD+RESET;
+    var cyc=el%total;
+    var p, bob=0;
+    if(cyc<DURATION){
+      p=easeOutCubic(cyc/DURATION);
+      bob=Math.sin(cyc/DURATION*Math.PI)*1.6;          /* settle bob, transform only */
+    }else if(cyc<DURATION+HOLD){
+      p=1;
+    }else{
+      var r=(cyc-DURATION-HOLD)/RESET;
+      p=1-r;                                           /* honest fade back to 0 */
+    }
+    readEl.style.transform='translate(-50%,calc(-50% + '+bob.toFixed(2)+'px))';
+    paint(p);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){ if(!running){running=true;t0=0;raf=requestAnimationFrame(frame);} }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden)stop(); else start();
+  });
+
+  raf=requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

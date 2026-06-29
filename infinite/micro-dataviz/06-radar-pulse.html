@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Six-axis teal radar chart on navy with grid rings, a pulsing animated polygon and a rotating sweep line, reshuffles on click.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Radar Pulse</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a1424;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  canvas{display:block;width:100%;height:100%}
+  .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
+    color:#52e0d4;opacity:.4;text-transform:uppercase}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">radar pulse</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  let W,H,DPR; const COL='#52e0d4';
+  const AX=6; let base=[],phase=0;
+  for(let i=0;i<AX;i++)base.push(0.4+Math.random()*0.5);
+  function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
+  let last=0,running=false;
+  function draw(t){
+    if(document.hidden){running=false;return}   // stop the loop while hidden (no reschedule)
+    last=t;if(!reduce)phase+=0.04;
+    ctx.clearRect(0,0,W,H);
+    const cx=W/2,cy=H/2, R=Math.min(W,H)*0.35;
+    const ang=i=>-Math.PI/2+Math.PI*2*i/AX;
+    // grid rings
+    ctx.strokeStyle='#ffffff12';ctx.lineWidth=1;
+    for(let r=1;r<=3;r++){ctx.beginPath();
+      for(let i=0;i<=AX;i++){const a=ang(i%AX),rr=R*r/3;const x=cx+Math.cos(a)*rr,y=cy+Math.sin(a)*rr;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+      ctx.closePath();ctx.stroke();}
+    // spokes
+    for(let i=0;i<AX;i++){const a=ang(i);ctx.beginPath();ctx.moveTo(cx,cy);
+      ctx.lineTo(cx+Math.cos(a)*R,cy+Math.sin(a)*R);ctx.stroke();}
+    // animated polygon
+    ctx.beginPath();
+    for(let i=0;i<=AX;i++){const k=i%AX;const a=ang(k);
+      const v=base[k]+(reduce?0:0.18*Math.sin(phase*1.3+k*1.7));
+      const rr=R*Math.max(0.1,Math.min(1,v));
+      const x=cx+Math.cos(a)*rr,y=cy+Math.sin(a)*rr;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+    ctx.closePath();
+    ctx.fillStyle=COL+'30';ctx.fill();
+    ctx.strokeStyle=COL;ctx.lineWidth=2;ctx.stroke();   // no per-frame canvas shadow (the fill carries the glow)
+    // vertices
+    for(let i=0;i<AX;i++){const a=ang(i);
+      const v=base[i]+(reduce?0:0.18*Math.sin(phase*1.3+i*1.7));
+      const rr=R*Math.max(0.1,Math.min(1,v));
+      ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr,2.6,0,7);ctx.fill();}
+    // sweep pulse
+    if(!reduce){const sa=phase*0.9%(Math.PI*2);
+      const g=ctx.createLinearGradient(cx,cy,cx+Math.cos(sa)*R,cy+Math.sin(sa)*R);
+      g.addColorStop(0,COL+'00');g.addColorStop(1,COL+'66');
+      ctx.strokeStyle=g;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx,cy);
+      ctx.lineTo(cx+Math.cos(sa)*R,cy+Math.sin(sa)*R);ctx.stroke();}
+    if(reduce){ running=false; return; }      // reduced-motion: draw one static frame, don't loop
+    raf();
+  }
+  function raf(){ running=true; requestAnimationFrame(draw); }
+  addEventListener('resize',()=>{ resize(); if(!running) requestAnimationFrame(draw); });
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden && !running && !reduce){ last=performance.now(); raf(); } });
+  cv.addEventListener('pointerdown',()=>{ for(let i=0;i<AX;i++)base[i]=0.4+Math.random()*0.5; if(!running) requestAnimationFrame(draw); });
+  resize();raf();
+})();
+</script>
+</body>
+</html>

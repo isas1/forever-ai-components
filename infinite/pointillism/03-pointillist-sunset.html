@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A glowing orange sun setting over dotted water, with shimmering reflections rendered as optically mixing colored points.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pointillist Sunset</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  #po03-stage{position:fixed;inset:0;display:block}
+  #po03-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="po03-stage" role="img" aria-label="A pointillist sunset: a glowing orange sun setting over dotted water, rendered in optically-mixing colored dots in the manner of Seurat and Signac.">
+  <canvas id="po03-c"></canvas>
+</div>
+<div class="cap">Pointillist Sunset</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('po03-c');
+  var ctx = cv.getContext('2d');
+  var stage = document.getElementById('po03-stage');
+
+  // Divisionist palette: warm sun touches + cool complementary water dots.
+  // Each "patch" of the scene mixes 3-4 hues optically. Stored as RGB triples.
+  var SKY_HI = [240,168,48];   // accent #f0a830
+  var SKY_LO = [122,72,128];   // violet dusk
+  var SUN    = [255,224,120];
+  var SUN_R  = [242,120,70];
+  var WATER_W= [232,150,64];   // warm reflection
+  var WATER_C= [44,86,128];    // cool deep
+  var WATER_T= [86,150,150];   // teal break
+
+  var W=0,H=0,DPR=1, horizon=0, cx=0, sunY=0, sunR=0;
+  var t=0, running=true, raf=0;
+
+  // ---- Static sky layer, rendered once per resize to an offscreen canvas. ----
+  // The sky never changes (it has no phase dependency), so we paint its dot
+  // lattice exactly once and blit it each frame with a single drawImage.
+  var sky = document.createElement('canvas');
+  var sctx = sky.getContext('2d');
+
+  // ---- Water shimmer layer. We rasterise the animated water dots straight
+  // into a reusable typed-array pixel buffer (single putImageData per frame),
+  // instead of thousands of per-dot ctx.arc fills. Geometry is precomputed
+  // once on resize; per frame we only recolour each dot in place. ----
+  var water = document.createElement('canvas');   // offscreen so we can alpha-composite
+  var wctx = water.getContext('2d');
+  var wImg=null, wBuf=null, wW=0, wH=0;   // ImageData + its Uint8ClampedArray
+  var wb={r:0,g:0,b:0};                    // scratch base colour (no per-frame alloc)
+  var wc={r:0,g:0,b:0};                    // scratch final colour
+  // Per-dot precomputed geometry/state (parallel typed arrays = no objects).
+  var dN=0;                                 // water dot count
+  var dPx=null,dPy=null,dR=null;            // device-px centre + radius
+  var dBaseR=null,dBaseG=null,dBaseB=null;  // static base water colour
+  var dRefl=null;                           // reflection weight 0..1
+  var dSp=null;                             // deterministic sparkle seed 0..1
+  var dWxK=null;                            // wx*0.04 wave phase constant
+  var dYK=null;                             // y2*0.09 wave constant
+
+  // small deterministic jitter
+  function rnd(s){ s=Math.sin(s)*43758.5453; return s-Math.floor(s); }
+
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = Math.round(stage.clientWidth);
+    H = Math.round(stage.clientHeight);
+    cv.width = Math.round(W*DPR);
+    cv.height= Math.round(H*DPR);
+    ctx.setTransform(1,0,0,1,0,0);
+    horizon = H*0.46;
+    cx = W*0.5;
+    sunR = Math.max(28, Math.min(W,H)*0.13);
+    sunY = horizon - sunR*0.15;
+    buildSky();
+    buildWater();
+  }
+
+  function mix3(out,a,b,k){
+    out.r = a[0]+(b[0]-a[0])*k;
+    out.g = a[1]+(b[1]-a[1])*k;
+    out.b = a[2]+(b[2]-a[2])*k;
+  }
+
+  // Paint the unchanging sky dot lattice once (device pixels).
+  function buildSky(){
+    sky.width = cv.width; sky.height = cv.height;
+    sctx.setTransform(DPR,0,0,DPR,0,0);
+    sctx.clearRect(0,0,W,H);
+    sctx.fillStyle = '#0d0f14';
+    sctx.fillRect(0,0,W,H);
+
+    var step = Math.max(7, Math.round(Math.min(W,H)/46));
+    var r = step*0.42;
+    var maxD = Math.min(W,H)*0.62;
+    var c = {r:0,g:0,b:0};
+    for(var y=-step; y<horizon; y+=step){
+      var row = Math.floor(y/step);
+      for(var x=-step; x<W+step; x+=step){
+        var col = Math.floor(x/step);
+        var ox = (row&1)?step*0.5:0;
+        var px = x+ox, py = y;
+        var vy = py/horizon;
+        var p = Math.max(0,vy); p = Math.pow(p,0.9);
+        mix3(c, SKY_LO, SKY_HI, p);
+        var dx=px-cx, dy=py-sunY, d=Math.sqrt(dx*dx+dy*dy);
+        var glow = Math.max(0, 1 - d/maxD); glow=glow*glow;
+        mix3(c, [c.r,c.g,c.b], SUN, glow*0.85);
+        if(d < sunR){
+          mix3(c, SUN, SUN_R, (d/sunR)*0.6);
+        } else if(d < sunR*1.22){
+          mix3(c, [c.r,c.g,c.b], SUN_R, 0.6);
+        }
+        var n = rnd(col*12.9898 + row*78.233);
+        if(n>0.78) mix3(c, [c.r,c.g,c.b], SKY_LO, 0.4);
+        else if(n<0.16) mix3(c, [c.r,c.g,c.b], SUN, 0.35);
+        var rad = r*(0.78+ n*0.5);
+        sctx.beginPath();
+        sctx.fillStyle = 'rgba('+(c.r|0)+','+(c.g|0)+','+(c.b|0)+',0.92)';
+        sctx.arc(px,py,rad,0,6.2832);
+        sctx.fill();
+      }
+    }
+  }
+
+  // Precompute water dot geometry + static fields once. The shimmer/sparkle
+  // colour is recomputed per frame, but positions/radii/base never change.
+  function buildWater(){
+    wW = cv.width; wH = cv.height;
+    water.width = wW; water.height = wH;
+    wImg = wctx.createImageData(wW, wH);
+    wBuf = wImg.data;
+
+    var step = Math.max(7, Math.round(Math.min(W,H)/46));
+    var r = step*0.42;
+
+    // First pass: count dots so we can size the typed arrays exactly.
+    var count=0, y2, x2, row2;
+    for(y2=horizon; y2<H+step; y2+=step){
+      for(x2=-step; x2<W+step; x2+=step) count++;
+    }
+    dN = count;
+    dPx=new Float32Array(dN); dPy=new Float32Array(dN); dR=new Float32Array(dN);
+    dBaseR=new Float32Array(dN); dBaseG=new Float32Array(dN); dBaseB=new Float32Array(dN);
+    dRefl=new Float32Array(dN); dSp=new Float32Array(dN);
+    dWxK=new Float32Array(dN); dYK=new Float32Array(dN);
+
+    var i=0, c={r:0,g:0,b:0};
+    for(y2=horizon; y2<H+step; y2+=step){
+      row2 = Math.floor((y2-horizon)/step);
+      var depth = (y2-horizon)/(H-horizon);
+      var colW = sunR*(0.5+depth*1.4);
+      for(x2=-step; x2<W+step; x2+=step){
+        var col2 = Math.floor(x2/step);
+        var ox2 = (row2&1)?step*0.5:0;
+        var wx = x2+ox2;
+        mix3(c, WATER_T, WATER_C, depth*0.85);
+        var off = Math.abs(wx-cx);
+        var refl = Math.max(0, 1 - off/colW);
+        dPx[i] = wx*DPR;
+        dPy[i] = y2*DPR;
+        dR[i]  = (r*(0.8 + rnd(col2*1.7+row2)*0.45))*DPR;
+        dBaseR[i]=c.r; dBaseG[i]=c.g; dBaseB[i]=c.b;
+        dRefl[i]=refl;
+        dSp[i]=rnd(col2*4.17+row2*9.31);   // base sparkle seed (frame-stable part)
+        dWxK[i]=wx*0.04;
+        dYK[i]=y2*0.09;
+        i++;
+      }
+    }
+  }
+
+  // Stamp a filled disc of colour (cr,cg,cb) at device-px centre (px,py)
+  // radius rad straight into the reusable pixel buffer. No allocation, no path.
+  function stampDot(px,py,rad,cr,cg,cb){
+    var x0 = px-rad, x1 = px+rad, y0 = py-rad, y1 = py+rad;
+    var ix0 = x0<0?0:(x0|0), ix1 = x1>=wW?wW-1:(x1|0);
+    var iy0 = y0<0?0:(y0|0), iy1 = y1>=wH?wH-1:(y1|0);
+    var rr = rad*rad;
+    var R = cr|0, G = cg|0, B = cb|0;
+    for(var yy=iy0; yy<=iy1; yy++){
+      var dy = yy-py; var dy2 = dy*dy;
+      var rowBase = yy*wW;
+      for(var xx=ix0; xx<=ix1; xx++){
+        var dx = xx-px;
+        if(dx*dx + dy2 <= rr){
+          var idx = (rowBase + xx)<<2;
+          wBuf[idx]   = R;
+          wBuf[idx+1] = G;
+          wBuf[idx+2] = B;
+          wBuf[idx+3] = 240;   // ~0.94 alpha, matching the original dot opacity
+        }
+      }
+    }
+  }
+
+  function draw(phase){
+    // Static sky: one blit.
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.clearRect(0,0,cv.width,cv.height);
+    ctx.drawImage(sky,0,0);
+
+    // Animated water: recolour every dot in place, stamp into the pixel
+    // buffer, then composite the buffer over the sky via one drawImage
+    // (putImageData would overwrite alpha and erase the sky beneath).
+    wBuf.fill(0);
+    var sparkOff = Math.floor(phase*2);
+    for(var i=0;i<dN;i++){
+      // shimmer waves: sinusoidal bands drifting with phase
+      var wave = Math.sin(dYK[i] - phase*1.6 + Math.sin(dWxK[i]+phase)*1.3);
+      var refl = dRefl[i];
+      var shimmer = refl * (0.5+0.5*wave);
+      // base water colour (precomputed) -> warm reflection by shimmer
+      var br=dBaseR[i], bg=dBaseG[i], bb=dBaseB[i];
+      var k = shimmer*0.7;            // (0.95-depth*0.3) folded into refl weighting
+      var cr = br+(WATER_W[0]-br)*k;
+      var cg = bg+(WATER_W[1]-bg)*k;
+      var cb = bb+(WATER_W[2]-bb)*k;
+      // frame-dependent sparkle seed
+      var sp = dSp[i] + sparkOff*0.001; sp = sp-(sp|0);
+      if(refl>0.25 && wave>0.7 && sp>0.6){
+        cr += (SUN[0]-cr)*0.6; cg += (SUN[1]-cg)*0.6; cb += (SUN[2]-cb)*0.6;
+      }
+      if(dSp[i]>0.86){
+        cr += (SKY_HI[0]-cr)*0.3; cg += (SKY_HI[1]-cg)*0.3; cb += (SKY_HI[2]-cb)*0.3;
+      } else if(dSp[i]<0.1){
+        cr += (30-cr)*0.4; cg += (40-cg)*0.4; cb += (70-cb)*0.4;
+      }
+      stampDot(dPx[i], dPy[i], dR[i], cr, cg, cb);
+    }
+    wctx.putImageData(wImg,0,0);
+    ctx.drawImage(water,0,0);
+  }
+
+  function loop(){
+    if(!running) return;
+    t += 0.016;
+    draw(t);
+    raf = requestAnimationFrame(loop);
+  }
+
+  function start(){
+    if(reduce){ draw(0.9); return; }   // one settled, on-brand frame
+    running = true;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(loop);
+  }
+
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ running=false; cancelAnimationFrame(raf); }
+    else if(!reduce){ start(); }
+  });
+
+  var rt;
+  window.addEventListener('resize', function(){
+    clearTimeout(rt);
+    rt = setTimeout(function(){
+      resize();
+      if(reduce){ draw(0.9); }
+    }, 120);
+  });
+
+  resize();
+  start();
+})();
+</script>
+</body>
+</html>

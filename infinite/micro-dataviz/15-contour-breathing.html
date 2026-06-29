@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Teal marching-squares contour map of drifting gaussian hills that pulse and breathe like a living topographic elevation field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contour Breathing</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#101820;}
+  #cb-c{display:block;width:100%;height:100%;}
+  .cb-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#7fe0d4;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="cb-c"></canvas>
+<div class="cb-cap">Contour Breathing</div>
+<script>
+(function(){
+  const cv=document.getElementById('cb-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,GW,GH,cell,field,px=0.5,py=0.5,pBoost=0;
+  // grid resolution scales with size; keep cells ~ constant px for crisp lines
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    const target=Math.max(14,Math.min(46,Math.round(Math.min(W,H)/12)));
+    cell=Math.min(W,H)/target;
+    GW=Math.ceil(W/cell)+1;GH=Math.ceil(H/cell)+1;
+    field=new Float32Array(GW*GH);
+  }
+  addEventListener('resize',size);size();
+
+  // animated scalar field: sum of drifting gaussian "hills" + low ripple
+  const hills=[];
+  for(let i=0;i<5;i++)hills.push({
+    px:Math.random(),py:Math.random(),
+    pa:Math.random()*6.283,sp:0.18+Math.random()*0.5,
+    rad:0.22+Math.random()*0.28,amp:0.7+Math.random()*0.9,
+    ox:0.12+Math.random()*0.22,oy:0.12+Math.random()*0.22
+  });
+
+  function buildField(t){
+    // hill centers orbit slowly
+    for(const h of hills){
+      h.cx=h.px+Math.cos(t*h.sp+h.pa)*h.ox;
+      h.cy=h.py+Math.sin(t*h.sp*0.83+h.pa)*h.oy;
+    }
+    const aspect=W/H;
+    for(let gy=0;gy<GH;gy++){
+      const ny=gy/(GH-1);
+      for(let gx=0;gx<GW;gx++){
+        const nx=gx/(GW-1);
+        let v=0;
+        for(const h of hills){
+          const dx=(nx-h.cx)*aspect,dy=ny-h.cy;
+          const d2=(dx*dx+dy*dy)/(h.rad*h.rad);
+          v+=h.amp*Math.exp(-d2)*(1+0.15*Math.sin(t*0.6+h.pa));
+        }
+        // breathing ripple so contours pulse in/out
+        v+=0.12*Math.sin((nx*5.1+ny*3.7)-t*0.9);
+        // pointer pushes a soft hill
+        const pdx=(nx-px)*aspect,pdy=ny-py;
+        v+=pBoost*Math.exp(-(pdx*pdx+pdy*pdy)/0.02);
+        field[gy*GW+gx]=v;
+      }
+    }
+  }
+
+  function lerp(a,b,va,vb,th){const d=vb-va;return d===0?a:a+(b-a)*((th-va)/d);}
+
+  // marching squares for one threshold -> stroke segments
+  function contour(th){
+    ctx.beginPath();
+    for(let gy=0;gy<GH-1;gy++){
+      for(let gx=0;gx<GW-1;gx++){
+        const i=gy*GW+gx;
+        const tl=field[i],tr=field[i+1],br=field[i+1+GW],bl=field[i+GW];
+        let c=0;
+        if(tl>th)c|=8; if(tr>th)c|=4; if(br>th)c|=2; if(bl>th)c|=1;
+        if(c===0||c===15)continue;
+        const x0=gx*cell,y0=gy*cell,x1=x0+cell,y1=y0+cell;
+        // edge crossing points
+        const T={x:lerp(x0,x1,tl,tr,th),y:y0};
+        const R={x:x1,y:lerp(y0,y1,tr,br,th)};
+        const B={x:lerp(x0,x1,bl,br,th),y:y1};
+        const L={x:x0,y:lerp(y0,y1,tl,bl,th)};
+        function seg(a,b){ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);}
+        switch(c){
+          case 1:case 14:seg(L,B);break;
+          case 2:case 13:seg(B,R);break;
+          case 3:case 12:seg(L,R);break;
+          case 4:case 11:seg(T,R);break;
+          case 5:seg(L,T);seg(B,R);break;
+          case 6:case 9:seg(T,B);break;
+          case 7:case 8:seg(L,T);break;
+          case 10:seg(T,R);seg(L,B);break;
+        }
+      }
+    }
+    ctx.stroke();
+  }
+
+  let t=0,raf=0;
+  function frame(){
+    t+=reduce?0:0.0125;
+    buildField(t);
+    pBoost*=0.95;
+    // soft trail so emerging/dying lines feel like breathing
+    ctx.fillStyle='rgba(16,24,32,0.42)';ctx.fillRect(0,0,W,H);
+    // dynamic field range -> evenly spaced thresholds
+    let mn=Infinity,mx=-Infinity;
+    for(let k=0;k<field.length;k++){const f=field[k];if(f<mn)mn=f;if(f>mx)mx=f;}
+    const span=Math.max(0.001,mx-mn),LINES=11;
+    for(let n=0;n<LINES;n++){
+      const fr=(n+0.5)/LINES, th=mn+fr*span;
+      // peaks brighter; tighter spacing reads as steeper elevation
+      const a=0.16+0.74*fr*fr;
+      ctx.strokeStyle='rgba(127,224,212,'+a.toFixed(3)+')';
+      ctx.lineWidth=fr>0.82?1.5:1;
+      contour(th);
+    }
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  cv.addEventListener('pointermove',e=>{
+    const r=cv.getBoundingClientRect();
+    px=(e.clientX-r.left)/W;py=(e.clientY-r.top)/H;pBoost=Math.min(1.4,pBoost+0.5);
+  });
+  cv.addEventListener('pointerdown',()=>{pBoost=Math.min(2,pBoost+1.2);});
+
+  if(reduce){ctx.fillStyle='#101820';ctx.fillRect(0,0,W,H);buildField(2.2);
+    let mn=Infinity,mx=-Infinity;for(let k=0;k<field.length;k++){const f=field[k];if(f<mn)mn=f;if(f>mx)mx=f;}
+    const span=Math.max(0.001,mx-mn),L=11;
+    for(let n=0;n<L;n++){const fr=(n+0.5)/L;ctx.strokeStyle='rgba(127,224,212,'+(0.16+0.74*fr*fr).toFixed(3)+')';
+      ctx.lineWidth=fr>0.82?1.5:1;contour(mn+fr*span);}
+  }else start();
+})();
+</script>
+</body>
+</html>

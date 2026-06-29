@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Glassy radially-symmetric diatom frustules with tessellated pores drift and slowly rotate in deep teal water, twinkling refractively.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tide Pool Diatoms</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#04161a;}
+  #tpd-c{display:block;width:100%;height:100%;}
+  .tpd-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#3fd6c0;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="tpd-c"></canvas>
+<div class="tpd-cap">Tide Pool Diatoms</div>
+<script>
+(function(){
+  const cv=document.getElementById('tpd-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ACC=[63,214,192];
+  let W,H,DPR,frust=[];
+  function rnd(a,b){return a+Math.random()*(b-a);}
+  function build(){
+    const m=Math.min(W,H);
+    frust=[];
+    // place a few drifting glassy skeletons; sizes scale with frame
+    const specs=[
+      {x:0.50,y:0.46,s:0.40,sym:9,rings:5,sp:1},
+      {x:0.20,y:0.22,s:0.20,sym:6,rings:4,sp:-1.4},
+      {x:0.80,y:0.74,s:0.24,sym:11,rings:5,sp:1.2},
+      {x:0.82,y:0.20,s:0.15,sym:7,rings:3,sp:-1.8},
+      {x:0.18,y:0.80,s:0.17,sym:8,rings:4,sp:1.6}
+    ];
+    specs.forEach(o=>{
+      frust.push({
+        cx:o.x*W, cy:o.y*H, R:o.s*m, sym:o.sym, rings:o.rings,
+        rot:Math.random()*Math.PI*2, sp:o.sp*0.00016, drift:Math.random()*Math.PI*2,
+        damp:rnd(0.012,0.03), phase:Math.random()*Math.PI*2
+      });
+    });
+  }
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    build();
+  }
+  addEventListener('resize',size);
+  let t=0,boost=0;
+  cv.addEventListener('pointermove',()=>{boost=Math.min(boost+0.25,1.4);});
+  function aRGBA(a){return 'rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+a+')';}
+
+  // one radially-symmetric frustule: mirrored phyllotaxis + tessellated pores
+  function drawFrustule(f){
+    const g=t*0.018+f.phase;
+    const breathe=1+Math.sin(g)*0.018;          // glass flex
+    const R=f.R*breathe;
+    ctx.save();
+    ctx.translate(f.cx + Math.cos(f.drift)*R*0.05, f.cy + Math.sin(f.drift*1.3)*R*0.05);
+    ctx.rotate(f.rot);
+    ctx.lineCap='round';ctx.lineJoin='round';
+
+    // cold refractive glow halo
+    const halo=ctx.createRadialGradient(0,0,R*0.2,0,0,R*1.18);
+    halo.addColorStop(0,aRGBA(0.10));
+    halo.addColorStop(0.6,aRGBA(0.05));
+    halo.addColorStop(1,aRGBA(0));
+    ctx.fillStyle=halo;ctx.beginPath();ctx.arc(0,0,R*1.18,0,6.2832);ctx.fill();
+
+    const seg=f.sym;
+    // concentric ring shells
+    for(let r=1;r<=f.rings;r++){
+      const rr=R*(r/f.rings);
+      ctx.beginPath();
+      for(let i=0;i<=seg*6;i++){
+        const a=i/(seg*6)*6.2832;
+        // scalloped edge -> tessellated valve outline
+        const scal=1+Math.cos(a*seg)*0.045*(r/f.rings);
+        const x=Math.cos(a)*rr*scal, y=Math.sin(a)*rr*scal;
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+      }
+      ctx.closePath();
+      ctx.lineWidth=Math.max(0.6,R*0.004);
+      ctx.strokeStyle=aRGBA(0.16+0.10*(1-r/f.rings));
+      ctx.stroke();
+    }
+    // radial mirrored ribs (phyllotaxis spokes), each side reflected
+    for(let s=0;s<seg;s++){
+      const a=s/seg*6.2832 + Math.sin(g*0.5)*0.01;
+      ctx.beginPath();ctx.moveTo(0,0);
+      ctx.lineTo(Math.cos(a)*R,Math.sin(a)*R);
+      ctx.lineWidth=Math.max(0.5,R*0.0035);
+      ctx.strokeStyle=aRGBA(0.22);
+      ctx.stroke();
+    }
+    // tessellated pores: areolae laid on a mirrored polar lattice
+    for(let r=1;r<f.rings;r++){
+      const rr=R*((r+0.5)/f.rings);
+      const count=seg*(r+1);
+      for(let i=0;i<count;i++){
+        const a=i/count*6.2832 + (r%2?Math.PI/count:0);
+        const x=Math.cos(a)*rr, y=Math.sin(a)*rr;
+        const pr=R*0.012*(1.4-r/f.rings);
+        const tw=0.45+0.45*Math.sin(g*1.6 + r*1.1 + i*0.7); // refractive twinkle
+        ctx.beginPath();ctx.arc(x,y,pr,0,6.2832);
+        ctx.fillStyle=aRGBA(0.10+tw*0.42);ctx.fill();
+      }
+    }
+    // central nucleus / raphe
+    ctx.beginPath();ctx.arc(0,0,R*0.07,0,6.2832);
+    ctx.fillStyle=aRGBA(0.32+0.18*Math.sin(g*2));ctx.fill();
+    ctx.beginPath();ctx.arc(0,0,R*0.12,0,6.2832);
+    ctx.lineWidth=Math.max(0.6,R*0.005);ctx.strokeStyle=aRGBA(0.5);ctx.stroke();
+    ctx.restore();
+  }
+
+  function frame(){
+    t+=reduce?0:1;
+    boost*=0.95;
+    // deep cold water with slow trails
+    ctx.fillStyle='rgba(4,22,26,0.16)';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='lighter';
+    frust.forEach(f=>{
+      if(!reduce) f.rot+=f.sp*(1+boost*4);
+      if(!reduce) f.drift+=f.damp*0.04;
+      drawFrustule(f);
+    });
+    ctx.globalCompositeOperation='source-over';
+    if(!reduce) raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  size();
+  if(reduce){ctx.fillStyle='#04161a';ctx.fillRect(0,0,W,H);frame();}
+  else{ctx.fillStyle='#04161a';ctx.fillRect(0,0,W,H);start();}
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Swan Duality — Hilma af Klint. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swan Duality</title>
+<style>
+  html,body{margin:0;height:100%;background:#1d1a24;overflow:hidden}
+  #afk03-stage{position:fixed;inset:0;width:100%;height:100%}
+  #afk03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .afk03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3eee4;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="afk03-stage" role="img" aria-label="Two abstract forms — one black, one white — circle and pour into one another, a homage to af Klint's symbolic Swan series: the union of opposites in slow rotation.">
+  <canvas id="afk03-cv"></canvas>
+</div>
+<div class="afk03-cap">Swan Duality</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('afk03-cv'); if(!cv) return;
+  const PAL={cream:'#f3eee4',ink:'#2a2730',rose:'#e3a9bd',lav:'#c3b3da',deep:'#1d1a24'};
+  function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width),h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr);c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), last=performance.now(), t=0;
+  function form(ctx,cx,cy,R,phase,fill,stroke){
+    ctx.beginPath();const steps=80;
+    for(let i=0;i<=steps;i++){
+      const a=(i/steps)*Math.PI*2;
+      const wob=1+0.16*Math.sin(a*2+phase)+0.09*Math.sin(a*3-phase*1.3);
+      const r=R*wob;
+      const x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r*0.82;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.closePath();ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=1.5;ctx.stroke();
+  }
+  function eye(ctx,cx,cy,r,c){ctx.fillStyle=c;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();}
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx,W=S.w,H=S.h, cx=W*0.5, cy=H*0.5;
+    ctx.fillStyle=PAL.deep;ctx.fillRect(0,0,W,H);
+    const R=Math.min(W,H)*0.20;
+    const orbit=R*1.05*(0.7+0.3*Math.sin(t*0.5));
+    const ang=t*0.5;
+    const wx=cx+Math.cos(ang)*orbit, wy=cy+Math.sin(ang)*orbit*0.6;
+    const bx=cx-Math.cos(ang)*orbit, by=cy-Math.sin(ang)*orbit*0.6;
+    ctx.strokeStyle=rgba(PAL.lav,0.18);ctx.lineWidth=1;
+    ctx.beginPath();ctx.ellipse(cx,cy,orbit+R*0.4,(orbit+R*0.4)*0.6,0,0,Math.PI*2);ctx.stroke();
+    form(ctx,wx,wy,R,t*1.1,rgba('#f3eee4',0.93),rgba(PAL.ink,0.5));
+    eye(ctx,wx+R*0.22,wy-R*0.1,2.6,PAL.ink);
+    form(ctx,bx,by,R,-t*1.1+1.5,rgba(PAL.ink,0.96),rgba('#f3eee4',0.6));
+    eye(ctx,bx-R*0.22,by-R*0.1,2.6,PAL.cream);
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*0.9);
+    g.addColorStop(0,rgba(PAL.rose,0.30));g.addColorStop(1,rgba(PAL.rose,0));
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*0.9,0,Math.PI*2);ctx.fill();
+  }
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

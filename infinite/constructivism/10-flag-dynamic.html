@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A red banner snaps and waves along a black diagonal strut with a white tick bar and Malevich-style square accent on black.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dynamic Flag</title>
+<style>
+  html,body{margin:0;height:100%;background:#0c0c0d;overflow:hidden}
+  #cv10-stage{position:fixed;inset:0;background:#0c0c0d}
+  #cv10-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
+</style>
+</head>
+<body>
+  <div id="cv10-stage" role="img" aria-label="Constructivist composition: a red banner snapping across diagonal struts on black, with bold slab lettering.">
+    <canvas id="cv10-c"></canvas>
+  </div>
+  <div class="cap">Dynamic Flag</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('cv10-stage');
+  var cv=document.getElementById('cv10-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // palette
+  var BG='#0c0c0d', RED='#d11f1f', RED2='#a8161a', WHT='#efe9df', BLK='#111012', INK='#1b1a1c';
+
+  var W=0,H=0,S=0,DPR=1;
+
+  // offscreen cache for the fully-static ground layer (built on resize, blitted per frame)
+  var groundCv=document.createElement('canvas');
+  var groundCtx=groundCv.getContext('2d');
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight; S=Math.min(W,H);
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    buildGround();
+  }
+
+  // render the static ground (gradient included) once into the offscreen cache
+  function buildGround(){
+    groundCv.width=cv.width; groundCv.height=cv.height;
+    groundCtx.setTransform(DPR,0,0,DPR,0,0);
+    drawStaticGround(groundCtx,W*0.5,H*0.5);
+  }
+
+  // diagonal axis (Constructivist dynamism)
+  var ANG=-0.62; // banner travels up-right
+  var COS=Math.cos(ANG), SIN=Math.sin(ANG);
+
+  // banner geometry: a quad swept along the diagonal, segmented for snap
+  var SEG=14;                 // ribbon segments (<=110 budget, tiny)
+  var phaseY=new Float32Array(SEG);
+  for(var i=0;i<SEG;i++) phaseY[i]=i*0.9;
+
+  function rot(px,py,cx,cy,c,s){ // rotate point about center -> [x,y] via out array
+    var dx=px-cx, dy=py-cy;
+    OUT[0]=cx+dx*c-dy*s; OUT[1]=cy+dx*s+dy*c;
+  }
+  var OUT=[0,0];
+
+  // draws the fully-static ground into the given context (called once per resize, never per frame)
+  function drawStaticGround(g2,cx,cy){
+    g2.fillStyle=BG; g2.fillRect(0,0,W,H);
+    // large black wedge (suprematist mass)
+    g2.save();
+    g2.translate(cx,cy); g2.rotate(ANG);
+    g2.fillStyle=BLK;
+    g2.beginPath();
+    g2.moveTo(-S*0.9,S*0.12); g2.lineTo(S*0.9,-S*0.04);
+    g2.lineTo(S*0.9,S*0.9); g2.lineTo(-S*0.9,S*0.9); g2.closePath(); g2.fill();
+    g2.restore();
+
+    // black diagonal strut the flag snaps from (the pole/axis)
+    g2.save();
+    g2.lineCap='butt';
+    g2.strokeStyle=INK; g2.lineWidth=Math.max(10,S*0.05);
+    g2.beginPath();
+    g2.moveTo(cx-COS*S*0.62, cy-SIN*S*0.62);
+    g2.lineTo(cx+COS*S*0.62, cy+SIN*S*0.62);
+    g2.stroke();
+    // bright accent strut just behind
+    g2.strokeStyle='#2a2a2d'; g2.lineWidth=Math.max(3,S*0.012);
+    g2.beginPath();
+    g2.moveTo(cx-COS*S*0.66 + SIN*S*0.05, cy-SIN*S*0.66 - COS*S*0.05);
+    g2.lineTo(cx+COS*S*0.5 + SIN*S*0.05, cy+SIN*S*0.5 - COS*S*0.05);
+    g2.stroke();
+    g2.restore();
+
+    // pivot disc (static, with baked radial — gradient allocated here, never in rAF)
+    var pr=S*0.052;
+    var grad=g2.createRadialGradient(cx-COS*S*0.5,cy-SIN*S*0.5,0,cx-COS*S*0.5,cy-SIN*S*0.5,pr*2.2);
+    grad.addColorStop(0,'#3a0a0a'); grad.addColorStop(1,'rgba(12,12,13,0)');
+    g2.fillStyle=grad;
+    g2.beginPath(); g2.arc(cx-COS*S*0.5,cy-SIN*S*0.5,pr*2.2,0,6.2832); g2.fill();
+    g2.fillStyle=WHT;
+    g2.beginPath(); g2.arc(cx-COS*S*0.5,cy-SIN*S*0.5,pr,0,6.2832); g2.fill();
+    g2.fillStyle=RED;
+    g2.beginPath(); g2.arc(cx-COS*S*0.5,cy-SIN*S*0.5,pr*0.5,0,6.2832); g2.fill();
+  }
+
+  // draw the banner ribbon in local diagonal space.
+  // t = animation phase; flag swept along +x of the rotated frame, waving in y.
+  function drawBanner(cx,cy,t){
+    var poleX=-S*0.5, poleEndX=S*0.46;     // along axis, local
+    var len=poleEndX-poleX;
+    var band=S*0.30;                        // banner thickness
+    var topY=-band*0.5, botY=band*0.5;
+
+    ctx.save();
+    ctx.translate(cx,cy); ctx.rotate(ANG);
+
+    // build top + bottom edge wave via segments
+    var k, x, w, ampBase=band*0.42;
+    // RED main body as one filled strip
+    ctx.beginPath();
+    for(k=0;k<=SEG;k++){
+      x=poleX+len*(k/SEG);
+      // amplitude grows toward the free end -> snapping cloth
+      w=Math.sin(phaseY[k%SEG]+t*4.0 - (k/SEG)*5.4)*ampBase*(k/SEG);
+      if(k===0) ctx.moveTo(x, topY+w*0.4); else ctx.lineTo(x, topY+w*0.4);
+    }
+    for(k=SEG;k>=0;k--){
+      x=poleX+len*(k/SEG);
+      w=Math.sin(phaseY[k%SEG]+t*4.0 - (k/SEG)*5.4)*ampBase*(k/SEG);
+      ctx.lineTo(x, botY+w*0.4);
+    }
+    ctx.closePath();
+    ctx.fillStyle=RED; ctx.fill();
+
+    // dark fold band (shaded valley) — drawn as a thin offset strip, static-color
+    ctx.beginPath();
+    for(k=0;k<=SEG;k++){
+      x=poleX+len*(k/SEG);
+      w=Math.sin(phaseY[k%SEG]+t*4.0 - (k/SEG)*5.4)*ampBase*(k/SEG);
+      var fy=topY+band*0.62+w*0.4;
+      if(k===0) ctx.moveTo(x,fy); else ctx.lineTo(x,fy);
+    }
+    for(k=SEG;k>=0;k--){
+      x=poleX+len*(k/SEG);
+      w=Math.sin(phaseY[k%SEG]+t*4.0 - (k/SEG)*5.4)*ampBase*(k/SEG);
+      ctx.lineTo(x, topY+band*0.78+w*0.4);
+    }
+    ctx.closePath();
+    ctx.fillStyle=RED2; ctx.fill();
+
+    // white slab bar riding the banner (propaganda type block) — clipped to body feel
+    ctx.save();
+    var bx=poleX+len*0.30, bw=len*0.40, by=topY+band*0.20, bh=band*0.24;
+    var wob=Math.sin(t*4.0-1.8)*ampBase*0.55;
+    ctx.translate(0,wob);
+    ctx.fillStyle=WHT;
+    ctx.fillRect(bx,by,bw,bh);
+    // black tick marks (constructivist rhythm) on the bar
+    ctx.fillStyle=BLK;
+    var ticks=5, tw=bw/(ticks*2);
+    for(var m=0;m<ticks;m++) ctx.fillRect(bx+ (m*2+0.5)*tw, by+bh*0.22, tw, bh*0.56);
+    ctx.restore();
+
+    // free-edge accent triangle (snap point)
+    var endW=Math.sin(phaseY[SEG-1]+t*4.0-5.0)*ampBase;
+    ctx.beginPath();
+    ctx.moveTo(poleEndX, topY+endW*0.4);
+    ctx.lineTo(poleEndX+len*0.10, (topY+botY)*0.5+endW*0.4);
+    ctx.lineTo(poleEndX, botY+endW*0.4);
+    ctx.closePath();
+    ctx.fillStyle=RED2; ctx.fill();
+
+    ctx.restore();
+  }
+
+  // foreground: bold black diagonal slab + white keyline (static, anchors composition)
+  function drawForeground(cx,cy){
+    ctx.save();
+    ctx.translate(cx,cy); ctx.rotate(ANG);
+    // thin white baseline along the axis
+    ctx.fillStyle=WHT;
+    ctx.fillRect(-S*0.5, S*0.40, S*0.96, Math.max(3,S*0.014));
+    // black square accent (Malevich nod) bottom-left of axis
+    ctx.fillStyle=BLK;
+    var q=S*0.10;
+    ctx.fillRect(-S*0.5, S*0.42+Math.max(3,S*0.014), q, q);
+    ctx.fillStyle=RED;
+    ctx.fillRect(-S*0.5+q*0.28, S*0.42+Math.max(3,S*0.014)+q*0.28, q*0.44, q*0.44);
+    ctx.restore();
+  }
+
+  function frame(cx,cy,t){
+    // blit the cached static ground (no allocation, no gradient build in the loop)
+    ctx.drawImage(groundCv,0,0,W,H);
+    drawBanner(cx,cy,t);
+    drawForeground(cx,cy);
+  }
+
+  var running=false, raf=0, start=0;
+  function loop(now){
+    if(!running) return;
+    if(!start) start=now;
+    var t=(now-start)/1000;
+    frame(W*0.5, H*0.5, t);
+    raf=requestAnimationFrame(loop);
+  }
+  function play(){ if(running)return; running=true; start=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size();
+    if(reduce){ frame(W*0.5,H*0.5,0.55); return; }
+    play();
+  }
+
+  var rt=0;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){
+      size();
+      if(reduce) frame(W*0.5,H*0.5,0.55);
+    },120);
+  });
+
+  document.addEventListener('visibilitychange',function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else play();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

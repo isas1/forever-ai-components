@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Honeycomb Repeat — William Morris. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Honeycomb Repeat</title>
+<style>
+  html,body{margin:0;height:100%;background:#1d3550;overflow:hidden}
+  #mor08-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mor08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mor08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe7d2;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mor08-stage" role="img" aria-label="A William Morris hexagonal tiling of botanical cells breathing across a deep indigo field — each hex a little garden of olive leaves, madder petals and an indigo berry, blossoms pulsing in waves like wind through a meadow.">
+  <canvas id="mor08-cv"></canvas>
+</div>
+<div class="mor08-cap">The Honeycomb Repeat</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mor08-cv'); if(!cv) return;
+  const PAL={indigoDeep:'#1d3550',indigo:'#2c4a6e',olive:'#6b7233',madder:'#a8392b',gold:'#c2a14a',ink:'#23301f'};
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const R=44;
+
+  function hexPath(ctx,cx,cy,r){
+    ctx.beginPath();
+    for(let i=0;i<6;i++){const a=Math.PI/6+i*Math.PI/3;const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+    ctx.closePath();
+  }
+  function cellMotif(ctx,cx,cy,r,pulse){
+    const open=0.5+0.5*pulse;
+    ctx.save();ctx.translate(cx,cy);
+    for(let i=0;i<3;i++){
+      ctx.save();ctx.rotate(i*Math.PI*2/3+0.4);
+      ctx.beginPath();ctx.moveTo(0,0);ctx.quadraticCurveTo(r*0.3*open,-r*0.4,0,-r*0.7*open);ctx.quadraticCurveTo(-r*0.3*open,-r*0.4,0,0);ctx.closePath();
+      ctx.fillStyle=PAL.olive;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=1;ctx.stroke();ctx.restore();
+    }
+    for(let i=0;i<5;i++){
+      ctx.save();ctx.rotate(i*Math.PI*2/5);
+      ctx.beginPath();ctx.ellipse(0,-r*0.32*open,r*0.13,r*0.26*open,0,0,7);
+      ctx.fillStyle=PAL.madder;ctx.fill();ctx.strokeStyle=PAL.ink;ctx.lineWidth=0.8;ctx.stroke();ctx.restore();
+    }
+    ctx.beginPath();ctx.arc(0,0,r*0.16,0,7);ctx.fillStyle=PAL.indigo;ctx.fill();ctx.strokeStyle=PAL.gold;ctx.lineWidth=1.2;ctx.stroke();
+    ctx.restore();
+  }
+
+  let t=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx;ctx.fillStyle=PAL.indigoDeep;ctx.fillRect(0,0,S.w,S.h);
+    const dx=R*1.5, dy=R*Math.sqrt(3);
+    const cols=Math.ceil(S.w/dx)+2, rows=Math.ceil(S.h/dy)+2;
+    for(let c=-1;c<cols;c++)for(let r=-1;r<rows;r++){
+      const cx=c*dx, cy=r*dy+(c%2?dy/2:0);
+      hexPath(ctx,cx,cy,R-2);
+      ctx.strokeStyle='rgba(194,161,74,.28)';ctx.lineWidth=1.4;ctx.stroke();
+      ctx.fillStyle='rgba(44,74,110,.18)';ctx.fill();
+      const pulse=0.5+0.5*Math.sin(t*1.4-cx*0.012-cy*0.012);
+      cellMotif(ctx,cx,cy,R,pulse);
+    }
+  }
+
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

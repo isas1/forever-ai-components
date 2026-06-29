@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A pill magnifier icon elastically expands into a white search bar and types a query with a blinking caret, then collapses back.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Search Bar Morph</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#F4F4F5;}
+  .sbm-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+       font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;}
+  .sbm-bar{
+    position:relative;height:clamp(46px,13vw,66px);
+    display:flex;align-items:center;
+    background:#fff;border-radius:999px;
+    box-shadow:0 1px 2px rgba(15,23,42,.06),
+               inset 0 0 0 1px rgba(15,23,42,.04),
+               inset 0 2px 6px rgba(15,23,42,.05);
+    overflow:hidden;will-change:width;
+  }
+  .sbm-bar svg{position:absolute;left:50%;top:50%;overflow:visible;}
+  .sbm-glass{fill:none;stroke:#0EA5E9;stroke-linecap:round;}
+  .sbm-text{
+    position:absolute;white-space:nowrap;
+    font-size:clamp(15px,4.2vw,20px);color:#334155;font-weight:450;
+    letter-spacing:.005em;will-change:clip-path,opacity;
+  }
+  .sbm-text .sbm-ph{color:#94a3b8;}
+  .sbm-caret{
+    display:inline-block;width:2px;height:1.05em;vertical-align:-.16em;
+    margin-left:1px;background:#0EA5E9;border-radius:1px;
+  }
+  .sbm-cap{position:fixed;left:11px;bottom:9px;font:600 10px/1.2 ui-monospace,monospace;
+       letter-spacing:.14em;color:#0EA5E9;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<div class="sbm-stage">
+  <div class="sbm-bar" id="sbmBar">
+    <div class="sbm-text" id="sbmText"></div>
+    <svg id="sbmSvg" width="1" height="1">
+      <circle class="sbm-glass" id="sbmRing" cx="0" cy="0" r="0"></circle>
+      <line    class="sbm-glass" id="sbmHandle" x1="0" y1="0" x2="0" y2="0"></line>
+    </svg>
+  </div>
+</div>
+<div class="sbm-cap">Search Bar Morph</div>
+<script>
+(function(){
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const bar=document.getElementById('sbmBar'), svg=document.getElementById('sbmSvg'),
+        ring=document.getElementById('sbmRing'), handle=document.getElementById('sbmHandle'),
+        txt=document.getElementById('sbmText');
+  const QUERY="design that breathes";
+
+  // geometry tuned per current bar height
+  let H,R,SW,PAD,OPEN,CLOSED;
+  function geo(){
+    H=bar.offsetHeight;
+    SW=Math.max(2,H*0.052);                // stroke width
+    R =H*0.165;                            // magnifier ring radius
+    PAD=H*0.5;                             // horizontal inset to icon centre
+    CLOSED=H;                              // collapsed = a circle
+    OPEN=Math.min(innerWidth*0.86, H*8.6); // expanded width
+    handle.style.strokeWidth=ring.style.strokeWidth=SW+"px";
+  }
+  geo(); addEventListener('resize',()=>{geo();render(last);});
+
+  // elastic settle: overshoots then resolves to 1
+  function elastic(p){
+    if(p<=0)return 0; if(p>=1)return 1;
+    return 1 - Math.pow(2,-9*p)*Math.cos((p*4.0-0.55)*Math.PI*2)*0.86;
+  }
+  const ease=p=>p<.5?4*p*p*p:1-Math.pow(-2*p+2,3)/2;
+  const lerp=(a,b,t)=>a+(b-a)*t;
+
+  // ── state machine ───────────────────────────────────────────────
+  // o = openness 0..1 (eased width). The magnifier sits at left; as it
+  // opens the handle elongates into the bar's leading edge.
+  const PHASES=[
+    {name:'idle',  dur:1100},
+    {name:'open',  dur:780, elastic:true},
+    {name:'type',  dur:2600},
+    {name:'hold',  dur:1400},
+    {name:'close', dur:640},
+  ];
+  let pi=0,t0=performance.now(),last={o:0,type:0,caret:1};
+
+  function render(s){
+    last=s;
+    const W=lerp(CLOSED,OPEN,s.o);
+    bar.style.width=W+"px";
+
+    // icon centre travels from bar centre (closed) to left inset (open)
+    const cx=lerp(W/2, PAD, s.o);
+    // svg local origin sits at the bar centre; offset it to the icon centre
+    svg.style.left="50%"; svg.style.top="50%";
+    svg.style.transform="translate("+(cx-W/2)+"px,0)";
+
+    ring.setAttribute("r",R);
+    // handle: short stub when closed, stretches toward leading edge when open
+    const baseX=R*0.72, baseY=R*0.72;
+    const len=lerp(R*0.62, R*0.62, s.o); // diagonal stub stays constant
+    handle.setAttribute("x1",baseX);
+    handle.setAttribute("y1",baseY);
+    handle.setAttribute("x2",baseX+len*0.7071);
+    handle.setAttribute("y2",baseY+len*0.7071);
+
+    // text reveal: clip from left as letters are "typed"
+    const n=Math.round(QUERY.length*s.type);
+    const shown=QUERY.slice(0,n);
+    const showCaret=s.o>0.55;
+    txt.style.left=(PAD+R*1.85)+"px";
+    txt.style.opacity=s.o>0.42?((s.o-0.42)/0.58).toFixed(3):0;
+    txt.style.transform="translateY(-50%)";
+    txt.style.top="50%";
+    if(showCaret){
+      const ph=(n===0)?'<span class="sbm-ph">Search</span>':'';
+      txt.innerHTML=esc(shown)+ph+'<span class="sbm-caret" style="opacity:'+s.caret.toFixed(2)+'"></span>';
+    } else txt.innerHTML="";
+  }
+  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+
+  function tick(now){
+    const ph=PHASES[pi]; let p=(now-t0)/ph.dur; if(p>1)p=1;
+    let o=last.o, type=0, caret=1;
+    if(ph.name==='idle'){ o=0; }
+    else if(ph.name==='open'){ o=ph.elastic?elastic(p):ease(p); }
+    else if(ph.name==='type'){
+      o=1;
+      // letters land with a tiny stagger feel via eased progress
+      type=ease(Math.min(1,p*1.08));
+      caret=(Math.floor(now/520)%2)?1:0.15;
+    }
+    else if(ph.name==='hold'){ o=1; type=1; caret=(Math.floor(now/520)%2)?1:0.15; }
+    else if(ph.name==='close'){ o=1-ease(p); type=Math.max(0,1-p*1.6); caret=0; }
+    render({o,type,caret});
+    if(p>=1){ pi=(pi+1)%PHASES.length; t0=now; }
+    raf=requestAnimationFrame(tick);
+  }
+
+  let raf=0;
+  function start(){ if(!raf&&!reduce) raf=requestAnimationFrame(tick); }
+  function stop(){ cancelAnimationFrame(raf); raf=0; }
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  // click to re-trigger the open sequence
+  bar.addEventListener('click',()=>{ if(reduce)return; pi=1; t0=performance.now(); });
+
+  if(reduce){
+    // static resting frame: fully open, query in place
+    render({o:1,type:1,caret:1});
+  } else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A grove of flat indigo bamboo stalks sways with flickering leaves against a cream sky and low coral moon in woodblock style.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bamboo Sway</title>
+<style>
+  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  #uk07-stage{position:fixed;inset:0;width:100%;height:100%}
+  #uk07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="uk07-stage" role="img" aria-label="A stylised Japanese woodblock grove of flat indigo bamboo stalks swaying against a cream sky, a low coral moon, and small leaves flickering in the wind.">
+  <canvas id="uk07-c"></canvas>
+</div>
+<div class="cap">Bamboo Sway</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("uk07-c"), ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,dpr=1,running=false,raf=0,t=0;
+
+  // ukiyo-e palette
+  var SKY_T="#f0e3c6", SKY_B="#e8d5b0", MOON="#d96a4a", MOONI="#e89a6a",
+      MIST="#cdba93", FAR="#27506f", MID="#1c3a5e", NEAR="#13314f",
+      LEAF="#2f6e5a", LEAFD="#1f4f42", NODE="#0c151f", INK="#0a1019";
+
+  // bamboo culms (<=110 elements incl. leaves). 9 stalks, each w/ leaf cluster.
+  var N=9;
+  var sx=new Float32Array(N), sw=new Float32Array(N), sh=new Float32Array(N),
+      sph=new Float32Array(N), samp=new Float32Array(N), sdepth=new Float32Array(N);
+  // leaves: fixed pool attached to upper culms
+  var LN=N*4, lpar=new Int8Array(LN), lay=new Float32Array(LN),
+      lang=new Float32Array(LN), llen=new Float32Array(LN), lph=new Float32Array(LN);
+
+  function build(){
+    var i,j;
+    for(i=0;i<N;i++){
+      var u=i/(N-1);
+      sx[i]=0.07+u*0.86 + (i%2?0.012:-0.012);
+      sdepth[i]=(i%3)/2;                 // 0 far .5 mid 1 near
+      sw[i]=0.012+sdepth[i]*0.018;       // stalk half-width (norm of minDim)
+      sh[i]=0.62+((i*7)%5)*0.06;         // height fraction of H
+      sph[i]=i*0.83;
+      samp[i]=0.018+sdepth[i]*0.03;      // sway amplitude
+    }
+    for(j=0;j<LN;j++){
+      var p=j%N; lpar[j]=p;
+      lay[j]=0.18+((j*13)%5)*0.11;       // height up the culm (0 top..1 lower)
+      lang[j]=(j%2?1:-1)*(0.5+((j*5)%4)*0.22);
+      llen[j]=0.07+((j*3)%4)*0.018;
+      lph[j]=j*1.27;
+    }
+  }
+
+  // preallocated scratch (no per-frame allocation)
+  var SEG=8;
+  var pxA=new Float32Array(SEG+1), pyA=new Float32Array(SEG+1), pwA=new Float32Array(SEG+1);
+  var infoBase=new Float32Array(N), infoTop=new Float32Array(N), infoH=new Float32Array(N);
+  var ORDER=[0,3,6,1,4,7,2,5,8];
+
+  function resize(){
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+
+  function drawSky(){
+    var g=ctx.createLinearGradient(0,0,0,H);   // bokashi
+    g.addColorStop(0,SKY_T); g.addColorStop(0.62,SKY_B); g.addColorStop(1,MIST);
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // low coral moon, flat discs (static glow via stacked alpha discs)
+    var mx=W*0.74, my=H*0.30, mr=Math.min(W,H)*0.13;
+    ctx.fillStyle=MOONI; ctx.globalAlpha=.28;
+    ctx.beginPath(); ctx.arc(mx,my,mr*1.35,0,6.2832); ctx.fill();
+    ctx.globalAlpha=1; ctx.fillStyle=MOON;
+    ctx.beginPath(); ctx.arc(mx,my,mr,0,6.2832); ctx.fill();
+    ctx.fillStyle=MOONI; ctx.globalAlpha=.55;
+    ctx.beginPath(); ctx.arc(mx-mr*0.22,my-mr*0.22,mr*0.7,0,6.2832); ctx.fill();
+    ctx.globalAlpha=1;
+    // ground mist band
+    var gb=ctx.createLinearGradient(0,H*0.80,0,H);
+    gb.addColorStop(0,"rgba(19,49,79,0)"); gb.addColorStop(1,NEAR);
+    ctx.fillStyle=gb; ctx.fillRect(0,H*0.80,W,H*0.20);
+  }
+
+  // one culm: a slightly tapered swaying stalk w/ segment nodes
+  function drawCulm(i,tt){
+    var md=Math.min(W,H);
+    var baseX=sx[i]*W, baseY=H*1.02;
+    var topY=H*(1.02-sh[i]);
+    var w0=sw[i]*md, w1=w0*0.55;
+    var lean=Math.sin(tt*0.9+sph[i])*samp[i]*W;     // top horizontal lean
+    var gust=Math.sin(tt*2.2+sph[i]*1.7)*samp[i]*W*0.22;
+    var col= sdepth[i]<0.4?FAR : sdepth[i]<0.8?MID:NEAR;
+
+    // sample the bent centerline into shared scratch arrays
+    var k, ease, f, ww;
+    for(k=0;k<=SEG;k++){
+      f=k/SEG;                     // 0 base .. 1 top
+      ease=f*f;                    // more bend toward top
+      pxA[k]=baseX + ease*lean + (f*0.7)*gust;
+      pyA[k]=baseY + (topY-baseY)*f;
+      pwA[k]=w0+(w1-w0)*f;
+    }
+    // fill stalk as a ribbon (right side down, left side up)
+    ctx.beginPath();
+    ctx.moveTo(pxA[0]+pwA[0],pyA[0]);
+    for(k=1;k<=SEG;k++) ctx.lineTo(pxA[k]+pwA[k],pyA[k]);
+    for(k=SEG;k>=0;k--) ctx.lineTo(pxA[k]-pwA[k],pyA[k]);
+    ctx.closePath();
+    ctx.fillStyle=col; ctx.fill();
+    // bold ink edge
+    ctx.lineJoin="round"; ctx.lineCap="round";
+    ctx.strokeStyle=INK; ctx.lineWidth=Math.max(1.4,md*0.006);
+    ctx.stroke();
+    // segment nodes: short ink bands across the culm
+    ctx.strokeStyle=NODE; ctx.lineWidth=Math.max(2,md*0.009);
+    for(k=2;k<SEG;k+=2){
+      ctx.beginPath();
+      ctx.moveTo(pxA[k]-pwA[k]*1.05,pyA[k]);
+      ctx.lineTo(pxA[k]+pwA[k]*1.05,pyA[k]);
+      ctx.stroke();
+    }
+    infoBase[i]=baseX; infoTop[i]=topY; infoH[i]=baseY-topY;
+  }
+
+  // flat lance-leaf as a stroked spear
+  function drawLeaf(j,culmX,culmTop,culmH,tt){
+    var md=Math.min(W,H);
+    var p=lpar[j];
+    var f=1-lay[j];                          // up the stalk
+    var ax=culmX + Math.sin(tt*0.9+sph[p])*samp[p]*W*f*f; // follow lean approx
+    var ay=culmTop + culmH*lay[j];
+    var flick=Math.sin(tt*3.1+lph[j])*0.32;  // leaf flicker (rotation only)
+    var ang=lang[j]+flick;
+    var len=llen[j]*md;
+    var dx=Math.cos(ang), dy=Math.sin(ang)*0.6-0.35;
+    var nl=Math.hypot(dx,dy)||1; dx/=nl; dy/=nl;
+    var tipx=ax+dx*len, tipy=ay+dy*len;
+    var pxn=-dy, pyn=dx, ww=len*0.16;        // perpendicular for width
+    ctx.beginPath();
+    ctx.moveTo(ax,ay);
+    ctx.quadraticCurveTo(ax+dx*len*0.5+pxn*ww, ay+dy*len*0.5+pyn*ww, tipx,tipy);
+    ctx.quadraticCurveTo(ax+dx*len*0.5-pxn*ww, ay+dy*len*0.5-pyn*ww, ax,ay);
+    ctx.closePath();
+    ctx.fillStyle= (j%2)?LEAF:LEAFD; ctx.fill();
+    ctx.strokeStyle=INK; ctx.lineWidth=Math.max(1,md*0.0035); ctx.stroke();
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    drawSky();
+    // far to near so near stalks overlap leaves of far ones
+    var oi,i,j;
+    for(oi=0;oi<N;oi++){ i=ORDER[oi]; drawCulm(i,t); }
+    // leaves drawn after culms, near-depth last
+    for(oi=0;oi<N;oi++){
+      i=ORDER[oi];
+      for(j=0;j<LN;j++){ if(lpar[j]!==i) continue; drawLeaf(j,infoBase[i],infoTop[i],infoH[i],t); }
+    }
+  }
+
+  function loop(){
+    if(!running) return;
+    t+=0.016;
+    render();
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){ if(running)return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    build(); resize();
+    if(reduce){ t=0.6; render(); return; }
+    start();
+  }
+
+  window.addEventListener("resize",function(){ resize(); if(reduce)render(); },{passive:true});
+  document.addEventListener("visibilitychange",function(){
+    if(reduce) return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

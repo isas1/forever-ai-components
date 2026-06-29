@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Bright specular glints sweep diagonally across a glossy chrome plane and a chrome title bar over a neon vaporwave grid and starfield.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Glint Sweep</title>
+<style>
+  :root{--vw05-bg:#160a2a;--vw05-cyan:#22d3ee;--vw05-mag:#ff3df0}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;background:var(--vw05-bg);overflow:hidden}
+  .vw05-stage{position:fixed;inset:0;background:
+    radial-gradient(120% 80% at 50% -10%, #3a1466 0%, #160a2a 55%, #0c0518 100%);
+    overflow:hidden}
+  #vw05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div class="vw05-stage" role="img" aria-label="Specular glints sweeping across a glossy chrome plane over a neon vaporwave grid">
+  <canvas id="vw05-c"></canvas>
+</div>
+<div class="cap">Glint Sweep</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('vw05-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,DPR=1,running=false,raf=0,t0=0;
+
+  // glint definitions: phase offset, speed, width, brightness, hue mix (0=cyan,1=magenta)
+  var N=5;
+  var ph=[0.00,0.27,0.52,0.71,0.88];
+  var sp=[0.85,1.20,0.62,1.45,1.00];
+  var wd=[0.18,0.11,0.24,0.09,0.15];
+  var br=[1.00,0.62,0.78,0.50,0.85];
+  var hu=[0.10,0.85,0.45,0.95,0.20];
+
+  function size(){
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = Math.max(1,(W*DPR)|0);
+    cv.height = Math.max(1,(H*DPR)|0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  function mix(a,b,k){ return (a + (b-a)*k)|0; }
+
+  // draw the static scene (grid + horizon glow + plane base) plus glints for a given time
+  function drawScene(time){
+    ctx.clearRect(0,0,W,H);
+
+    var horizon = H*0.46;
+    var plY = horizon;                 // top of glossy plane
+    var plH = H - plY;
+
+    // --- glossy plane base (static vertical gradient, chrome lilac) ---
+    var pg = ctx.createLinearGradient(0,plY,0,H);
+    pg.addColorStop(0,'#2a1450');
+    pg.addColorStop(0.5,'#1b0d38');
+    pg.addColorStop(1,'#0c0620');
+    ctx.fillStyle = pg;
+    ctx.fillRect(0,plY,W,plH);
+
+    // --- perspective wireframe grid below horizon (static) ---
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0,plY,W,plH);
+    ctx.clip();
+    var cx = W*0.5;
+    ctx.lineWidth = 1;
+    // radiating verticals
+    ctx.strokeStyle = 'rgba(34,211,238,0.28)';
+    ctx.beginPath();
+    for(var i=-10;i<=10;i++){
+      var fx = cx + (W*0.085)*i;
+      ctx.moveTo(cx, plY);
+      ctx.lineTo(fx, H);
+    }
+    ctx.stroke();
+    // receding horizontals (exponential spacing)
+    ctx.strokeStyle = 'rgba(255,61,240,0.30)';
+    ctx.beginPath();
+    for(var j=1;j<=11;j++){
+      var f = j/11;
+      var gy = plY + plH*(f*f);
+      ctx.moveTo(0,gy);
+      ctx.lineTo(W,gy);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // --- horizon line glow (static layered strokes, no filter) ---
+    ctx.fillStyle = 'rgba(255,61,240,0.10)';
+    ctx.fillRect(0,horizon-9,W,18);
+    ctx.fillStyle = 'rgba(34,211,238,0.16)';
+    ctx.fillRect(0,horizon-2,W,4);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillRect(0,horizon-1,W,2);
+
+    // --- upper sky: faint starfield as static dots seeded deterministically ---
+    var s=12345;
+    function rnd(){ s=(s*1103515245+12345)&0x7fffffff; return s/0x7fffffff; }
+    ctx.fillStyle='rgba(255,255,255,0.7)';
+    for(var k=0;k<46;k++){
+      var sx=rnd()*W, sy=rnd()*horizon*0.92, sr=rnd()*1.1+0.2;
+      ctx.globalAlpha = 0.25+rnd()*0.5;
+      ctx.fillRect(sx,sy,sr,sr);
+    }
+    ctx.globalAlpha=1;
+
+    // --- the glints: bright diagonal bands sweeping across the plane ---
+    // each glint is a moving linear gradient band painted only over the plane.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0,plY,W,plH);
+    ctx.clip();
+    ctx.globalCompositeOperation = 'lighter';
+    var span = W*1.45;
+    for(var g=0;g<N;g++){
+      var p = (ph[g] + time*0.06*sp[g]) % 1;
+      var center = -W*0.22 + p*span;          // sweeps left -> right
+      var half = W*wd[g];
+      var skew = H*0.32;                        // diagonal lean
+      var x0 = center - half;
+      var x1 = center + half;
+      // angled band via gradient (top shifted by skew)
+      var lg = ctx.createLinearGradient(x0,plY, x1,H);
+      var r = mix(180,255,hu[g]);
+      var gn = mix(255, 120, hu[g]);
+      var b = mix(255, 245, hu[g]);
+      var a = br[g];
+      lg.addColorStop(0,'rgba('+r+','+gn+','+b+',0)');
+      lg.addColorStop(0.5,'rgba('+r+','+gn+','+b+','+(0.55*a)+')');
+      lg.addColorStop(0.5,'rgba(255,255,255,'+(0.85*a)+')');
+      lg.addColorStop(0.5,'rgba('+r+','+gn+','+b+','+(0.55*a)+')');
+      lg.addColorStop(1,'rgba('+r+','+gn+','+b+',0)');
+      ctx.fillStyle = lg;
+      ctx.fillRect(x0 - skew, plY, (x1-x0)+skew, plH);
+    }
+    ctx.restore();
+
+    // --- chrome title band reflecting glints: a glossy bar above horizon ---
+    var barY = horizon - Math.min(H*0.18, 78);
+    var barH = Math.min(H*0.14, 56);
+    var bg = ctx.createLinearGradient(0,barY,0,barY+barH);
+    bg.addColorStop(0,'#bff7ff');
+    bg.addColorStop(0.42,'#39c6e6');
+    bg.addColorStop(0.5,'#0e6e8c');
+    bg.addColorStop(0.58,'#7fe6ff');
+    bg.addColorStop(1,'#ff8df5');
+    ctx.save();
+    ctx.beginPath();
+    var bx = W*0.5, bw = Math.min(W*0.66, 320);
+    ctx.fillStyle = bg;
+    roundRect(ctx, bx-bw/2, barY, bw, barH, Math.min(barH*0.28,14));
+    ctx.fill();
+    // moving specular highlight on the chrome bar (clipped to bar)
+    ctx.clip();
+    ctx.globalCompositeOperation='lighter';
+    var hp = ((time*0.10)%1);
+    var hx = (bx-bw/2) + hp*(bw*1.4) - bw*0.2;
+    var hg = ctx.createLinearGradient(hx-bw*0.12,0,hx+bw*0.12,0);
+    hg.addColorStop(0,'rgba(255,255,255,0)');
+    hg.addColorStop(0.5,'rgba(255,255,255,0.85)');
+    hg.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=hg;
+    ctx.fillRect(bx-bw/2,barY,bw,barH);
+    ctx.restore();
+    // bar outline
+    ctx.lineWidth=1.5;
+    ctx.strokeStyle='rgba(255,255,255,0.35)';
+    roundRect(ctx, bx-bw/2, barY, bw, barH, Math.min(barH*0.28,14));
+    ctx.stroke();
+  }
+
+  function roundRect(c,x,y,w,h,r){
+    c.beginPath();
+    c.moveTo(x+r,y);
+    c.arcTo(x+w,y,x+w,y+h,r);
+    c.arcTo(x+w,y+h,x,y+h,r);
+    c.arcTo(x,y+h,x,y,r);
+    c.arcTo(x,y,x+w,y,r);
+    c.closePath();
+  }
+
+  function frame(ts){
+    if(!running) return;
+    if(!t0) t0=ts;
+    var time=(ts-t0)/1000;
+    drawScene(time);
+    raf=requestAnimationFrame(frame);
+  }
+
+  function start(){
+    if(running||reduce) return;
+    running=true; t0=0;
+    raf=requestAnimationFrame(frame);
+  }
+  function stop(){
+    running=false;
+    if(raf) cancelAnimationFrame(raf), raf=0;
+  }
+
+  function init(){
+    size();
+    if(reduce){ drawScene(2.4); return; }
+    start();
+  }
+
+  window.addEventListener('resize', function(){
+    size();
+    if(reduce) drawScene(2.4);
+  });
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden) stop();
+    else if(!reduce) start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

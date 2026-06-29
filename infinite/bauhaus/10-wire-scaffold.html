@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A thin-line box lattice of stacked square rings and gable triangles rotates in faux-3D, carrying primary circle, square and triangle solids.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wire Scaffold</title>
+<style>
+  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  #bh10-stage{position:fixed;inset:0;display:block}
+  #bh10-c{position:absolute;inset:0;width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="bh10-stage" role="img" aria-label="A thin-line geometric scaffold of circles, squares and triangles rotating slowly in faux three-dimensional space, in Bauhaus red, blue, yellow and black on a dark ground.">
+  <canvas id="bh10-c"></canvas>
+</div>
+<div class="cap">Wire Scaffold</div>
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('bh10-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,DPR=1,S=0,CX=0,CY=0;
+
+  // Palette — Bauhaus primaries + black on dark ground.
+  var RED='#e63329', BLUE='#2c4a9a', YEL='#f0c419', BLK='#0a0a0c', INK='#16161a';
+
+  // A modular scaffold: vertices of three stacked square rings (a box lattice),
+  // plus diagonal bracing. Defined in normalized 3D (-1..1), projected each frame.
+  // Vertices: 3 levels (y=-1,0,1), each a 4-corner ring on the x/z plane.
+  var VX=[], VY=[], VZ=[], N=0;
+  function pushV(x,y,z){VX[N]=x;VY[N]=y;VZ[N]=z;N++;}
+  var lvls=[-0.92,0,0.92], r=0.78, li;
+  for(li=0;li<3;li++){
+    var y=lvls[li];
+    pushV(-r,y,-r); pushV(r,y,-r); pushV(r,y,r); pushV(-r,y,r);
+  }
+  // central spine top + bottom for the triangle gables
+  pushV(0,-1.5,0); pushV(0,1.5,0);
+
+  // Edges: [a,b,colorIndex,weight]
+  var COLS=[RED,BLUE,YEL];
+  var E=[];
+  function edge(a,b,c,w){E.push(a,b,c,w);}
+  // ring edges (each of 3 levels)
+  for(li=0;li<3;li++){var o=li*4;edge(o,o+1,li,1);edge(o+1,o+2,li,1);edge(o+2,o+3,li,1);edge(o+3,o,li,1);}
+  // verticals between levels
+  for(var k=0;k<4;k++){edge(k,k+4,2,1);edge(k+4,k+8,0,1);}
+  // diagonal bracing (cross faces) — gives op rhythm
+  edge(0,5,2,0); edge(1,6,2,0); edge(2,7,2,0); edge(3,4,2,0);
+  edge(4,9,0,0); edge(5,10,0,0); edge(6,11,0,0); edge(7,8,0,0);
+  // gable spine triangles
+  edge(12,0,1,1); edge(12,1,1,1); edge(12,2,1,1); edge(12,3,1,1);
+  edge(13,8,0,1); edge(13,9,0,1); edge(13,10,0,1); edge(13,11,0,1);
+  var EN=E.length/4;
+
+  // projected scratch buffers (no per-frame alloc)
+  var PX=new Float32Array(N), PY=new Float32Array(N), PZ=new Float32Array(N);
+
+  // Bauhaus flat solids riding on the lattice corners — circle/square/triangle.
+  // Stride 4 per entry: [shapeKind, color, sizeFrac, vertexIndex]
+  // shapeKind: 0=circle 1=square 2=triangle. vertexIndex valid 0..13.
+  var SH=[
+    0, RED,  0.34, 6,    // red circle on a mid-ring corner
+    1, YEL,  0.30, 10,   // yellow square on a top-ring corner
+    2, BLUE, 0.40, 5,    // blue triangle on a bottom-ring corner
+    2, YEL,  0.26, 12    // small yellow triangle on the upper gable apex
+  ];
+
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H); CX=W/2; CY=H/2;
+  }
+
+  // rotate point about Y then X, project with simple perspective.
+  function project(ax,ay){
+    var cy=Math.cos(ay),sy=Math.sin(ay),cx=Math.cos(ax),sx=Math.sin(ax);
+    var scale=S*0.30, fov=3.0, i, x,y,z, x1,z1, y2,z2, p;
+    for(i=0;i<N;i++){
+      x=VX[i]; y=VY[i]; z=VZ[i];
+      x1=x*cy - z*sy;  z1=x*sy + z*cy;          // yaw
+      y2=y*cx - z1*sx; z2=y*sx + z1*cx;         // pitch
+      p=fov/(fov+z2);
+      PX[i]=CX + x1*scale*p;
+      PY[i]=CY + y2*scale*p;
+      PZ[i]=p;
+    }
+  }
+
+  function shape(cx,cy,rad,kind,col){
+    ctx.fillStyle=col;
+    if(kind===0){ctx.beginPath();ctx.arc(cx,cy,rad,0,6.2832);ctx.fill();}
+    else if(kind===1){ctx.fillRect(cx-rad,cy-rad,rad*2,rad*2);}
+    else{ctx.beginPath();ctx.moveTo(cx,cy-rad);ctx.lineTo(cx+rad*0.92,cy+rad*0.7);ctx.lineTo(cx-rad*0.92,cy+rad*0.7);ctx.closePath();ctx.fill();}
+  }
+
+  function frame(ay,ax){
+    project(ax,ay);
+    ctx.fillStyle='#101012'; ctx.fillRect(0,0,W,H);
+    // ground gridlines for rhythm (static structure feel) — drawn thin, dim
+    var lw=Math.max(1,S*0.004), i,a,b,col,wt,solid;
+    // edges
+    for(i=0;i<EN;i++){
+      a=E[i*4]; b=E[i*4+1]; col=COLS[E[i*4+2]]; solid=E[i*4+3];
+      var depth=(PZ[a]+PZ[b])*0.5;
+      ctx.globalAlpha = solid? 0.42+depth*0.55 : 0.16+depth*0.34;
+      ctx.strokeStyle=col;
+      ctx.lineWidth=lw*(0.6+depth*0.9);
+      ctx.beginPath(); ctx.moveTo(PX[a],PY[a]); ctx.lineTo(PX[b],PY[b]); ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+    // nodes — small black-ringed dots at every vertex
+    for(i=0;i<N;i++){
+      var nr=Math.max(1.5,S*0.009*PZ[i]);
+      ctx.fillStyle=INK; ctx.beginPath(); ctx.arc(PX[i],PY[i],nr+lw,0,6.2832); ctx.fill();
+      ctx.fillStyle='#e8e6e0'; ctx.beginPath(); ctx.arc(PX[i],PY[i],nr,0,6.2832); ctx.fill();
+    }
+  }
+
+  // draw the riding solids — separate, correct-stride pass
+  function solids(){
+    for(var i=0;i<SH.length;i+=4){
+      var kind=SH[i], col=SH[i+1], sf=SH[i+2], vi=SH[i+3];
+      var d=PZ[vi];
+      ctx.globalAlpha=0.55+d*0.45;
+      shape(PX[vi],PY[vi],S*sf*0.16*d, kind, col);
+    }
+    ctx.globalAlpha=1;
+  }
+
+  var raf=0, running=false, t=0;
+  function loop(){
+    raf=requestAnimationFrame(loop);
+    t+=0.0045;
+    var ay=t, ax=0.46+Math.sin(t*0.6)*0.16;
+    frame(ay,ax);
+    solids();
+  }
+  function start(){ if(running)return; running=true; loop(); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    resize();
+    if(reduce){ frame(0.7,0.5); solids(); return; }
+    start();
+  }
+
+  window.addEventListener('resize',function(){resize(); if(reduce){frame(0.7,0.5);solids();}},{passive:true});
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Blue glowing volume slider whose thumb travels while an equalizer of spring-bouncing bars reacts and a numeric readout counts the level.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Volume Slider Pulse</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0B0C1E;}
+  #vsp{display:block;width:100%;height:100%;}
+  .vsp-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.12em;color:#60A5FA;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="vsp"></canvas>
+<div class="vsp-cap">Volume Slider Pulse</div>
+<script>
+(function(){
+  const cv=document.getElementById('vsp'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const AC='#60A5FA';
+  let W,H,DPR,S,raf=0,t=0;
+  const NB=13, bars=[];               // equalizer bars: value + velocity (spring)
+  for(let i=0;i<NB;i++) bars.push({v:0.12,vel:0});
+  let nudge=0;                         // pointer energy boost
+
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);
+  }
+  addEventListener('resize',size);size();
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.35,1.6);});
+  cv.addEventListener('click',()=>{nudge=1.8;});
+
+  // eased sine drive -> slider position 0..1 (dwell at the ends)
+  function drivePos(){
+    const s=Math.sin(t*0.018);
+    const e=Math.sign(s)*Math.pow(Math.abs(s),0.62); // ease toward extremes, lingers mid less
+    return 0.5+0.5*e;
+  }
+
+  function roundRect(x,y,w,h,r){
+    r=Math.min(r,w/2,h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+  }
+
+  function render(){
+    ctx.clearRect(0,0,W,H);
+    const cx=W/2, trackY=H*0.66;
+    const trackW=Math.min(W*0.78, S*1.05), x0=cx-trackW/2, x1=cx+trackW/2;
+    const th=Math.max(4,S*0.018);            // track thickness
+    const pos=drivePos();
+    const fillW=trackW*pos;
+    const thumbX=x0+fillW, thumbR=Math.max(7,S*0.032);
+    const energy=Math.abs(Math.cos(t*0.018))*0.6+0.4; // fast near centre crossing
+    const glow=(0.55+0.45*energy)*(reduce?0.7:1)+Math.min(nudge,1)*0.5;
+
+    // --- equalizer bars (above the slider) ---
+    const bw=trackW/NB, gap=bw*0.34, barMaxH=H*0.32, barBase=trackY-S*0.14;
+    for(let i=0;i<NB;i++){
+      // target driven by the slider: louder volume -> taller, with a travelling wave + flicker
+      const dist=Math.abs((i/(NB-1))-pos);
+      const wave=0.5+0.5*Math.sin(t*0.06 - i*0.5);
+      let target=pos*(0.35+0.65*wave)*(1-dist*0.5);
+      target+=(reduce?0:( (Math.random()*0.18) ))*pos;        // springy flicker
+      target+=nudge*0.12*(1-dist);
+      target=Math.max(0.05,Math.min(1,target));
+      const b=bars[i];
+      if(reduce){ b.v=0.18+0.5*pos*(1-dist*0.4); }
+      else{
+        // spring with staggered decay (lower bars settle slower)
+        const k=0.18, damp=0.62+i*0.005;
+        b.vel+=(target-b.v)*k; b.vel*=damp; b.v+=b.vel;
+        b.v=Math.max(0.04,Math.min(1.15,b.v));
+      }
+      const bx=x0+i*bw+gap/2, bWidth=bw-gap;
+      const bh=barMaxH*b.v;
+      const a=0.22+0.62*Math.min(1,b.v);
+      const grd=ctx.createLinearGradient(0,barBase-bh,0,barBase);
+      grd.addColorStop(0,AC);grd.addColorStop(1,'rgba(96,165,250,0.12)');
+      ctx.globalAlpha=a;ctx.fillStyle=grd;
+      roundRect(bx,barBase-bh,bWidth,bh,bWidth*0.4);ctx.fill();
+      ctx.globalAlpha=1;
+    }
+
+    // --- track (unfilled) ---
+    ctx.fillStyle='rgba(255,255,255,0.08)';
+    roundRect(x0,trackY-th/2,trackW,th,th/2);ctx.fill();
+
+    // --- filled track with breathing glow (gradient halo instead of shadowBlur) ---
+    const gh=th*0.5+(10+glow*26);
+    const tg=ctx.createLinearGradient(0,trackY-gh,0,trackY+gh);
+    tg.addColorStop(0,'rgba(96,165,250,0)');
+    tg.addColorStop(0.5,'rgba(96,165,250,'+(0.10+glow*0.16).toFixed(3)+')');
+    tg.addColorStop(1,'rgba(96,165,250,0)');
+    ctx.fillStyle=tg;
+    roundRect(x0,trackY-gh,Math.max(th,fillW),gh*2,gh);ctx.fill();
+    const fg=ctx.createLinearGradient(x0,0,thumbX,0);
+    fg.addColorStop(0,'rgba(96,165,250,0.55)');fg.addColorStop(1,AC);
+    ctx.fillStyle=fg;
+    roundRect(x0,trackY-th/2,Math.max(th,fillW),th,th/2);ctx.fill();
+
+    // --- thumb: halo + core ---
+    const haloR=thumbR*(1.8+glow*0.7);
+    const hg=ctx.createRadialGradient(thumbX,trackY,thumbR*0.4,thumbX,trackY,haloR);
+    hg.addColorStop(0,'rgba(96,165,250,'+(0.30+glow*0.18)+')');
+    hg.addColorStop(1,'rgba(96,165,250,0)');
+    ctx.fillStyle=hg;ctx.beginPath();ctx.arc(thumbX,trackY,haloR,0,Math.PI*2);ctx.fill();
+    // tight inner halo replaces per-frame shadowBlur on the core
+    const ig=ctx.createRadialGradient(thumbX,trackY,thumbR*0.6,thumbX,trackY,thumbR*1.9);
+    ig.addColorStop(0,'rgba(96,165,250,'+(0.5+glow*0.2).toFixed(3)+')');
+    ig.addColorStop(1,'rgba(96,165,250,0)');
+    ctx.fillStyle=ig;ctx.beginPath();ctx.arc(thumbX,trackY,thumbR*1.9,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#EaF2FF';
+    ctx.beginPath();ctx.arc(thumbX,trackY,thumbR,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=AC;
+    ctx.beginPath();ctx.arc(thumbX,trackY,thumbR*0.42,0,Math.PI*2);ctx.fill();
+
+    // --- volume readout ---
+    ctx.fillStyle='rgba(96,165,250,0.85)';
+    ctx.font='600 '+Math.max(10,S*0.05).toFixed(0)+'px ui-monospace,SFMono-Regular,Menlo,monospace';
+    ctx.textAlign='center';ctx.textBaseline='alphabetic';
+    ctx.fillText(Math.round(pos*100).toString().padStart(2,'0'),cx,trackY+S*0.13);
+  }
+
+  function frame(){
+    if(!reduce){ t+=1; nudge*=0.9; }
+    render();
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ t=Math.PI/0.018*0.5; render(); } else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Black palm-tree silhouettes sway over a glowing neon grid beneath a sliced sun and magenta-to-gold sunset with a chrome gradient title.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Palm Silhouette</title>
+<style>
+  :root{
+    --vw06-bg:#160a2a; --vw06-cyan:#22d3ee; --vw06-mag:#f637c9;
+    --vw06-violet:#7b3ff2; --vw06-orange:#ff7a59; --vw06-gold:#ffd166;
+  }
+  html,body{margin:0;height:100%}
+  body{background:var(--vw06-bg);overflow:hidden}
+  #vw06-stage{position:fixed;inset:0;overflow:hidden;background:var(--vw06-bg)}
+  /* sky gradient + static glow, painted once, never animated */
+  #vw06-sky{position:absolute;inset:0;
+    background:
+      radial-gradient(120% 70% at 50% 78%, rgba(255,122,89,.18), transparent 55%),
+      linear-gradient(#160a2a 0%, #2a0f4a 30%, #6e1d6b 56%, #f637c9 72%, #ff7a59 84%, #ffd166 96%);
+  }
+  /* sun: pure transform candidate; glow is a STATIC inset shadow */
+  #vw06-sun{position:absolute;left:50%;top:50%;width:38%;padding-bottom:38%;height:0;
+    transform:translate(-50%,-58%);border-radius:50%;
+    background:linear-gradient(var(--vw06-gold), var(--vw06-orange) 55%, var(--vw06-mag));
+    box-shadow:0 0 0 1px rgba(255,209,102,.35), 0 0 60px 6px rgba(246,55,201,.30);
+    -webkit-mask:repeating-linear-gradient(#000 0 11px, transparent 11px 14px) bottom/100% 50% no-repeat,
+                 linear-gradient(#000 0 50%, transparent 50%) top/100% 50% no-repeat;
+            mask:repeating-linear-gradient(#000 0 11px, transparent 11px 14px) bottom/100% 50% no-repeat,
+                 linear-gradient(#000 0 50%, transparent 50%) top/100% 50% no-repeat;
+  }
+  #vw06-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* twin chrome caption title baked into composition */
+  #vw06-title{position:absolute;left:0;right:0;top:8%;text-align:center;
+    font:800 clamp(15px,5.5vw,34px)/1 "Arial Black",Impact,system-ui,sans-serif;
+    letter-spacing:.14em;text-transform:uppercase;pointer-events:none;
+    background:linear-gradient(#fff,#cfeffd 38%,#22d3ee 52%,#7b3ff2 70%,#f637c9);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 1px 0 rgba(0,0,0,.25);opacity:.96}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="vw06-stage" role="img" aria-label="Vaporwave sunset with palm tree silhouettes over a glowing neon perspective grid">
+    <div id="vw06-sky"></div>
+    <div id="vw06-sun"></div>
+    <canvas id="vw06-c"></canvas>
+    <div id="vw06-title">Palm Silhouette</div>
+  </div>
+  <div class="cap">Palm Silhouette</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("vw06-c"), ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var W=0,H=0,DPR=1,running=false,raf=0,t0=0;
+
+  // Static starfield (typed arrays, computed on resize, never reallocated per frame)
+  var SN=70, sx=new Float32Array(SN), sy=new Float32Array(SN), sr=new Float32Array(SN), sp=new Float32Array(SN);
+  // Palm definitions: x fraction, scale fraction, frond seed
+  var palms=[{x:.20,s:1.00,f:0},{x:.80,s:1.18,f:9},{x:.50,s:.66,f:4}];
+
+  function resize(){
+    var r=cv.getBoundingClientRect();
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=Math.max(1,r.width); H=Math.max(1,r.height);
+    cv.width=(W*DPR)|0; cv.height=(H*DPR)|0;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    for(var i=0;i<SN;i++){
+      sx[i]=Math.random()*W; sy[i]=Math.random()*H*0.6;
+      sr[i]=Math.random()*1.1+0.3; sp[i]=Math.random()*6.28;
+    }
+    if(reduce){ draw(0); }
+  }
+
+  var horizon, gridTop;
+  function drawGrid(time){
+    horizon=H*0.62; gridTop=horizon;
+    var cx=W*0.5, scroll=(time*0.05)%1;
+    ctx.lineWidth=1;
+    // horizontal receding lines, perspective spaced, scrolling toward viewer
+    for(var k=0;k<14;k++){
+      var f=(k+scroll)/14; var p=f*f; // ease toward horizon
+      var y=gridTop+p*(H-gridTop);
+      var a=0.10+0.55*f;
+      ctx.strokeStyle="rgba(34,211,238,"+a.toFixed(3)+")";
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    }
+    // vanishing verticals
+    ctx.strokeStyle="rgba(246,55,201,0.45)";
+    for(var v=-7;v<=7;v++){
+      var bx=cx+v*(W*0.5/7)*2.6;
+      ctx.beginPath(); ctx.moveTo(cx+v*6,gridTop); ctx.lineTo(bx,H); ctx.stroke();
+    }
+  }
+
+  function palm(px,py,sc,seed,sway){
+    // trunk: tapering segmented silhouette
+    ctx.fillStyle="#0a0414";
+    ctx.strokeStyle="#0a0414";
+    var th=H*0.30*sc, tw=Math.max(2.2,6*sc);
+    var lean=Math.sin(sway+seed)*6*sc;
+    ctx.beginPath();
+    ctx.moveTo(px-tw,py);
+    ctx.quadraticCurveTo(px-tw*0.5+lean*0.5, py-th*0.5, px-tw*0.35+lean, py-th);
+    ctx.lineTo(px+tw*0.35+lean, py-th);
+    ctx.quadraticCurveTo(px+tw*0.5+lean*0.5, py-th*0.5, px+tw, py);
+    ctx.closePath(); ctx.fill();
+    // crown fronds
+    var topx=px+lean, topy=py-th, fronds=7;
+    for(var i=0;i<fronds;i++){
+      var ang=(-Math.PI*0.5)+(i-(fronds-1)/2)*(Math.PI/ (fronds-1))*0.95;
+      var droop=Math.sin(sway*1.3+i+seed)*0.10;
+      ang+=droop;
+      var len=H*0.16*sc*(0.7+0.3*Math.cos(ang));
+      var ex=topx+Math.cos(ang)*len, ey=topy+Math.sin(ang)*len;
+      var mx=topx+Math.cos(ang)*len*0.5 - Math.sin(ang)*len*0.18;
+      var my=topy+Math.sin(ang)*len*0.5 + Math.cos(ang)*len*0.18;
+      ctx.lineWidth=Math.max(2,5*sc);
+      ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(topx,topy);
+      ctx.quadraticCurveTo(mx,my,ex,ey); ctx.stroke();
+    }
+  }
+
+  function draw(time){
+    ctx.clearRect(0,0,W,H);
+    // stars (twinkle = opacity only, additive draw)
+    for(var i=0;i<SN;i++){
+      var tw=0.45+0.55*Math.sin(time*1.2+sp[i]);
+      ctx.globalAlpha=tw*0.9;
+      ctx.fillStyle = (i%5===0)?"#22d3ee":"#ffffff";
+      ctx.fillRect(sx[i],sy[i],sr[i],sr[i]);
+    }
+    ctx.globalAlpha=1;
+    drawGrid(time);
+    // palms sit on horizon, larger ones forward
+    var sway=time;
+    for(var p=0;p<palms.length;p++){
+      var P=palms[p];
+      palm(W*P.x, horizon+ (1-P.s)*H*0.06 + H*0.02, P.s, P.f, sway);
+    }
+  }
+
+  function loop(ts){
+    if(!running) return;
+    if(!t0) t0=ts;
+    draw((ts-t0)/1000);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){ if(running||reduce)return; running=true; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden) stop(); else { t0=0; start(); }
+  });
+  window.addEventListener("resize",resize,{passive:true});
+
+  resize();
+  if(reduce){ draw(0.4); return; }
+  start();
+})();
+</script>
+</body>
+</html>

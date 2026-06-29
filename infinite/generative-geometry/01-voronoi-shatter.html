@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Cool blue Voronoi cell mosaic with drifting sites that recolor and shift; pointer nudges the nearest cell.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voronoi Shatter</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0d1b2a}
+  #c{display:block;width:100%;height:100%}
+  #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,Menlo,monospace;
+       color:#7fd1ff;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="cap">voronoi shatter</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  let W,H,DPR,pts,mouse=null,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const N=14;
+  function rnd(a,b){return a+Math.random()*(b-a)}
+  function resize(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  function init(){
+    pts=[];for(let i=0;i<N;i++)pts.push({x:rnd(0,1),y:rnd(0,1),vx:rnd(-1,1)*.04,vy:rnd(-1,1)*.04,h:rnd(180,210)});
+  }
+  function step(t){
+    const s=Math.min(W,H);
+    for(const p of pts){
+      p.x+=p.vx*0.004;p.y+=p.vy*0.004;
+      if(p.x<0||p.x>1)p.vx*=-1;if(p.y<0||p.y>1)p.vy*=-1;
+      p.x=Math.max(0,Math.min(1,p.x));p.y=Math.max(0,Math.min(1,p.y));
+    }
+    ctx.fillStyle='#0d1b2a';ctx.fillRect(0,0,W,H);
+    // pixel-grid voronoi via coarse cells (cheap), draw as small rects colored by nearest site
+    const cell=Math.max(5,Math.floor(s/64));
+    const ox=(W-s)/2,oy=(H-s)/2;
+    for(let py=0;py<s;py+=cell){
+      for(let px=0;px<s;px+=cell){
+        const fx=px/s,fy=py/s;let bi=0,bd=9;
+        for(let i=0;i<N;i++){
+          let dx=pts[i].x-fx,dy=pts[i].y-fy;
+          if(mouse){const md=(mouse.x-pts[i].x),mdy=(mouse.y-pts[i].y);}
+          const d=dx*dx+dy*dy;if(d<bd){bd=d;bi=i;}
+        }
+        const p=pts[bi];
+        const li=30+Math.sin(t*0.001+bi)*8+ (1-Math.min(1,bd*6))*20;
+        ctx.fillStyle='hsl('+p.h+','+(55+bi*1.5)+'%,'+li+'%)';
+        ctx.fillRect(ox+px,oy+py,cell+0.6,cell+0.6);
+      }
+    }
+    // site dots
+    for(const p of pts){ctx.fillStyle='rgba(220,245,255,.8)';ctx.beginPath();ctx.arc(ox+p.x*s,oy+p.y*s,1.6,0,7);ctx.fill();}
+  }
+  let raf;
+  function loop(t){if(!reduce){step(t);}raf=requestAnimationFrame(loop);}
+  function start(){cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
+  addEventListener('resize',()=>{resize();});
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();const s=Math.min(W,H);
+    mouse={x:(e.clientX-r.left-(W-s)/2)/s,y:(e.clientY-r.top-(H-s)/2)/s};
+    // nudge nearest site toward pointer
+    let bi=0,bd=9;for(let i=0;i<N;i++){const d=(pts[i].x-mouse.x)**2+(pts[i].y-mouse.y)**2;if(d<bd){bd=d;bi=i}}
+    pts[bi].x+=(mouse.x-pts[bi].x)*.2;pts[bi].y+=(mouse.y-pts[bi].y)*.2;
+  });
+  cv.addEventListener('pointerleave',()=>mouse=null);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
+  resize();init();if(reduce)step(0);else start();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A 5x5 grid of mismatched bright Memphis shapes — squiggles, dots, zigzags, triangles — jittering and rotating over a terrazzo-speckled dark">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grid Jumble</title>
+<style>
+  html,body{margin:0;height:100%;background:#141019;overflow:hidden}
+  #mp06-stage{position:fixed;inset:0;background:#141019}
+  #mp06-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="mp06-stage" role="img" aria-label="A Memphis-style grid of mismatched bright geometric shapes — squiggles, dots, zigzags and triangles — jittering in rhythm against a dark background.">
+  <canvas id="mp06-c"></canvas>
+</div>
+<div class="cap">Grid Jumble</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("mp06-stage");
+  var cv=document.getElementById("mp06-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // Memphis palette around accent #36d6c3
+  var PAL=["#36d6c3","#ff4f7b","#ffd23f","#7b5cff","#ff8a3d","#f4f0e6"];
+  var BG="#141019";
+
+  // grid config
+  var COLS=5, ROWS=5, N=COLS*ROWS; // 25 cells, well under cap
+  // per-cell typed-array state (allocated once)
+  var kind=new Uint8Array(N);   // shape type 0..6
+  var col=new Uint8Array(N);    // palette index
+  var ph=new Float32Array(N);   // phase offset
+  var spd=new Float32Array(N);  // wobble speed
+  var amp=new Float32Array(N);  // jitter amplitude (rel to cell)
+  var rot0=new Float32Array(N); // base rotation
+  var sc0=new Float32Array(N);  // base scale
+
+  var seed=1337;
+  function rnd(){ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }
+  for(var i=0;i<N;i++){
+    kind[i]=(rnd()*7)|0;
+    col[i]=(rnd()*PAL.length)|0;
+    ph[i]=rnd()*6.283;
+    spd[i]=0.6+rnd()*1.3;
+    amp[i]=0.06+rnd()*0.12;
+    rot0[i]=(rnd()-0.5)*0.9;
+    sc0[i]=0.62+rnd()*0.18;
+  }
+
+  var W=0,H=0,DPR=1,cw=0,ch=0,ox=0,oy=0,gw=0,gh=0,unit=0;
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    // fit a square-ish grid with margin
+    var m=Math.min(W,H)*0.07;
+    gw=W-m*2; gh=H-m*2;
+    cw=gw/COLS; ch=gh/ROWS;
+    unit=Math.min(cw,ch);
+    ox=m; oy=m+(gh-ch*ROWS)/2;
+  }
+
+  // draw one shape centered at (0,0), size s, given kind+color. uses current transform.
+  function shape(k,s,c){
+    var h=s*0.5;
+    ctx.lineWidth=Math.max(2,s*0.16);
+    ctx.lineCap="round"; ctx.lineJoin="round";
+    if(k===0){ // filled circle + dot
+      ctx.fillStyle=c; ctx.beginPath(); ctx.arc(0,0,h*0.92,0,6.2832); ctx.fill();
+      ctx.fillStyle=BG; ctx.beginPath(); ctx.arc(0,0,h*0.32,0,6.2832); ctx.fill();
+    } else if(k===1){ // triangle
+      ctx.fillStyle=c; ctx.beginPath();
+      ctx.moveTo(0,-h); ctx.lineTo(h*0.92,h*0.78); ctx.lineTo(-h*0.92,h*0.78); ctx.closePath(); ctx.fill();
+    } else if(k===2){ // squiggle stroke
+      ctx.strokeStyle=c; ctx.beginPath();
+      ctx.moveTo(-h,0);
+      ctx.bezierCurveTo(-h*0.5,-h*1.1, -h*0.1,h*1.1, h*0.35,-h*0.2);
+      ctx.bezierCurveTo(h*0.6,-h*0.9, h*0.85,h*0.6, h,0);
+      ctx.stroke();
+    } else if(k===3){ // zigzag stroke
+      ctx.strokeStyle=c; ctx.beginPath();
+      ctx.moveTo(-h,-h*0.5); ctx.lineTo(-h*0.33,h*0.5);
+      ctx.lineTo(h*0.33,-h*0.5); ctx.lineTo(h,h*0.5);
+      ctx.stroke();
+    } else if(k===4){ // half-pill / quarter arc fan
+      ctx.fillStyle=c; ctx.beginPath();
+      ctx.arc(0,h*0.45,h*1.05,Math.PI,0,false); ctx.closePath(); ctx.fill();
+    } else if(k===5){ // checker-ish rotated square ring
+      ctx.strokeStyle=c; ctx.strokeRect(-h*0.8,-h*0.8,h*1.6,h*1.6);
+      ctx.fillStyle=c; ctx.fillRect(-h*0.3,-h*0.3,h*0.6,h*0.6);
+    } else { // cross / plus
+      ctx.fillStyle=c;
+      var t=h*0.34;
+      ctx.fillRect(-t,-h,t*2,h*2);
+      ctx.fillRect(-h,-t,h*2,t*2);
+    }
+  }
+
+  function cell(i,t){
+    var cx=i%COLS, cy=(i/COLS)|0;
+    var px=ox+cx*cw+cw*0.5;
+    var py=oy+cy*ch+ch*0.5;
+    var a=t*spd[i]+ph[i];
+    // jitter on transform only
+    var jx=Math.sin(a)*unit*amp[i];
+    var jy=Math.cos(a*0.87+1.3)*unit*amp[i];
+    var rot=rot0[i]+Math.sin(a*0.7)*0.26;
+    var sc=sc0[i]+Math.sin(a*1.4+0.6)*0.10;
+    ctx.save();
+    ctx.translate(px+jx,py+jy);
+    ctx.rotate(rot);
+    shape(kind[i],unit*sc,PAL[col[i]]);
+    ctx.restore();
+  }
+
+  // static terrazzo speckle baked once into the bg pass (no per-frame repaint cost beyond fill)
+  var SP=46, spx=new Float32Array(SP), spy=new Float32Array(SP), spr=new Float32Array(SP), spc=new Uint8Array(SP);
+  for(var s=0;s<SP;s++){ spx[s]=rnd(); spy[s]=rnd(); spr[s]=1.5+rnd()*2.8; spc[s]=(rnd()*PAL.length)|0; }
+
+  function bg(){
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    // faint terrazzo dust
+    ctx.globalAlpha=0.18;
+    for(var s=0;s<SP;s++){
+      ctx.fillStyle=PAL[spc[s]];
+      ctx.beginPath(); ctx.arc(spx[s]*W,spy[s]*H,spr[s],0,6.2832); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function frame(t){
+    bg();
+    for(var i=0;i<N;i++) cell(i,t);
+  }
+
+  var running=false, raf=0, t0=0;
+  function loop(now){
+    if(!running) return;
+    if(!t0) t0=now;
+    frame((now-t0)*0.001);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){ if(running||reduce) return; running=true; t0=0; raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    size();
+    if(reduce){ frame(0.6); return; } // one calm, legible static frame
+    start();
+  }
+
+  var rt;
+  window.addEventListener("resize",function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ size(); if(reduce) frame(0.6); },120);
+  });
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden) stop(); else start();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

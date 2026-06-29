@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Red, blue and yellow rectangles hang from a black beam that tilts and settles toward level on a near-black field, a balancing mobile.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dynamic Equilibrium</title>
+<style>
+  html,body{margin:0;height:100%;background:#0e0e10}
+  #ds05-stage{position:fixed;inset:0;overflow:hidden;background:#0e0e10}
+  #ds05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="ds05-stage" role="img" aria-label="De Stijl Neoplastic composition: asymmetric red, blue, and yellow rectangles hang from a black beam that tilts and settles level, finding dynamic equilibrium against a near-black field">
+    <canvas id="ds05-c"></canvas>
+  </div>
+  <div class="cap">Dynamic Equilibrium</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('ds05-stage');
+  var cv=document.getElementById('ds05-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // Neoplastic palette around accent #1b5fc4
+  var PAINT='#ece7da', LINE='#0a0a0c';
+  var RED='#cc2a1e', BLUE='#1b5fc4', YEL='#e8b416';
+
+  var W=0,H=0,DPR=1,S=0,OX=0,OY=0,LW=0;
+
+  // The beam pivots at fulcrum. Six blocks hang at fixed offsets along it.
+  // Each block has weight; net torque drives the beam toward level.
+  // off = horizontal slot along beam (-1..1), w = relative weight, col, sz = block size frac.
+  var blocks=[
+    {off:-0.86,w:1.0,col:RED, sz:0.20},
+    {off:-0.50,w:0.6,col:PAINT,sz:0.13},
+    {off:-0.16,w:0.9,col:BLUE,sz:0.17},
+    {off: 0.22,w:0.5,col:YEL, sz:0.12},
+    {off: 0.54,w:0.8,col:PAINT,sz:0.15},
+    {off: 0.88,w:1.1,col:BLUE,sz:0.21}
+  ];
+
+  // Beam angle dynamics (radians). Spring toward target torque equilibrium with damping.
+  var ang=0, av=0;          // angle, angular velocity
+  var torqueBias=0;         // slowly shifting offset that breaks perfect balance -> "dynamic"
+  var biasV=0, biasT=0;     // bias target retarget timer
+  var blockBob=new Float32Array(blocks.length);   // tiny settle bob per block (transform only equiv)
+
+  function resize(){
+    W=stage.clientWidth; H=stage.clientHeight;
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
+    S=Math.min(W,H); OX=(W-S)/2; OY=(H-S)/2;
+    LW=Math.max(3,Math.round(S*0.020));
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  function netTorque(){
+    var t=0,i,b;
+    for(i=0;i<blocks.length;i++){ b=blocks[i]; t+=b.off*b.w; }
+    return t*0.10 + torqueBias;     // scaled; bias keeps it gently alive
+  }
+
+  function step(dt){
+    // retarget the bias occasionally so equilibrium keeps drifting (never strobes)
+    biasT-=dt;
+    if(biasT<=0){ biasV=(Math.random()*2-1)*0.16; biasT=2.4+Math.random()*2.4; }
+    torqueBias += (biasV-torqueBias)*Math.min(1,dt*0.7);
+
+    // angular spring: restoring toward angle implied by torque, with damping
+    var target=netTorque();                 // desired tilt (small radians)
+    var k=14, c=4.6;                         // stiffness, damping
+    var acc=k*(target-ang) - c*av;
+    av+=acc*dt; ang+=av*dt;
+    if(ang>0.42)ang=0.42; if(ang<-0.42)ang=-0.42;
+
+    // per-block bob eases to rest (settle metaphor)
+    for(var i=0;i<blocks.length;i++){
+      blockBob[i] += (0 - blockBob[i])*Math.min(1,dt*3.0);
+    }
+  }
+
+  function rrect(x,y,w,h){ ctx.fillRect(x,y,w,h); }
+
+  function draw(){
+    ctx.fillStyle='#0e0e10'; ctx.fillRect(0,0,W,H);
+
+    var cx=OX+S*0.5, cy=OY+S*0.5;
+    var beamLen=S*0.78, half=beamLen/2;
+    var fy=cy - S*0.20;                       // fulcrum y (beam hangs blocks below)
+
+    // --- static counter-plane: a few flat neoplastic rectangles anchoring corners (no motion) ---
+    ctx.fillStyle=PAINT;
+    rrect(OX+S*0.0, OY+S*0.0, S*0.30, S*0.16);     // top-left plane
+    ctx.fillStyle=YEL;
+    rrect(OX+S*0.0, OY+S*0.84, S*0.18, S*0.16);    // bottom-left primary
+    ctx.fillStyle=PAINT;
+    rrect(OX+S*0.74, OY+S*0.0, S*0.26, S*0.12);
+
+    // --- fulcrum post (vertical, black) ---
+    ctx.fillStyle=LINE;
+    var postW=LW*0.9;
+    rrect(cx-postW/2, fy, postW, OY+S - fy - S*0.06);
+    // fulcrum triangle base (rectangular pedestal, no diagonals -> stays orthogonal)
+    rrect(cx-S*0.05, OY+S - S*0.07 - LW/2, S*0.10, S*0.04);
+
+    // --- rotating beam group ---
+    var sin=Math.sin(ang), cos=Math.cos(ang);
+    // beam endpoints
+    var bx0=cx-half*cos, by0=fy-half*sin;
+    var bx1=cx+half*cos, by1=fy+half*sin;
+
+    // hangers + blocks (computed along the tilted beam, blocks hang straight down)
+    var i,b,t, ax,ay, bw,bh, topY;
+    for(i=0;i<blocks.length;i++){
+      b=blocks[i];
+      t=b.off; // -1..1 along beam
+      ax=cx + t*half*cos;
+      ay=fy + t*half*sin;
+      bw=S*b.sz; bh=S*b.sz*(0.7+0.5*((i*7)%3)/2);  // varied rectangles, no squares-only
+      var hang=S*(0.10 + b.w*0.10) + blockBob[i]*S*0.04;
+      topY=ay+hang;
+      // hanger line (black, vertical)
+      ctx.fillStyle=LINE;
+      rrect(ax-LW*0.30, ay, LW*0.60, hang);
+      // block
+      ctx.fillStyle=b.col;
+      var bxL=ax-bw/2;
+      rrect(bxL, topY, bw, bh);
+      // heavy black border on block (neoplastic outline) drawn as 4 bars
+      ctx.fillStyle=LINE;
+      var hw=LW*0.55;
+      rrect(bxL-hw, topY-hw, bw+hw*2, hw);
+      rrect(bxL-hw, topY+bh, bw+hw*2, hw);
+      rrect(bxL-hw, topY-hw, hw, bh+hw*2);
+      rrect(bxL+bw, topY-hw, hw, bh+hw*2);
+    }
+
+    // --- the beam itself (thick black bar), drawn over hanger tops ---
+    ctx.fillStyle=LINE;
+    drawThickLine(bx0,by0,bx1,by1,LW*1.15);
+
+    // --- equilibrium reference line: faint horizontal level marker (static, low opacity) ---
+    ctx.fillStyle='rgba(236,231,218,0.10)';
+    rrect(cx-half, fy-1, beamLen, 2);
+
+    // outer containing frame
+    ctx.fillStyle=LINE; var hw2=LW/2;
+    rrect(OX-hw2, OY-hw2, S+LW, hw2*2);
+    rrect(OX-hw2, OY+S-hw2, S+LW, hw2*2);
+    rrect(OX-hw2, OY-hw2, hw2*2, S+LW);
+    rrect(OX+S-hw2, OY-hw2, hw2*2, S+LW);
+  }
+
+  // axis-aligned-ish thick bar between two points via rotated fill
+  function drawThickLine(x0,y0,x1,y1,wpx){
+    var dx=x1-x0, dy=y1-y0, len=Math.sqrt(dx*dx+dy*dy);
+    var a=Math.atan2(dy,dx);
+    ctx.save();
+    ctx.translate(x0,y0); ctx.rotate(a);
+    ctx.fillRect(0,-wpx/2,len,wpx);
+    ctx.restore();
+  }
+
+  var raf=0, running=false, last=0;
+  function loop(ts){
+    if(!running)return;
+    if(!last)last=ts;
+    var dt=(ts-last)/1000; last=ts;
+    if(dt>0.05)dt=0.05;       // clamp after tab return
+    step(dt); draw();
+    raf=requestAnimationFrame(loop);
+  }
+  function startLoop(){ if(running)return; running=true; last=0; raf=requestAnimationFrame(loop); }
+  function stopLoop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
+
+  function init(){
+    resize();
+    if(reduce){
+      // settle to one static, balanced frame
+      torqueBias=0.06; ang=0.05; draw(); return;
+    }
+    startLoop();
+  }
+
+  var rt;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(function(){ resize(); if(reduce)draw(); },120);
+  });
+  document.addEventListener('visibilitychange',function(){
+    if(reduce)return;
+    if(document.hidden)stopLoop(); else startLoop();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Heat-colored particles spiral inward across a tilted accretion disk into a black event horizon, speeding up on pointer movement.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Black-hole Accretion Swirl</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#05040a;}
+  #c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
+       letter-spacing:.08em;color:#ffd9b0;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="cap">Black-hole Accretion Swirl</div>
+<script>
+(function(){
+  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,scale;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;scale=Math.min(W,H)/400;
+  }
+  addEventListener('resize',size);size();
+  const N=110,parts=[];
+  for(let i=0;i<N;i++){
+    parts.push({a:Math.random()*Math.PI*2,r:40+Math.random()*150,sp:0.4+Math.random()*0.5});
+  }
+  let t=0,boost=0;
+  cv.addEventListener('pointermove',()=>{boost=1;});
+  function frame(){
+    t+=reduce?0:1;
+    ctx.fillStyle='rgba(5,4,10,0.22)';ctx.fillRect(0,0,W,H);
+    boost*=0.94;
+    ctx.save();ctx.translate(cx,cy);ctx.scale(1,0.42);ctx.rotate(0.35);
+    parts.forEach(p=>{
+      const dt=reduce?0:(0.6+boost)*p.sp*(60/Math.max(p.r,30))*0.55;
+      p.a+=dt*0.04;p.r-=0.18*(1+boost);
+      if(p.r<26){p.r=180+Math.random()*30;p.a=Math.random()*Math.PI*2;}
+      const x=Math.cos(p.a)*p.r*scale,y=Math.sin(p.a)*p.r*scale;
+      const heat=1-(p.r-26)/160;
+      const col=heat>0.6?'#fff1c4':heat>0.35?'#ffae4d':'#ff5e2e';
+      ctx.fillStyle=col;ctx.globalAlpha=0.5+heat*0.5;
+      ctx.beginPath();ctx.arc(x,y,(1.1+heat*1.8)*scale,0,Math.PI*2);ctx.fill();
+    });
+    ctx.restore();ctx.globalAlpha=1;
+    // event horizon
+    const g=ctx.createRadialGradient(cx,cy,2,cx,cy,30*scale);
+    g.addColorStop(0,'#000');g.addColorStop(.72,'#000');
+    g.addColorStop(.9,'rgba(255,140,40,0.55)');g.addColorStop(1,'rgba(255,90,30,0)');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,30*scale,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#000';ctx.beginPath();ctx.arc(cx,cy,21*scale,0,Math.PI*2);ctx.fill();
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){ctx.fillStyle='#05040a';ctx.fillRect(0,0,W,H);frame();}else start();
+})();
+</script>
+</body>
+</html>

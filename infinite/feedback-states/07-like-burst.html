@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A heart dips then springs into a magenta-mint gradient fill, firing a 96-particle synthwave burst of dots and ring shards.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Like Burst</title>
+<style>
+  html,body{margin:0;height:100%}
+  body{background:#0b0d12;overflow:hidden}
+  #fb07-stage{position:fixed;inset:0;display:grid;place-items:center;outline:none}
+  #fb07-stage:focus-visible{box-shadow:inset 0 0 0 2px rgba(52,211,153,.55)}
+  #fb07-c{width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  #fb07-hint{position:fixed;right:9px;bottom:7px;font:600 9px/1 ui-monospace,Menlo,monospace;
+    color:#34d399;opacity:.34;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="fb07-stage" role="button" tabindex="0" aria-label="Like button. Activate to send a like with a particle burst.">
+  <canvas id="fb07-c" aria-hidden="true"></canvas>
+</div>
+<div class="cap">Like Burst</div>
+<div id="fb07-hint" aria-hidden="true">tap / space</div>
+<div id="fb07-live" role="status" aria-live="polite" style="position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+
+<script>
+(function(){
+  "use strict";
+  var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var stage = document.getElementById("fb07-stage");
+  var cv    = document.getElementById("fb07-c");
+  var live  = document.getElementById("fb07-live");
+  var ctx   = cv.getContext("2d");
+
+  // synthwave/vaporwave palette around the brand mint
+  var MINT="#34d399", CYAN="#5eead4", MAG="#f472b6", VIO="#a78bfa", SUN="#fbbf24";
+  var SWATCH=[MINT,CYAN,MAG,VIO,SUN];
+
+  var W=0,H=0,cx=0,cy=0,R=0,DPR=1;
+  function resize(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight;
+    cv.width=W*DPR; cv.height=H*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2; cy=H/2;
+    R=Math.max(26,Math.min(W,H)*0.20);   // heart scale unit
+  }
+  resize();
+  window.addEventListener("resize",resize);
+
+  // heart path in unit coords, scaled by s, centered at (cx,cy)
+  function heartPath(s){
+    ctx.beginPath();
+    var k=R*s/16;
+    ctx.moveTo(cx, cy + 12*k);
+    ctx.bezierCurveTo(cx-16*k, cy-4*k, cx-13*k, cy-18*k, cx, cy-8*k);
+    ctx.bezierCurveTo(cx+13*k, cy-18*k, cx+16*k, cy-4*k, cx, cy+12*k);
+    ctx.closePath();
+  }
+
+  // ---- particles (cap 96) ----
+  var N=96;
+  var px=new Float32Array(N), py=new Float32Array(N),
+      vx=new Float32Array(N), vy=new Float32Array(N),
+      pr=new Float32Array(N), pa=new Float32Array(N),  // radius, alpha
+      plife=new Float32Array(N), pmax=new Float32Array(N),
+      pc=new Int8Array(N), pkind=new Int8Array(N);      // color idx, kind(0 dot,1 ring shard)
+  var active=0;
+
+  function burst(){
+    active=N;
+    for(var i=0;i<N;i++){
+      var ang = (i/N)*Math.PI*2 + Math.random()*0.4;
+      var spd = R*(0.10+Math.random()*0.16);
+      px[i]=cx; py[i]=cy - R*0.02;
+      vx[i]=Math.cos(ang)*spd; vy[i]=Math.sin(ang)*spd - R*0.02;
+      pr[i]=R*(0.04+Math.random()*0.06);
+      pmax[i]=plife[i]=42+Math.random()*22;
+      pa[i]=1;
+      pc[i]=(Math.random()*SWATCH.length)|0;
+      pkind[i]=Math.random()<0.32?1:0;
+    }
+  }
+
+  // ---- state machine ----
+  var DUR=1100;            // heart pop + burst lifetime
+  var IDLE_AFTER=4200, AUTO_GAP=2600;
+  var running=true, rafId=0;
+  var playStart=-1, nextAuto=0, userMode=false, lastInput=0, liked=false;
+
+  function spring(t){
+    if(t>=1) return 1;
+    return 1 + Math.pow(2,-7*t)*Math.sin((t*7-0.18)*(Math.PI*2))*0.5;
+  }
+  function easeOut(t){ return 1-Math.pow(1-t,3); }
+
+  function drawHeart(scale, on, glow){
+    // static radial glow gradient (no per-frame filter/shadow repaint of layout)
+    if(glow>0){
+      var g=ctx.createRadialGradient(cx,cy,R*0.2,cx,cy,R*1.9);
+      g.addColorStop(0,"rgba(52,211,153,"+(0.16*glow).toFixed(3)+")");
+      g.addColorStop(1,"rgba(52,211,153,0)");
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    }
+    heartPath(scale);
+    if(on){
+      var lg=ctx.createLinearGradient(cx,cy-R,cx,cy+R);
+      lg.addColorStop(0,MAG); lg.addColorStop(1,MINT);
+      ctx.fillStyle=lg; ctx.fill();
+    } else {
+      ctx.fillStyle="#11151c"; ctx.fill();
+      ctx.lineWidth=Math.max(2,R*0.07); ctx.strokeStyle="rgba(94,234,212,.55)"; ctx.stroke();
+    }
+  }
+
+  function drawParticles(){
+    for(var i=0;i<active;i++){
+      if(plife[i]<=0) continue;
+      var col=SWATCH[pc[i]];
+      ctx.globalAlpha=pa[i];
+      if(pkind[i]===0){
+        ctx.beginPath(); ctx.arc(px[i],py[i],pr[i],0,Math.PI*2);
+        ctx.fillStyle=col; ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.arc(px[i],py[i],pr[i]*1.4,0,Math.PI*2);
+        ctx.lineWidth=Math.max(1,pr[i]*0.5); ctx.strokeStyle=col; ctx.stroke();
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function stepParticles(){
+    var any=false;
+    for(var i=0;i<active;i++){
+      if(plife[i]<=0) continue;
+      any=true;
+      px[i]+=vx[i]; py[i]+=vy[i];
+      vx[i]*=0.90; vy[i]=vy[i]*0.90 + R*0.006;  // drag + gentle gravity
+      plife[i]-=1;
+      pa[i]=Math.max(0,plife[i]/pmax[i]);
+      pr[i]*=0.985;
+    }
+    if(!any) active=0;
+  }
+
+  function drawOneFrame(){
+    ctx.clearRect(0,0,W,H);
+    drawHeart(1, true, 0.6);
+    live.textContent="Liked";
+  }
+  if(reduce){ drawOneFrame(); return; }
+
+  function frame(now){
+    if(!running) return;
+    if(playStart<0){
+      if(userMode && now-lastInput>IDLE_AFTER) userMode=false;
+      if(now>=nextAuto && !userMode) trigger(now,false);
+    }
+
+    ctx.clearRect(0,0,W,H);
+
+    var scale=1, glow=0, on=liked;
+    if(playStart>=0){
+      var ms=now-playStart; var t=ms/DUR; if(t>1)t=1;
+      // heart: collapse dip then spring pop on activation
+      var sp=spring(Math.min(1,ms/560));
+      // tiny pre-dip in first 90ms for tactile press
+      if(ms<90){ scale=1-0.12*(ms/90); on=false; }
+      else { scale=0.88+(sp-0.88); on=true; }
+      glow=Math.max(0, 1-ms/DUR)*0.9;
+
+      stepParticles();
+
+      if(t>=1){ playStart=-1; nextAuto=now+AUTO_GAP; active=0; liked=false; }
+    }
+
+    drawHeart(scale, on, glow);
+    if(active>0) drawParticles();
+
+    rafId=requestAnimationFrame(frame);
+  }
+
+  function trigger(now, fromUser){
+    playStart=now; liked=true; burst();
+    if(fromUser){ userMode=true; lastInput=now; }
+    live.textContent="Liked";
+  }
+  function userPlay(){ if(playStart>=0) return; trigger(performance.now(), true); }
+
+  function start(){ if(!running){ running=true; rafId=requestAnimationFrame(frame); } }
+  function stop(){ running=false; cancelAnimationFrame(rafId); }
+
+  stage.addEventListener("pointerdown", function(){ userPlay(); });
+  stage.addEventListener("keydown", function(e){
+    if(e.key===" "||e.key==="Enter"){ e.preventDefault(); userPlay(); }
+  });
+  document.addEventListener("visibilitychange", function(){
+    if(document.hidden){ stop(); }
+    else { nextAuto=performance.now()+400; start(); }
+  });
+
+  // idle visuals: empty (un-liked) heart, kick first autonomous like shortly
+  drawHeart(1,false,0);
+  nextAuto=performance.now()+700;
+  rafId=requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

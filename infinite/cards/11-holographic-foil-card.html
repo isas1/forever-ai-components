@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+<meta name="description" content="Holographic Foil Card — Cards. A self-contained, zero-dependency animated web component.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Holographic Foil Card</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #0a0a0c;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, sans-serif;
+      perspective: 1000px;
+    }
+    
+    .holo-cap {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 12px;
+      pointer-events: none;
+      letter-spacing: 0.5px;
+    }
+
+    .holo-card-wrapper {
+      width: clamp(200px, 40vw, 320px);
+      aspect-ratio: 2.5 / 3.5;
+      position: relative;
+      transform-style: preserve-3d;
+      transition: transform 0.1s ease-out;
+    }
+
+    .holo-card {
+      width: 100%;
+      height: 100%;
+      background-color: #1a1a24;
+      border-radius: 16px;
+      position: absolute;
+      box-shadow: 
+        0 10px 30px -10px rgba(0, 0, 0, 0.8),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-align: center;
+      transform-style: preserve-3d;
+      will-change: transform;
+    }
+
+    /* The foil layer */
+    .holo-card::before, .holo-card::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      mix-blend-mode: color-dodge;
+      will-change: background, opacity;
+      transition: opacity 0.3s ease;
+      opacity: 0;
+    }
+
+    /* Rainbow gradient foil */
+    .holo-card::before {
+      background: linear-gradient(
+        115deg,
+        transparent 20%,
+        rgba(255, 0, 84, 0.5) 25%,
+        rgba(255, 184, 0, 0.5) 35%,
+        rgba(0, 255, 136, 0.5) 50%,
+        rgba(0, 195, 255, 0.5) 65%,
+        rgba(157, 0, 255, 0.5) 75%,
+        transparent 80%
+      );
+      background-size: 300% 300%;
+      background-position: var(--pos-x, 50%) var(--pos-y, 50%);
+      filter: brightness(1.2) contrast(1.5);
+    }
+
+    /* Sparkle/glare overlay */
+    .holo-card::after {
+      background: radial-gradient(
+        circle at var(--pos-x, 50%) var(--pos-y, 50%),
+        rgba(255, 255, 255, 0.8) 0%,
+        rgba(255, 255, 255, 0) 60%
+      );
+      mix-blend-mode: overlay;
+    }
+
+    .holo-card:hover::before,
+    .holo-card:hover::after {
+      opacity: 1;
+    }
+
+    /* Card Content */
+    .holo-content {
+      transform: translateZ(40px); /* Pops out slightly due to preserve-3d */
+      padding: 20px;
+      pointer-events: none;
+    }
+
+    .holo-icon {
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, #fff, #888);
+      clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+      margin: 0 auto 20px auto;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    }
+
+    .holo-title {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 0 0 8px 0;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      text-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+
+    .holo-subtitle {
+      font-size: 12px;
+      color: #8892b0;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Glitch lines inside the foil */
+    .holo-card .lines {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255,255,255,0.03) 2px,
+        rgba(255,255,255,0.03) 4px
+      );
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .holo-card-wrapper {
+        transform: none !important;
+        transition: none !important;
+      }
+      .holo-card::before, .holo-card::after {
+        opacity: 0.5 !important;
+        background-position: 50% 50% !important;
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="holo-card-wrapper" id="holoWrapper">
+    <div class="holo-card" id="holoCard">
+      <div class="lines"></div>
+      <div class="holo-content">
+        <div class="holo-icon"></div>
+        <h2 class="holo-title">Aether</h2>
+        <div class="holo-subtitle">Mythic Rare</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="holo-cap">Holographic Foil Card</div>
+
+  <script>
+    (() => {
+      const wrapper = document.getElementById('holoWrapper');
+      const card = document.getElementById('holoCard');
+      const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      
+      let isRunning = true;
+      let targetRotX = 0;
+      let targetRotY = 0;
+      let currentRotX = 0;
+      let currentRotY = 0;
+      let isHovering = false;
+      let animationFrame;
+
+      const lerp = (start, end, factor) => start + (end - start) * factor;
+
+      const handleMouseMove = (e) => {
+        if (!isRunning || prefersReducedMotion) return;
+        isHovering = true;
+        
+        const rect = wrapper.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        
+        const mouseX = e.clientX - centerX;
+        const mouseY = e.clientY - centerY;
+        
+        // Calculate rotation angles (max 20 degrees)
+        targetRotX = -(mouseY / (rect.height / 2)) * 20;
+        targetRotY = (mouseX / (rect.width / 2)) * 20;
+        
+        // Calculate background position for foil (0% to 100%)
+        const bgPosX = ((e.clientX - rect.left) / rect.width) * 100;
+        const bgPosY = ((e.clientY - rect.top) / rect.height) * 100;
+        
+        card.style.setProperty('--pos-x', `${bgPosX}%`);
+        card.style.setProperty('--pos-y', `${bgPosY}%`);
+      };
+
+      const handleMouseLeave = () => {
+        isHovering = false;
+        targetRotX = 0;
+        targetRotY = 0;
+        card.style.setProperty('--pos-x', `50%`);
+        card.style.setProperty('--pos-y', `50%`);
+      };
+
+      const animate = () => {
+        if (!isRunning || prefersReducedMotion) return;
+        
+        currentRotX = lerp(currentRotX, targetRotX, 0.1);
+        currentRotY = lerp(currentRotY, targetRotY, 0.1);
+        
+        wrapper.style.transform = `perspective(1000px) rotateX(${currentRotX}deg) rotateY(${currentRotY}deg)`;
+        
+        animationFrame = requestAnimationFrame(animate);
+      };
+
+      const start = () => {
+        if (!isRunning && !prefersReducedMotion) {
+          isRunning = true;
+          animate();
+        }
+      };
+
+      const stop = () => {
+        isRunning = false;
+        cancelAnimationFrame(animationFrame);
+      };
+
+      document.addEventListener('visibilitychange', () => {
+        document.hidden ? stop() : start();
+      });
+
+      wrapper.addEventListener('mousemove', handleMouseMove);
+      wrapper.addEventListener('mouseleave', handleMouseLeave);
+      
+      // For mobile testing
+      wrapper.addEventListener('touchmove', (e) => handleMouseMove(e.touches[0]));
+      wrapper.addEventListener('touchend', handleMouseLeave);
+
+      if (!prefersReducedMotion) {
+        animate();
+      }
+      
+      window.start = start;
+      window.stop = stop;
+    })();
+  </script>
+</body>
+</html>

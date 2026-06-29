@@ -1,0 +1,128 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="A glowing pink ring trails the pointer with damped-spring momentum, stretching and squashing along its velocity with an echo and dotted reti">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Elastic Ring</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:#0a0a0f;display:grid;place-items:center}
+#ccp04-c{display:block;width:100%;height:100%;touch-action:none;cursor:none}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:#ff5ca8;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style></head><body>
+<canvas id="ccp04-c" role="img" aria-label="Elastic ring trailing a moving pointer"></canvas>
+<div class="cap">Elastic Ring</div>
+<script>(function(){
+var cv=document.getElementById('ccp04-c'),ctx=cv.getContext('2d');
+var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var W=0,H=0,DPR=1,raf=0,running=true,t=0;
+var ACC='#ff5ca8';
+// pointer state: target (where we steer toward) and ring (lagging follower)
+var tx=0,ty=0,rx=0,ry=0,vx=0,vy=0; // ring pos + velocity
+var px=0,py=0; // raw pointer for spring target when real
+var real=false,lastMove=-1e9,prx=0,pry=0;
+
+function size(){
+  DPR=Math.min(2,window.devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+size();window.addEventListener('resize',size);
+
+// Self-demo path: eased Lissajous figure, centred, scaled to frame
+function demoPath(time){
+  var cx=W/2,cy=H/2,R=Math.min(W,H)*0.30;
+  var a=time*0.0011;
+  // figure-eight-ish 3:2 Lissajous, slight breathing radius
+  var br=R*(0.92+0.08*Math.sin(a*0.7));
+  return {x:cx+Math.sin(a*2)*br*1.02, y:cy+Math.sin(a*3+0.6)*br*0.66};
+}
+
+cv.addEventListener('pointermove',function(e){
+  var r=cv.getBoundingClientRect();
+  px=e.clientX-r.left;py=e.clientY-r.top;
+  real=true;lastMove=t;
+},{passive:true});
+
+function drawRing(cx,cy,base,sx,sy,ang,glow,alpha,lw){
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);ctx.scale(sx,sy);
+  ctx.beginPath();ctx.arc(0,0,base,0,Math.PI*2);ctx.restore();
+  ctx.lineWidth=lw;ctx.globalAlpha=alpha;
+  ctx.shadowBlur=glow;ctx.shadowColor=ACC;ctx.strokeStyle=ACC;ctx.stroke();
+}
+
+function render(){
+  // trailing fade clears canvas + leaves faint motion trail
+  ctx.globalAlpha=1;ctx.shadowBlur=0;
+  ctx.fillStyle='rgba(10,10,15,0.30)';ctx.fillRect(0,0,W,H);
+
+  var base=Math.max(10,Math.min(W,H)*0.085);
+
+  // ---- pointer target selection ----
+  if(real&&(t-lastMove)>2600){real=false;} // idle: hand back to demo
+  if(real){
+    // spring the demo target onto the real pointer
+    tx+=(px-tx)*0.35;ty+=(py-ty)*0.35;
+  }else{
+    var d=demoPath(t);tx+=(d.x-tx)*0.10;ty+=(d.y-ty)*0.10; // ease onto path
+  }
+
+  // ---- ring follows target with lag + momentum ----
+  var ox=rx,oy=ry;
+  var ax=(tx-rx)*0.14, ay=(ty-ry)*0.14;
+  vx=(vx+ax)*0.80;vy=(vy+ay)*0.80; // damped spring -> velocity
+  rx+=vx;ry+=vy;
+
+  // velocity drives deformation: stretch along travel, squash across
+  var sp=Math.hypot(vx,vy);
+  var ang=Math.atan2(vy,vx);
+  var k=Math.min(0.85,sp*0.045);            // deform amount, capped
+  var sx=1+k, sy=1-k*0.62;                   // stretch / squash (volume-ish)
+
+  // soft outer echo ring lags a touch more — secondary motion
+  var ex=rx-vx*1.4, ey=ry-vy*1.4;
+
+  // dotted target reticle (where it's chasing)
+  ctx.setLineDash([2,5]);
+  drawRing(tx,ty,base*0.34,1,1,0,8,0.30,1.5);
+  ctx.setLineDash([]);
+
+  // echo
+  drawRing(ex,ey,base*0.92,1+k*0.5,1-k*0.3,ang,10,0.18,2);
+  // main elastic ring
+  drawRing(rx,ry,base,sx,sy,ang,18,0.95,3);
+  // inner core dot, scales subtly with speed
+  ctx.globalAlpha=0.9;ctx.shadowBlur=14;ctx.shadowColor=ACC;ctx.fillStyle=ACC;
+  ctx.beginPath();ctx.arc(rx,ry,Math.max(1.5,base*0.10*(1+k*0.5)),0,Math.PI*2);ctx.fill();
+
+  // velocity streak from echo to head
+  ctx.globalAlpha=Math.min(0.5,sp*0.03);ctx.shadowBlur=6;
+  ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(ex,ey);ctx.lineTo(rx,ry);ctx.stroke();
+
+  ctx.globalAlpha=1;ctx.shadowBlur=0;
+}
+
+function loop(){
+  if(!running)return;
+  t+=16.7;render();raf=requestAnimationFrame(loop);
+}
+
+function start(){
+  // seed positions at centre
+  tx=rx=W/2;ty=ry=H/2;
+  if(reduce){
+    var d=demoPath(0);tx=d.x;ty=d.y;rx=tx-40;ry=ty-26;
+    vx=8;vy=5; // frozen mid-flight so deformation is visible
+    ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,W,H);
+    render();return;
+  }
+  loop();
+}
+
+function vis(){
+  if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  else if(!reduce&&!running){running=true;loop();}
+}
+document.addEventListener('visibilitychange',vis);
+start();
+})();</script>
+</body></html>

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Expanding amber light wavefronts ripple from a central star, lighting up distance markers (1 AU, 1 ly, 100 ly) as they arrive.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Light Travel Delay</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0612;}
+  #ltd-c{display:block;width:100%;height:100%;}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.14em;color:#ffb347;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="ltd-c"></canvas>
+<div class="cap">Light Travel Delay</div>
+<script>
+(function(){
+  const cv=document.getElementById('ltd-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,cx,cy,R;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;R=Math.min(W,H)*0.46;
+  }
+  addEventListener('resize',size);size();
+  // markers at log-scaled fractions of the max ring radius. dist = arrival "time" fraction.
+  const MK=[{f:0.30,l:'1 AU'},{f:0.62,l:'1 ly'},{f:0.95,l:'100 ly'}];
+  const SP=0.40; // wavefront speed: fraction of R per second (the "light speed" scale)
+  const PERIOD=MK[MK.length-1].f/SP+1.6; // time for a front to clear the last marker, plus pause
+  let fronts=[],t0=performance.now()/1000,emit=t0,boost=0,pulse=0;
+  function lit(m,now){ // is marker reached by any front yet, and how recently?
+    let best=-1;
+    for(const f of fronts){const d=(now-f.born)*SP;if(d>=m.f){const age=d-m.f;best=Math.max(best,1-Math.min(age/0.55,1));}}
+    return best; // -1 = dark, 0..1 = recently struck glow
+  }
+  cv.addEventListener('pointermove',()=>{boost=1;});
+  cv.addEventListener('click',()=>{fronts.push({born:performance.now()/1000});pulse=1;});
+  function frame(){
+    const now=performance.now()/1000;
+    ctx.fillStyle='rgba(10,6,18,0.30)';ctx.fillRect(0,0,W,H);
+    if(!reduce){
+      boost*=0.93;pulse*=0.90;
+      if(now-emit>PERIOD*(0.5)){emit=now;fronts.push({born:now});}
+      fronts=fronts.filter(f=>(now-f.born)*SP < 1.25);
+    }
+    // faint radial scale grid
+    ctx.strokeStyle='rgba(255,179,71,0.06)';ctx.lineWidth=1;
+    for(let i=1;i<=4;i++){ctx.beginPath();ctx.arc(cx,cy,R*i/4,0,Math.PI*2);ctx.stroke();}
+    // expanding wavefronts
+    for(const f of fronts){
+      const d=(now-f.born)*SP, r=d*R; if(r<1)continue;
+      const fade=1-Math.min(d/1.2,1);
+      ctx.strokeStyle='rgba(255,179,71,'+(0.55*fade*fade).toFixed(3)+')';
+      ctx.lineWidth=(1.4+2.2*fade);
+      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
+    }
+    // distance markers
+    ctx.textAlign='left';ctx.textBaseline='middle';
+    const fs=Math.max(9,Math.min(13,R*0.05));
+    ctx.font='600 '+fs+'px ui-monospace,Menlo,monospace';
+    for(const m of MK){
+      const r=m.f*R, lg=lit(m,now), on=lg>=0;
+      // dotted ring at marker distance
+      ctx.setLineDash([2,6]);ctx.lineWidth=1;
+      ctx.strokeStyle=on?'rgba(255,179,71,'+(0.18+0.4*lg).toFixed(3)+')':'rgba(255,179,71,0.10)';
+      ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+      // marker dot on the up-right diagonal
+      const a=-Math.PI/4, mx=cx+Math.cos(a)*r, my=cy+Math.sin(a)*r;
+      const g=on?lg:0;
+      ctx.fillStyle=on?'rgba(255,'+(120+90*g)+','+(40+90*g)+','+(0.5+0.5*g)+')':'rgba(120,100,140,0.5)';
+      ctx.beginPath();ctx.arc(mx,my,(2.2+3.0*g)*(R/180),0,Math.PI*2);ctx.fill();
+      ctx.fillStyle=on?'rgba(255,200,140,'+(0.45+0.55*g)+')':'rgba(150,135,170,0.45)';
+      ctx.fillText(m.l,mx+7*(R/180),my-0.5);
+    }
+    // central star
+    const sr=(5+pulse*4)*(R/180);
+    const sg=ctx.createRadialGradient(cx,cy,0,cx,cy,sr*4);
+    sg.addColorStop(0,'#fff7e6');sg.addColorStop(0.4,'#ffd9a0');
+    sg.addColorStop(0.7,'rgba(255,179,71,0.4)');sg.addColorStop(1,'rgba(255,179,71,0)');
+    ctx.fillStyle=sg;ctx.beginPath();ctx.arc(cx,cy,sr*4,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='#fff7e6';ctx.beginPath();ctx.arc(cx,cy,sr,0,Math.PI*2);ctx.fill();
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){fronts=[{born:t0-1.4},{born:t0-0.7},{born:t0}];frame();}else start();
+})();
+</script>
+</body>
+</html>

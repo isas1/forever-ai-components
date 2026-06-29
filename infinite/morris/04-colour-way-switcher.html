@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Colour-Way Switcher — William Morris. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Colour-Way Switcher</title>
+<style>
+  html,body{margin:0;height:100%;background:#dfe6e4;overflow:hidden}
+  #mor04-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mor04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mor04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#23301f;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mor04-stage" role="img" aria-label="One William Morris ogee botanical block scrolling slowly upward while it recolours itself through historic dye-bath colourways — indigo, madder, sage, gold and ink — the pattern stays, only the ink changes.">
+  <canvas id="mor04-cv"></canvas>
+</div>
+<div class="mor04-cap">The Colour-Way Switcher</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('mor04-cv'); if(!cv) return;
+  const INK='#23301f';
+
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+
+  const colourways=[
+    {stem:'#3a6a55',leaf:'#2c4a6e',flower:'#c2a14a',berry:'#7d9b6a',ground:'#dfe6e4'},
+    {stem:'#6b7233',leaf:'#a8392b',flower:'#c2a14a',berry:'#2c4a6e',ground:'#f0e2d4'},
+    {stem:'#4a5a2a',leaf:'#7d9b6a',flower:'#a8392b',berry:'#6b7233',ground:'#e9ecda'},
+    {stem:'#6b7233',leaf:'#c2a14a',flower:'#a8392b',berry:'#2c4a6e',ground:'#f1e9cf'},
+    {stem:'#3a4a33',leaf:'#23301f',flower:'#a8392b',berry:'#6b7233',ground:'#e6dcc0'}
+  ];
+  function hex(c){return parseInt(c.slice(1),16);}
+  function mc(a,b,t){const pa=hex(a),pb=hex(b);const ar=pa>>16,ag=(pa>>8)&255,ab=pa&255,br=pb>>16,bg=(pb>>8)&255,bb=pb&255;return 'rgb('+Math.round(ar+(br-ar)*t)+','+Math.round(ag+(bg-ag)*t)+','+Math.round(ab+(bb-ab)*t)+')';}
+  function mixWay(a,b,t){return {stem:mc(a.stem,b.stem,t),leaf:mc(a.leaf,b.leaf,t),flower:mc(a.flower,b.flower,t),berry:mc(a.berry,b.berry,t),ground:mc(a.ground,b.ground,t)};}
+
+  /* autonomous idle loop: auto-cycle through colourways on a timer */
+  let cur=0, want=0, blend=1, hold=0;
+
+  let tileCv,tileSize=120;
+  function buildTile(w){
+    const c=tileCv||(tileCv=document.createElement('canvas'));
+    c.width=c.height=tileSize;
+    const x=c.getContext('2d');const u=tileSize;
+    x.clearRect(0,0,u,u);x.lineCap='round';x.lineJoin='round';
+    x.strokeStyle=w.stem;x.lineWidth=5;
+    x.beginPath();x.moveTo(u*0.5,0);
+    x.bezierCurveTo(u*0.9,u*0.25,u*0.1,u*0.5,u*0.5,u*0.75);
+    x.bezierCurveTo(u*0.9,u*0.9,u*0.5,u,u*0.5,u);x.stroke();
+    x.beginPath();x.moveTo(0,u*0.5);
+    x.bezierCurveTo(u*0.25,u*0.1,u*0.5,u*0.9,u*0.75,u*0.5);
+    x.bezierCurveTo(u*0.9,u*0.5,u,u*0.5,u,u*0.5);x.stroke();
+    function lf(px,py,rot,sc){
+      x.save();x.translate(px,py);x.rotate(rot);x.scale(sc,sc);
+      x.beginPath();x.moveTo(0,0);x.bezierCurveTo(14,-8,18,-26,6,-40);x.bezierCurveTo(2,-30,-4,-34,-14,-22);x.bezierCurveTo(-8,-12,-10,-6,0,0);x.closePath();
+      x.fillStyle=w.leaf;x.fill();x.strokeStyle=INK;x.lineWidth=1.4;x.stroke();x.restore();
+    }
+    lf(u*0.5,u*0.5,0.5,1);lf(u*0.5,u*0.5,Math.PI+0.5,0.8);
+    x.save();x.translate(u*0.5,u*0.5);
+    for(let i=0;i<6;i++){x.rotate(Math.PI/3);x.beginPath();x.ellipse(0,-10,5,9,0,0,7);x.fillStyle=w.flower;x.fill();x.strokeStyle=INK;x.lineWidth=1;x.stroke();}
+    x.beginPath();x.arc(0,0,5,0,7);x.fillStyle=w.berry;x.fill();x.strokeStyle=INK;x.lineWidth=1;x.stroke();x.restore();
+    [[6,6],[u-6,6],[6,u-6],[u-6,u-6]].forEach(p=>{x.beginPath();x.arc(p[0],p[1],4,0,7);x.fillStyle=w.berry;x.fill();x.strokeStyle=INK;x.lineWidth=1;x.stroke();});
+    return c;
+  }
+
+  let off=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000);last=now;
+    if(!REDUCED){
+      if(blend<1){ blend=Math.min(1,blend+dt*1.2); if(blend>=1){ cur=want; hold=0; } }
+      else { hold+=dt; if(hold>=2.6){ want=(cur+1)%colourways.length; blend=0; } }
+    }
+    const a=colourways[cur], b=colourways[want];
+    const w=(blend<1)?mixWay(a,b,blend):colourways[cur];
+    const ctx=S.ctx;ctx.fillStyle=w.ground;ctx.fillRect(0,0,S.w,S.h);
+    const tile=buildTile(w);
+    if(!REDUCED) off=(off+dt*6)%tileSize;
+    const pat=ctx.createPattern(tile,'repeat');
+    ctx.save();ctx.translate(0,-off);ctx.fillStyle=pat;ctx.fillRect(0,-tileSize,S.w,S.h+tileSize*2);ctx.restore();
+  }
+
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ draw(performance.now()); } else start();
+})();
+</script>
+</body>
+</html>

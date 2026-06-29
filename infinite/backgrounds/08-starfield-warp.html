@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Canvas stars streak outward from center as tinted accelerating light trails, simulating a hyperspace warp through space on black.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Starfield Warp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-900:#08090d;
+  --text-2:#8a91a8;
+  --font-display:"Space Grotesk",system-ui,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;}
+html,body{margin:0;height:100%;overflow:hidden;}
+body{background:var(--bg-900);}
+.frame{position:absolute;inset:0;display:grid;place-items:center;}
+.stage{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-900);}
+.c08-warp{position:absolute;inset:0;}
+.c08-warp canvas{display:block;width:100%;height:100%;}
+.caption{position:absolute;left:12px;bottom:10px;z-index:5;
+  font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-2);opacity:.7;pointer-events:none;}
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="stage">
+    <div class="c08-warp" data-c08 aria-hidden="true"><canvas></canvas></div>
+    <span class="caption">Starfield Warp</span>
+  </div>
+</div>
+<script>
+(function(){
+  "use strict";
+  var REDUCED=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function setupCanvas(host,draw){
+    var canvas=host.querySelector("canvas"),ctx=canvas.getContext("2d");
+    var dpr=Math.min(window.devicePixelRatio||1,2),w=0,h=0;
+    function resize(){
+      var r=host.getBoundingClientRect();
+      w=Math.max(1,Math.round(r.width));h=Math.max(1,Math.round(r.height));
+      canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      if(draw.onResize) draw.onResize(w,h);
+    }
+    if(window.ResizeObserver){new ResizeObserver(resize).observe(host);}
+    else{window.addEventListener("resize",resize);}
+    resize();
+    return {ctx:ctx,get w(){return w;},get h(){return h;}};
+  }
+
+  function runLoop(tick){
+    var running=false,id=0;
+    function loop(){tick();id=requestAnimationFrame(loop);}
+    function start(){if(running||document.hidden)return;running=true;id=requestAnimationFrame(loop);}
+    function stop(){running=false;cancelAnimationFrame(id);}
+    document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
+    start();
+  }
+
+  var host=document.querySelector("[data-c08]");
+  if(!host) return;
+  var stars=[],cx=0,cy=0;
+  var cv=setupCanvas(host,{onResize:function(w,h){cx=w/2;cy=h/2;build(w,h);}});
+
+  function build(w,h){
+    var count=Math.max(80,Math.min(220,Math.round((w*h)/1600)));
+    stars=[];
+    for(var i=0;i<count;i++) stars.push(spawn(w,h,true));
+  }
+  function spawn(w,h,initial){
+    var maxR=Math.max(w,h);
+    return {a:Math.random()*Math.PI*2,r:initial?Math.random()*maxR:Math.random()*12,
+      speed:0.4+Math.random()*1.6,pr:0,hue:Math.random()};
+  }
+  function tint(t){
+    return t>0.66?"rgba(174,246,255,":(t>0.33?"rgba(124,92,255,":"rgba(34,211,238,");
+  }
+
+  function render(){
+    var ctx=cv.ctx,w=cv.w,h=cv.h,maxR=Math.max(w,h);
+    ctx.fillStyle="rgba(8,9,13,0.35)";ctx.fillRect(0,0,w,h);
+    for(var i=0;i<stars.length;i++){
+      var s=stars[i];s.pr=s.r;s.r+=s.speed*(1+s.r/maxR*3);
+      var x1=cx+Math.cos(s.a)*s.pr,y1=cy+Math.sin(s.a)*s.pr;
+      var x2=cx+Math.cos(s.a)*s.r,y2=cy+Math.sin(s.a)*s.r;
+      var alpha=Math.min(1,s.r/(maxR*0.5));
+      ctx.strokeStyle=tint(s.hue)+(alpha*0.9)+")";
+      ctx.lineWidth=Math.min(2.4,0.4+s.r/maxR*4);
+      ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+      if(s.r>maxR*0.62||x2<-20||x2>w+20||y2<-20||y2>h+20) stars[i]=spawn(w,h,false);
+    }
+  }
+
+  if(REDUCED){
+    var ctx=cv.ctx;
+    ctx.fillStyle="#08090d";ctx.fillRect(0,0,cv.w,cv.h);
+    for(var i=0;i<90;i++){
+      ctx.fillStyle="rgba(199,204,219,"+(0.2+Math.random()*0.6)+")";
+      var rad=Math.random()*1.4+0.3;
+      ctx.beginPath();ctx.arc(Math.random()*cv.w,Math.random()*cv.h,rad,0,Math.PI*2);ctx.fill();
+    }
+    return;
+  }
+  runLoop(render);
+})();
+</script>
+</body>
+</html>

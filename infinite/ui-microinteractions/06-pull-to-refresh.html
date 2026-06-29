@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Mobile list frame you drag down to trigger a rotating arc spinner that refreshes and flashes skeleton rows.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pull to Refresh</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0f1a24;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  #wrap{position:fixed;inset:0;display:grid;place-items:center;cursor:ns-resize;touch-action:none}
+  #frame{position:relative;width:62%;max-width:200px;aspect-ratio:.82;background:#16252f;border-radius:20px;overflow:hidden;box-shadow:0 14px 34px rgba(0,0,0,.4)}
+  #spinarea{position:absolute;top:0;left:0;right:0;height:46px;display:grid;place-items:center}
+  #spin{width:24px;height:24px}
+  #spin circle{fill:none;stroke:#3ad6c5;stroke-width:3;stroke-linecap:round;stroke-dasharray:60;stroke-dashoffset:60}
+  #list{position:absolute;top:0;left:0;right:0;padding:12px;will-change:transform}
+  .row{height:14px;border-radius:7px;background:#22404e;margin-bottom:9px}
+  .row:nth-child(odd){width:80%}.row:nth-child(even){width:60%}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  .hint{position:absolute;top:14px;left:0;right:0;text-align:center;font-size:9px;color:#5a7585;letter-spacing:.1em}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="frame">
+    <div id="spinarea"><svg id="spin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg></div>
+    <div class="hint" id="hint">PULL DOWN</div>
+    <div id="list"></div>
+  </div>
+</div>
+<div class="cap">Pull refresh</div>
+<script>
+const list=document.getElementById('list'),spin=document.getElementById('spin'),circle=spin.querySelector('circle'),frame=document.getElementById('frame'),wrap=document.getElementById('wrap'),hint=document.getElementById('hint');
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+for(let i=0;i<7;i++){const r=document.createElement('div');r.className='row';list.appendChild(r);}
+const MAX=60;let y=0,dragging=false,sy=0,refreshing=false,raf;
+function render(){list.style.transform='translateY('+y+'px)';const p=Math.min(1,y/MAX);spin.style.transform='rotate('+(p*270)+'deg)';circle.style.strokeDashoffset=60-p*50;spin.style.opacity=p;hint.style.opacity=refreshing?0:(1-p);}
+function down(e){if(refreshing)return;dragging=true;sy=(e.touches?e.touches[0].clientY:e.clientY);stop();}
+function move(e){if(!dragging)return;const cy=(e.touches?e.touches[0].clientY:e.clientY);y=Math.max(0,Math.min(MAX*1.3,(cy-sy)*.7));render();}
+function up(){if(!dragging)return;dragging=false;if(y>=MAX){refresh();}else{ease(0);loop();}}
+function ease(to){const s=y;const t0=performance.now();(function a(t){const k=Math.min(1,(t-t0)/260);y=s+(to-s)*(1-Math.pow(1-k,3));render();if(k<1)raf=requestAnimationFrame(a);})(performance.now());}
+function refresh(){refreshing=true;y=MAX;render();let r=0;const t0=performance.now();(function a(t){r=((t-t0)/700)%1;spin.style.transform='rotate('+(r*360+270)+'deg)';if(performance.now()-t0<1400)raf=requestAnimationFrame(a);else{flash();ease(0);refreshing=false;loop();}})(t0);}
+function flash(){[...list.children].forEach((row,i)=>{row.animate([{opacity:.4},{opacity:1}],{duration:300,delay:i*40,easing:'ease-out'});});}
+function stop(){cancelAnimationFrame(raf);}
+wrap.addEventListener('mousedown',down);window.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
+wrap.addEventListener('touchstart',down,{passive:true});wrap.addEventListener('touchmove',move,{passive:true});wrap.addEventListener('touchend',up);
+let timer;
+function loop(){clearTimeout(timer);if(reduce)return;timer=setTimeout(()=>{if(!dragging&&!refreshing)refresh();},2400);}
+document.addEventListener('visibilitychange',()=>{document.hidden?(stop(),clearTimeout(timer)):loop();});
+render();loop();
+</script>
+</body>
+</html>

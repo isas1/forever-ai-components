@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A halftone grid of dots swells from the center, blooming into a glowing amber flower on a deep blue field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Halftone Bloom</title>
+<style>
+  html,body{margin:0;height:100%;background:#0d0f14}
+  #po07-stage{position:fixed;inset:0;background:#0d0f14;overflow:hidden}
+  #po07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+  <div id="po07-stage" role="img" aria-label="A blooming circle rendered in Pointillist halftone: a grid of colored dots that swell from the center to optically mix into a glowing amber flower on a deep blue field.">
+    <canvas id="po07-c"></canvas>
+  </div>
+  <div class="cap">Halftone Bloom</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById('po07-stage');
+  var cv=document.getElementById('po07-c');
+  var ctx=cv.getContext('2d');
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // Divisionist palette: warm amber core, magenta + violet shadows, cyan/teal complements.
+  // Each dot picks a hue by radius band so colors optically mix toward amber.
+  var PAL=['#f0a830','#ff6f3c','#e8472e','#c0307a','#7a2a8c','#2d5fa6','#1f8a8a','#f6d24b'];
+  var rgb=[];
+  for(var i=0;i<PAL.length;i++){var h=PAL[i];rgb.push([parseInt(h.substr(1,2),16),parseInt(h.substr(3,2),16),parseInt(h.substr(5,2),16)]);}
+
+  var W=0,H=0,dpr=1,cx=0,cy=0,maxR=0,pitch=0;
+  // Halftone grid cells (capped). Built on resize.
+  var GX=[],GY=[],GR=[],GC=[],N=0; // base position, dist-from-center, color idx
+
+  function build(){
+    var cw=stage.clientWidth||300, ch=stage.clientHeight||300;
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    W=Math.round(cw*dpr); H=Math.round(ch*dpr);
+    cv.width=W; cv.height=H;
+    cx=W/2; cy=H/2;
+    var minSide=Math.min(W,H);
+    maxR=minSide*0.46;
+    // pitch chosen so cell count stays <=110
+    pitch=minSide/9.2;
+    GX.length=GY.length=GR.length=GC.length=0; N=0;
+    var off=pitch*0.5;
+    var span=maxR+pitch;
+    for(var y=cy-span;y<=cy+span && N<110;y+=pitch){
+      for(var x=cx-span;x<=cx+span && N<110;x+=pitch){
+        var dx=x-cx, dy=y-cy, d=Math.sqrt(dx*dx+dy*dy);
+        if(d>span)continue;
+        GX[N]=x; GY[N]=y; GR[N]=d;
+        // color band by normalized radius: core amber -> outer cool
+        var nr=d/maxR;
+        var ci;
+        if(nr<0.18)ci=0; else if(nr<0.34)ci=7; else if(nr<0.5)ci=1;
+        else if(nr<0.64)ci=2; else if(nr<0.78)ci=3; else if(nr<0.9)ci=4;
+        else ci=(((x|0)+(y|0))&1)?5:6;
+        GC[N]=ci;
+        N++;
+      }
+    }
+    off=off; // (keep lint quiet)
+  }
+
+  function dot(x,y,r,ci,a){
+    if(r<0.35)return;
+    var c=rgb[ci];
+    ctx.fillStyle='rgba('+c[0]+','+c[1]+','+c[2]+','+a+')';
+    ctx.beginPath();
+    ctx.arc(x,y,r,0,6.283185307179586);
+    ctx.fill();
+  }
+
+  // Render one frame. p = bloom phase 0..1 (eased), breathe 0..1
+  function render(p,breathe){
+    ctx.fillStyle='#0d0f14';
+    ctx.fillRect(0,0,W,H);
+    // bloom front radius in canvas units
+    var front=p*(maxR+pitch);
+    var cellMax=pitch*0.62;
+    var twoPi=6.283185307179586;
+    for(var i=0;i<N;i++){
+      var d=GR[i];
+      // local growth: how far the bloom front has passed this cell
+      var t=(front-d)/(pitch*2.2);
+      if(t<=0){continue;}
+      if(t>1)t=1;
+      // halftone: cell darkness -> dot size. Core dots biggest, falloff outward.
+      var tone=1-(d/(maxR+pitch));      // 1 at center, 0 at edge
+      if(tone<0)tone=0;
+      // settle ripple so it reads as bloom, not fill
+      var ripple=0.85+0.15*Math.sin(d*0.05 - breathe*twoPi);
+      var r=cellMax*(0.28+0.72*tone)*t*ripple;
+      // outer petals stay smaller -> negative space, very Seurat
+      var a=0.55+0.4*t*tone;
+      if(a>0.95)a=0.95;
+      dot(GX[i],GY[i],r,GC[i],a);
+    }
+    // static central highlight as a pre-baked radial — drawn each frame but no layout/filter
+    var g=ctx.createRadialGradient(cx,cy,0,cx,cy,maxR*0.55);
+    g.addColorStop(0,'rgba(246,210,75,'+(0.22*p)+')');
+    g.addColorStop(1,'rgba(246,210,75,0)');
+    ctx.fillStyle=g;
+    ctx.beginPath();ctx.arc(cx,cy,maxR*0.55,0,twoPi);ctx.fill();
+  }
+
+  function ease(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+  build();
+
+  if(reduce){
+    render(1,0.0);
+    window.addEventListener('resize',function(){build();render(1,0.0);});
+    return;
+  }
+
+  var running=true, raf=0, t0=0;
+  var PERIOD=5200; // ms per bloom cycle
+
+  function loop(ts){
+    if(!running)return;
+    if(!t0)t0=ts;
+    var el=(ts-t0)%PERIOD;
+    var cyc=(ts-t0)/PERIOD;
+    // bloom: grow 0..1 over 70% then hold/exhale
+    var ph=el/PERIOD;
+    var p;
+    if(ph<0.72){p=ease(ph/0.72);}
+    else {p=1-0.12*ease((ph-0.72)/0.28);} // gentle exhale, never collapses (no strobe)
+    var breathe=cyc%1; // slow phase for ripple, < 1Hz
+    render(p,breathe);
+    raf=requestAnimationFrame(loop);
+  }
+  raf=requestAnimationFrame(loop);
+
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+    else if(!running){running=true;t0=0;raf=requestAnimationFrame(loop);}
+  });
+
+  var rt;
+  window.addEventListener('resize',function(){
+    clearTimeout(rt);
+    rt=setTimeout(build,120);
+  });
+})();
+</script>
+</body>
+</html>

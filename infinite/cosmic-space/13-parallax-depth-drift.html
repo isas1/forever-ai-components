@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Four-layer parallax starfield drifting laterally, near stars streak with motion blur while the deep field barely stirs; pointer nudges the d">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parallax Depth Drift</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#070a14;}
+  #pdd-c{display:block;width:100%;height:100%;}
+  .pdd-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
+       letter-spacing:.14em;color:#c9b8ff;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="pdd-c"></canvas>
+<div class="pdd-cap">Parallax Depth Drift</div>
+<script>
+(function(){
+  const cv=document.getElementById('pdd-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,scale;
+  // four layers: deep field barely stirs, near stars streak. speed ~ 1/distance.
+  const LAYERS=[
+    {n:90, sp:0.05, sz:0.55, col:'176,184,214', glow:0},   // ancient deep field
+    {n:60, sp:0.16, sz:0.85, col:'201,184,255', glow:0},   // mid
+    {n:34, sp:0.46, sz:1.3,  col:'222,212,255', glow:.4},  // near
+    {n:16, sp:1.15, sz:2.0,  col:'255,252,255', glow:1}    // foreground streakers
+  ];
+  let stars=[];
+  function build(){
+    stars=LAYERS.map(L=>{
+      const a=[];
+      for(let i=0;i<L.n;i++)a.push({x:Math.random(),y:Math.random(),tw:Math.random()*6.28});
+      return a;
+    });
+  }
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    scale=Math.min(W,H)/360;
+  }
+  addEventListener('resize',size);size();build();
+  let t=0,obs=0,nudge=0;
+  cv.addEventListener('pointermove',e=>{nudge=(e.offsetX/W-0.5)*2;});
+  cv.addEventListener('click',()=>{nudge=(Math.random()-0.5)*4;});
+  function draw(){
+    ctx.fillStyle='#070a14';ctx.fillRect(0,0,W,H);
+    // faint depth wash, brighter toward back
+    const bg=ctx.createRadialGradient(W*0.5,H*0.42,0,W*0.5,H*0.42,Math.max(W,H)*0.7);
+    bg.addColorStop(0,'rgba(28,24,54,0.5)');bg.addColorStop(1,'rgba(7,10,20,0)');
+    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+    // slow lateral observer drift + pointer nudge, eased
+    obs+=( (reduce?0:1)*0.18 + nudge*1.4 ); nudge*=0.90;
+    LAYERS.forEach((L,li)=>{
+      const off=obs*L.sp*scale;
+      const sgrp=stars[li];
+      for(let i=0;i<sgrp.length;i++){
+        const s=sgrp[i];
+        let px=((s.x*W - off)%W+W)%W;
+        const py=s.y*H;
+        const tw=reduce?0.7:0.6+0.4*Math.sin(t*0.04+s.tw);
+        const r=(L.sz*scale)*(0.7+0.3*tw);
+        // near layers streak in the drift direction (motion blur as depth cue)
+        const streak=L.sp*scale*2.2;
+        if(streak>1.4 && !reduce){
+          const g=ctx.createLinearGradient(px,py,px+streak,py);
+          g.addColorStop(0,'rgba('+L.col+',0)');
+          g.addColorStop(1,'rgba('+L.col+','+(0.5*tw)+')');
+          ctx.strokeStyle=g;ctx.lineWidth=r*1.1;ctx.lineCap='round';
+          ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px+streak,py);ctx.stroke();
+        }
+        ctx.globalAlpha=(0.35+0.55*tw)*(0.55+li*0.18);
+        if(L.glow){
+          const gg=ctx.createRadialGradient(px,py,0,px,py,r*4);
+          gg.addColorStop(0,'rgba('+L.col+','+(0.5*L.glow)+')');
+          gg.addColorStop(1,'rgba('+L.col+',0)');
+          ctx.fillStyle=gg;ctx.beginPath();ctx.arc(px,py,r*4,0,6.283);ctx.fill();
+        }
+        ctx.fillStyle='rgb('+L.col+')';
+        ctx.beginPath();ctx.arc(px,py,r,0,6.283);ctx.fill();
+      }
+    });
+    ctx.globalAlpha=1;
+  }
+  function frame(){t+=1;draw();raf=requestAnimationFrame(frame);}
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce)draw();else start();
+})();
+</script>
+</body>
+</html>

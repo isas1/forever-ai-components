@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="A glowing orange sun with orbiting colored dots in layered 3D depth that tilts and parallaxes toward the pointer.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parallax Depth</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#0a0f1c;
+    font-family:system-ui,-apple-system,sans-serif;}
+  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    perspective:700px;}
+  #card{position:relative;width:60vmin;height:60vmin;transform-style:preserve-3d;will-change:transform;}
+  .layer{position:absolute;inset:0;}
+  .sun{position:absolute;left:50%;top:50%;width:24vmin;height:24vmin;border-radius:50%;
+    transform:translate(-50%,-50%);
+    background:radial-gradient(circle at 38% 35%,#ffe39a,#ff7a45 70%);
+    box-shadow:0 0 40px #ff9a4d;}
+  .dot{position:absolute;left:50%;top:50%;border-radius:50%;}
+  .cap{position:fixed;left:10px;bottom:8px;color:#9ad0ff;opacity:.34;
+    font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="card">
+    <div class="layer" data-d="-50"><div class="sun"></div></div>
+    <div class="layer" data-d="40" id="mid"></div>
+    <div class="layer" data-d="110" id="near"></div>
+  </div>
+</div>
+<div class="cap">Parallax Depth</div>
+<script>
+  const card=document.getElementById('card');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // cache layer depth once (dataset parse out of the frame loop)
+  const layers=[...card.querySelectorAll('.layer')].map(el=>({el,d:+el.dataset.d}));
+  const colors=['#7ec8ff','#c8a0ff','#8effc4','#ffd86b'];
+  const dots=[];
+  function spawn(host,depth,n){
+    for(let i=0;i<n;i++){
+      const s=depth>80?(2.4+Math.random()*2.4):(1.4+Math.random()*1.6);
+      const c=colors[(Math.random()*4)|0];
+      const d=document.createElement('div');d.className='dot';
+      d.style.cssText=`width:${s}vmin;height:${s}vmin;background:${c};box-shadow:0 0 10px ${c}`;
+      host.appendChild(d);
+      // r stored in vmin (orbit % of the 60vmin card → *0.6)
+      dots.push({el:d,r:(24+Math.random()*22)*0.6,a:Math.random()*6.28,
+        sp:(0.003+Math.random()*0.008)*(Math.random()<.5?-1:1)});
+    }
+  }
+  spawn(document.getElementById('mid'),40,8);
+  spawn(document.getElementById('near'),110,6);
+  let tx=0,ty=0,auto=0,interacted=false,raf;
+  addEventListener('pointermove',e=>{interacted=true;
+    tx=(e.clientX/innerWidth-.5)*60;ty=(e.clientY/innerHeight-.5)*46;});
+  function loop(){
+    if(!interacted){auto+=0.02;tx=Math.cos(auto)*26;ty=Math.sin(auto*0.8)*20;}
+    dots.forEach(o=>{o.a+=o.sp;
+      o.el.style.transform=`translate(-50%,-50%) translate(${Math.cos(o.a)*o.r}vmin,${Math.sin(o.a)*o.r}vmin)`;});
+    layers.forEach(l=>{const d=l.d;
+      l.el.style.transform=`translateZ(${d}px) translate(${tx*d/110}px,${ty*d/110}px)`;});
+    card.style.transform=`rotateY(${tx*0.18}deg) rotateX(${-ty*0.18}deg)`;
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){if(!raf&&!reduce)loop();}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  if(reduce){loop();cancelAnimationFrame(raf);raf=0;}else start();
+</script>
+</body>
+</html>

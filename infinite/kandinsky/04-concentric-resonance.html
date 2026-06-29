@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric Resonance — Wassily Kandinsky. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Concentric Resonance</title>
+<style>
+  html,body{margin:0;height:100%;background:#17151a;overflow:hidden}
+  #kan04-stage{position:fixed;inset:0;width:100%;height:100%}
+  #kan04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .kan04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f4efe2;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="kan04-stage" role="img" aria-label="Concentric resonance: rings race outward from struck points like a gong, colour following pitch, sounding tone after tone of their own accord across a charcoal field.">
+  <canvas id="kan04-cv"></canvas>
+</div>
+<div class="kan04-cap">Concentric Resonance</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={paper:'#f4efe2',blue:'#1438a8',yellow:'#f7c80b',red:'#d8321b',green:'#1f7a4d',violet:'#5a2d82'};
+  const cv=document.getElementById('kan04-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const rings=[];
+  const cols=[PAL.blue,PAL.yellow,PAL.red,PAL.violet,PAL.green];
+  function strike(x,y){
+    const base=cols[(Math.random()*cols.length)|0];
+    for(let i=0;i<4;i++) rings.push({x,y,r:6+i*8,c:i%2?base:PAL.paper,t:0,sp:60+i*22});
+  }
+  let last=performance.now(), autoT=0;
+  function draw(now){
+    const dt=(now-last)/1000; last=now; autoT+=dt;
+    if(!REDUCED && autoT>1.4){autoT=0; strike(40+Math.random()*(S.w-80),40+Math.random()*(S.h-80));}
+    S.ctx.clearRect(0,0,S.w,S.h);
+    for(const g of rings){
+      if(!REDUCED){ g.t+=dt; g.r+=g.sp*dt; }
+      const a=Math.max(0,1-g.t/2.4);
+      if(a<=0){g.dead=true;continue;}
+      S.ctx.globalAlpha=a;S.ctx.strokeStyle=g.c;S.ctx.lineWidth=2.5;
+      S.ctx.beginPath();S.ctx.arc(g.x,g.y,g.r,0,7);S.ctx.stroke();
+    }
+    S.ctx.globalAlpha=1;
+    for(let i=rings.length-1;i>=0;i--) if(rings[i].dead) rings.splice(i,1);
+    if(rings.length>80) rings.splice(0,rings.length-80);
+  }
+  strike(S.w*0.5,S.h*0.5);
+
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+
+  let _rt;
+  window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+
+  if(REDUCED){ for(let i=0;i<30;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

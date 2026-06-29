@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Iridescent oil-slick sheen of swirling pink, cyan and violet thin-film bands flowing in slow liquid waves.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oil Slick</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  #ps08-stage{position:fixed;inset:0;display:block}
+  #ps08-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* static iridescent vignette glow — never repaints */
+  #ps08-glow{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 42%,transparent 38%,rgba(10,6,18,.55) 78%,#0a0612 100%);
+    box-shadow:inset 0 0 90px rgba(255,61,166,.20),inset 0 0 160px rgba(40,200,255,.10)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ps08-stage" role="img" aria-label="Iridescent oil-slick sheen of swirling pink, cyan and violet bands flowing in slow liquid waves">
+  <canvas id="ps08-c"></canvas>
+  <div id="ps08-glow"></div>
+</div>
+<div class="cap">Oil Slick</div>
+<script>
+(function(){
+  "use strict";
+  var cv=document.getElementById("ps08-c");
+  var ctx=cv.getContext("2d");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // low-res field, upscaled by canvas -> cheap, smooth, no per-pixel layout reads
+  var FW=120, FH=120;            // simulation grid
+  var img, data;
+  var W=0,H=0,DPR=1;
+
+  function fitField(){
+    img=ctx.createImageData(FW,FH);
+    data=img.data;
+  }
+  fitField();
+
+  function size(){
+    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=cv.clientWidth; H=cv.clientHeight;
+    cv.width=Math.max(1,Math.round(W*DPR));
+    cv.height=Math.max(1,Math.round(H*DPR));
+  }
+  size();
+
+  // iridescent palette LUT (Fillmore-style complementary sheen): magenta->violet->cyan->gold
+  var LUT=new Uint8Array(256*3);
+  (function buildLUT(){
+    // anchor stops [pos, r,g,b]
+    var stops=[
+      [0.00, 255, 61,166], // hot pink (accent)
+      [0.18, 150, 40,200], // violet
+      [0.36,  40,120,255], // blue
+      [0.52,  40,210,235], // cyan
+      [0.68, 120,235,150], // sea green
+      [0.82, 255,210, 70], // gold
+      [1.00, 255, 61,166]  // loop back to pink
+    ];
+    for(var i=0;i<256;i++){
+      var t=i/255, a=stops[0], b=stops[stops.length-1], k;
+      for(k=0;k<stops.length-1;k++){
+        if(t>=stops[k][0]&&t<=stops[k+1][0]){a=stops[k];b=stops[k+1];break;}
+      }
+      var span=(b[0]-a[0])||1, f=(t-a[0])/span;
+      LUT[i*3  ]=a[1]+(b[1]-a[1])*f;
+      LUT[i*3+1]=a[2]+(b[2]-a[2])*f;
+      LUT[i*3+2]=a[3]+(b[3]-a[3])*f;
+    }
+  })();
+
+  // precompute centered grid coords (allocation-free loop later)
+  var GX=new Float32Array(FW), GY=new Float32Array(FH);
+  (function(){
+    for(var x=0;x<FW;x++)GX[x]=(x/FW-0.5)*2;
+    for(var y=0;y<FH;y++)GY[y]=(y/FH-0.5)*2;
+  })();
+
+  var TAU=Math.PI*2;
+
+  function render(t){
+    var p1=t*0.00018, p2=t*0.00011, p3=t*0.00026; // slow phases -> seizure-safe
+    var s1=Math.sin(p1), c1=Math.cos(p1*0.7);
+    var s2=Math.sin(p2*1.3), c2=Math.cos(p2);
+    var i=0, x, y, gy, gx, v, idx;
+    for(y=0;y<FH;y++){
+      gy=GY[y];
+      for(x=0;x<FW;x++){
+        gx=GX[x];
+        // layered sine interference = liquid oil-film thickness -> color phase
+        v = Math.sin(gx*3.1 + s1*2.4 + gy*1.7)
+          + Math.sin(gy*3.7 - p2*3.0 + gx*c1*2.0)
+          + Math.sin((gx*gx+gy*gy)*4.2 - p3*2.2)
+          + Math.sin((gx*c2 - gy*s2)*5.0 + p1*1.6);
+        // map to 0..1 thin-film phase, wrap for that metallic banding
+        v = v*0.25 + 0.5;
+        v = v - Math.floor(v);
+        idx=(v*255)|0; idx=idx*3;
+        data[i  ]=LUT[idx];
+        data[i+1]=LUT[idx+1];
+        data[i+2]=LUT[idx+2];
+        data[i+3]=255;
+        i+=4;
+      }
+    }
+    ctx.putImageData(img,0,0);
+    // upscale the small field to fill the frame, smoothly
+    ctx.save();
+    ctx.imageSmoothingEnabled=true;
+    ctx.globalCompositeOperation="copy";
+    ctx.drawImage(cv,0,0,FW,FH,0,0,cv.width,cv.height);
+    ctx.restore();
+  }
+
+  var raf=0, running=false, startT=0;
+  function loop(now){
+    if(!running)return;
+    render(now-startT);
+    raf=requestAnimationFrame(loop);
+  }
+  function start(){
+    if(running)return;
+    running=true; startT=performance.now()-0;
+    raf=requestAnimationFrame(loop);
+  }
+  function stop(){
+    running=false;
+    if(raf)cancelAnimationFrame(raf), raf=0;
+  }
+
+  function onResize(){
+    size();
+    if(reduce){ render(8200); }
+  }
+  window.addEventListener("resize",onResize);
+
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){ stop(); }
+    else if(!reduce){ startT=performance.now()-((performance.now()-startT)); start(); }
+  });
+
+  if(reduce){
+    // one calm, on-brand static frame — no loop
+    render(8200);
+    return;
+  }
+  start();
+})();
+</script>
+</body>
+</html>

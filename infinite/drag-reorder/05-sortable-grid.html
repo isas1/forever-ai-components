@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A 3x3 grid of primary-colored numbered tiles that spring-reorder as they are dragged or swapped, with auto-demo shuffling.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sortable Grid</title>
+<style>
+  :root{--bg:#0c0e13;--ac:#22d3ee}
+  *{margin:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+  #dr05-stage{position:fixed;inset:0;display:grid;place-items:center}
+  #dr05-grid{position:relative;outline:none}
+  .dr05-t{position:absolute;left:0;top:0;border-radius:7px;will-change:transform;
+    display:grid;place-items:center;color:#0c0e13;font-weight:700;
+    box-shadow:0 6px 22px rgba(0,0,0,.5),inset 0 0 0 1.5px rgba(255,255,255,.14)}
+  .dr05-t span{font-size:clamp(11px,3.4cqw,20px);letter-spacing:.04em;mix-blend-mode:luminosity;opacity:.92}
+  .dr05-t.lift{box-shadow:0 18px 40px rgba(0,0,0,.6),inset 0 0 0 2px var(--ac);z-index:9}
+  .dr05-t.foc{outline:2px solid #fff;outline-offset:3px;z-index:8}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="dr05-stage">
+  <div id="dr05-grid" tabindex="0" role="application"
+       aria-label="Sortable grid. Arrow keys move the focused tile; space picks up and drops.">
+  </div>
+</div>
+<div class="cap">Sortable Grid</div>
+<script>
+(function(){
+  "use strict";
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var grid=document.getElementById("dr05-grid");
+  // De Stijl / Constructivist primaries warmed toward the cyan accent.
+  var PAL=["#22d3ee","#f4d03f","#e0533d","#3a6df0","#e8e6df","#22d3ee","#f4d03f","#e0533d","#e8e6df"];
+  var N=9,COLS=3,order=[];          // order[slot]=tileIndex
+  var tiles=[],pos=[];              // current rendered x/y (spring state)
+  var px=[],py=[],vx=[],vy=[];      // spring physics per tile
+  var GAP=0,CELL=0,PAD=0;
+
+  for(var i=0;i<N;i++){
+    var t=document.createElement("div");
+    t.className="dr05-t";t.style.background=PAL[i];
+    t.style.containerType="size";
+    var s=document.createElement("span");s.textContent=(i+1);
+    t.appendChild(s);grid.appendChild(t);tiles.push(t);
+    order[i]=i;px[i]=0;py[i]=0;vx[i]=0;vy[i]=0;pos[i]={x:0,y:0};
+  }
+
+  function slotXY(slot){return {x:PAD+(slot%COLS)*(CELL+GAP), y:PAD+((slot/COLS)|0)*(CELL+GAP)};}
+  function slotOf(tile){return order.indexOf(tile);}
+
+  function layout(){
+    var w=grid.parentElement.clientWidth, h=grid.parentElement.clientHeight;
+    var side=Math.min(w,h)*0.82; side=Math.max(150,Math.min(side,560));
+    GAP=Math.round(side*0.045); PAD=Math.round(side*0.02);
+    CELL=Math.round((side-PAD*2-GAP*(COLS-1))/COLS);
+    var dim=PAD*2+CELL*COLS+GAP*(COLS-1);
+    grid.style.width=dim+"px";grid.style.height=dim+"px";
+    for(var s=0;s<N;s++){var ti=order[s],p=slotXY(s);
+      tiles[ti].style.width=CELL+"px";tiles[ti].style.height=CELL+"px";
+      px[ti]=p.x;py[ti]=p.y;pos[ti].x=p.x;pos[ti].y=p.y;
+      tiles[ti].style.transform="translate3d("+p.x+"px,"+p.y+"px,0)";
+    }
+  }
+
+  // ---- reorder: move tile from slot a to slot b (FLIP via springs) ----
+  function reorder(a,b){
+    if(a===b)return;
+    var moved=order.splice(a,1)[0];
+    order.splice(b,0,moved);
+  }
+  function retarget(){for(var s=0;s<N;s++){var ti=order[s],p=slotXY(s);px[ti]=p.x;py[ti]=p.y;}}
+
+  // ---- spring loop ----
+  var running=true,raf=0,K=0.14,D=0.74;
+  function frame(){
+    if(!running)return;
+    for(var i=0;i<N;i++){
+      var ax=(px[i]-pos[i].x)*K, ay=(py[i]-pos[i].y)*K;
+      vx[i]=(vx[i]+ax)*D; vy[i]=(vy[i]+ay)*D;
+      pos[i].x+=vx[i]; pos[i].y+=vy[i];
+      tiles[i].style.transform="translate3d("+pos[i].x+"px,"+pos[i].y+"px,0)";
+    }
+    raf=requestAnimationFrame(frame);
+  }
+
+  // ---- pointer drag ----
+  var drag=null;
+  function ptDown(e){
+    var t=e.target.closest(".dr05-t");if(!t)return;
+    e.preventDefault();userActive();
+    var i=tiles.indexOf(t);
+    drag={i:i,ox:e.clientX,oy:e.clientY,bx:pos[i].x,by:pos[i].y};
+    t.classList.add("lift");grid.setPointerCapture&&grid.setPointerCapture(e.pointerId);
+  }
+  function ptMove(e){
+    if(!drag)return;userActive();
+    var i=drag.i;
+    pos[i].x=drag.bx+(e.clientX-drag.ox); pos[i].y=drag.by+(e.clientY-drag.oy);
+    px[i]=pos[i].x;py[i]=pos[i].y;vx[i]=0;vy[i]=0;
+    tiles[i].style.transform="translate3d("+pos[i].x+"px,"+pos[i].y+"px,0)";
+    var cx=pos[i].x+CELL/2,cy=pos[i].y+CELL/2;
+    var tslot=Math.max(0,Math.min(COLS-1,Math.floor((cx-PAD)/(CELL+GAP))))
+            + Math.max(0,Math.min(COLS-1,Math.floor((cy-PAD)/(CELL+GAP))))*COLS;
+    tslot=Math.max(0,Math.min(N-1,tslot));
+    var cur=slotOf(i);
+    if(tslot!==cur){reorder(cur,tslot);retarget();}
+  }
+  function ptUp(){
+    if(!drag)return;var i=drag.i;
+    tiles[i].classList.remove("lift");
+    var p=slotXY(slotOf(i));px[i]=p.x;py[i]=p.y;drag=null;
+  }
+
+  // ---- keyboard reorder ----
+  var foc=0,held=-1;
+  function showFoc(){for(var s=0;s<N;s++)tiles[order[s]].classList.toggle("foc",s===foc&&held<0);
+    if(held>=0)tiles[order[held]].classList.add("foc");}
+  function key(e){
+    var k=e.key,d={ArrowLeft:-1,ArrowRight:1,ArrowUp:-COLS,ArrowDown:COLS}[k];
+    if(d!==undefined){
+      e.preventDefault();userActive();
+      if(held>=0){var nb=held+d;if(nb<0||nb>=N)return;reorder(held,nb);held=nb;foc=nb;retarget();}
+      else{var nf=foc+d;if(nf>=0&&nf<N)foc=nf;}
+      showFoc();
+    }else if(k===" "||k==="Enter"){
+      e.preventDefault();userActive();
+      if(held<0){held=foc;tiles[order[held]].classList.add("lift");}
+      else{tiles[order[held]].classList.remove("lift");held=-1;}
+      showFoc();
+    }
+  }
+
+  // ---- self-demo: synthesize swaps on a gentle timer ----
+  var demoOn=true,idleTO=0,demoTO=0;
+  function userActive(){
+    demoOn=false;clearTimeout(idleTO);clearTimeout(demoTO);
+    idleTO=setTimeout(function(){demoOn=true;foc=0;held=-1;showFoc();demoStep();},3600);
+  }
+  function demoStep(){
+    if(!demoOn||reduce||document.hidden)return;
+    var a=(Math.random()*N)|0, b=(Math.random()*N)|0;
+    if(a===b)b=(b+1)%N;
+    reorder(a,b);retarget();
+    demoTO=setTimeout(demoStep,1300);
+  }
+
+  // ---- lifecycle ----
+  function start(){running=true;if(!raf)raf=requestAnimationFrame(frame);}
+  function stop(){running=false;if(raf){cancelAnimationFrame(raf);raf=0;}}
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){stop();clearTimeout(demoTO);}
+    else{start();if(demoOn)demoStep();}
+  });
+  var rTO=0;addEventListener("resize",function(){clearTimeout(rTO);rTO=setTimeout(layout,120);});
+
+  grid.addEventListener("pointerdown",ptDown);
+  addEventListener("pointermove",ptMove);
+  addEventListener("pointerup",ptUp);addEventListener("pointercancel",ptUp);
+  grid.addEventListener("keydown",key);
+  grid.addEventListener("focus",function(){if(demoOn){foc=0;showFoc();}});
+
+  layout();
+  if(reduce){return;}      // settled static frame, no loop, no demo
+  start();
+  demoTO=setTimeout(demoStep,900);
+})();
+</script>
+</body>
+</html>

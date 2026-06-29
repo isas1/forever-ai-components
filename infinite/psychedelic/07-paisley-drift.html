@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Drifting psychedelic paisley teardrops morphing and rotating across a deep violet field in magenta, cyan and gold.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paisley Drift</title>
+<style>
+  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  #ps07-stage{position:fixed;inset:0;background:#0a0612}
+  #ps07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="ps07-stage" role="img" aria-label="Slowly drifting psychedelic paisley forms morphing across a deep violet field in swirling magenta, cyan and gold.">
+  <canvas id="ps07-c"></canvas>
+</div>
+<div class="cap">Paisley Drift</div>
+<script>
+(function(){
+  var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var cv = document.getElementById('ps07-c');
+  var ctx = cv.getContext('2d');
+  var W=0,H=0,DPR=1,MIN=0,running=true,raf=0,t0=0;
+
+  // Fillmore-poster palette around #ff3da6
+  var PAL = ['#ff3da6','#ff7ad0','#19d3c5','#5be6d6','#ffd23d','#ffa03d','#a64dff','#3d6bff'];
+  var N = 30;            // paisley agents (cap << 110)
+  var seed = new Float32Array(N*6); // phx,phy,phr,phm,scl,hue
+  for(var i=0;i<N;i++){
+    seed[i*6]   = Math.random()*6.283;        // drift phase x
+    seed[i*6+1] = Math.random()*6.283;        // drift phase y
+    seed[i*6+2] = Math.random()*6.283;        // rotation phase
+    seed[i*6+3] = Math.random()*6.283;        // morph phase
+    seed[i*6+4] = 0.55 + Math.random()*0.95;  // scale
+    seed[i*6+5] = i % PAL.length;             // colour index
+  }
+
+  function size(){
+    DPR = Math.min(2, window.devicePixelRatio||1);
+    W = cv.clientWidth; H = cv.clientHeight;
+    MIN = Math.min(W,H);
+    cv.width = Math.max(1,(W*DPR)|0);
+    cv.height= Math.max(1,(H*DPR)|0);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+
+  // Trace one paisley teardrop: bulbous base curling to a hooked point.
+  // unit shape, drawn in local space; m in 0..1 fattens the curl (morph).
+  function paisleyPath(s, m){
+    var bulb = s*0.62;
+    var curl = s*(1.05 + m*0.35);
+    ctx.beginPath();
+    ctx.moveTo(0, bulb);
+    // outer swell up the right side
+    ctx.bezierCurveTo(bulb*1.55, bulb*0.95, bulb*1.35, -bulb*0.55, bulb*0.35, -bulb*1.15);
+    // tapering hook toward the point, curling left
+    ctx.bezierCurveTo(-bulb*0.2, -curl*1.0, -bulb*0.95, -curl*0.78 + s*(0.18-m*0.22), -bulb*0.62, -bulb*0.78);
+    // inner wall back down to base, hollow following the curl
+    ctx.bezierCurveTo(-bulb*0.42, -bulb*0.42, -bulb*0.86, bulb*0.4, 0, bulb);
+    ctx.closePath();
+  }
+
+  function drawAgent(i, time){
+    var b = i*6;
+    var dx = Math.sin(time*0.06 + seed[b])   * MIN*0.30;
+    var dy = Math.cos(time*0.05 + seed[b+1]) * MIN*0.30;
+    // gentle swirl bias so motion feels like a slow vortex
+    var sw = time*0.018;
+    var px = W*0.5 + Math.cos(sw + seed[b+2])*MIN*0.06 + dx;
+    var py = H*0.5 + Math.sin(sw + seed[b+2])*MIN*0.06 + dy;
+    var rot = seed[b+2] + time*0.04 + Math.sin(time*0.03 + seed[b+1])*0.5;
+    var m   = 0.5 + 0.5*Math.sin(time*0.07 + seed[b+3]);   // 0..1 morph
+    var scl = seed[b+4] * (1 + 0.10*Math.sin(time*0.05 + seed[b]));
+    var s   = MIN*0.085*scl;
+    var ci  = seed[b+5]|0;
+    var col = PAL[ci];
+    var col2= PAL[(ci+2)%PAL.length];
+
+    ctx.save();
+    ctx.translate(px,py);
+    ctx.rotate(rot);
+    ctx.globalAlpha = 0.82;
+
+    // body
+    paisleyPath(s, m);
+    ctx.fillStyle = col;
+    ctx.fill();
+
+    // inner hollow outline (complementary), no blur — flat strokes only
+    ctx.globalAlpha = 0.9;
+    paisleyPath(s*0.62, m);
+    ctx.lineWidth = Math.max(1, s*0.06);
+    ctx.strokeStyle = col2;
+    ctx.stroke();
+
+    // seed dot row tracing the curl — classic paisley detail
+    ctx.fillStyle = '#0a0612';
+    var k, ang, rr;
+    for(k=0;k<5;k++){
+      ang = -1.05 + k*0.42;
+      rr  = s*(0.30 + k*0.052);
+      ctx.beginPath();
+      ctx.arc(Math.cos(ang)*rr*0.55, -Math.abs(Math.sin(ang))*rr - s*0.12, Math.max(1,s*0.05), 0, 6.283);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function frame(now){
+    if(!running) return;
+    var time = (now - t0)/1000;
+    // trail wash instead of clear — liquid lava-lamp smear, stays cheap
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(10,6,18,0.16)';
+    ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation = 'lighter';
+    for(var i=0;i<N;i++) drawAgent(i, time);
+    ctx.globalCompositeOperation = 'source-over';
+    raf = requestAnimationFrame(frame);
+  }
+
+  function drawOneFrame(){
+    ctx.fillStyle = '#0a0612';
+    ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation = 'lighter';
+    for(var i=0;i<N;i++) drawAgent(i, 8.0); // a composed, settled instant
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function start(){
+    size();
+    if(reduce){ drawOneFrame(); return; }
+    ctx.fillStyle = '#0a0612';
+    ctx.fillRect(0,0,W,H);
+    t0 = performance.now();
+    running = true;
+    raf = requestAnimationFrame(frame);
+  }
+
+  window.addEventListener('resize', function(){
+    var was = running;
+    size();
+    if(reduce){ drawOneFrame(); }
+    else if(!was){ /* stay paused */ }
+  });
+
+  document.addEventListener('visibilitychange', function(){
+    if(reduce) return;
+    if(document.hidden){ running=false; if(raf) cancelAnimationFrame(raf); }
+    else if(!running){ running=true; t0 = performance.now() - 8000; raf=requestAnimationFrame(frame); }
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>

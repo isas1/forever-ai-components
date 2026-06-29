@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Soft multi-octave noise field of mottled hot-red and cold-blue temperature patches, vignetted like a full-sky CMB map with a pointer dipole.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cosmic Microwave Static</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#060409;}
+  #cmb-c{display:block;width:100%;height:100%;}
+  .cmb-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
+       letter-spacing:.14em;color:#9db4ff;opacity:.35;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="cmb-c"></canvas>
+<div class="cmb-cap">Cosmic Microwave Static</div>
+<script>
+(function(){
+  const cv=document.getElementById('cmb-c'),ctx=cv.getContext('2d');
+  const off=document.createElement('canvas'),octx=off.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,GW,GH,img,buf;
+  // low-res field upscaled for that 1px-resolution, oldest-light look
+  const CELL=7; // device px per fluctuation cell (after DPR)
+  const MAXCELLS=4200; // cap noise grid so per-frame cost stays bounded on big tiles
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;
+    GW=Math.max(2,Math.ceil(cv.width/CELL));GH=Math.max(2,Math.ceil(cv.height/CELL));
+    if(GW*GH>MAXCELLS){const k=Math.sqrt(MAXCELLS/(GW*GH));GW=Math.max(2,Math.round(GW*k));GH=Math.max(2,Math.round(GH*k));}
+    off.width=GW;off.height=GH;
+    img=octx.createImageData(GW,GH);buf=img.data;
+    ctx.imageSmoothingEnabled=true;
+  }
+  addEventListener('resize',size);size();
+
+  // scale-invariant multi-octave value noise (the spectrum of the early universe)
+  const P=new Uint8Array(512);
+  (function(){const p=[...Array(256).keys()];for(let i=255;i>0;i--){const j=(Math.random()*(i+1))|0;[p[i],p[j]]=[p[j],p[i]];}for(let i=0;i<512;i++)P[i]=p[i&255];})();
+  function fade(t){return t*t*t*(t*(t*6-15)+10);}
+  function lerp(a,b,t){return a+(b-a)*t;}
+  function grad(h,x,y){const u=(h&1)?x:y,v=(h&2)?y:x;return ((h&4)?-u:u)+((h&8)?-v:v);}
+  function noise(x,y){
+    const X=Math.floor(x)&255,Y=Math.floor(y)&255;x-=Math.floor(x);y-=Math.floor(y);
+    const u=fade(x),v=fade(y);
+    const A=P[X]+Y,B=P[X+1]+Y;
+    return lerp(lerp(grad(P[A],x,y),grad(P[B],x-1,y),u),
+               lerp(grad(P[A+1],x,y-1),grad(P[B+1],x-1,y-1),u),v);
+  }
+  // dipole / nudge anisotropy
+  let nx=0,ny=0,warm=0;
+  cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();nx=(e.clientX-r.left)/W-.5;ny=(e.clientY-r.top)/H-.5;warm=1;});
+
+  function temp(x,y,t){
+    // octaves: large structure -> fine seed-of-galaxies grain (scale-invariant ~equal power)
+    let v=0;
+    v+=noise(x*1.1+t*0.05,y*1.1)*1.00;
+    v+=noise(x*2.3-t*0.04,y*2.3+t*0.02)*0.62;
+    v+=noise(x*4.7+t*0.03,y*4.7)*0.40;
+    v+=noise(x*9.1,y*9.1-t*0.05)*0.26;
+    v+=noise(x*18.3+t*0.06,y*18.3)*0.17;
+    return v;
+  }
+
+  let t=0;
+  function render(){
+    const fx=GW/Math.max(GW,GH)*3.2, fy=GH/Math.max(GW,GH)*3.2;
+    const dip=nx, dipy=ny;
+    for(let j=0;j<GH;j++){
+      const yy=j/GH;
+      for(let i=0;i<GW;i++){
+        const xx=i/GW;
+        let v=temp(xx*fx,yy*fy,t);
+        v+=(xx-.5)*dip*0.9+(yy-.5)*dipy*0.9; // faint dipole from pointer
+        v=Math.max(-1,Math.min(1,v*0.62));
+        // map temperature: cold -> deep blue accent, hot -> red, mid -> near-bg
+        const idx=(j*GW+i)<<2;
+        let r,g,b;
+        const a=Math.abs(v);
+        if(v<0){ // colder than average -> blue (#9db4ff family)
+          r=12+(0.27*157)*a; g=14+(0.45*180)*a; b=24+(220*a);
+        }else{ // hotter -> red/orange
+          r=24+(225*a); g=14+(70*a); b=26+(40*a);
+        }
+        const glow=warm*60*(0.5-Math.abs(xx-(.5+nx)))-warm*10;
+        buf[idx]  =Math.min(255,r+(glow>0?glow*0.4:0));
+        buf[idx+1]=Math.min(255,g);
+        buf[idx+2]=Math.min(255,b);
+        buf[idx+3]=255;
+      }
+    }
+    octx.putImageData(img,0,0);
+    // upscale low-res field across full canvas for soft mottled patches
+    ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(off,0,0,GW,GH,0,0,cv.width,cv.height);
+    // vignette — full-sky horizon falloff
+    const g=ctx.createRadialGradient(cv.width/2,cv.height/2,Math.min(cv.width,cv.height)*0.2,cv.width/2,cv.height/2,Math.max(cv.width,cv.height)*0.62);
+    g.addColorStop(0,'rgba(6,4,9,0)');g.addColorStop(1,'rgba(6,4,9,0.7)');
+    ctx.fillStyle=g;ctx.fillRect(0,0,cv.width,cv.height);
+  }
+
+  function frame(){
+    t+=0.012; warm*=0.95;
+    render();
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){render();}else start();
+})();
+</script>
+</body>
+</html>

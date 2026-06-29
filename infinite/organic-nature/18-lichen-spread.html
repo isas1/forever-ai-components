@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Concentric crinkle-edged lichen colonies in olive and sage greens grow as reaction-front rings over a speckled weathered-stone field.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lichen Spread</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1c1d18;}
+  #lkn-c{display:block;width:100%;height:100%;}
+  .lkn-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+       letter-spacing:.16em;color:#c4d49a;opacity:.34;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="lkn-c"></canvas>
+<div class="lkn-cap">Lichen Spread</div>
+<script>
+(function(){
+  const cv=document.getElementById('lkn-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let W,H,DPR,S;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    S=Math.min(W,H);
+  }
+  addEventListener('resize',()=>{size();buildStone();layout();});
+  // weathered stone field — rendered ONCE to an offscreen canvas, then blitted each frame
+  let stoneCv=document.createElement('canvas'),stoneCtx=stoneCv.getContext('2d');
+  function buildStone(){
+    stoneCv.width=Math.max(1,W);stoneCv.height=Math.max(1,H);
+    const sc=stoneCtx;
+    sc.setTransform(1,0,0,1,0,0);
+    sc.fillStyle='#1c1d18';sc.fillRect(0,0,W,H);
+    const cnt=2200*(W*H)/(360*360);
+    for(let i=0;i<cnt;i++){
+      const x=Math.random()*W,y=Math.random()*H,v=Math.random();
+      sc.fillStyle=`rgba(${v>.5?120:40},${v>.5?122:42},${v>.5?108:38},${0.04+v*0.05})`;
+      sc.fillRect(x,y,1.4,1.4);
+    }
+  }
+  function stone(){ ctx.drawImage(stoneCv,0,0,W,H); }
+  // hash noise for crinkled rim
+  function n(a){a=Math.sin(a*12.9898)*43758.5453;return a-Math.floor(a);}
+  function fbm(a){return n(a)*0.5+n(a*2.07+11)*0.28+n(a*4.13+31)*0.14+n(a*8.2+57)*0.08;}
+
+  let colonies=[];
+  function layout(){
+    colonies=[];
+    const palettes=[
+      ['#5c6b3e','#8a9a5b','#c4d49a','#e6efc8'],
+      ['#6b6f4a','#9aa36e','#cdd9a6','#aebd7e'],
+      ['#4f5d3a','#7d8a55','#b6c78a','#d8e3b0'],
+      ['#5a6446','#919c66','#c0d094','#9fb074']
+    ];
+    const n0=S<300?5:S<460?7:9;
+    for(let i=0;i<n0;i++){
+      colonies.push({
+        x:Math.random()*W,y:Math.random()*H,
+        rmax:(0.12+Math.random()*0.22)*S,
+        rings:6+(Math.random()*5|0),
+        ph:Math.random()*99,
+        seed:Math.random()*999,
+        pal:palettes[Math.random()*palettes.length|0],
+        lobes:7+(Math.random()*9|0),
+        grow:0
+      });
+    }
+    colonies.sort((a,b)=>b.rmax-a.rmax);
+  }
+  size();buildStone();stone();layout();
+
+  // radial crinkled boundary for a ring at growth phase g
+  function ringPath(cl,frac,wob,t){
+    const L=cl.lobes, steps=64;
+    ctx.beginPath();
+    for(let i=0;i<=steps;i++){
+      const a=i/steps*Math.PI*2;
+      // lobed rim: multi-octave crinkle, seasonal per ring (frac)
+      const lobe=Math.sin(a*L+cl.seed+frac*5)*0.5+Math.sin(a*(L*2+3)+cl.seed*2)*0.22;
+      const crink=(fbm(a*3.2+frac*40+cl.seed)-0.5)*wob;
+      const breathe=reduce?0:Math.sin(t*0.0007+a*2+cl.ph)*0.012;
+      const r=cl.rmax*frac*(1+lobe*0.10+crink+breathe);
+      const x=cl.x+Math.cos(a)*r, y=cl.y+Math.sin(a)*r;
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    }
+    ctx.closePath();
+  }
+
+  let t=0,nudge=0;
+  cv.addEventListener('pointermove',e=>{
+    nudge=1;
+    // nearest colony gets a growth pulse
+    let bd=1e9,bi=0;
+    colonies.forEach((c,i)=>{const d=(c.x-e.offsetX)**2+(c.y-e.offsetY)**2;if(d<bd){bd=d;bi=i;}});
+    colonies[bi].grow=Math.min(1.15,colonies[bi].grow+0.04);
+  });
+
+  function paint(t){
+    colonies.forEach(cl=>{
+      const g=cl.grow;
+      // concentric reaction-front rings, oldest (largest) drawn first
+      for(let k=cl.rings;k>=1;k--){
+        const base=k/cl.rings;
+        const frac=base*g;
+        if(frac<=0.02)continue;
+        const tone=cl.pal[Math.min(cl.pal.length-1, Math.floor((1-base)*cl.pal.length))];
+        const wob=0.018+(1-base)*0.05;            // outer rim crinkles more
+        ringPath(cl,frac,wob,t);
+        ctx.globalAlpha=0.9;
+        ctx.fillStyle=tone;
+        ctx.fill();
+      }
+      // mottled apothecia / texture speckle inside the thallus
+      const rn=(s)=>{s=Math.sin(s*91.7+cl.seed)*1e4;return s-Math.floor(s);};
+      const spots=Math.floor(cl.rmax*cl.rmax*g*0.006);
+      ctx.fillStyle=cl.pal[cl.pal.length-1];
+      for(let s=0;s<spots;s++){
+        const a=rn(s)*6.283, rr=Math.sqrt(rn(s+0.5))*cl.rmax*g*0.92;
+        const x=cl.x+Math.cos(a)*rr, y=cl.y+Math.sin(a)*rr;
+        ctx.globalAlpha=0.08+rn(s+0.2)*0.16;
+        ctx.beginPath();ctx.arc(x,y,0.6+rn(s+0.7)*1.6,0,6.283);ctx.fill();
+      }
+      // dark prothallus rim — the advancing reaction front
+      ctx.globalAlpha=0.5;
+      ctx.lineWidth=Math.max(0.7,S*0.0016);
+      ctx.strokeStyle='rgba(28,30,22,0.85)';
+      ringPath(cl,Math.min(1,g),0.018+0.05,t);ctx.stroke();
+      // pale bright growing margin highlight
+      ctx.globalAlpha=0.22;
+      ctx.strokeStyle=cl.pal[cl.pal.length-1];
+      ringPath(cl,Math.min(0.995,g)*0.985,0.05,t);ctx.stroke();
+    });
+    ctx.globalAlpha=1;
+  }
+
+  function frame(){
+    t+=16;
+    nudge*=0.93;
+    stone();
+    colonies.forEach(cl=>{
+      if(cl.grow<1) cl.grow=Math.min(1,cl.grow+0.006);
+      else cl.grow+= (1-cl.grow)*0.05;
+      if(cl.grow>1) cl.grow=Math.max(1,cl.grow-0.004);
+    });
+    paint(t);
+    raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){colonies.forEach(c=>c.grow=1);stone();paint(8000);}else start();
+})();
+</script>
+</body>
+</html>

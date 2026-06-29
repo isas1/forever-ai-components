@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Warm ochre chord diagram of six labeled nodes whose ribbon flows continuously rebalance, growing and shrinking arcs around the ring.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chord Rebalance</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#1d1606;}
+  #cr-c{display:block;width:100%;height:100%;}
+  .cr-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
+       letter-spacing:.14em;color:#c8a23a;opacity:.36;text-transform:uppercase;
+       pointer-events:none;user-select:none;}
+</style>
+</head>
+<body>
+<canvas id="cr-c"></canvas>
+<div class="cr-cap">Chord Rebalance</div>
+<script>
+(function(){
+  const cv=document.getElementById('cr-c'),ctx=cv.getContext('2d');
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const N=6, ACC='#c8a23a';
+  // warm ochre family, distinct hue per node
+  const HUE=[44,30,52,38,22,48];
+  function col(i,l,a){return 'hsla('+HUE[i]+','+(58+l*8)+'%,'+(34+l*22)+'%,'+a+')';}
+  let W,H,DPR,cx,cy,R,rib;
+  function size(){
+    DPR=Math.min(devicePixelRatio||1,2);
+    W=cv.clientWidth;H=cv.clientHeight;
+    cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
+    cx=W/2;cy=H/2;R=Math.min(W,H)*0.34;rib=Math.min(W,H)*0.052;
+  }
+  addEventListener('resize',size);size();
+  // flow matrix M[i][j] (undirected pairs i<j), animated toward targets
+  const pairs=[];for(let i=0;i<N;i++)for(let j=i+1;j<N;j++)pairs.push([i,j]);
+  function rnd(){return 0.04+Math.pow(Math.random(),1.8)*0.96;}
+  let cur=pairs.map(rnd), tgt=pairs.map(rnd), t=0, retarget=0, boost=0;
+  function newTargets(){tgt=pairs.map(rnd);}
+  // per-node arc geometry derived from row sums
+  const ang=new Float64Array(N), span=new Float64Array(N);
+  function layout(){
+    const sum=new Float64Array(N);let tot=0;
+    pairs.forEach((p,k)=>{sum[p[0]]+=cur[k];sum[p[1]]+=cur[k];tot+=cur[k]*2;});
+    const gap=0.10, avail=Math.PI*2-gap*N;let a=-Math.PI/2;
+    for(let i=0;i<N;i++){span[i]=avail*(sum[i]/tot);ang[i]=a+span[i]/2;a+=span[i]+gap;}
+    return sum;
+  }
+  function ptOnArc(i,frac){const a=ang[i]-span[i]/2+span[i]*frac;return [cx+Math.cos(a)*R,cy+Math.sin(a)*R,a];}
+  cv.addEventListener('pointermove',()=>{boost=Math.min(boost+0.25,1);});
+  cv.addEventListener('click',()=>{newTargets();boost=1;});
+  function frame(){
+    t+=reduce?0:1;boost*=0.95;
+    if(!reduce){retarget++;if(retarget>150){retarget=0;newTargets();}}
+    const k=0.045+boost*0.04;
+    for(let i=0;i<cur.length;i++)cur[i]+=(tgt[i]-cur[i])*k;
+    layout();
+    ctx.fillStyle='#1d1606';ctx.fillRect(0,0,W,H);
+    // running offsets along each node arc so ribbons pack without overlap
+    const sum=new Float64Array(N);pairs.forEach((p,m)=>{sum[p[0]]+=cur[m];sum[p[1]]+=cur[m];});
+    const off=new Float64Array(N);
+    // draw ribbons (sorted thin->thick so fat flows sit on top)
+    const order=pairs.map((p,m)=>m).sort((a,b)=>cur[a]-cur[b]);
+    order.forEach(m=>{
+      const [i,j]=pairs[m],v=cur[m];
+      const wi=v/sum[i],wj=v/sum[j];
+      const [a0]=[ptOnArc(i,off[i])],[a1]=[ptOnArc(i,off[i]+wi)];
+      const A0=ptOnArc(i,off[i]),A1=ptOnArc(i,off[i]+wi);
+      const B0=ptOnArc(j,off[j]),B1=ptOnArc(j,off[j]+wj);
+      off[i]+=wi;off[j]+=wj;
+      const al=0.16+Math.min(v,1)*0.5;
+      const g=ctx.createLinearGradient(A0[0],A0[1],B0[0],B0[1]);
+      g.addColorStop(0,col(i,Math.min(v,1),al));
+      g.addColorStop(1,col(j,Math.min(v,1),al));
+      ctx.fillStyle=g;ctx.beginPath();
+      ctx.moveTo(A0[0],A0[1]);
+      ctx.quadraticCurveTo(cx,cy,B1[0],B1[1]);
+      ctx.lineTo(B0[0],B0[1]);
+      ctx.quadraticCurveTo(cx,cy,A1[0],A1[1]);
+      ctx.closePath();ctx.fill();
+    });
+    // node arcs on the ring
+    for(let i=0;i<N;i++){
+      ctx.lineWidth=rib;ctx.strokeStyle=col(i,1,0.92);ctx.lineCap='butt';
+      ctx.beginPath();ctx.arc(cx,cy,R,ang[i]-span[i]/2,ang[i]+span[i]/2);ctx.stroke();
+      // tick + value
+      const lr=R+rib*0.5+6,[lx,ly]=[cx+Math.cos(ang[i])*lr,cy+Math.sin(ang[i])*lr];
+      ctx.fillStyle=ACC;ctx.globalAlpha=0.85;
+      ctx.font='600 '+Math.max(9,rib*0.62)+'px ui-monospace,monospace';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(String.fromCharCode(65+i),lx,ly);ctx.globalAlpha=1;
+    }
+    if(!reduce)raf=requestAnimationFrame(frame);
+  }
+  let raf=0;
+  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;}
+  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  if(reduce){for(let i=0;i<cur.length;i++)cur[i]=tgt[i];frame();stop();}else start();
+})();
+</script>
+</body>
+</html>

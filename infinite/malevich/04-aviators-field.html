@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The Aviator's Field — Kazimir Malevich. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Aviator's Field</title>
+<style>
+  html,body{margin:0;height:100%;background:#f0ece2;overflow:hidden}
+  #mal04-stage{position:fixed;inset:0;width:100%;height:100%}
+  #mal04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .mal04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#111;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="mal04-stage" role="img" aria-label="Long thin Suprematist bars in black, red, blue and yellow launch across a white field on upward diagonal trajectories in steady tempo — flight as pure dynamic line.">
+  <canvas id="mal04-cv"></canvas>
+</div>
+<div class="mal04-cap">The Aviator's Field</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAL={black:'#111111',red:'#d8261c',blue:'#1746a0',yellow:'#f2b705'};
+  const cv=document.getElementById('mal04-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv);
+  const cols=[PAL.black,PAL.red,PAL.blue,PAL.yellow];
+  let bars=[];
+  function launch(){
+    const ang=(-0.7+Math.random()*0.5);
+    const fromBottom=Math.random()<0.5;
+    const sx=Math.random()*0.5*S.w + (fromBottom?0:-0.2*S.w);
+    const sy=fromBottom?S.h*1.1:S.h*(0.3+Math.random()*0.6);
+    const speed=(120+Math.random()*120);
+    const len=S.w*(0.22+Math.random()*0.30);
+    bars.push({x:sx,y:sy,ang,vx:Math.cos(ang)*speed,vy:Math.sin(ang)*speed,
+      len, th:3+Math.random()*7, c:cols[(Math.random()*cols.length)|0], t:0});
+  }
+  let acc=0,last=performance.now();
+  function draw(now){
+    const dt=Math.min(0.05,(now-last)/1000); last=now; acc+=dt;
+    const tempo=REDUCED?999:0.62;
+    if(acc>tempo){acc=0; launch();}
+    const ctx=S.ctx;
+    ctx.fillStyle='#f0ece2'; ctx.fillRect(0,0,S.w,S.h);
+    ctx.strokeStyle='rgba(17,17,17,.06)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(0,S.h); ctx.lineTo(S.w,0); ctx.stroke();
+    for(const b of bars){
+      b.t+=dt; b.x+=b.vx*dt; b.y+=b.vy*dt;
+      const a=b.t<0.3?b.t/0.3:1;
+      ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.ang);
+      ctx.globalAlpha=Math.min(1,a); ctx.fillStyle=b.c;
+      ctx.fillRect(0,-b.th/2,b.len,b.th);
+      ctx.fillRect(b.len,-b.th*0.9,b.th*1.8,b.th*1.8);
+      ctx.restore();
+      if(b.x>S.w*2||b.y<-S.h*0.4||b.x<-S.w*0.5) b.dead=true;
+    }
+    ctx.globalAlpha=1;
+    for(let i=bars.length-1;i>=0;i--) if(bars[i].dead) bars.splice(i,1);
+    if(bars.length>40) bars.splice(0,bars.length-40);
+  }
+  let raf=0,running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  if(REDUCED){ for(let i=0;i<5;i++){launch(); bars[i].t=1; bars[i].x=S.w*(0.1+i*0.18); bars[i].y=S.h*(0.7-i*0.12);} }
+  else { for(let i=0;i<3;i++){launch(); bars[i].t=Math.random();} }
+  S.ctx.fillStyle='#f0ece2'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>

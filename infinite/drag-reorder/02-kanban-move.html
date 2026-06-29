@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A three-column kanban board where a cyan-tagged card lifts and springs between Red, Yellow, and Cyan lanes via FLIP transitions.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kanban Move</title>
+<style>
+  :root{--dr02-bg:#0c0e13;--dr02-acc:#22d3ee;--dr02-red:#e8593f;--dr02-yel:#f4c531;--dr02-ink:#e7ecf3}
+  html,body{margin:0;height:100%}
+  body{background:var(--dr02-bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
+  #dr02-stage{position:fixed;inset:0;display:flex;gap:3.2%;padding:9% 6% 11%;box-sizing:border-box;outline:none}
+  .dr02-col{flex:1;display:flex;flex-direction:column;gap:7%;min-width:0}
+  .dr02-head{height:8px;border-radius:2px;opacity:.9;transform-origin:left}
+  .dr02-c0 .dr02-head{background:var(--dr02-red)}
+  .dr02-c1 .dr02-head{background:var(--dr02-yel)}
+  .dr02-c2 .dr02-head{background:var(--dr02-acc)}
+  .dr02-lane{flex:1;border:1px solid rgba(231,236,243,.07);border-radius:5px;padding:6px;display:flex;flex-direction:column;gap:6px;position:relative;background:rgba(255,255,255,.012)}
+  .dr02-card{height:13%;min-height:14px;border-radius:4px;background:#161a23;border:1px solid rgba(231,236,243,.09);
+    box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 6px 14px rgba(0,0,0,.4);
+    will-change:transform;position:relative;overflow:hidden}
+  .dr02-card::before{content:"";position:absolute;left:7px;top:30%;width:46%;height:2px;border-radius:1px;background:rgba(231,236,243,.32)}
+  .dr02-card::after{content:"";position:absolute;left:7px;top:58%;width:28%;height:2px;border-radius:1px;background:rgba(231,236,243,.16)}
+  .dr02-card[data-tag="0"]{border-left:3px solid var(--dr02-red)}
+  .dr02-card[data-tag="1"]{border-left:3px solid var(--dr02-yel)}
+  .dr02-card[data-tag="2"]{border-left:3px solid var(--dr02-acc)}
+  .dr02-lift{z-index:5;box-shadow:0 0 0 1px var(--dr02-acc),0 14px 30px rgba(0,0,0,.55),0 0 22px rgba(34,211,238,.28)}
+  .dr02-lift::before,.dr02-lift::after{background:var(--dr02-acc);opacity:.85}
+  #dr02-stage:focus-visible{box-shadow:inset 0 0 0 2px rgba(34,211,238,.6)}
+  .dr02-ghost{outline:1px dashed rgba(34,211,238,.45);outline-offset:-1px;border-radius:4px;pointer-events:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+</style>
+</head>
+<body>
+<div id="dr02-stage" role="application" aria-label="Kanban board. Move a card between columns with arrow keys." tabindex="0"></div>
+<div class="cap">Kanban Move</div>
+<script>
+(function(){
+  "use strict";
+  var stage=document.getElementById("dr02-stage");
+  var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var COLS=3, tags=["0","1","2"];
+  // model: each column is an array of card objects {el, tag}
+  var cols=[], lanes=[], cards=[];
+  for(var c=0;c<COLS;c++){
+    var col=document.createElement("div"); col.className="dr02-col dr02-c"+c;
+    var head=document.createElement("div"); head.className="dr02-head"; col.appendChild(head);
+    var lane=document.createElement("div"); lane.className="dr02-lane"; col.appendChild(lane);
+    stage.appendChild(col); lanes.push(lane); cols.push([]);
+  }
+  var layout=[[0,1,2],[1,0],[2]]; // tag per starting column
+  for(c=0;c<COLS;c++){
+    for(var i=0;i<layout[c].length;i++){
+      var el=document.createElement("div"); el.className="dr02-card";
+      el.setAttribute("data-tag",layout[c][i]);
+      lanes[c].appendChild(el);
+      var obj={el:el,col:c}; cards.push(obj); cols[c].push(obj);
+    }
+  }
+  var sel=cols[0][0]; // selected card (top-left, the cyan-tagged one moves)
+  sel=cols[0][2]; // the cyan card
+
+  // ---- spring FLIP engine (allocation-free loop) ----
+  var N=cards.length;
+  var px=new Float32Array(N), py=new Float32Array(N); // current visual offset
+  var vx=new Float32Array(N), vy=new Float32Array(N);
+  var tx=new Float32Array(N), ty=new Float32Array(N); // target offset (0 once settled)
+  var liftScale=new Float32Array(N), liftTarget=new Float32Array(N);
+  var baseL=new Float32Array(N), baseT=new Float32Array(N); // cached layout pos
+  function idx(o){return cards.indexOf(o);}
+
+  function measure(){
+    var sr=stage.getBoundingClientRect();
+    for(var k=0;k<N;k++){
+      var r=cards[k].el.getBoundingClientRect();
+      baseL[k]=r.left-sr.left; baseT[k]=r.top-sr.top;
+    }
+  }
+  // FLIP: record old screen pos, reflow DOM, then set offsets so cards appear unmoved, springs animate to 0
+  function flipReorder(mutate){
+    var sr=stage.getBoundingClientRect();
+    var oldL=[],oldT=[];
+    for(var k=0;k<N;k++){var r=cards[k].el.getBoundingClientRect();oldL[k]=r.left-sr.left;oldT[k]=r.top-sr.top;}
+    mutate();
+    measure();
+    // keep each card visually where it was on screen (old screen pos = new base + offset),
+    // preserving any in-flight spring offset; springs then ease the offset back to 0.
+    for(k=0;k<N;k++){
+      px[k]=oldL[k]+px[k]-baseL[k];
+      py[k]=oldT[k]+py[k]-baseT[k];
+      tx[k]=0; ty[k]=0;
+    }
+  }
+
+  // move selected card to column dir (-1/+1), insert at sensible row
+  function moveSel(dir){
+    var from=sel.col, to=Math.max(0,Math.min(COLS-1,from+dir));
+    if(to===from) return;
+    flipReorder(function(){
+      var arr=cols[from], j=arr.indexOf(sel); arr.splice(j,1);
+      var dest=cols[to], pos=Math.min(j,dest.length);
+      dest.splice(pos,0,sel); sel.col=to;
+      // rebuild DOM order for both lanes
+      paint(from); paint(to);
+    });
+  }
+  function paint(c){var lane=lanes[c];for(var i=0;i<cols[c].length;i++)lane.appendChild(cols[c][i].el);}
+
+  // ---- selection visual ----
+  var curSel=null;
+  function setSel(o){
+    if(curSel===o)return;
+    if(curSel){curSel.el.classList.remove("dr02-lift");liftTarget[idx(curSel)]=0;}
+    curSel=o; o.el.classList.add("dr02-lift"); liftTarget[idx(o)]=1; sel=o;
+  }
+
+  // ---- render loop ----
+  var running=true, raf=0;
+  function frame(){
+    if(!running)return;
+    var k,kk=2*Math.PI;
+    for(k=0;k<N;k++){
+      // critically-ish damped spring toward target
+      var ax=(tx[k]-px[k])*0.18 - vx[k]*0.34;
+      var ay=(ty[k]-py[k])*0.18 - vy[k]*0.34;
+      vx[k]+=ax; vy[k]+=ay; px[k]+=vx[k]; py[k]+=vy[k];
+      var ls=liftScale[k]+(liftTarget[k]-liftScale[k])*0.16; liftScale[k]=ls;
+      var s=1+ls*0.05, lift=ls*-3;
+      var e=cards[k].el;
+      e.style.transform="translate3d("+px[k].toFixed(2)+"px,"+(py[k]+lift).toFixed(2)+"px,0) scale("+s.toFixed(3)+")";
+    }
+    raf=requestAnimationFrame(frame);
+  }
+
+  // ---- self-demo on a gentle timer ----
+  var demoTimer=0, idleTimer=0, userActive=false, dir=1;
+  function demoStep(){
+    if(userActive)return;
+    setSel(sel);
+    moveSel(dir);
+    if(sel.col===0)dir=1; else if(sel.col===COLS-1)dir=-1;
+  }
+  function startDemo(){clearInterval(demoTimer);if(!reduce)demoTimer=setInterval(demoStep,2200);}
+  function userInteract(){
+    userActive=true; clearTimeout(idleTimer);
+    idleTimer=setTimeout(function(){userActive=false;},4000);
+  }
+
+  // ---- keyboard ----
+  stage.addEventListener("keydown",function(ev){
+    var d=0;
+    if(ev.key==="ArrowRight")d=1; else if(ev.key==="ArrowLeft")d=-1; else return;
+    ev.preventDefault(); userInteract(); setSel(sel); moveSel(d);
+  });
+
+  // ---- pointer (tap a card to select; drag horizontally to move) ----
+  var dragId=-1,startX=0,movedCol=0;
+  stage.addEventListener("pointerdown",function(ev){
+    var t=ev.target.closest(".dr02-card"); if(!t)return;
+    var o=null; for(var k=0;k<N;k++)if(cards[k].el===t){o=cards[k];break;}
+    if(!o)return;
+    userInteract(); setSel(o); dragId=ev.pointerId; startX=ev.clientX; movedCol=0;
+    try{stage.setPointerCapture(dragId);}catch(e){}
+  });
+  stage.addEventListener("pointermove",function(ev){
+    if(dragId<0||ev.pointerId!==dragId)return;
+    userInteract();
+    var k=idx(sel); px[k]=ev.clientX-startX - movedCol*0; // follow finger horizontally
+    var dx=ev.clientX-startX, colW=stage.clientWidth/COLS;
+    var want=Math.round(dx/colW);
+    while(want>movedCol){ if(sel.col<COLS-1){startX+=colW;movedCol++;moveSel(1);} else break; }
+    while(want<movedCol){ if(sel.col>0){startX-=colW;movedCol--;moveSel(-1);} else break; }
+    px[idx(sel)]=ev.clientX-startX;
+  });
+  function endDrag(ev){
+    if(dragId<0)return; tx[idx(sel)]=0; dragId=-1;
+  }
+  stage.addEventListener("pointerup",endDrag);
+  stage.addEventListener("pointercancel",endDrag);
+
+  // ---- lifecycle ----
+  document.addEventListener("visibilitychange",function(){
+    if(document.hidden){running=false;cancelAnimationFrame(raf);clearInterval(demoTimer);}
+    else if(!reduce){running=true;measure();raf=requestAnimationFrame(frame);startDemo();}
+  });
+  window.addEventListener("resize",measure);
+
+  // ---- boot ----
+  requestAnimationFrame(function(){
+    measure();
+    setSel(sel);
+    if(reduce){
+      // one static, legible frame: selected card lifted, no loop
+      liftScale[idx(sel)]=1;
+      for(var k=0;k<N;k++){var s=1+liftScale[k]*0.05,lift=liftScale[k]*-3;
+        cards[k].el.style.transform="translate3d(0,"+lift+"px,0) scale("+s.toFixed(3)+")";}
+      return;
+    }
+    raf=requestAnimationFrame(frame);
+    startDemo();
+  });
+})();
+</script>
+</body>
+</html>

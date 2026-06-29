@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Mirror Tunnel — Infinitude. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mirror Tunnel</title>
+<style>
+  html,body{margin:0;height:100%;background:#060406;overflow:hidden}
+  #dot02-stage{position:fixed;inset:0;width:100%;height:100%}
+  #dot02-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .dot02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff6d6;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+</style>
+</head>
+<body>
+<div id="dot02-stage" role="img" aria-label="Receding rings of glowing coloured dots rushing toward the viewer down an endless black mirrored corridor.">
+  <canvas id="dot02-cv"></canvas>
+</div>
+<div class="dot02-cap">Mirror Tunnel</div>
+<script>
+(function(){
+  "use strict";
+  const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const cv=document.getElementById('dot02-cv'); if(!cv) return;
+  function fitCanvas(c){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=c.getBoundingClientRect();
+    const w=Math.max(2,r.width), h=Math.max(2,r.height);
+    c.width=Math.round(w*dpr); c.height=Math.round(h*dpr);
+    const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+    return {ctx,w,h,dpr};
+  }
+  let S=fitCanvas(cv), rings=[], last=performance.now(), t=0;
+  const NR=26, speed=0.0016;
+  const cols=['#ff2d8a','#ffd400','#e8112d','#fff6d6','#ff63ac'];
+  function build(){
+    rings=[];
+    for(let i=0;i<NR;i++) rings.push({z:i/NR, n:10+((i*3)%8), rot:i*0.5, c:cols[i%cols.length]});
+  }
+  build();
+  function draw(now){
+    const dt=Math.min(50,now-last); last=now;
+    if(!REDUCED) t+=dt;
+    const ctx=S.ctx, cx=S.w/2, cy=S.h/2;
+    ctx.fillStyle='#060406'; ctx.fillRect(0,0,S.w,S.h);
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(S.w,S.h)*0.5);
+    g.addColorStop(0,'rgba(255,246,214,0.22)'); g.addColorStop(1,'rgba(6,4,6,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,S.w,S.h);
+    const mv=REDUCED?0:speed, maxR=Math.max(S.w,S.h)*0.62;
+    for(let i=0;i<rings.length;i++){ const r=rings[i]; r.z+=mv*(dt/16.67); if(r.z>1) r.z-=1; }
+    const ordered=rings.slice().sort((a,b)=>a.z-b.z);
+    for(let k=0;k<ordered.length;k++){
+      const rr=ordered[k], ez=rr.z*rr.z;
+      const radius=ez*maxR+6;
+      const alpha=Math.min(1,rr.z*1.6)*(1-rr.z*0.15);
+      const dotR=1.5+ez*9;
+      const spin=REDUCED?rr.rot:(rr.rot+t*0.0003*(1+rr.z));
+      ctx.fillStyle=rr.c;
+      for(let j=0;j<rr.n;j++){
+        const a=spin+(j/rr.n)*Math.PI*2;
+        ctx.globalAlpha=alpha;
+        ctx.beginPath();
+        ctx.arc(cx+Math.cos(a)*radius, cy+Math.sin(a)*radius, dotR, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha=1;
+  }
+  let raf=0, running=false;
+  function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
+  function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
+  function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  S.ctx.fillStyle='#060406'; S.ctx.fillRect(0,0,S.w,S.h);
+  let _rt;
+  window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
+  document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  if(REDUCED){ for(let i=0;i<3;i++) draw(performance.now()); }
+  else start();
+})();
+</script>
+</body>
+</html>
