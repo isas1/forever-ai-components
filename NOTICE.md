@@ -7,14 +7,14 @@ components are not reproductions, scans, or copies of any existing artwork.
 
 Some themes are created **in the style of**, or as a **tribute to**, well-known artistic movements
 and historical artists (e.g. Post-Impressionism, De Stijl, Art Nouveau, Bauhaus, ukiyo-e). Artistic
-**style and technique are not protected by copyright** — these components reinterpret a style, they
+**style and technique are not protected by copyright** - these components reinterpret a style, they
 do not copy a work.
 
 ## No affiliation or endorsement
 
 This project, its authors, and any site that hosts it are **not affiliated with, endorsed by, or
 connected to** any artist, artist's estate, foundation, or rights-holder. Where an artist's name
-appears, it is used **descriptively**, to credit the stylistic influence behind an original work —
+appears, it is used **descriptively**, to credit the stylistic influence behind an original work - 
 not to imply authorship, endorsement, or origin.
 
 ## Public-domain basis

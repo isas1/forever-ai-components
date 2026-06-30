@@ -1,6 +1,6 @@
 # Roadmap
 
-## Now — active
+## Now - active
 - Expanding the component catalog (targeting 1000+ components across 60+ themes)
 - Deepening metadata: `works_with`, `recommended_collections`, semantic tags
 - MCP server for direct agent access without HTTP fetching
