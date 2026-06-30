@@ -309,19 +309,19 @@ forever-ai-components/
 
 | Theme | Count |
 |---|---|
-| Vincent van Gogh | 8 |
-| Wassily Kandinsky | 10 |
-| Robert Delaunay | 8 |
-| Paul Klee | 8 |
-| Hilma af Klint | 8 |
-| Gustav Klimt | 8 |
-| Katsushika Hokusai | 9 |
-| Utagawa Hiroshige | 8 |
-| Georges Seurat | 8 |
-| Alphonse Mucha | 8 |
-| Piet Mondrian | 8 |
-| Kazimir Malevich | 8 |
-| William Morris | 8 |
+| Post-Impressionist Night Studies | 8 |
+| Abstract Geometric Improvisations | 10 |
+| Orphist Colour Discs | 8 |
+| Playful Geometric Notation | 8 |
+| Symbolic Pastel Abstraction | 8 |
+| Gold-Leaf Ornamental Studies | 8 |
+| Ukiyo-e Wave & Mountain | 9 |
+| Ukiyo-e Weather & Road | 8 |
+| Pointillist Dot-Field Studies | 8 |
+| Art Nouveau Ornamental Panels | 8 |
+| Primary Grid Compositions | 8 |
+| Suprematist Geometric Forms | 8 |
+| Arts & Crafts Pattern Repeats | 8 |
 | Ukiyo-e Woodblock | 10 |
 | Infinitude | 8 |
 
