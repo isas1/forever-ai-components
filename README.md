@@ -4,6 +4,7 @@
 [![Themes](https://img.shields.io/badge/themes-58-blue?style=flat)](#component-index-by-theme)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
 [![Zero deps](https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat)](#)
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-☕-FFDD00?style=flat-square)](https://buymeacoffee.com/isas1)
 
 ---
 
