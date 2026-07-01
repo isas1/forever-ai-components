@@ -1,7 +1,7 @@
 # Forever AI Components
 
 [![600+ components](https://img.shields.io/badge/components-600%2B-blueviolet?style=flat)](https://forever-components.vercel.app/infinite/)
-[![Themes](https://img.shields.io/badge/themes-57-blue?style=flat)](#component-index-by-theme)
+[![Themes](https://img.shields.io/badge/themes-58-blue?style=flat)](#component-index-by-theme)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
 [![Zero deps](https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat)](#)
 
@@ -241,7 +241,7 @@ forever-ai-components/
 
 ## Component index by theme
 
-600+ components across 57 themes:
+600+ components across 58 themes:
 
 ### UI Components
 
@@ -324,7 +324,11 @@ forever-ai-components/
 | Arts & Crafts Pattern Repeats | 8 |
 | Ukiyo-e Woodblock | 10 |
 | Infinitude | 8 |
+### Other
 
+| Theme | Count |
+|---|---|
+| Business Graphics | 3 |
 
 ---
 

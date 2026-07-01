@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Grid Monitor Dashboard - Business Graphics. Grid array mapping node status and telemetry reports with active pulse sweeps.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grid Monitor</title>
+<style>
+  :root {
+    --bg-900: #08090d; --bg-800: #12141c; --green: #10b981; --red: #ef4444; --blue: #3b82f6;
+    --gray-700: #374151; --gray-800: #1f2937; --text-primary: #f3f4f6; --text-muted: #9ca3af;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-900); }
+  .bg02-stage {
+    position: fixed; inset: 0; display: flex; flex-direction: column; padding: 24px;
+    font-family: system-ui, -apple-system, sans-serif; color: var(--text-primary);
+  }
+  .bg02-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; user-select: none; }
+  .bg02-header h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .bg02-header p { margin: 4px 0 0 0; font-size: 11px; color: var(--text-muted); }
+  .bg02-stats { font-size: 11px; font-family: ui-monospace, monospace; text-align: right; }
+  .bg02-stats span { color: var(--green); font-weight: 700; }
+  .bg02-body { flex: 1; display: grid; grid-template-columns: 2fr 1fr; gap: 20px; min-height: 0; }
+  .bg02-grid-pane {
+    background: var(--bg-800); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px;
+    display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(5, 1fr); gap: 8px; position: relative; overflow: hidden;
+  }
+  .bg02-cell {
+    background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px;
+    cursor: pointer; position: relative; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .bg02-cell::after {
+    content: ''; position: absolute; right: 6px; bottom: 6px; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--cell-color, var(--green)); box-shadow: 0 0 8px var(--cell-color, var(--green)); transition: background 0.3s, box-shadow 0.3s;
+  }
+  .bg02-cell-label { position: absolute; left: 8px; top: 8px; font-size: 9px; font-family: ui-monospace, monospace; color: var(--text-muted); font-weight: 600; }
+  .bg02-cell:hover, .bg02-cell.active { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.2); transform: scale(1.03); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 10; }
+  .bg02-cell.active { border-color: var(--blue); box-shadow: 0 0 10px rgba(59, 130, 246, 0.4); }
+  .bg02-sweep {
+    position: absolute; top: 0; bottom: 0; width: 80px;
+    background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.08) 50%, transparent);
+    border-right: 1px solid rgba(59, 130, 246, 0.3); pointer-events: none; z-index: 2; animation: bg02-sweep-anim 4s linear infinite;
+  }
+  @keyframes bg02-sweep-anim { 0% { left: -100px; } 100% { left: 105%; } }
+  .bg02-detail-pane { background: var(--bg-800); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .bg02-detail-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 8px; color: var(--blue); }
+  .bg02-detail-metric { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
+  .bg02-detail-metric label { color: var(--text-muted); }
+  .bg02-detail-metric span { font-family: ui-monospace, monospace; font-weight: 600; }
+  .bg02-bar-outer { height: 6px; background: rgba(255, 255, 255, 0.05); border-radius: 3px; overflow: hidden; margin-top: 4px; }
+  .bg02-bar-inner { height: 100%; width: 0%; background: var(--blue); border-radius: 3px; transition: width 0.4s ease-out; }
+  .bg02-detail-health {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 12px; align-self: flex-start; background: rgba(16, 185, 129, 0.15); color: var(--green);
+  }
+  .bg02-detail-health.error { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+  .cap { position: fixed; left: 8px; bottom: 7px; font: 600 10px/1 ui-monospace, Menlo, monospace; color: var(--blue); opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; user-select: none; pointer-events: none; }
+  @media (max-width: 480px) { .bg02-body { grid-template-columns: 1fr; grid-template-rows: 2fr 1fr; gap: 12px; } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .bg02-sweep { display: none; } }
+</style>
+</head>
+<body>
+  <div class="bg02-stage" id="bg02-root">
+    <div class="bg02-header">
+      <div>
+        <h1 id="bg02-title-el">System Operations Grid</h1>
+        <p id="bg02-desc-el">Real-time Node Clusters & Traffic Monitor</p>
+      </div>
+      <div class="bg02-stats">NODES ONLINE: <span id="bg02-online-count">29/30</span></div>
+    </div>
+    <div class="bg02-body">
+      <div class="bg02-grid-pane" id="bg02-grid">
+        <div class="bg02-sweep"></div>
+      </div>
+      <div class="bg02-detail-pane">
+        <div class="bg02-detail-title" id="bg02-node-name">Node ID: --</div>
+        <div class="bg02-detail-health" id="bg02-node-status">Status: Normal</div>
+        <div style="margin-top: 10px;">
+          <div class="bg02-detail-metric"><label>CPU Utilization</label><span id="bg02-cpu-val">0%</span></div>
+          <div class="bg02-bar-outer"><div class="bg02-bar-inner" id="bg02-cpu-bar"></div></div>
+        </div>
+        <div>
+          <div class="bg02-detail-metric"><label>Memory Usage</label><span id="bg02-mem-val">0%</span></div>
+          <div class="bg02-bar-outer"><div class="bg02-bar-inner" id="bg02-mem-bar"></div></div>
+        </div>
+        <div>
+          <div class="bg02-detail-metric"><label>Response Latency</label><span id="bg02-latency-val">0ms</span></div>
+          <div class="bg02-bar-outer"><div class="bg02-bar-inner" id="bg02-latency-bar"></div></div>
+        </div>
+      </div>
+    </div>
+  <script>(function(){"use strict";
+    var totalCells = 30, grid = document.getElementById("bg02-grid"), activeNodeName = document.getElementById("bg02-node-name");
+    var activeNodeStatus = document.getElementById("bg02-node-status"), cpuVal = document.getElementById("bg02-cpu-val");
+    var memVal = document.getElementById("bg02-mem-val"), latencyVal = document.getElementById("bg02-latency-val");
+    var cpuBar = document.getElementById("bg02-cpu-bar"), memBar = document.getElementById("bg02-mem-bar");
+    var latencyBar = document.getElementById("bg02-latency-bar"), onlineCounter = document.getElementById("bg02-online-count");
+    if (!grid || !activeNodeName) return;
+    var cellStates = [], activeIndex = 0, running = true;
+    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (var i = 0; i < totalCells; i++) {
+      var isError = (i === 17);
+      cellStates.push({
+        name: "srv-" + (100 + i), error: isError,
+        cpu: isError ? 98 : Math.floor(10 + Math.random() * 65),
+        mem: isError ? 94 : Math.floor(20 + Math.random() * 55),
+        latency: isError ? 820 : Math.floor(12 + Math.random() * 45)
+      });
+    }
+    var cellsHtml = '<div class="bg02-sweep"></div>';
+    cellStates.forEach(function(state, idx) {
+      var color = state.error ? "var(--red)" : "var(--green)";
+      cellsHtml += '<div class="bg02-cell" data-index="' + idx + '" style="--cell-color: ' + color + '">' +
+                     '<span class="bg02-cell-label">' + state.name.split("-")[1] + '</span>' +
+                   '</div>';
+    });
+    grid.innerHTML = cellsHtml;
+    var cellElements = grid.querySelectorAll(".bg02-cell");
+    function selectNode(index) {
+      activeIndex = index;
+      cellElements.forEach(function(el, idx) { el.classList.toggle("active", idx === index); });
+      var state = cellStates[index];
+      activeNodeName.textContent = "Node: " + state.name;
+      if (state.error) {
+        activeNodeStatus.textContent = "Status: Critical"; activeNodeStatus.className = "bg02-detail-health error";
+      } else {
+        activeNodeStatus.textContent = "Status: Normal"; activeNodeStatus.className = "bg02-detail-health";
+      }
+      cpuVal.textContent = state.cpu + "%"; cpuBar.style.width = state.cpu + "%";
+      cpuBar.style.background = state.cpu > 80 ? "var(--red)" : "var(--blue)";
+      memVal.textContent = state.mem + "%"; memBar.style.width = state.mem + "%";
+      memBar.style.background = state.mem > 85 ? "var(--red)" : "var(--blue)";
+      var latPct = Math.min((state.latency / 1000) * 100, 100);
+      latencyVal.textContent = state.latency + "ms"; latencyBar.style.width = latPct + "%";
+      latencyBar.style.background = state.latency > 500 ? "var(--red)" : "var(--blue)";
+    }
+    cellElements.forEach(function(el) {
+      el.addEventListener("click", function() { selectNode(parseInt(el.getAttribute("data-index"), 10)); });
+    });
+    selectNode(activeIndex);
+    function simulateMetrics() {
+      if (!running || reduce) return;
+      var onlineCount = 30;
+      cellStates.forEach(function(state, idx) {
+        if (Math.random() > 0.75) {
+          if (!state.error) {
+            state.cpu = Math.max(5, Math.min(95, state.cpu + Math.floor((Math.random() - 0.5) * 10)));
+            state.mem = Math.max(10, Math.min(95, state.mem + Math.floor((Math.random() - 0.5) * 6)));
+            state.latency = Math.max(5, Math.min(180, state.latency + Math.floor((Math.random() - 0.5) * 12)));
+          } else {
+            state.cpu = Math.max(90, Math.min(100, state.cpu + Math.floor((Math.random() - 0.5) * 4)));
+            state.latency = Math.max(700, Math.min(950, state.latency + Math.floor((Math.random() - 0.5) * 40)));
+          }
+        }
+        if (idx !== 17 && Math.random() > 0.995) {
+          state.error = !state.error;
+          cellElements[idx].style.setProperty("--cell-color", state.error ? "var(--red)" : "var(--green)");
+        }
+        if (state.error) onlineCount--;
+      });
+      onlineCounter.textContent = onlineCount + "/30"; selectNode(activeIndex);
+      setTimeout(simulateMetrics, 1200);
+    }
+    if (!reduce) { setTimeout(simulateMetrics, 1000); }
+    document.addEventListener("visibilitychange", function() {
+      running = !document.hidden;
+      var sweepEl = grid.querySelector(".bg02-sweep");
+      if (sweepEl) sweepEl.style.animationPlayState = running ? "running" : "paused";
+    });
+  })();
+  </script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/business-graphics/02-grid-monitor.html",
+ "title": "Grid Monitor",
+ "description": "System health grid monitoring status of 30 nodes with active scanning sweeps and interactive detail pane.",
+ "useWhen": "DevOps status pages, server health dashboards, security telemetry centers, system logs overview.",
+ "avoidWhen": "UIs requiring a light aesthetic, or dashboards with only 3-5 nodes (looks best at 24+ nodes).",
+ "agentPrompt": "Alter the count of grid cells to 24 by updating totalCells to 24 in JS, and adjust cells color by editing css colors.",
+ "editableAreas": [
+  "total nodes count (totalCells=30)",
+  "sweep scanline speed (bg02-sweep-anim 4s)",
+  "accent colors in CSS variables (--blue, --green, --red)",
+  "metric update frequency (1200ms in simulateMetrics)"
+ ],
+ "preserveElements": [
+  "visibilitychange sweep play-state control",
+  "prefers-reduced-motion scanline check",
+  "IIFE wrapper"
+ ],
+ "knownLimitations": [
+  "Grid layout is hardcoded to 6 columns by 5 rows, must change grid-template-columns for other totals"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "grid",
+  "monitor",
+  "telemetry",
+  "interactive",
+  "clicks",
+  "dashboard",
+  "dataviz",
+  "cybersecurity"
+ ]
+}
+</script>
+</body>
+</html>

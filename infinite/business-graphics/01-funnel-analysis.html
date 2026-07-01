@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Conversions Funnel Analysis - Business Graphics. Interactive 3D funnel stages with live traffic flow particles and conversion rates.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Funnel Analysis</title>
+<style>
+  :root {
+    --bg-900: #0d0f14; --bg-800: #141722; --teal: #0df; --violet: #8a2be2; --amber: #ffaa00;
+    --text-primary: #f1f5f9; --text-muted: #64748b;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-900); }
+  .bg01-stage {
+    position: fixed; inset: 0; display: flex; flex-direction: column; padding: 24px;
+    font-family: system-ui, -apple-system, sans-serif; color: var(--text-primary);
+  }
+  .bg01-header { margin-bottom: 20px; user-select: none; }
+  .bg01-header h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .bg01-header p { margin: 4px 0 0 0; font-size: 11px; color: var(--text-muted); }
+  .bg01-body { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+  .bg01-canvas-container { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  .bg01-funnel { position: relative; width: min(100%, 280px); display: flex; flex-direction: column; gap: 8px; z-index: 2; }
+  .bg01-funnel-stage {
+    position: relative; height: 42px; background: rgba(20, 23, 34, 0.6); border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px; display: flex; align-items: center; padding: 0 16px; cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); overflow: hidden;
+  }
+  .bg01-funnel-stage::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--stage-color, var(--teal)); transition: width 0.3s; }
+  .bg01-funnel-stage:hover { transform: translateY(-2px) scale(1.02); border-color: rgba(255, 255, 255, 0.15); background: rgba(20, 23, 34, 0.85); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+  .bg01-funnel-stage:hover::before { width: 8px; }
+  .bg01-stage-label { flex: 1; display: flex; flex-direction: column; }
+  .bg01-stage-name { font-size: 12px; font-weight: 600; }
+  .bg01-stage-count { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+  .bg01-stage-percent { font-size: 14px; font-weight: 700; font-family: ui-monospace, monospace; color: var(--stage-color, var(--teal)); }
+  .cap { position: fixed; left: 8px; bottom: 7px; font: 600 10px/1 ui-monospace, Menlo, monospace; color: var(--teal); opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; user-select: none; pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    .bg01-funnel-stage:hover { transform: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="bg01-stage" id="bg01-root">
+    <div class="bg01-header">
+      <h1 id="bg01-title-el">Conversions Funnel</h1>
+      <p id="bg01-desc-el">Q2 Acquisition & Checkout Performance</p>
+    </div>
+    <div class="bg01-body">
+      <div class="bg01-canvas-container"><canvas id="bg01-canvas"></canvas></div>
+      <div class="bg01-funnel" id="bg01-funnel-container"></div>
+    </div>
+  </div>
+  <script>(function(){"use strict";
+    var funnelData = [
+      { name: "Impressions", count: "142,500", percent: "100%", color: "#0df" },
+      { name: "Product Views", count: "73,815", percent: "51.8%", color: "#0bf" },
+      { name: "Add to Cart", count: "23,916", percent: "16.8%", color: "#8a2be2" },
+      { name: "Purchase", count: "10,977", percent: "7.7%", color: "#ffaa00" }
+    ];
+    var container = document.getElementById("bg01-funnel-container");
+    var canvas = document.getElementById("bg01-canvas");
+    if (!container || !canvas) return;
+    var ctx = canvas.getContext("2d");
+    var width, height, running = true, hoveredIndex = -1;
+    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var html = "";
+    funnelData.forEach(function(item, idx) {
+      html += '<div class="bg01-funnel-stage" data-index="' + idx + '" style="--stage-color: ' + item.color + '">' +
+                '<div class="bg01-stage-label">' +
+                  '<span class="bg01-stage-name">' + item.name + '</span>' +
+                  '<span class="bg01-stage-count">' + item.count + ' users</span>' +
+                '</div>' +
+                '<span class="bg01-stage-percent">' + item.percent + '</span>' +
+              '</div>';
+    });
+    container.innerHTML = html;
+    var stages = container.querySelectorAll(".bg01-funnel-stage");
+    stages.forEach(function(el) {
+      el.addEventListener("mouseenter", function() { hoveredIndex = parseInt(el.getAttribute("data-index"), 10); });
+      el.addEventListener("mouseleave", function() { hoveredIndex = -1; });
+    });
+    function resize() {
+      var rect = canvas.parentElement.getBoundingClientRect();
+      width = canvas.width = rect.width; height = canvas.height = rect.height;
+    }
+    window.addEventListener("resize", resize); resize();
+    var particles = [];
+    var maxParticles = reduce ? 0 : 75;
+    function createParticle() {
+      if (particles.length >= maxParticles) return;
+      particles.push({
+        x: width / 2 + (Math.random() - 0.5) * 80, y: 10, vy: 1.2 + Math.random() * 1.5,
+        size: 1 + Math.random() * 2, color: funnelData[0].color, stage: 0
+      });
+    }
+    function updateParticles() {
+      var stageRects = [];
+      stages.forEach(function(s) {
+        var rect = s.getBoundingClientRect(), pRect = canvas.getBoundingClientRect();
+        stageRects.push({ top: rect.top - pRect.top, bottom: rect.bottom - pRect.top, width: rect.width });
+      });
+      for (var i = particles.length - 1; i >= 0; i--) {
+        var p = particles[i]; p.y += p.vy;
+        var currentStage = 0, targetWidth = 120, stageColor = funnelData[0].color;
+        for (var s = 0; s < stageRects.length; s++) {
+          var r = stageRects[s];
+          if (p.y >= r.top && p.y <= r.bottom) { currentStage = s; targetWidth = r.width; stageColor = funnelData[s].color; break; }
+          if (p.y > r.bottom) {
+            currentStage = s + 1;
+            if (s + 1 < stageRects.length) { targetWidth = stageRects[s + 1].width; stageColor = funnelData[s + 1].color; }
+            else { targetWidth = 40; stageColor = funnelData[stageRects.length - 1].color; }
+          }
+        }
+        p.color = stageColor;
+        p.x -= (p.x - width / 2) * 0.03;
+        p.x += (Math.random() - 0.5) * 0.5;
+        if (hoveredIndex !== -1 && currentStage === hoveredIndex) { p.vy = 0.5; }
+        else { p.vy = p.vy * 0.98 + (1.2 + p.size) * 0.02; }
+        if (p.y > height || (stageRects.length > 0 && p.y > stageRects[stageRects.length - 1].bottom + 10)) { particles.splice(i, 1); }
+      }
+    }
+    function draw() {
+      ctx.clearRect(0, 0, width, height);
+      if (reduce) return;
+      ctx.lineWidth = 1;
+      var gradient = ctx.createLinearGradient(width / 2, 0, width / 2, height);
+      gradient.addColorStop(0, "rgba(0, 221, 255, 0.15)");
+      gradient.addColorStop(0.5, "rgba(138, 43, 226, 0.15)");
+      gradient.addColorStop(1, "rgba(255, 170, 0, 0.05)");
+      ctx.strokeStyle = gradient; ctx.beginPath();
+      ctx.moveTo(width / 2 - 40, 0); ctx.lineTo(width / 2 + 40, 0);
+      ctx.quadraticCurveTo(width / 2 + 50, height * 0.5, width / 2 + 20, height);
+      ctx.lineTo(width / 2 - 20, height);
+      ctx.quadraticCurveTo(width / 2 - 50, height * 0.5, width / 2 - 40, 0); ctx.stroke();
+      for (var i = 0; i < particles.length; i++) {
+        var p = particles[i]; ctx.fillStyle = p.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    function loop() {
+      if (!running) return;
+      if (!reduce) { createParticle(); createParticle(); updateParticles(); draw(); }
+      requestAnimationFrame(loop);
+    }
+    if (!reduce) { loop(); } else { resize(); draw(); }
+    document.addEventListener("visibilitychange", function() {
+      running = !document.hidden; if (running && !reduce) loop();
+    });
+  })();
+  </script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/business-graphics/01-funnel-analysis.html",
+ "title": "Funnel Analysis",
+ "description": "Interactive conversions funnel stage chart with flow particles reacting to mouse hover.",
+ "useWhen": "Marketing analytics, sales conversion dashboards, SaaS business metric headers.",
+ "avoidWhen": "UIs requiring extremely simple/flat styles, light-background layouts without restyling variables.",
+ "agentPrompt": "Change the funnel stages count to 3 by editing the funnelData array, or update the accent color by replacing --teal in CSS.",
+ "editableAreas": [
+  "funnel stages count and values (funnelData array)",
+  "colors in CSS variables (--teal, --violet, --amber)",
+  "particle count (maxParticles=75)",
+  "funnel stage width (min(100%, 280px))"
+ ],
+ "preserveElements": [
+  "visibilitychange pause/resume",
+  "prefers-reduced-motion check",
+  "IIFE wrapper"
+ ],
+ "knownLimitations": [
+  "Particles flow strictly top-to-bottom and don't curve around the stage edges dynamically",
+  "Tooltip positioning is computed relative to stage elements"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "funnel",
+  "conversions",
+  "canvas",
+  "particles",
+  "interactive",
+  "gradient",
+  "3d",
+  "dashboard",
+  "dataviz"
+ ]
+}
+</script>
+</body>
+</html>
