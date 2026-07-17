@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Activity feed - a live audit stream where new events (approved an invoice, invited a teammate, deployed a service) slide in at the top with a colored initials avatar, actor, action and relative time as the oldest fades out.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Activity Feed</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#3fb950;
+    --pro-accent-2:#4f8ff7;
+    --pro-ok:#3fb950;
+    --pro-warn:#d29922;
+    --pro-err:#f85149;
+    --pro-radius:12px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .afd-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:2.2vmin;
+    padding:4.5vmin;font-family:var(--pro-font);color:var(--pro-text)}
+  .afd-head{display:flex;align-items:center;justify-content:space-between;user-select:none;flex:none}
+  .afd-title{margin:0;font-size:clamp(11px,2.6vmin,15px);font-weight:700;letter-spacing:.02em}
+  .afd-live{display:inline-flex;align-items:center;gap:1.1vmin;font-size:clamp(8px,1.7vmin,11px);
+    font-weight:700;color:var(--pro-ok);text-transform:uppercase;letter-spacing:.08em}
+  .afd-live i{width:1.3vmin;height:1.3vmin;min-width:7px;min-height:7px;border-radius:50%;
+    background:var(--pro-ok);animation:afd-pulse 2s ease-out infinite}
+  .afd-feed{flex:1;min-height:0;overflow:hidden;position:relative;display:flex;flex-direction:column;
+    -webkit-mask-image:linear-gradient(180deg,var(--pro-text) 80%,transparent);
+    mask-image:linear-gradient(180deg,var(--pro-text) 80%,transparent)}
+  .afd-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;
+    column-gap:2.2vmin;padding:1.6vmin .4vmin;border-bottom:1px solid var(--pro-border);
+    overflow:hidden;max-height:18vmin}
+  .afd-row.in{animation:afd-in .55s cubic-bezier(.2,.7,.3,1) both}
+  .afd-row.out{animation:afd-out .45s ease-in forwards}
+  .afd-av{grid-column:1;grid-row:1/span 2;width:6.6vmin;height:6.6vmin;min-width:30px;min-height:30px;
+    border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:clamp(9px,2vmin,12px);font-weight:700;letter-spacing:.02em;color:var(--k);
+    background:color-mix(in srgb,var(--k) 20%,transparent);
+    border:1px solid color-mix(in srgb,var(--k) 36%,transparent)}
+  .afd-line{grid-column:2;grid-row:1;font-size:clamp(9px,2vmin,12.5px);line-height:1.35;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .afd-line b{font-weight:700;color:var(--pro-text)}
+  .afd-line span{color:var(--pro-muted)}
+  .afd-sub{grid-column:2;grid-row:2;font-size:clamp(7px,1.5vmin,10px);color:var(--pro-muted);
+    margin-top:.35vmin;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .afd-time{grid-column:3;grid-row:1/span 2;font-size:clamp(8px,1.6vmin,10.5px);color:var(--pro-muted);
+    font-variant-numeric:tabular-nums;white-space:nowrap;padding-left:1vmin;text-align:right}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @keyframes afd-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--pro-ok) 55%,transparent)}
+    70%,100%{box-shadow:0 0 0 2.6vmin transparent}}
+  @keyframes afd-in{0%{max-height:0;opacity:0;transform:translateY(-8px)}
+    55%{opacity:1}100%{max-height:18vmin;opacity:1;transform:none}}
+  @keyframes afd-out{0%{max-height:18vmin;opacity:1}100%{max-height:0;opacity:0}}
+  @media (prefers-reduced-motion:reduce){.afd-live i{animation:none}.afd-row.in{animation:none}}
+</style>
+</head>
+<body>
+  <div class="afd-stage" role="img"
+       aria-label="Live activity feed: teammates approving invoices, deploying services, inviting members and rotating credentials — newest events slide in at the top with initials avatars and relative timestamps.">
+    <div class="afd-head">
+      <h1 class="afd-title">Workspace activity</h1>
+      <span class="afd-live"><i></i>Live</span>
+    </div>
+    <div class="afd-feed" id="afd-feed"></div>
+  </div>
+  <div class="cap" aria-hidden="true">Activity Feed</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var feed=document.getElementById("afd-feed");
+    if(!feed)return;
+    // colour keys map to shared theme tokens so avatars re-theme with the tile
+    var COL={a:"--pro-accent",c:"--pro-accent-2",o:"--pro-ok",w:"--pro-warn",e:"--pro-err",m:"--pro-muted"};
+    var people=["Maya K.","Dev R.","Priya N.","Leon T.","Sofia M.","Ivan B.","Ada L.","Noah P.","Elena V.","Omar S."];
+    // [action, colour-key, detail sub-line, number-base(0 = no id appended)]
+    var acts=[
+      ["approved invoice #","o","Finance · net-30",1040],
+      ["deployed api-gateway","c","prod-us-east-1",0],
+      ["invited dev@northwind.io","a","role: Developer",0],
+      ["merged PR #","c","api-gateway +214 -38",300],
+      ["revoked a stale API key","w","unused for 41 days",0],
+      ["published release v2.4.","a","18 commits",1],
+      ["archived project Atlas","m","by workspace owner",0],
+      ["rotated service credentials","w","vault auto-policy",0],
+      ["flagged a failed login","e","203.0.113.9 · Lisbon",0],
+      ["exported the audit log","m","CSV · 6,204 rows",0],
+      ["opened incident SEV-2 #","e","on-call paged",77],
+      ["updated billing settings","o","seats 15 → 25",0]
+    ];
+    var VISIBLE=7, lastA=-1, lastP=-1, live=[];
+    function pick(len,not){var i;do{i=Math.floor(Math.random()*len);}while(i===not&&len>1);return i;}
+    function initials(name){var p=name.split(" ");return (p[0][0]+(p[1]?p[1][0]:"")).toUpperCase();}
+    function rel(s){if(s<8)return"just now";if(s<60)return s+"s ago";
+      var m=Math.floor(s/60);if(m<60)return m+"m ago";return Math.floor(m/60)+"h ago";}
+    function makeRow(born,animate){
+      var ai=pick(acts.length,lastA);lastA=ai;
+      var pi=pick(people.length,lastP);lastP=pi;
+      var a=acts[ai], person=people[pi];
+      var txt=a[0]+(a[3]?(a[3]+Math.floor(Math.random()*90)):"");
+      var row=document.createElement("div");
+      row.className="afd-row"+(animate?" in":"");
+      row.style.setProperty("--k","var("+COL[a[1]]+")");
+      row.innerHTML=
+        '<div class="afd-av">'+initials(person)+'</div>'+
+        '<div class="afd-line"><b>'+person+'</b> <span>'+txt+'</span></div>'+
+        '<div class="afd-sub">'+a[2]+'</div>'+
+        '<div class="afd-time"></div>';
+      var t=row.querySelector(".afd-time");
+      t.textContent=rel(Math.round((Date.now()-born)/1000));
+      return {el:row,timeEl:t,born:born};
+    }
+    function updateTimes(){live.forEach(function(r){
+      r.timeEl.textContent=rel(Math.round((Date.now()-r.born)/1000));});}
+    function addEvent(){
+      var rec=makeRow(Date.now(),true);
+      feed.insertBefore(rec.el,feed.firstChild);
+      live.unshift(rec);
+      if(live.length>VISIBLE){
+        var old=live.pop();
+        old.el.classList.add("out");
+        old.el.addEventListener("animationend",function(){
+          if(old.el.parentNode)old.el.parentNode.removeChild(old.el);});
+      }
+      updateTimes();
+    }
+    // initial populated stream: newest first, ages widening down the list
+    for(var i=0;i<VISIBLE;i++){
+      var rec=makeRow(Date.now()-i*(25+i*20)*1000,false);
+      feed.appendChild(rec.el);
+      live.push(rec);
+    }
+    if(reduce)return;
+    var running=true;
+    document.addEventListener("visibilitychange",function(){running=!document.hidden;});
+    (function loop(){setTimeout(function(){if(running)addEvent();loop();},2800);})();
+  })();
+  </script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/business-graphics/06-activity-feed.html",
+ "title": "Activity Feed",
+ "description": "A live workspace audit stream: new events slide and fade in at the top with a colored initials avatar, an actor, an action (approved invoice, deployed api-gateway, invited a teammate) and a relative time, while the oldest event fades out — 7 visible at once.",
+ "useWhen": "Dashboard sidebars, audit/activity logs, notification centers, admin overview panels, and team workspace feeds that need a sense of live recent activity.",
+ "avoidWhen": "When events must reflect a real backend stream (these are simulated), or when full event detail, filtering, and pagination are required — use a real log table instead.",
+ "agentPrompt": "Edit the people and acts arrays (actor names, action text, colour key, detail sub-line, and optional id number-base) to set your own event stream, and change the add interval (loop setTimeout 2800ms) or VISIBLE count. Colour keys (a/c/o/w/e/m) map avatar tints to the theme tokens. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "event data (people array and acts array: action text, colour key, detail sub-line, id number-base)",
+  "add-event interval (loop setTimeout 2800ms)",
+  "visible event count (VISIBLE=7) and avatar colour-to-token map (COL)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .afd-stage",
+  "IIFE wrapper",
+  "prefers-reduced-motion early return to the populated static stream",
+  "visibilitychange pause (running flag)"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Events are randomly generated on a loop for demo, not wired to a real activity source",
+  "Relative timestamps advance on each add tick (~2.8s), not once per second"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "activity-feed",
+  "audit-log",
+  "timeline",
+  "notifications",
+  "avatars",
+  "saas",
+  "realtime",
+  "dataviz",
+  "admin"
+ ]
+}
+</script>
+</body>
+</html>

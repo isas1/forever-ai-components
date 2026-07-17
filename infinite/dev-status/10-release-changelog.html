@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Release changelog feed: dated semver cards streaming in at the top of a vertical timeline rail, each listing Feature, Fix and Perf changes on small colored chips.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Release Changelog</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#4f8ff7;
+    --pro-ok:#3fb950;
+    --pro-warn:#d29922;
+    --pro-radius:12px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .rcl-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:2.6vmin;
+    padding:4.4vmin;font-family:var(--pro-font);color:var(--pro-text)}
+  .rcl-head{display:flex;align-items:center;justify-content:space-between;gap:2vmin;user-select:none}
+  .rcl-title{margin:0;font-size:clamp(11px,2.6vmin,15px);font-weight:700;letter-spacing:.02em}
+  .rcl-live{display:inline-flex;align-items:center;gap:1.1vmin;font-size:clamp(8px,1.7vmin,11px);
+    color:var(--pro-muted);font-weight:600}
+  .rcl-pulse{width:1.1vmin;height:1.1vmin;min-width:6px;min-height:6px;border-radius:50%;
+    background:var(--pro-ok);animation:rcl-blink 2.4s ease-in-out infinite}
+  .rcl-feed{position:relative;flex:1;min-height:0;overflow:hidden}
+  .rcl-feed::before{content:"";position:absolute;top:0;bottom:0;left:2.4vmin;width:2px;
+    background:linear-gradient(var(--pro-border),var(--pro-border) 68%,transparent);pointer-events:none}
+  .rcl-entry{display:grid;grid-template-rows:1fr;opacity:1;
+    transition:grid-template-rows .55s cubic-bezier(.2,.7,.2,1),opacity .55s ease,transform .55s ease}
+  .rcl-entry.rcl-enter{grid-template-rows:0fr;opacity:0;transform:translateY(-6px)}
+  .rcl-inner{min-height:0;overflow:hidden;position:relative;padding:0 0 2.8vmin 6vmin}
+  .rcl-dot{position:absolute;left:2.4vmin;top:.4vmin;transform:translateX(-50%);
+    width:1.8vmin;height:1.8vmin;min-width:9px;min-height:9px;border-radius:50%;
+    background:var(--pro-surface);border:2px solid var(--pro-muted)}
+  .rcl-entry:first-child .rcl-dot{background:var(--pro-accent);border-color:var(--pro-accent);
+    box-shadow:0 0 0 .5vmin color-mix(in srgb,var(--pro-accent) 20%,transparent);
+    animation:rcl-ring 2.4s ease-out infinite}
+  .rcl-ehead{display:flex;align-items:center;gap:1.6vmin;margin-bottom:1.5vmin}
+  .rcl-ver{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:clamp(9px,2vmin,12px);font-weight:700;color:var(--pro-accent);
+    padding:.4vmin 1.2vmin;border-radius:6px;letter-spacing:.02em;
+    background:color-mix(in srgb,var(--pro-accent) 12%,transparent);
+    border:1px solid color-mix(in srgb,var(--pro-accent) 32%,transparent)}
+  .rcl-date{font-size:clamp(8px,1.7vmin,11px);color:var(--pro-muted);font-weight:600;
+    font-variant-numeric:tabular-nums}
+  .rcl-changes{display:flex;flex-direction:column;gap:1.2vmin}
+  .rcl-chg{display:flex;align-items:flex-start;gap:1.4vmin;line-height:1.3;
+    font-size:clamp(9px,1.9vmin,12px)}
+  .rcl-chip{flex:none;font-size:clamp(7px,1.5vmin,9px);font-weight:700;text-transform:uppercase;
+    letter-spacing:.05em;padding:.35vmin 1vmin;border-radius:999px;color:var(--chip);margin-top:.15vmin;
+    background:color-mix(in srgb,var(--chip) 16%,transparent)}
+  .rcl-txt{color:var(--pro-text);opacity:.92}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @keyframes rcl-blink{0%,100%{opacity:1}50%{opacity:.3}}
+  @keyframes rcl-ring{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--pro-accent) 45%,transparent)}
+    70%,100%{box-shadow:0 0 0 1.4vmin color-mix(in srgb,var(--pro-accent) 0%,transparent)}}
+  @media (prefers-reduced-motion:reduce){
+    .rcl-entry{transition:none}
+    .rcl-pulse,.rcl-entry:first-child .rcl-dot{animation:none}
+  }
+</style>
+</head>
+<body>
+  <div class="rcl-stage" role="img"
+       aria-label="Release changelog feed. Newest release v2.4.1 at the top of a vertical timeline rail, with older releases below, each listing Feature, Fix and Perf changes on colored chips.">
+    <div class="rcl-head">
+      <h1 class="rcl-title">Release Changelog &middot; web-console</h1>
+      <span class="rcl-live"><span class="rcl-pulse" aria-hidden="true"></span>shipping</span>
+    </div>
+    <div class="rcl-feed" id="rcl-feed"></div>
+  </div>
+  <div class="cap" aria-hidden="true">Release Changelog</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var feed=document.getElementById('rcl-feed');
+    if(!feed)return;
+    var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var CUM=[0,31,59,90,120,151,181,212,243,273,304,334];
+    function fmtDate(d){d=((d-1)%365)+1;var m=11;while(CUM[m]>=d)m--;return MON[m]+' '+(d-CUM[m]);}
+    // chip kind -> label + token colour
+    var CHIP={feat:{l:'Feature',c:'var(--pro-ok)'},fix:{l:'Fix',c:'var(--pro-warn)'},perf:{l:'Perf',c:'var(--pro-accent)'}};
+    // invented but realistic changelog copy; cycled to synthesize new releases
+    var TPL=[
+      [['feat','Dark mode for the settings panel'],['fix','Token refresh race on cold start'],['perf','Trim cold-start bundle by 38 KB']],
+      [['feat','Bulk export for saved views'],['fix','Timezone drift in the job scheduler']],
+      [['fix','Retry 429 responses with jitter backoff'],['perf','Memoize heavy table rows']],
+      [['feat','Inline comments on dashboards'],['fix','Duplicate webhook delivery'],['perf','Debounce the live filter input']],
+      [['perf','Lazy-load the chart worker'],['feat','Keyboard nav in the command palette']],
+      [['fix','Escape HTML in the audit log viewer'],['feat','CSV import mapping presets']]
+    ];
+    var ti=0,day=176,maj=2,mnr=3,pat=8,MAX=4;
+    function nextVer(){var v='v'+maj+'.'+mnr+'.'+pat;pat++;if(pat>9){pat=0;mnr++;if(mnr>9){mnr=0;maj++;}}return v;}
+    function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+    function build(){
+      var tpl=TPL[ti%TPL.length];ti++;
+      day+=3+((Math.random()*4)|0);
+      var rows=tpl.map(function(ch){var m=CHIP[ch[0]];
+        return '<div class="rcl-chg"><span class="rcl-chip" style="--chip:'+m.c+'">'+m.l+
+          '</span><span class="rcl-txt">'+esc(ch[1])+'</span></div>';}).join('');
+      var e=document.createElement('div');
+      e.className='rcl-entry rcl-enter';
+      e.innerHTML='<div class="rcl-inner"><span class="rcl-dot" aria-hidden="true"></span>'+
+        '<div class="rcl-ehead"><span class="rcl-ver">'+nextVer()+'</span>'+
+        '<span class="rcl-date">'+fmtDate(day)+'</span></div>'+
+        '<div class="rcl-changes">'+rows+'</div></div>';
+      return e;
+    }
+    function add(animate){
+      var e=build();
+      feed.insertBefore(e,feed.firstChild);
+      if(animate){requestAnimationFrame(function(){requestAnimationFrame(function(){e.classList.remove('rcl-enter');});});}
+      else e.classList.remove('rcl-enter');
+      while(feed.children.length>MAX)feed.removeChild(feed.lastChild);
+    }
+    for(var i=0;i<MAX;i++)add(false);   // seed a populated feed (top ends at v2.4.1)
+    if(reduce)return;
+    var running=true;
+    document.addEventListener('visibilitychange',function(){running=!document.hidden;});
+    setInterval(function(){if(running)add(true);},3400);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/dev-status/10-release-changelog.html",
+ "title": "Release Changelog",
+ "description": "A release changelog feed: dated semver cards stream in at the top of a thin vertical timeline rail with connecting dots, each listing Feature (green), Fix (amber) and Perf (blue) changes on small colored chips, looping with plausible invented copy.",
+ "useWhen": "Product update panels, \"What's new\" widgets, dev/ops status pages, release or deploy dashboards, and changelog sidebars that need a live, self-animating timeline.",
+ "avoidWhen": "When you need a full paginated/searchable release history, real commit or deploy data wiring, or a static single release note — the entries here are synthesized invented copy on a loop.",
+ "agentPrompt": "Edit the TPL array (change lines as [kind,text] where kind is feat/fix/perf) and the CHIP map to set your own changelog copy; nextVer() and the day counter drive the semver badges and dates, and the setInterval (3400ms) sets how often a new release slides in. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "changelog copy (TPL array of [kind,text] change lines; CHIP kind→label/color map)",
+  "version + date roll (nextVer() start maj/mnr/pat, day counter)",
+  "release cadence (setInterval 3400ms) and visible count (MAX=4)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .rcl-stage",
+  "IIFE wrapper",
+  "prefers-reduced-motion early return to the seeded populated feed",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Changelog entries are synthesized from invented copy on a loop, not wired to a real release/commit source",
+  "At the 180px minimum size only the newest one or two entries stay fully visible; lower entries are clipped by the feed"
+ ],
+ "tier": "curated",
+ "labels": [
+  "themeable",
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "changelog",
+  "release-notes",
+  "timeline",
+  "semver",
+  "dev-status",
+  "feed",
+  "versioning",
+  "chips",
+  "ci-cd"
+ ]
+}
+</script>
+</body>
+</html>

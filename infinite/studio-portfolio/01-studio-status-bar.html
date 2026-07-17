@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Ambient studio status bar: availability, active client count and average response time, each stat ticking gently, with a breathing status dot signalling the studio is open for new work." >
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Studio Status Bar</title>
+<style>
+:root{
+  --pro-bg:#0d1117;
+  --pro-surface:#161b22;
+  --pro-border:rgba(255,255,255,.08);
+  --pro-text:#e6edf3;
+  --pro-muted:#8b949e;
+  --pro-accent:#7c9cff;
+  --pro-ok:#3fb950;
+  --pro-radius:8px;
+  --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+.asb-stage{position:fixed;inset:0;padding:4.4vmin;display:flex;font-family:var(--pro-font);color:var(--pro-text)}
+.asb-card{flex:1;min-height:0;background:var(--pro-surface);border:1px solid var(--pro-border);
+  border-radius:var(--pro-radius);padding:4vmin;display:flex;flex-direction:column;justify-content:space-between;gap:2.6vmin}
+.asb-top{display:flex;align-items:center;gap:1.6vmin}
+.asb-pulse{width:2.2vmin;min-width:10px;aspect-ratio:1;border-radius:50%;background:var(--pro-ok);position:relative;flex:none}
+.asb-pulse::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1.5px solid var(--pro-ok);
+  opacity:.6;animation:asb-ring 2.4s ease-out infinite}
+.asb-status{font-size:clamp(9px,1.9vmin,12px);font-weight:700}
+.asb-note{font-size:clamp(8px,1.7vmin,11px);color:var(--pro-muted)}
+.asb-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:2vmin;border-top:1px solid var(--pro-border);padding-top:2.4vmin}
+.asb-stat{display:flex;flex-direction:column;gap:.6vmin}
+.asb-num{font-size:clamp(14px,3.6vmin,22px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.asb-lbl{font-size:clamp(7px,1.4vmin,9px);color:var(--pro-muted);text-transform:uppercase;letter-spacing:.04em}
+.asb-mid{display:flex;flex-direction:column;gap:1vmin}
+.asb-mid-lbl{font-size:clamp(7px,1.4vmin,9px);color:var(--pro-muted);text-transform:uppercase;letter-spacing:.04em}
+.asb-week{display:flex;gap:.8vmin}
+.asb-day{flex:1;display:flex;flex-direction:column;align-items:center;gap:.6vmin}
+.asb-day-lbl{font-size:clamp(6px,1.2vmin,8px);color:var(--pro-muted)}
+.asb-day-chip{width:100%;aspect-ratio:1;border-radius:5px;border:1.4px solid var(--pro-border)}
+.asb-day.busy .asb-day-chip{background:var(--pro-muted);border-color:transparent;opacity:.5}
+.asb-day.open .asb-day-chip{background:color-mix(in srgb,var(--pro-ok) 22%,transparent);border-color:var(--pro-ok)}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+  user-select:none;pointer-events:none}
+@keyframes asb-ring{0%{transform:scale(1);opacity:.6}100%{transform:scale(2.1);opacity:0}}
+@media (prefers-reduced-motion:reduce){.asb-pulse::after{animation:none;display:none}}
+</style>
+</head>
+<body>
+  <div class="asb-stage">
+    <div class="asb-card" role="img" aria-label="Studio status bar showing open for new projects, a this-week availability strip with three busy and four open days, three active clients and an average response time of under two hours, with figures drifting gently.">
+      <div>
+        <div class="asb-top"><span class="asb-pulse" aria-hidden="true"></span><span class="asb-status">Open for new projects</span></div>
+        <div class="asb-note" style="margin-top:1.4vmin">Next available start: <b id="asb-start" style="color:var(--pro-text)">Mar 17</b></div>
+      </div>
+      <div class="asb-mid">
+        <div class="asb-mid-lbl">This week</div>
+        <div class="asb-week" id="asb-week"></div>
+      </div>
+      <div class="asb-stats">
+        <div class="asb-stat"><div class="asb-num" id="asb-clients">3</div><div class="asb-lbl">Active clients</div></div>
+        <div class="asb-stat"><div class="asb-num" id="asb-resp">1.6h</div><div class="asb-lbl">Avg. response</div></div>
+        <div class="asb-stat"><div class="asb-num" id="asb-sat">9.4</div><div class="asb-lbl">Satisfaction /10</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Studio Status Bar</div>
+  <script>(function(){"use strict";
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var days=[{d:'Mon',busy:true},{d:'Tue',busy:true},{d:'Wed',busy:true},{d:'Thu',busy:false},{d:'Fri',busy:false},{d:'Sat',busy:false},{d:'Sun',busy:false}];
+  document.getElementById('asb-week').innerHTML=days.map(function(x){
+    return '<div class="asb-day '+(x.busy?'busy':'open')+'"><div class="asb-day-chip"></div><span class="asb-day-lbl">'+x.d+'</span></div>';
+  }).join('');
+  var respEl=document.getElementById('asb-resp'), satEl=document.getElementById('asb-sat');
+  var baseResp=1.6, baseSat=9.4;
+  function paint(resp,sat){
+    respEl.textContent=resp.toFixed(1)+'h';
+    satEl.textContent=sat.toFixed(1);
+  }
+  paint(baseResp,baseSat);
+  if(reduce)return;
+  var running=true;
+  document.addEventListener('visibilitychange',function(){running=!document.hidden;});
+  var t0=performance.now();
+  function frame(ts){
+    if(!running){t0+=16;requestAnimationFrame(frame);return;}
+    var sec=(ts-t0)/1000;
+    paint(baseResp+Math.sin(sec*0.15)*0.35, baseSat+Math.sin(sec*0.11+1)*0.15);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/studio-portfolio/01-studio-status-bar.html",
+ "title": "Studio Status Bar",
+ "description": "An ambient studio status card with a breathing availability dot, next-start date, and three drifting stats — active clients, average response time and satisfaction score.",
+ "useWhen": "Freelance and small-studio homepages, footer status strips, contact pages wanting a quiet capacity signal.",
+ "avoidWhen": "You need a real-time operations dashboard wired to actual client and response data — figures here drift for ambient motion.",
+ "agentPrompt": "Edit the .asb-status/.asb-note text and the baseResp/baseSat constants and starting stat values in the markup to fit your own studio. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "status copy (.asb-status, .asb-note, next-start date) and stat baselines (baseResp, baseSat)",
+  "drift speed/amplitude in the frame loop"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .asb-card",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion (pulse ring removed, static populated stats remain)",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Stats drift for ambient motion and are illustrative, not wired to a real CRM or helpdesk"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "availability",
+  "status-bar",
+  "freelance",
+  "studio",
+  "capacity",
+  "response-time",
+  "satisfaction",
+  "dashboard"
+ ]
+}
+</script>
+</body>
+</html>

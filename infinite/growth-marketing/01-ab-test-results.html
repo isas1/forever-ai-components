@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A/B test results: two variant bars race toward a confidence threshold, a significance fill climbs, and a Significant badge lands on the winning variant before the run resets." />
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A/B Test Results</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#9bd12b;
+    --pro-radius:14px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .gtr-stage{position:fixed;inset:0;padding:4vmin;display:flex;font-family:var(--pro-font);color:var(--pro-text)}
+  .gtr-card{flex:1;min-height:0;background:var(--pro-surface);border:1px solid var(--pro-border);
+    border-radius:var(--pro-radius);padding:3.2vmin;display:flex;flex-direction:column;gap:2vmin}
+  .gtr-top{display:flex;justify-content:space-between;align-items:baseline}
+  .gtr-title{font-size:clamp(10px,2.2vmin,14px);font-weight:800}
+  .gtr-conf{font-size:clamp(7px,1.6vmin,10px);color:var(--pro-muted);font-weight:600}
+  .gtr-conf b{color:var(--pro-accent);font-variant-numeric:tabular-nums}
+  .gtr-lift{font-size:clamp(8px,1.8vmin,11px);font-weight:800;color:var(--pro-accent);font-variant-numeric:tabular-nums}
+  .gtr-liftsub{font-size:clamp(6px,1.3vmin,8px);color:var(--pro-muted);font-weight:600;margin-left:.6vmin}
+  .gtr-rows{flex:1;min-height:0;display:flex;flex-direction:column;gap:2.4vmin;justify-content:space-evenly}
+  .gtr-row{display:flex;flex-direction:column;gap:.9vmin;position:relative}
+  .gtr-rtop{display:flex;align-items:center;gap:1.2vmin;font-size:clamp(8px,1.8vmin,11px);font-weight:600}
+  .gtr-name{color:var(--pro-muted)}
+  .gtr-cr{margin-left:auto;font-variant-numeric:tabular-nums;font-weight:800;color:var(--pro-text);font-size:clamp(10px,2.2vmin,14px)}
+  .gtr-win{font-size:clamp(6px,1.4vmin,8px);font-weight:800;text-transform:uppercase;letter-spacing:.04em;
+    padding:.35vmin 1vmin;border-radius:999px;background:color-mix(in srgb,var(--pro-accent) 20%,transparent);
+    color:var(--pro-accent);opacity:0;transform:scale(.8);transition:all .4s}
+  .gtr-row.winner .gtr-win{opacity:1;transform:none}
+  .gtr-track{height:3.2vmin;min-height:13px;border-radius:999px;background:var(--pro-border);overflow:hidden}
+  .gtr-fill{height:100%;border-radius:999px;background:color-mix(in srgb,var(--pro-accent) 45%,var(--pro-border));width:0%;
+    transition:width .6s cubic-bezier(.4,0,.2,1),background-color .4s}
+  .gtr-row.winner .gtr-fill{background:var(--pro-accent)}
+  .gtr-sig{display:flex;align-items:center;gap:1.2vmin;font-size:clamp(7px,1.5vmin,9px);color:var(--pro-muted);font-weight:600}
+  .gtr-sigtrack{flex:1;height:.9vmin;min-height:5px;border-radius:999px;background:var(--pro-border);overflow:hidden}
+  .gtr-sigfill{height:100%;border-radius:999px;background:var(--pro-accent);width:0%;transition:width .5s ease}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+  @media (prefers-reduced-motion:reduce){.gtr-fill,.gtr-sigfill,.gtr-win{transition:none}}
+</style>
+</head>
+<body>
+  <div class="gtr-stage">
+    <div class="gtr-card" id="gtr-root" role="img"
+         aria-label="A/B test results: Control and Variant B conversion-rate bars climb as sample size grows above a relative-lift callout, a significance fill bar rises toward 95 percent confidence, and a Winner badge lands on the leading variant.">
+      <div class="gtr-top"><span class="gtr-title">Checkout button test</span><span class="gtr-conf">confidence <b id="gtr-conf">0%</b></span></div>
+      <div><span class="gtr-lift" id="gtr-lift"></span><span class="gtr-liftsub">relative lift</span></div>
+      <div class="gtr-rows" id="gtr-rows"></div>
+      <div class="gtr-sig"><span>Significance</span><div class="gtr-sigtrack"><div class="gtr-sigfill" id="gtr-sigfill"></div></div></div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">A/B Test Results</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var root=document.getElementById('gtr-root'), rows=document.getElementById('gtr-rows'),
+        confEl=document.getElementById('gtr-conf'), sigFill=document.getElementById('gtr-sigfill'),
+        liftEl=document.getElementById('gtr-lift');
+    if(!root)return;
+    var VARIANTS=[
+      {name:'Control', target:3.8},
+      {name:'Variant B', target:4.9}
+    ];
+    var MAX_CR=Math.max.apply(null,VARIANTS.map(function(v){return v.target;}))*1.12;
+    var liftPct=((VARIANTS[1].target-VARIANTS[0].target)/VARIANTS[0].target*100);
+    liftEl.textContent='+'+liftPct.toFixed(1)+'%';
+    VARIANTS.forEach(function(v){
+      var row=document.createElement('div'); row.className='gtr-row';
+      row.innerHTML='<div class="gtr-rtop"><span class="gtr-name">'+v.name+'</span><span class="gtr-cr" data-c>0.0%</span><span class="gtr-win" data-w>Winner</span></div>'+
+        '<div class="gtr-track"><div class="gtr-fill" data-f></div></div>';
+      rows.appendChild(row); v.row=row; v.cEl=row.querySelector('[data-c]'); v.fEl=row.querySelector('[data-f]');
+    });
+    function paint(frac){
+      VARIANTS.forEach(function(v){
+        var cr=v.target*Math.min(1,frac*1.06);
+        v.cEl.textContent=cr.toFixed(1)+'%';
+        v.fEl.style.width=(cr/MAX_CR*100).toFixed(1)+'%';
+      });
+      var conf=Math.min(97,frac*97);
+      confEl.textContent=Math.round(conf)+'%';
+      sigFill.style.width=(conf/97*100).toFixed(1)+'%';
+      var sig=conf>=95;
+      VARIANTS.forEach(function(v){ v.row.classList.toggle('winner', sig && v.target===Math.max.apply(null,VARIANTS.map(function(x){return x.target;}))); });
+    }
+    if(reduce){ paint(1); return; }
+    var running=true,t0=performance.now(),last=0;
+    document.addEventListener('visibilitychange',function(){ running=!document.hidden; if(running) last=performance.now(); });
+    function frame(ts){
+      if(!running){ last=ts; return requestAnimationFrame(frame); }
+      last=ts;
+      var sec=(ts-t0)/1000;
+      var cyc=sec%9; // 9s run cycle: climb 7s, hold 2s, then resets via modulo wrap
+      var frac=Math.min(1,cyc/7);
+      paint(frac);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/growth-marketing/01-ab-test-results.html",
+ "title": "A/B Test Results",
+ "description": "An A/B test results card: Control and Variant B conversion-rate bars climb as sample size grows, a significance fill bar rises toward 95% confidence, and a Winner badge lands on the leading variant once significant — then the run resets.",
+ "useWhen": "Experimentation/CRO dashboards, A/B testing tool result panels, growth marketing reporting overview cards.",
+ "avoidWhen": "When you need real statistical computation (p-values, sample-size math) or more than two variants — this is an illustrative simulated run.",
+ "agentPrompt": "Edit the VARIANTS array (name, target conversion rate) to set your own test; the 9s cycle (7s climb + 2s hold) controls pacing. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "variant data (VARIANTS array: name, target)",
+  "run cycle timing (cyc modulo 9s, 7s climb window)",
+  "significance threshold (95%)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .gtr-card",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to a populated static state",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Confidence and significance are an illustrative simulated ramp, not a real statistical computation"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "ab-testing",
+  "experimentation",
+  "conversion-rate",
+  "significance",
+  "cro",
+  "marketing",
+  "dashboard",
+  "growth",
+  "analytics",
+  "testing"
+ ]
+}
+</script>
+</body>
+</html>

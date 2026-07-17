@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Opening hours card: a live open/closed status with a soft pulsing indicator, today's hours highlighted in a full weekly hours list, and time until close.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Opening Hours Card</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#e8845c;
+    --pro-ok:#3fb950;
+    --pro-radius:16px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --soh-serif:ui-serif,Georgia,"Times New Roman",serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .soh-stage{position:fixed;inset:0;padding:4.2vmin;display:flex;font-family:var(--pro-font);color:var(--pro-text)}
+  .soh-card{flex:1;min-height:0;background:var(--pro-surface);border:1px solid var(--pro-border);
+    border-radius:var(--pro-radius);padding:3.6vmin;display:flex;flex-direction:column;gap:2vmin}
+  .soh-title{margin:0;font-family:var(--soh-serif);font-style:italic;font-weight:700;
+    font-size:clamp(13px,2.8vmin,16px)}
+  .soh-status{display:flex;align-items:center;gap:1vmin;font-weight:700;font-size:clamp(9px,1.9vmin,12px);
+    color:var(--pro-ok)}
+  .soh-status i{width:1.6vmin;min-width:7px;height:1.6vmin;min-height:7px;border-radius:50%;background:currentColor;
+    animation:soh-pulse 1.8s ease-in-out infinite}
+  @keyframes soh-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+  .soh-status.closed{color:var(--pro-muted)}
+  .soh-status.closed i{animation:none;opacity:.6}
+  .soh-sub{font-size:clamp(7px,1.5vmin,9px);color:var(--pro-muted);margin-top:.8vmin}
+  .soh-list{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:space-evenly}
+  .soh-row{display:flex;justify-content:space-between;font-size:clamp(8px,1.7vmin,10.5px);color:var(--pro-muted)}
+  .soh-row.today{color:var(--pro-text);font-weight:700}
+  .soh-row.today .soh-hrs{color:var(--pro-accent)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @media (prefers-reduced-motion:reduce){.soh-status i{animation:none;opacity:1}}
+</style>
+</head>
+<body>
+  <div class="soh-stage">
+    <div class="soh-card" id="soh-card" role="img"
+         aria-label="Opening hours card showing the restaurant is open now and closes at 10pm today, with the full weekly hours list and today's row highlighted.">
+      <h1 class="soh-title">Via Verde</h1>
+      <div>
+        <div class="soh-status" id="soh-status"><i></i><span id="soh-status-text">Open now</span></div>
+        <div class="soh-sub" id="soh-sub">Closes at 10:00pm</div>
+      </div>
+      <div class="soh-list" id="soh-list"></div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Opening Hours Card</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var statusEl=document.getElementById('soh-status'), statusText=document.getElementById('soh-status-text'),
+        sub=document.getElementById('soh-sub'), list=document.getElementById('soh-list');
+    if(!list)return;
+    var week=[
+      {d:"Monday",h:"Closed"},
+      {d:"Tuesday",h:"5pm – 9pm"},
+      {d:"Wednesday",h:"5pm – 9pm"},
+      {d:"Thursday",h:"5pm – 10pm"},
+      {d:"Friday",h:"5pm – 11pm"},
+      {d:"Saturday",h:"11am – 11pm"},
+      {d:"Sunday",h:"11am – 9pm"}
+    ];
+    var rows=week.map(function(w){
+      var r=document.createElement('div'); r.className='soh-row';
+      r.innerHTML='<span>'+w.d+'</span><span class="soh-hrs">'+w.h+'</span>';
+      list.appendChild(r); return r;
+    });
+    var todayIdx=4; // Friday, for the initial open state below
+    rows[todayIdx].classList.add('today');
+    function setState(open){
+      statusEl.classList.toggle('closed',!open);
+      statusText.textContent = open ? 'Open now' : 'Closed now';
+      sub.textContent = open ? 'Closes at 11:00pm' : 'Opens tomorrow at 11:00am';
+    }
+    setState(true);
+    if(reduce)return;
+    var running=true, open=true;
+    document.addEventListener('visibilitychange',function(){ running=!document.hidden; });
+    setInterval(function(){
+      if(!running)return;
+      open=!open;
+      setState(open);
+    },6000);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/local-storefront/01-opening-hours-card.html",
+ "title": "Opening Hours Card",
+ "description": "An opening-hours card with a pulsing open/closed status, a countdown-style closing time, and the full weekly hours list with today's row highlighted in the accent color.",
+ "useWhen": "Restaurant, café or shop contact/hours sections, footer widgets, 'are you open' quick-answer blocks.",
+ "avoidWhen": "When a real timezone-aware wall-clock status is required — the open/closed state here toggles on a demo timer, not the actual current time.",
+ "agentPrompt": "Edit the week array (day, hours) and todayIdx (which row is highlighted as today) to set your own hours. Wire to a real clock by replacing the setInterval toggle with a Date-based check against your actual opening hours. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent and --pro-ok), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent, --pro-ok)",
+  "hours data (week array: day, hours string)",
+  "highlighted day (todayIdx)",
+  "status toggle cadence (loop setInterval 6000ms)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .soh-card",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to the open populated static state",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Open/closed status toggles on a demo timer, not wired to the real wall clock or timezone"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "hours",
+  "open-closed",
+  "status",
+  "restaurant",
+  "hospitality",
+  "schedule",
+  "weekly-hours",
+  "contact"
+ ]
+}
+</script>
+</body>
+</html>

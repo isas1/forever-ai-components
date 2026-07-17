@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cart drawer with three line items that live-recompute: a quantity bumps, a promo code applies with a strike-through discount, and the subtotal/shipping/total animate to match, on a repeating loop.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cart Drawer Live Totals</title>
+<style>
+:root{
+  --pro-bg:#0d1117;
+  --pro-surface:#161b22;
+  --pro-border:rgba(255,255,255,.08);
+  --pro-text:#e6edf3;
+  --pro-muted:#8b949e;
+  --pro-accent:#ffb224;
+  --pro-accent-2:#ff5c7a;
+  --pro-ok:#3fb950;
+  --pro-radius:14px;
+  --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+.ccd-stage{position:fixed;inset:0;display:flex;padding:3.4vmin;font-family:var(--pro-font);color:var(--pro-text)}
+.ccd-drawer{flex:1;min-height:0;background:var(--pro-surface);border:1px solid var(--pro-border);
+  border-radius:var(--pro-radius);display:flex;flex-direction:column;overflow:hidden}
+.ccd-head{display:flex;align-items:center;justify-content:space-between;padding:2.8vmin 3.2vmin;
+  border-bottom:1px solid var(--pro-border)}
+.ccd-title{font-size:clamp(11px,2.4vmin,14px);font-weight:800}
+.ccd-close{width:2.6vmin;min-width:14px;height:2.6vmin;min-height:14px;color:var(--pro-muted)}
+.ccd-list{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:2vmin;
+  padding:2.4vmin 3.2vmin}
+.ccd-item{display:flex;align-items:center;gap:2vmin}
+.ccd-thumb{width:8vmin;min-width:36px;height:8vmin;min-height:36px;border-radius:9px;flex:none;
+  background:linear-gradient(135deg,var(--tc,var(--pro-accent)),color-mix(in srgb,var(--tc,var(--pro-accent)) 55%,#000))}
+.ccd-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:.6vmin}
+.ccd-name{font-size:clamp(9px,2vmin,12px);font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ccd-meta{font-size:clamp(7px,1.5vmin,9px);color:var(--pro-muted)}
+.ccd-qty{display:flex;align-items:center;gap:1vmin;font-size:clamp(8px,1.7vmin,10px);font-weight:700;
+  font-variant-numeric:tabular-nums;color:var(--pro-muted)}
+.ccd-qty b{color:var(--pro-text);transition:color .3s}
+.ccd-qty.bump b{color:var(--pro-accent)}
+.ccd-price{font-size:clamp(9px,2vmin,12px);font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ccd-foot{border-top:1px solid var(--pro-border);padding:2.6vmin 3.2vmin 3.2vmin;display:flex;
+  flex-direction:column;gap:1.1vmin}
+.ccd-row{display:flex;justify-content:space-between;font-size:clamp(8px,1.7vmin,10px);color:var(--pro-muted);
+  font-variant-numeric:tabular-nums}
+.ccd-row span:last-child{color:var(--pro-text);font-weight:600}
+.ccd-row.promo{color:var(--pro-ok)}
+.ccd-row.promo span:last-child{color:var(--pro-ok)}
+.ccd-row.total{margin-top:.6vmin;padding-top:1.4vmin;border-top:1px dashed var(--pro-border);
+  font-size:clamp(10px,2.2vmin,13px);font-weight:800;color:var(--pro-text)}
+.ccd-row.total span:last-child{color:var(--pro-text);font-size:clamp(12px,2.6vmin,16px)}
+.ccd-cta{margin-top:1.6vmin;text-align:center;font-weight:800;font-size:clamp(9px,2vmin,12px);
+  padding:1.6vmin;border-radius:999px;background:var(--pro-accent);color:#1a1300;position:relative;overflow:hidden}
+.ccd-cta.pop::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,.4);
+  animation:ccd-flash .5s ease-out}
+@keyframes ccd-flash{from{opacity:1}to{opacity:0}}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--pro-muted);
+  opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.ccd-cta.pop::after{animation:none}.ccd-qty b{transition:none}}
+</style>
+</head>
+<body>
+  <div class="ccd-stage">
+    <div class="ccd-drawer" id="ccd-root" role="img"
+         aria-label="Shopping cart drawer with three items; a quantity increases, a promo code SAVE10 applies an $8.20 discount, and the subtotal, shipping and total animate to the new $126.10 total.">
+      <div class="ccd-head">
+        <div class="ccd-title" id="ccd-heading">Your cart (3)</div>
+        <svg class="ccd-close" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <div class="ccd-list" id="ccd-list"></div>
+      <div class="ccd-foot">
+        <div class="ccd-row"><span>Subtotal</span><span id="ccd-sub">$142.00</span></div>
+        <div class="ccd-row promo" id="ccd-promo-row" style="visibility:hidden"><span>Promo SAVE10</span><span id="ccd-promo">&minus;$14.20</span></div>
+        <div class="ccd-row"><span>Shipping</span><span id="ccd-ship">$6.00</span></div>
+        <div class="ccd-row total"><span>Total</span><span id="ccd-total">$148.00</span></div>
+        <div class="ccd-cta" id="ccd-cta">Checkout</div>
+      </div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Cart Drawer Live Totals</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var list=document.getElementById('ccd-list'), heading=document.getElementById('ccd-heading'),
+        subEl=document.getElementById('ccd-sub'), shipEl=document.getElementById('ccd-ship'),
+        totalEl=document.getElementById('ccd-total'), promoRow=document.getElementById('ccd-promo-row'),
+        promoEl=document.getElementById('ccd-promo'), cta=document.getElementById('ccd-cta');
+    if(!list)return;
+    var items=[
+      {name:'Aurora Desk Lamp', meta:'Warm oak', price:48, qty:1, c:'#ffb224'},
+      {name:'Woven Storage Bin', meta:'Set of 2', price:34, qty:2, c:'#ff5c7a'},
+      {name:'Ceramic Mug Duo', meta:'Sage green', price:26, qty:1, c:'#3fb950'}
+    ];
+    items.forEach(function(it){
+      var row=document.createElement('div'); row.className='ccd-item';
+      row.innerHTML='<div class="ccd-thumb" style="--tc:'+it.c+'"></div>'+
+        '<div class="ccd-info"><div class="ccd-name">'+it.name+'</div><div class="ccd-meta">'+it.meta+'</div>'+
+        '<div class="ccd-qty">Qty <b data-q>'+it.qty+'</b></div></div>'+
+        '<div class="ccd-price" data-p>$'+(it.price*it.qty).toFixed(2)+'</div>';
+      list.appendChild(row);
+      it.qEl=row.querySelector('[data-q]'); it.pEl=row.querySelector('[data-p]'); it.qWrap=row.querySelector('.ccd-qty');
+    });
+    function fmt(n){return '$'+n.toFixed(2);}
+    function recalc(promo){
+      var sub=0; items.forEach(function(it){sub+=it.price*it.qty;});
+      var ship = sub>120?0:6;
+      var disc = promo? sub*0.1:0;
+      var total = sub-disc+ship;
+      subEl.textContent=fmt(sub);
+      shipEl.textContent= ship===0?'Free':fmt(ship);
+      promoEl.textContent='−'+fmt(disc);
+      promoRow.style.visibility=promo?'visible':'hidden';
+      totalEl.textContent=fmt(total);
+      var count=0; items.forEach(function(it){count+=it.qty;});
+      heading.textContent='Your cart ('+count+')';
+    }
+    recalc(false);
+    if(reduce)return;
+    var running=true, tm=null;
+    document.addEventListener('visibilitychange',function(){running=!document.hidden;});
+    function bumpQty(){
+      var it=items[1];
+      it.qty++; it.qEl.textContent=it.qty; it.pEl.textContent=fmt(it.price*it.qty);
+      it.qWrap.classList.add('bump'); setTimeout(function(){it.qWrap.classList.remove('bump');},600);
+      recalc(false);
+    }
+    function applyPromo(){ recalc(true); cta.classList.add('pop'); setTimeout(function(){cta.classList.remove('pop');},520); }
+    function resetAll(){ items[1].qty=2; items[1].qEl.textContent=2; items[1].pEl.textContent=fmt(items[1].price*2); recalc(false); }
+    var Q=[[2600,bumpQty],[3600,applyPromo],[4600,resetAll]], idx=0;
+    function run(){
+      tm=setTimeout(function go(){
+        if(!running){ tm=setTimeout(go,220); return; }
+        Q[idx][1](); idx=(idx+1)%Q.length; run();
+      },Q[idx][0]);
+    }
+    run();
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/commerce-essentials/02-cart-drawer-live-totals.html",
+ "title": "Cart Drawer Live Totals",
+ "description": "A right-side cart drawer with three line items where a quantity bumps, a SAVE10 promo applies with a discount row, and the subtotal, shipping and total recompute and flash to confirm, all on a repeating scripted loop.",
+ "useWhen": "Ecommerce cart previews, checkout entry points, header cart icons, or any surface demonstrating live cart math.",
+ "avoidWhen": "When you need a functioning cart wired to real inventory/pricing APIs — quantities and totals here are scripted, not persisted.",
+ "agentPrompt": "Edit the items array (name, meta, price, qty, color) and the promo rate in recalc() to change the cart contents and discount. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "cart items array (name, meta, price, qty, thumb color)",
+  "promo/shipping rules (10% promo, free shipping over $120)",
+  "loop sequence (Q array: bump qty, apply promo, reset)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .ccd-drawer",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to the static 3-item cart",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Cart math is a scripted demo loop, not connected to a real inventory or pricing service"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "cart",
+  "drawer",
+  "checkout",
+  "ecommerce",
+  "totals",
+  "promo-code",
+  "shop",
+  "conversion"
+ ]
+}
+</script>
+</body>
+</html>

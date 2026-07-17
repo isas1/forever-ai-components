@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Payment status strip: a slim horizontal row of Paid, Pending and Overdue invoice counts with proportional bars, one count nudging up at a time to feel like a live billing summary.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Payment Status Strip</title>
+<style>
+:root{
+  --pro-bg:#0d1117; --pro-surface:#161b22; --pro-border:rgba(255,255,255,.08);
+  --pro-text:#e6edf3; --pro-muted:#8b949e; --pro-accent:#3fb970;
+  --pro-warn:#e3b341; --pro-err:#f85149; --pro-radius:14px;
+  --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+.fps-stage{position:fixed;inset:0;padding:4vmin;display:flex;font-family:var(--pro-font);color:var(--pro-text)}
+.fps-card{flex:1;min-height:0;background:var(--pro-surface);border:1px solid var(--pro-border);
+  border-radius:var(--pro-radius);padding:3.4vmin;display:flex;flex-direction:column;gap:2vmin}
+.fps-head{display:flex;justify-content:space-between;align-items:baseline}
+.fps-eyebrow{font-size:clamp(8px,1.6vmin,10px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--pro-muted)}
+.fps-total{font-size:clamp(8px,1.7vmin,11px);color:var(--pro-text);font-weight:700;font-variant-numeric:tabular-nums}
+.fps-row{flex:1;min-height:0;display:flex;align-items:center;gap:3vmin}
+.fps-col{flex:1;display:flex;flex-direction:column;gap:1.4vmin}
+.fps-num{font-size:clamp(20px,6vmin,40px);font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.fps-lbl{font-size:clamp(8px,1.8vmin,11px);color:var(--pro-muted);font-weight:600}
+.fps-bar{height:2.6vmin;min-height:14px;border-radius:6px;background:var(--pro-bg);border:1px solid var(--pro-border);overflow:hidden}
+.fps-fill{height:100%;width:0;border-radius:6px;transition:width 1s cubic-bezier(.3,.9,.3,1)}
+.fps-col.paid .fps-fill{background:var(--pro-accent)}
+.fps-col.pending .fps-fill{background:var(--pro-warn)}
+.fps-col.overdue .fps-fill{background:var(--pro-err)}
+.fps-foot{display:flex;justify-content:space-between;font-size:clamp(7.5px,1.5vmin,10px);color:var(--pro-muted);font-weight:600}
+.fps-foot b{color:var(--pro-text)}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--pro-muted);
+  opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+@media (prefers-reduced-motion:reduce){ .fps-fill{transition:none} }
+</style>
+</head>
+<body>
+  <div class="fps-stage">
+    <div class="fps-card" id="fps-root" role="img"
+      aria-label="Payment status strip showing 42 paid invoices, 11 pending and 5 overdue, each with a proportional bar, counts nudging gently to feel live.">
+      <div class="fps-head">
+        <div class="fps-eyebrow">Invoice status</div>
+        <div class="fps-total" id="fps-total">58 invoices</div>
+      </div>
+      <div class="fps-row" id="fps-row"></div>
+      <div class="fps-foot">
+        <span><b id="fps-count">58</b> tracked this cycle</span>
+        <span>as of today</span>
+      </div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Payment Status Strip</div>
+  <script>(function(){"use strict";
+    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var root=document.getElementById('fps-root');
+    if(!root)return;
+    // Edit `stats` (key, label, count) — bar widths derive from the current max.
+    var stats=[
+      {k:'paid', lbl:'Paid', n:42},
+      {k:'pending', lbl:'Pending', n:11},
+      {k:'overdue', lbl:'Overdue', n:5}
+    ];
+    var wrap=document.getElementById('fps-row');
+    var totalEl=document.getElementById('fps-total'), countEl=document.getElementById('fps-count');
+    var max=Math.max.apply(null,stats.map(function(s){return s.n;}));
+    // widths are computed and written inline at creation time (not via a post-paint rAF
+    // pass) so every bar encodes its count from the very first frame — a screenshot taken
+    // at any moment always shows a visible, proportional Paid/Pending/Overdue split.
+    var fills=stats.map(function(s){
+      var col=document.createElement('div'); col.className='fps-col '+s.k;
+      var w=Math.max(6,(s.n/max)*100);
+      col.innerHTML='<span class="fps-num" data-n>'+s.n+'</span><span class="fps-lbl">'+s.lbl+'</span><span class="fps-bar"><span class="fps-fill" style="width:'+w+'%"></span></span>';
+      wrap.appendChild(col);
+      return col.querySelector('.fps-fill');
+    });
+    function paintTotals(){
+      var t=stats.reduce(function(a,s){return a+s.n;},0);
+      totalEl.textContent=t+' invoices'; countEl.textContent=t;
+    }
+    paintTotals();
+    if(reduce)return;
+
+    var running=true;
+    document.addEventListener('visibilitychange',function(){ running=!document.hidden; });
+    function paint(){
+      max=Math.max.apply(null,stats.map(function(s){return s.n;}));
+      stats.forEach(function(s,i){ fills[i].style.width=Math.max(6,(s.n/max)*100)+'%'; wrap.children[i].querySelector('[data-n]').textContent=s.n; });
+      paintTotals();
+    }
+    setInterval(function(){
+      if(!running)return;
+      // simulate a paid invoice resolving from pending
+      if(stats[1].n>3){ stats[1].n-=1; stats[0].n+=1; }
+      else { stats[1].n+=Math.floor(Math.random()*2)+1; }
+      paint();
+    },3400);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/finance-back-office/02-payment-status-strip.html",
+ "title": "Payment Status Strip",
+ "description": "A three-column strip fills the card top-to-bottom with a header total, Paid/Pending/Overdue invoice counts each with a visible accent-colored bar (green/amber/red) proportional to their share, and a footer total; bar widths are painted synchronously on load, and on a loop a pending invoice resolves into paid, nudging the counts to feel like a live billing summary.",
+ "useWhen": "Compact invoicing dashboards, billing overview strips, SMB finance summary widgets needing a small footprint.",
+ "avoidWhen": "Detailed per-invoice drill-down — this is a three-bucket count summary only.",
+ "agentPrompt": "Edit the `stats` array (k, lbl, n) to set your own status counts; bar widths and the header/footer invoice totals derive automatically from the current max/sum. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "status counts (stats array: key, label, count)",
+  "drift cadence (3400ms interval)",
+  "footer text (tracked-this-cycle label)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .fps-root",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to static painted bars",
+  "visibilitychange pause",
+  "synchronous inline fill widths on bar creation (no post-paint rAF pass, so bars never render invisible/unproportional)",
+  "head/row/foot column layout (fills the frame; row uses flex:1 so bars don't collapse to a narrow centered band)"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Count drift is simulated for demo, not wired to a real invoicing backend"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "invoicing",
+  "payment-status",
+  "billing",
+  "finance",
+  "summary",
+  "dashboard",
+  "bar-chart",
+  "overdue",
+  "compact",
+  "back-office"
+ ]
+}
+</script>
+</body>
+</html>

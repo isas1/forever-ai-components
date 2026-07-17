@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Time-slot picker: a calm grid of appointment times where an availability pulse quietly sweeps the open slots, settles on one, and confirms it before resetting to scan again.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Time Slot Picker</title>
+<style>
+:root{
+  --pro-bg:#0d1117;
+  --pro-surface:#161b22;
+  --pro-border:rgba(255,255,255,.08);
+  --pro-text:#e6edf3;
+  --pro-muted:#8b949e;
+  --pro-accent:#58c4a8;
+  --pro-radius:16px;
+  --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+.btp-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:2.8vmin;
+  padding:4.6vmin;font-family:var(--pro-font);color:var(--pro-text)}
+.btp-head{display:flex;align-items:baseline;justify-content:space-between;gap:1.4vmin;user-select:none}
+.btp-title{margin:0;font-size:clamp(11px,2.5vmin,15px);font-weight:600;letter-spacing:.01em}
+.btp-date{font-size:clamp(8px,1.8vmin,11px);color:var(--pro-muted);font-weight:500}
+.btp-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(4,1fr);
+  grid-auto-rows:1fr;gap:1.3vmin}
+.btp-slot{position:relative;display:flex;align-items:center;justify-content:center;
+  border-radius:calc(var(--pro-radius) * .5);border:1px solid var(--pro-border);
+  font-size:clamp(8px,1.9vmin,11px);font-weight:500;font-variant-numeric:tabular-nums;
+  color:var(--pro-muted);transition:border-color .7s ease,color .7s ease,background-color .7s ease}
+.btp-slot.booked{color:color-mix(in srgb,var(--pro-muted) 55%,transparent);
+  background:color-mix(in srgb,var(--pro-border) 55%,transparent);border-color:transparent}
+.btp-slot.scan{border-color:color-mix(in srgb,var(--pro-accent) 65%,transparent);color:var(--pro-text)}
+.btp-slot.scan::after{content:"";position:absolute;inset:-1px;border-radius:inherit;
+  border:1px solid var(--pro-accent);opacity:.55;animation:btp-breathe 1.8s ease-in-out infinite}
+.btp-slot.sel{background:var(--pro-accent);border-color:transparent;color:#0d1117;font-weight:700}
+@keyframes btp-breathe{0%,100%{opacity:.15;transform:scale(1)}50%{opacity:.6;transform:scale(1.04)}}
+.btp-foot{display:flex;align-items:center;justify-content:space-between;gap:2vmin;
+  padding-top:.4vmin;border-top:1px solid var(--pro-border)}
+.btp-sum{font-size:clamp(8px,1.8vmin,11px);color:var(--pro-muted);min-height:1.4em}
+.btp-sum b{color:var(--pro-text);font-weight:600}
+.btp-btn{font-size:clamp(8px,1.8vmin,11px);font-weight:600;padding:1.2vmin 2.6vmin;
+  border-radius:999px;background:var(--pro-border);color:var(--pro-muted);
+  transition:background-color .7s ease,color .7s ease}
+.btp-btn.on{background:var(--pro-accent);color:#0d1117}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+  color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+  user-select:none;pointer-events:none}
+@media (prefers-reduced-motion:reduce){
+  .btp-slot.scan::after{animation:none;opacity:.35}
+  .btp-slot{transition:none}
+}
+</style>
+</head>
+<body>
+  <div class="btp-stage" id="btp-stage" role="img"
+       aria-label="Appointment time-slot picker for Tuesday, November 18th. Booked times are muted, open times are outlined; a gentle scan sweeps the open slots and settles on 2:00pm, which is then confirmed.">
+    <div class="btp-head">
+      <h1 class="btp-title">Book a visit</h1>
+      <span class="btp-date">Tue, Nov 18</span>
+    </div>
+    <div class="btp-grid" id="btp-grid" aria-hidden="true"></div>
+    <div class="btp-foot">
+      <span class="btp-sum" id="btp-sum">Choose an open time</span>
+      <span class="btp-btn" id="btp-btn">Confirm</span>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Time Slot Picker</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var stage=document.getElementById('btp-stage'),
+        grid=document.getElementById('btp-grid'),
+        sum=document.getElementById('btp-sum'),
+        btn=document.getElementById('btp-btn');
+    if(!stage||!grid)return;
+
+    var TIMES=["8:00","8:30","9:00","9:30","10:00","10:30","11:00","11:30",
+               "1:00","1:30","2:00","2:30","3:00","3:30","4:00","4:30"];
+    var BOOKED=[2,5,7,9,13];
+    var cells=[];
+    TIMES.forEach(function(t,i){
+      var d=document.createElement('div');
+      d.className='btp-slot'+(BOOKED.indexOf(i)>-1?' booked':'');
+      d.textContent=t;
+      grid.appendChild(d); cells.push(d);
+    });
+    var openIdx=[]; TIMES.forEach(function(_,i){ if(BOOKED.indexOf(i)===-1) openIdx.push(i); });
+    var TARGET=10; // "2:00" — the one that ends up chosen
+
+    function clearScan(){ cells.forEach(function(c){ c.classList.remove('scan'); }); }
+    function clearSel(){ cells.forEach(function(c){ c.classList.remove('sel'); }); }
+
+    if(reduce){
+      cells[TARGET].classList.add('sel');
+      sum.innerHTML='<b>2:00pm</b> with Dr. Alvarez';
+      btn.classList.add('on');
+      return;
+    }
+
+    var running=true, step=0, ptr=0, timer=null;
+    document.addEventListener('visibilitychange',function(){
+      running=!document.hidden; if(running) schedule(0);
+    });
+    function schedule(ms){ clearTimeout(timer); if(running) timer=setTimeout(advance,ms); }
+
+    function advance(){
+      if(!running) return;
+      if(step===0){ // scanning phase
+        clearScan();
+        cells[openIdx[ptr]].classList.add('scan');
+        ptr++;
+        if(ptr>=openIdx.length){ step=1; ptr=0; schedule(650); }
+        else schedule(320);
+        return;
+      }
+      if(step===1){ // settle on target
+        clearScan(); clearSel();
+        cells[TARGET].classList.add('sel');
+        sum.innerHTML='<b>2:00pm</b> with Dr. Alvarez';
+        btn.classList.add('on');
+        step=2; schedule(3200);
+        return;
+      }
+      // reset
+      clearSel(); btn.classList.remove('on');
+      sum.textContent='Choose an open time';
+      step=0; ptr=0; schedule(700);
+    }
+    schedule(500);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/booking-services/01-time-slot-picker.html",
+ "title": "Time Slot Picker",
+ "description": "A calm appointment-time grid where booked slots sit muted and open slots stay outlined; a quiet availability pulse sweeps the open times, settles on one, confirms it with the practitioner's name, then resets to scan again.",
+ "useWhen": "Salon, clinic, studio or tutoring booking flows needing a scannable day-of time grid; hero demos for scheduling products.",
+ "avoidWhen": "Multi-day or multi-resource scheduling — this shows a single day's slots for one practitioner; pair with a date picker for range selection.",
+ "agentPrompt": "Edit TIMES (slot labels), BOOKED (indices already taken) and TARGET (index the scan settles on) to fit your own day. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "slot data (TIMES array, BOOKED indices, TARGET index)",
+  "scan cadence (320ms per slot, 3200ms hold on confirm)",
+  "confirmation copy (.btp-sum text)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .btp-stage",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to the populated 2:00pm confirmed state",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Single-day, single-practitioner grid — scripted demo loop, not wired to a live calendar"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "booking",
+  "time-slot",
+  "scheduling",
+  "calendar",
+  "appointment",
+  "availability",
+  "salon",
+  "clinic",
+  "service-business",
+  "grid"
+ ]
+}
+</script>
+</body>
+</html>

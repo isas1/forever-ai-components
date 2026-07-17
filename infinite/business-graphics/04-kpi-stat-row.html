@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="KPI Stat Row - four SaaS metric cards (MRR, active users, churn, net revenue retention) with count-up numbers, delta chips and trend arrows that drift plausibly over time.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KPI Stat Row</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#4f8ff7;
+    --pro-ok:#3fb950;
+    --pro-err:#f85149;
+    --pro-radius:12px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .ksr-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:3.2vmin;
+    padding:5vmin;font-family:var(--pro-font);color:var(--pro-text)}
+  .ksr-head{display:flex;align-items:baseline;justify-content:space-between;user-select:none}
+  .ksr-title{margin:0;font-size:clamp(11px,2.6vmin,15px);font-weight:700;letter-spacing:.02em}
+  .ksr-period{font-size:clamp(8px,1.8vmin,11px);color:var(--pro-muted);font-weight:600}
+  .ksr-grid{flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-rows:repeat(2,minmax(0,1fr));gap:3vmin;min-height:0}
+  .ksr-card{background:var(--pro-surface);border:1px solid var(--pro-border);
+    border-radius:var(--pro-radius);padding:3.4vmin;display:flex;flex-direction:column;
+    justify-content:space-between;position:relative;overflow:hidden}
+  .ksr-card::after{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--card-accent,var(--pro-accent)),transparent);
+    opacity:.35;transform:translateX(-100%);animation:ksr-sweep 6s linear infinite;
+    animation-delay:var(--card-delay,0s)}
+  .ksr-label{font-size:clamp(8px,1.9vmin,11px);color:var(--pro-muted);font-weight:600;
+    text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:1.4vmin}
+  .ksr-dot{width:1.2vmin;height:1.2vmin;min-width:6px;min-height:6px;border-radius:50%;
+    background:var(--card-accent,var(--pro-accent))}
+  .ksr-value{font-size:clamp(20px,6vmin,40px);font-weight:800;line-height:1;
+    font-variant-numeric:tabular-nums;letter-spacing:-.01em;margin:1.6vmin 0}
+  .ksr-foot{display:flex;align-items:center;gap:1.6vmin}
+  .ksr-delta{display:inline-flex;align-items:center;gap:.6vmin;font-size:clamp(9px,2vmin,12px);
+    font-weight:700;font-variant-numeric:tabular-nums;padding:.5vmin 1.4vmin;border-radius:999px;
+    background:color-mix(in srgb,var(--pro-ok) 15%,transparent);color:var(--pro-ok)}
+  .ksr-delta.down{background:color-mix(in srgb,var(--pro-err) 15%,transparent);color:var(--pro-err)}
+  .ksr-delta svg{width:1.6vmin;height:1.6vmin;min-width:9px;min-height:9px}
+  .ksr-sub{font-size:clamp(8px,1.7vmin,10px);color:var(--pro-muted)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @keyframes ksr-sweep{0%{transform:translateX(-100%)}55%,100%{transform:translateX(100%)}}
+  @media (prefers-reduced-motion:reduce){.ksr-card::after{animation:none;opacity:.25;transform:none}}
+</style>
+</head>
+<body>
+  <div class="ksr-stage" id="ksr-root" role="img"
+       aria-label="Dashboard stat row: monthly recurring revenue $48,250 up 12.4 percent, active users 2,847 up 4.1 percent, churn rate 1.8 percent down, net revenue retention 114 percent up.">
+    <div class="ksr-head">
+      <h1 class="ksr-title">Revenue overview</h1>
+      <span class="ksr-period">Last 30 days</span>
+    </div>
+    <div class="ksr-grid" id="ksr-grid"></div>
+  </div>
+  <div class="cap" aria-hidden="true">KPI Stat Row</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var UP='<svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M6 2v8M6 2l3 3M6 2L3 5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var DN='<svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M6 10V2M6 10l3-3M6 10l-3-3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    // Realistic SaaS KPIs. fmt: how to render the live value. goodUp: is rising good?
+    var stats=[
+      {label:"MRR",     accent:"#4f8ff7", value:48250, delta:12.4, goodUp:true,  sub:"vs $42,930",  fmt:function(v){return "$"+Math.round(v).toLocaleString();}},
+      {label:"Active users", accent:"#3fb950", value:2847, delta:4.1, goodUp:true, sub:"vs 2,735",   fmt:function(v){return Math.round(v).toLocaleString();}},
+      {label:"Churn",   accent:"#d29922", value:1.8, delta:-0.3, goodUp:false, sub:"vs 2.1%",       fmt:function(v){return v.toFixed(1)+"%";}},
+      {label:"Net retention", accent:"#a371f7", value:114, delta:6.0, goodUp:true, sub:"vs 108%",   fmt:function(v){return Math.round(v)+"%";}}
+    ];
+    var grid=document.getElementById("ksr-grid");
+    if(!grid)return;
+    stats.forEach(function(s,i){
+      var down=s.delta<0;
+      var deltaGood=(s.delta>=0)===s.goodUp;
+      var card=document.createElement("div");
+      card.className="ksr-card";
+      card.style.setProperty("--card-accent",s.accent);
+      card.style.setProperty("--card-delay",(i*1.4)+"s");
+      card.innerHTML=
+        '<div class="ksr-label"><span class="ksr-dot"></span>'+s.label+'</div>'+
+        '<div class="ksr-value" data-v="'+i+'">'+s.fmt(0)+'</div>'+
+        '<div class="ksr-foot">'+
+          '<span class="ksr-delta'+(deltaGood?'':' down')+'">'+(down?DN:UP)+
+            (down?'':'+')+s.delta.toFixed(1)+'%</span>'+
+          '<span class="ksr-sub">'+s.sub+'</span>'+
+        '</div>';
+      grid.appendChild(card);
+      s.el=card.querySelector('.ksr-value');
+    });
+
+    function render(){ stats.forEach(function(s){ s.el.textContent=s.fmt(s.shown); }); }
+
+    if(reduce){
+      stats.forEach(function(s){ s.shown=s.value; });
+      render();
+      return;
+    }
+
+    // Count-up on entry, then plausible slow drift.
+    var start=null, DUR=1100;
+    function ease(t){ return 1-Math.pow(1-t,3); }
+    function intro(ts){
+      if(start===null)start=ts;
+      var t=Math.min(1,(ts-start)/DUR), k=ease(t);
+      stats.forEach(function(s){ s.shown=s.value*k; });
+      render();
+      if(t<1){ requestAnimationFrame(intro); }
+      else { stats.forEach(function(s){ s.shown=s.value; }); render(); loop(); }
+    }
+    var running=true, timer=null;
+    function loop(){
+      timer=setTimeout(function(){
+        if(running){
+          stats.forEach(function(s){
+            var drift=(Math.random()-0.45)*s.value*0.006;
+            s.value=Math.max(0,s.value+drift);
+            s.shown=s.value;
+          });
+          render();
+        }
+        loop();
+      },2600);
+    }
+    document.addEventListener("visibilitychange",function(){ running=!document.hidden; });
+    requestAnimationFrame(intro);
+  })();
+  </script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/business-graphics/04-kpi-stat-row.html",
+ "title": "KPI Stat Row",
+ "description": "Four SaaS metric cards — MRR, active users, churn, net revenue retention — with count-up values, colored delta chips and trend arrows, updating with plausible drift over time.",
+ "useWhen": "Dashboard headers, analytics overview pages, SaaS admin summaries, executive KPI rows.",
+ "avoidWhen": "When a single hero metric is needed, or exact real-time data wiring — the values here are simulated drift.",
+ "agentPrompt": "Edit the stats array (label, value, delta, sub, fmt) to set your own metrics. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "KPI data (stats array: label, value, delta, goodUp, sub, accent, fmt)",
+  "drift interval (loop setTimeout 2600ms)",
+  "count-up duration (DUR=1100)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .ksr-stage",
+  "IIFE wrapper",
+  "prefers-reduced-motion early return to the populated state",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Values are simulated drift for demo, not wired to a live data source"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "kpi",
+  "dashboard",
+  "metrics",
+  "stat-cards",
+  "mrr",
+  "saas",
+  "count-up",
+  "dataviz",
+  "admin"
+ ]
+}
+</script>
+</body>
+</html>

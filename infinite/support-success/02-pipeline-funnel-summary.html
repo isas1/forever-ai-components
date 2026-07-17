@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Pipeline funnel summary: four narrowing stage bars (Leads, Qualified, Proposal, Won) with counts, dollar values and conversion percentages, where deals visibly advance down the funnel on a slow loop.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pipeline Funnel Summary</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#4dd0e1;
+    --pro-ok:#3fb950;
+    --pro-radius:12px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .upf-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:1.6vmin;
+    padding:4.2vmin;font-family:var(--pro-font);color:var(--pro-text)}
+  .upf-head{display:flex;align-items:baseline;justify-content:space-between;gap:1.4vmin;user-select:none}
+  .upf-title{margin:0;font-size:clamp(11px,2.4vmin,15px);font-weight:700;letter-spacing:.01em}
+  .upf-total{font-size:clamp(8px,1.7vmin,11px);color:var(--pro-accent);font-weight:700;
+    font-variant-numeric:tabular-nums;white-space:nowrap}
+  .upf-funnel{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;
+    gap:.6vmin;position:relative}
+  .upf-row{display:flex;flex-direction:column;align-items:center;gap:.4vmin}
+  .upf-bar{width:100%;max-width:96%;border-radius:999px;padding:1.1vmin 3vmin;
+    display:flex;align-items:center;justify-content:space-between;gap:1.4vmin;
+    background:linear-gradient(90deg,color-mix(in srgb,var(--pro-accent) var(--upf-i,60%),var(--pro-surface)),
+      color-mix(in srgb,var(--pro-accent) calc(var(--upf-i,60%) - 18%),var(--pro-surface)));
+    border:1px solid color-mix(in srgb,var(--pro-accent) 30%,var(--pro-border));
+    box-shadow:0 6px 18px -10px color-mix(in srgb,var(--pro-accent) 40%,transparent);
+    transition:width .6s cubic-bezier(.22,1,.36,1),background .6s ease;
+    transform:scale(1)}
+  .upf-bar.upf-nudge{animation:upf-nudge .6s cubic-bezier(.34,1.5,.4,1)}
+  @keyframes upf-nudge{0%{transform:scale(1)}35%{transform:scale(1.035)}100%{transform:scale(1)}}
+  .upf-name{font-size:clamp(8.5px,1.8vmin,11px);font-weight:700;color:#0a1016;letter-spacing:.01em}
+  .upf-mid{display:flex;flex-direction:column;align-items:flex-end;line-height:1.15}
+  .upf-n{font-size:clamp(9px,2vmin,12px);font-weight:800;font-variant-numeric:tabular-nums;color:#0a1016}
+  .upf-v{font-size:clamp(7px,1.4vmin,9.5px);font-weight:600;color:rgba(10,16,22,.72);
+    font-variant-numeric:tabular-nums}
+  .upf-conv{font-size:clamp(7px,1.4vmin,9.5px);color:var(--pro-muted);font-weight:600;
+    display:flex;align-items:center;gap:.5vmin}
+  .upf-conv b{color:var(--pro-text);font-variant-numeric:tabular-nums}
+  .upf-marker{position:absolute;left:50%;width:1.6vmin;height:1.6vmin;min-width:9px;min-height:9px;
+    border-radius:50%;background:#fff;box-shadow:0 0 0 3px color-mix(in srgb,var(--pro-accent) 55%,transparent),
+    0 2px 8px rgba(0,0,0,.4);transform:translate(-50%,-50%);opacity:0;pointer-events:none;
+    transition:top .75s cubic-bezier(.4,0,.2,1),opacity .3s ease}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @media (prefers-reduced-motion:reduce){
+    .upf-bar{transition:none} .upf-bar.upf-nudge{animation:none} .upf-marker{transition:none;opacity:0}
+  }
+</style>
+</head>
+<body>
+  <div class="upf-stage" id="upf-stage" role="img" aria-label="Sales pipeline funnel, loading">
+    <div class="upf-head">
+      <h1 class="upf-title">Pipeline funnel</h1>
+      <span class="upf-total" id="upf-total">$0 total</span>
+    </div>
+    <div class="upf-funnel" id="upf-funnel">
+      <span class="upf-marker" id="upf-marker" aria-hidden="true"></span>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Pipeline Funnel Summary</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var stage=document.getElementById('upf-stage'),
+        funnel=document.getElementById('upf-funnel'),
+        totalEl=document.getElementById('upf-total'),
+        marker=document.getElementById('upf-marker');
+    if(!stage||!funnel)return;
+
+    var stages=[
+      {name:'Leads',     count:1240, val:372000, unit:300},
+      {name:'Qualified', count:620,  val:258400, unit:417},
+      {name:'Proposal',  count:260,  val:142600, unit:548},
+      {name:'Won',       count:96,   val:96200,  unit:1002}
+    ];
+    var minI=44, maxI=88; // color-mix intensity range for --upf-i
+
+    function fmt$(v){ return '$'+Math.round(v).toLocaleString('en-US'); }
+    function fmtK(v){ return v>=1000?'$'+(v/1000).toFixed(v>=10000?0:1)+'K':'$'+Math.round(v); }
+
+    stages.forEach(function(s,i){
+      var row=document.createElement('div'); row.className='upf-row';
+      var bar=document.createElement('div'); bar.className='upf-bar';
+      bar.innerHTML='<span class="upf-name">'+s.name+'</span>'+
+        '<span class="upf-mid"><span class="upf-n" data-n>'+s.count.toLocaleString()+'</span>'+
+        '<span class="upf-v" data-v>'+fmt$(s.val)+'</span></span>';
+      row.appendChild(bar);
+      if(i<stages.length-1){
+        var conv=document.createElement('div'); conv.className='upf-conv';
+        conv.innerHTML='<b data-conv></b><span>&rarr; '+stages[i+1].name+'</span>';
+        row.appendChild(conv); s.convEl=conv.querySelector('[data-conv]');
+      }
+      funnel.appendChild(row);
+      s.rowEl=row; s.barEl=bar; s.nEl=bar.querySelector('[data-n]'); s.vEl=bar.querySelector('[data-v]');
+    });
+
+    function widths(){
+      var counts=stages.map(function(s){return s.count;});
+      var lo=Math.log(Math.min.apply(null,counts)), hi=Math.log(Math.max.apply(null,counts));
+      var span=Math.max(0.0001,hi-lo);
+      return stages.map(function(s){
+        var r=(Math.log(s.count)-lo)/span;
+        return {w:34+66*r, i:minI+(maxI-minI)*r};
+      });
+    }
+    function describe(){
+      var total=stages.reduce(function(a,s){return a+s.val;},0);
+      return 'Sales pipeline funnel, '+fmtK(total)+' total value across four stages: '+
+        stages.map(function(s){return s.name+' '+s.count.toLocaleString()+' deals, '+fmt$(s.val);}).join('; ')+'.';
+    }
+    function paint(){
+      var w=widths();
+      stages.forEach(function(s,i){
+        s.barEl.style.width=w[i].w.toFixed(1)+'%';
+        s.barEl.style.setProperty('--upf-i',w[i].i.toFixed(1)+'%');
+        s.nEl.textContent=s.count.toLocaleString();
+        s.vEl.textContent=fmt$(s.val);
+        if(s.convEl && stages[i+1]){
+          s.convEl.textContent=Math.round((stages[i+1].count/s.count)*100)+'%';
+        }
+      });
+      var total=stages.reduce(function(a,s){return a+s.val;},0);
+      totalEl.textContent=fmtK(total)+' total';
+      stage.setAttribute('aria-label',describe());
+    }
+    paint();
+    if(reduce)return;
+
+    function newLead(){
+      stages[0].count+=1;
+      stages[0].val+=Math.round(stages[0].unit*(0.85+Math.random()*0.3));
+      paint();
+    }
+    function advance(){
+      var idx=Math.floor(Math.random()*3); // 0..2, Won is terminal
+      var src=stages[idx], dst=stages[idx+1];
+      if(src.count<=dst.count+1)return;
+      src.count-=1; dst.count+=1;
+      var moved=Math.round(dst.unit*(0.9+Math.random()*0.25));
+      src.val=Math.max(0,src.val-Math.round(src.unit*0.6));
+      dst.val+=moved;
+      paint();
+      dst.barEl.classList.remove('upf-nudge'); void dst.barEl.offsetWidth; dst.barEl.classList.add('upf-nudge');
+      var r1=src.rowEl.getBoundingClientRect(), r2=dst.rowEl.getBoundingClientRect(), fr=funnel.getBoundingClientRect();
+      marker.style.transition='none';
+      marker.style.top=(r1.top-fr.top+r1.height/2)+'px';
+      marker.style.opacity='1';
+      void marker.offsetWidth;
+      marker.style.transition='top .75s cubic-bezier(.4,0,.2,1),opacity .3s ease';
+      marker.style.top=(r2.top-fr.top+r2.height/2)+'px';
+      setTimeout(function(){ marker.style.opacity='0'; },780);
+    }
+
+    var running=true,last=0,leadAcc=0,advAcc=0,LEAD_STEP=2500,ADV_STEP=3700;
+    document.addEventListener('visibilitychange',function(){
+      running=!document.hidden; if(running)last=performance.now();
+    });
+    function frame(ts){
+      if(!running){ last=ts; return requestAnimationFrame(frame); }
+      var dt=Math.min(200,ts-last); last=ts; leadAcc+=dt; advAcc+=dt;
+      while(leadAcc>=LEAD_STEP){ leadAcc-=LEAD_STEP; newLead(); }
+      while(advAcc>=ADV_STEP){ advAcc-=ADV_STEP; advance(); }
+      requestAnimationFrame(frame);
+    }
+    last=performance.now(); requestAnimationFrame(frame);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/support-success/02-pipeline-funnel-summary.html",
+ "title": "Pipeline Funnel Summary",
+ "description": "A four-stage sales pipeline funnel (Leads, Qualified, Proposal, Won) as narrowing rounded bars labeled with count, dollar value and stage-to-stage conversion percent; on an autonomous loop new leads trickle in and single deals visibly advance down the funnel with a traveling marker and a destination-bar nudge.",
+ "useWhen": "CRM/sales dashboards, pipeline overview cards, sales-ops summary panels needing a compact stage-by-stage funnel view distinct from a kanban board.",
+ "avoidWhen": "More than four or five pipeline stages (bars get too thin to read), or when exact live deal-level data is required — counts and values here are simulated drift for demo.",
+ "agentPrompt": "Edit the stages array (name, count, val, unit) to set your own pipeline and starting figures; advance() controls which stage-to-stage transition fires on each loop. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "pipeline data (stages array: name, count, val, unit)",
+  "bar width scale (widths() log-scale min/max and minI/maxI intensity range)",
+  "tick cadence (LEAD_STEP=2500ms new-lead trickle, ADV_STEP=3700ms deal advance)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .upf-stage (kept in sync via describe())",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to the populated static funnel",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Counts, values and advances are simulated drift for demo, not wired to a live CRM source",
+  "Tuned for exactly four stages; bar text crowds below roughly 220px wide"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "sales",
+  "pipeline",
+  "funnel",
+  "crm",
+  "conversion-rate",
+  "deals",
+  "revenue",
+  "dashboard",
+  "dataviz",
+  "summary-card"
+ ]
+}
+</script>
+</body>
+</html>

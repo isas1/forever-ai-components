@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Job posting card: role, department and salary band over a geometric grid header, with an applicant count that ticks up as new candidates arrive and an avatar-initial stack that grows.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Job Posting Card</title>
+<style>
+:root{
+  --pro-bg:#0d1117;
+  --pro-surface:#161b22;
+  --pro-border:rgba(255,255,255,.08);
+  --pro-text:#e6edf3;
+  --pro-muted:#8b949e;
+  --pro-accent:#a78bfa;
+  --pro-ok:#3fb950;
+  --pro-radius:2px;
+  --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+.tjp-stage{position:fixed;inset:0;display:flex;flex-direction:column;font-family:var(--pro-font);color:var(--pro-text)}
+.tjp-head{background:var(--pro-accent);color:#1a1025;padding:3.4vmin 4vmin;display:flex;flex-direction:column;gap:.6vmin}
+.tjp-dept{font-size:clamp(7px,1.6vmin,10px);font-weight:800;letter-spacing:.12em;text-transform:uppercase;opacity:.75}
+.tjp-role{font-size:clamp(14px,3.6vmin,22px);font-weight:800;letter-spacing:-.01em;line-height:1.08}
+.tjp-body{flex:1;min-height:0;padding:3.2vmin 4vmin;display:flex;flex-direction:column;gap:2.6vmin;border-left:1px solid var(--pro-border);border-right:1px solid var(--pro-border)}
+.tjp-row{display:flex;justify-content:space-between;align-items:center;gap:1.6vmin}
+.tjp-loc{font-size:clamp(9px,2vmin,12px);color:var(--pro-muted);font-weight:600}
+.tjp-pill{font-size:clamp(7px,1.5vmin,9px);font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  padding:.5vmin 1.4vmin;border:1px solid color-mix(in srgb,var(--pro-ok) 55%,var(--pro-border));color:var(--pro-ok)}
+.tjp-salary{font-size:clamp(13px,3vmin,18px);font-weight:800;font-variant-numeric:tabular-nums}
+.tjp-stat{display:flex;align-items:baseline;gap:1.2vmin}
+.tjp-num{font-size:clamp(24px,7.5vmin,44px);font-weight:800;font-variant-numeric:tabular-nums;color:var(--pro-accent);line-height:1}
+.tjp-numlabel{font-size:clamp(8px,1.7vmin,11px);color:var(--pro-muted);font-weight:600}
+.tjp-avatars{display:flex}
+.tjp-av{width:5.2vmin;min-width:26px;aspect-ratio:1;border-radius:50%;background:var(--pro-surface);
+  border:2px solid var(--pro-bg);display:flex;align-items:center;justify-content:center;
+  font-size:clamp(8px,1.7vmin,10px);font-weight:800;margin-left:-1.4vmin;color:var(--pro-text);
+  opacity:0;transform:scale(.4);transition:all .4s cubic-bezier(.3,1.4,.4,1)}
+.tjp-av.in{opacity:1;transform:scale(1)}
+.tjp-av:first-child{margin-left:0}
+.tjp-pipeline{display:flex;gap:1.4vmin}
+.tjp-stagechip{flex:1;min-width:0;display:flex;flex-direction:column;gap:.6vmin;padding:1.2vmin 1.4vmin;
+  background:var(--pro-surface);border:1px solid var(--pro-border)}
+.tjp-schead{display:flex;justify-content:space-between;align-items:baseline;gap:.6vmin}
+.tjp-sclabel{font-size:clamp(6.5px,1.4vmin,8.5px);color:var(--pro-muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.tjp-scnum{font-size:clamp(13px,3vmin,18px);font-weight:800;font-variant-numeric:tabular-nums}
+.tjp-scbar{height:.7vmin;min-height:4px;background:var(--pro-border);overflow:hidden}
+.tjp-scbar i{display:block;height:100%;background:var(--pro-accent)}
+.tjp-foot{display:flex;justify-content:flex-end;align-items:center;gap:2vmin;padding:2vmin 4vmin;
+  border-top:1px solid var(--pro-border);font-size:clamp(7px,1.6vmin,10px);color:var(--pro-muted);font-weight:600}
+.tjp-new{color:var(--pro-accent);font-weight:800;opacity:0}
+.tjp-new.show{animation:tjp-flash 1.4s ease}
+@keyframes tjp-flash{0%{opacity:0;transform:translateY(3px)}20%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--pro-muted);
+  opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.tjp-av{transition:none}.tjp-new.show{animation:none;opacity:1}}
+</style>
+</head>
+<body>
+  <div class="tjp-stage" id="tjp-root" role="img"
+       aria-label="Job posting for Senior Product Designer, Design department, full-time, remote, salary band $95,000 to $120,000, actively hiring, with a live applicant count that grows as new candidates apply.">
+    <div class="tjp-head">
+      <div class="tjp-dept">Design &middot; Full-time &middot; Remote</div>
+      <div class="tjp-role">Senior Product Designer</div>
+    </div>
+    <div class="tjp-body">
+      <div class="tjp-row"><span class="tjp-loc">Posted 6d ago</span><span class="tjp-pill">Actively hiring</span></div>
+      <div class="tjp-salary">$95,000&ndash;$120,000</div>
+      <div class="tjp-row">
+        <div class="tjp-stat"><span class="tjp-num" id="tjp-num">38</span><span class="tjp-numlabel">applicants</span></div>
+        <span class="tjp-new" id="tjp-new">+1 new</span>
+      </div>
+      <div class="tjp-pipeline">
+        <div class="tjp-stagechip"><div class="tjp-schead"><span class="tjp-sclabel">Screen</span><span class="tjp-scnum">22</span></div><div class="tjp-scbar"><i style="width:100%"></i></div></div>
+        <div class="tjp-stagechip"><div class="tjp-schead"><span class="tjp-sclabel">Interview</span><span class="tjp-scnum">9</span></div><div class="tjp-scbar"><i style="width:41%"></i></div></div>
+        <div class="tjp-stagechip"><div class="tjp-schead"><span class="tjp-sclabel">Offer</span><span class="tjp-scnum">2</span></div><div class="tjp-scbar"><i style="width:9%"></i></div></div>
+      </div>
+      <div class="tjp-avatars" id="tjp-avatars"></div>
+    </div>
+    <div class="tjp-foot"><span>req-2291</span><span id="tjp-open">14 days open</span></div>
+  </div>
+  <div class="cap" aria-hidden="true">Job Posting Card</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var numEl=document.getElementById('tjp-num'), newEl=document.getElementById('tjp-new'),
+        avWrap=document.getElementById('tjp-avatars'), openEl=document.getElementById('tjp-open');
+    if(!numEl)return;
+    var NAMES=['M.K','R.T','S.O','J.L','A.P','D.N','C.W','E.B'];
+    var count=38, day=14;
+    function addAvatar(){
+      if(avWrap.children.length>=8){avWrap.removeChild(avWrap.firstChild);}
+      var d=document.createElement('div'); d.className='tjp-av';
+      d.textContent=NAMES[Math.floor(Math.random()*NAMES.length)];
+      avWrap.appendChild(d);
+      requestAnimationFrame(function(){requestAnimationFrame(function(){d.classList.add('in');});});
+    }
+    for(var i=0;i<5;i++)addAvatar();
+    function flashNew(){
+      newEl.classList.remove('show'); void newEl.offsetWidth; newEl.classList.add('show');
+    }
+    if(reduce){ numEl.textContent=count; openEl.textContent=day+' days open'; return; }
+    var running=true;
+    document.addEventListener('visibilitychange',function(){running=!document.hidden;});
+    var t=setInterval(function(){
+      if(!running)return;
+      count++; numEl.textContent=count; addAvatar(); flashNew();
+    },4200);
+    var t2=setInterval(function(){
+      if(!running)return;
+      day++; openEl.textContent=day+' days open';
+    },21000);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/team-people/01-job-posting-countup.html",
+ "title": "Job Posting Card",
+ "description": "A geometric job posting card with a solid accent-block header (role, department, location), a salary band, and a live applicant counter that ticks up with a growing avatar-initial stack and a brief '+1 new' flash.",
+ "useWhen": "Careers pages, job board listings, ATS dashboards, hiring landing pages needing a single open-role summary card.",
+ "avoidWhen": "Multi-role listings or filterable job boards — this renders exactly one posting; use a list/table for many roles.",
+ "agentPrompt": "Edit the role/department/salary text in the markup and the NAMES array + starting count/day in the script. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "posting copy (role, department, location, salary band, req id)",
+  "applicant data (NAMES initials array, starting count, days-open counter)",
+  "tick cadence (4200ms new applicant, 21000ms day tick)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .tjp-root",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to the populated 38-applicant static state",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Applicant growth and day counter are simulated drift, not wired to a real ATS"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "job-posting",
+  "hiring",
+  "recruiting",
+  "ats",
+  "applicant",
+  "careers",
+  "hr",
+  "people-ops",
+  "count-up",
+  "job-board"
+ ]
+}
+</script>
+</body>
+</html>

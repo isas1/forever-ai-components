@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Applicant pipeline kanban: five stage columns (Applied, Screening, Interview, Offer, Hired) with candidate cards that advance one stage at a time on a slow autonomous loop.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Applicant Pipeline</title>
+<style>
+:root{
+  --pro-bg:#0d1117;
+  --pro-surface:#161b22;
+  --pro-border:rgba(255,255,255,.08);
+  --pro-text:#e6edf3;
+  --pro-muted:#8b949e;
+  --pro-accent:#a78bfa;
+  --pro-ok:#3fb950;
+  --pro-radius:2px;
+  --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+.tpk-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:1.8vmin;padding:3.4vmin;
+  font-family:var(--pro-font);color:var(--pro-text)}
+.tpk-title{font-size:clamp(10px,2.2vmin,13px);font-weight:800;letter-spacing:.02em}
+.tpk-board{flex:1;min-height:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:1.2vmin}
+.tpk-col{display:flex;flex-direction:column;gap:1vmin;min-width:0}
+.tpk-colhead{background:var(--pro-surface);border-top:3px solid var(--tc,var(--pro-accent));
+  padding:1vmin 1.2vmin;display:flex;flex-direction:column;gap:.3vmin}
+.tpk-colname{font-size:clamp(6.5px,1.3vmin,9px);font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--pro-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tpk-colcount{font-size:clamp(11px,2.6vmin,16px);font-weight:800;font-variant-numeric:tabular-nums;color:var(--pro-text)}
+.tpk-cards{flex:1;display:flex;flex-direction:column;gap:.9vmin;overflow:hidden}
+.tpk-card{background:var(--pro-surface);border:1px solid var(--pro-border);border-left:2px solid var(--tc,var(--pro-accent));
+  padding:1vmin 1.1vmin;display:flex;flex-direction:column;gap:.4vmin;
+  transition:opacity .5s ease, transform .5s ease}
+.tpk-name{font-size:clamp(7px,1.5vmin,9.5px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tpk-role{font-size:clamp(6px,1.2vmin,8px);color:var(--pro-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tpk-card.leave{opacity:0;transform:translateX(6px) scale(.94)}
+.tpk-card.enter{opacity:0;transform:translateX(-6px) scale(.94)}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--pro-muted);
+  opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.tpk-card{transition:none}}
+</style>
+</head>
+<body>
+  <div class="tpk-stage" id="tpk-root" role="img"
+       aria-label="Applicant pipeline board with five stages, Applied, Screening, Interview, Offer and Hired, showing candidate cards that periodically advance to the next stage.">
+    <div class="tpk-title">Hiring pipeline &middot; Product Designer</div>
+    <div class="tpk-board" id="tpk-board"></div>
+  </div>
+  <div class="cap" aria-hidden="true">Applicant Pipeline</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var board=document.getElementById('tpk-board');
+    if(!board)return;
+    var COLORS=['#a78bfa','#8f7ae0','#7a6bd6','#6a5acd','#3fb950'];
+    var STAGES=['Applied','Screening','Interview','Offer','Hired'];
+    var ROLES=['Sr Designer','Designer','UX Researcher','Product Design','Design Lead'];
+    var NAMES=['Maya K.','Ravi T.','Sofia O.','Jonas L.','Amara P.','Devon N.','Chloe W.','Ethan B.','Priya S.','Liam F.'];
+    var cols=STAGES.map(function(name,i){
+      var el=document.createElement('div'); el.className='tpk-col';
+      el.innerHTML='<div class="tpk-colhead" style="--tc:'+COLORS[i]+'"><span class="tpk-colname">'+name+
+        '</span><span class="tpk-colcount" data-count>0</span></div><div class="tpk-cards" data-cards></div>';
+      board.appendChild(el);
+      return {name:name,color:COLORS[i],cardsEl:el.querySelector('[data-cards]'),countEl:el.querySelector('[data-count]'),items:[]};
+    });
+    var uid=0;
+    function makeCandidate(){ uid++; return {id:uid, name:NAMES[Math.floor(Math.random()*NAMES.length)], role:ROLES[Math.floor(Math.random()*ROLES.length)]}; }
+    function renderCol(ci){
+      var col=cols[ci]; col.countEl.textContent=col.items.length;
+      var max=ci===0?5:4;
+      var shown=col.items.slice(-max);
+      col.cardsEl.innerHTML='';
+      shown.forEach(function(c){
+        var d=document.createElement('div'); d.className='tpk-card'; d.style.setProperty('--tc',col.color);
+        d.innerHTML='<span class="tpk-name">'+c.name+'</span><span class="tpk-role">'+c.role+'</span>';
+        col.cardsEl.appendChild(d);
+      });
+    }
+    // seed
+    [5,3,2,1,1].forEach(function(n,ci){ for(var k=0;k<n;k++)cols[ci].items.push(makeCandidate()); });
+    cols.forEach(function(c,i){renderCol(i);});
+    function advance(){
+      // pick a random source column 0..3 that has items
+      var src=-1, tries=0;
+      var order=[0,1,2,3];
+      order.sort(function(){return Math.random()-0.5;});
+      for(var k=0;k<order.length;k++){ if(cols[order[k]].items.length>0){src=order[k];break;} }
+      if(src<0)return;
+      var cand=cols[src].items.shift();
+      cols[src+1].items.push(cand);
+      renderCol(src); renderCol(src+1);
+      if(src===0){ cols[0].items.push(makeCandidate()); renderCol(0); }
+    }
+    if(reduce)return;
+    var running=true;
+    document.addEventListener('visibilitychange',function(){running=!document.hidden;});
+    setInterval(function(){ if(running)advance(); },3600);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/team-people/02-applicant-pipeline-kanban.html",
+ "title": "Applicant Pipeline",
+ "description": "A five-column hiring kanban (Applied, Screening, Interview, Offer, Hired) with candidate cards labeled by name and role; on a slow loop a candidate advances to the next stage and a fresh applicant enters the funnel.",
+ "useWhen": "ATS dashboards, recruiting overviews, hiring manager summaries, careers-team internal tools needing a live pipeline snapshot.",
+ "avoidWhen": "Drag-and-drop or editable kanban needs — this is a read-only ambient visualization, not an interactive board.",
+ "agentPrompt": "Edit STAGES, COLORS, ROLES and NAMES arrays and the seed counts ([5,3,2,1,1]) to match your own pipeline. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "pipeline data (STAGES, COLORS, ROLES, NAMES arrays; seed counts per column)",
+  "advance cadence (setInterval 3600ms)",
+  "max visible cards per column"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .tpk-root",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return (freezes at seeded static distribution)",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Stage advancement is a simulated loop, not wired to a real ATS backend",
+  "Fixed at five stages; more would crowd below ~360px wide"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "kanban",
+  "pipeline",
+  "hiring",
+  "recruiting",
+  "applicant-tracking",
+  "ats",
+  "hr",
+  "people-ops",
+  "board",
+  "candidates"
+ ]
+}
+</script>
+</body>
+</html>

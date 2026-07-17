@@ -1,0 +1,154 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Diff Viewer — Terminal. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diff Viewer</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:clamp(10px,1.7vmin,13px)/1.55 ui-monospace,Menlo,Consolas,"Courier New",monospace}
+.dvw-wrap{padding:clamp(8px,2vmin,14px);height:100%;display:flex;flex-direction:column;overflow:hidden}
+.dvw-file{color:#c9d1d9;border:1px solid #21262d;border-bottom:0;background:#161b22;padding:6px 10px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-radius:6px 6px 0 0}
+.dvw-file b{color:#e6edf3;font-weight:600}
+.dvw-add{color:#4ade80}
+.dvw-del{color:#f85149}
+.dvw-body{flex:1;overflow:hidden;border:1px solid #21262d;border-radius:0 0 6px 6px;display:flex;flex-direction:column;justify-content:flex-start}
+.dvw-hunk{color:#7d8590;background:#0f1620;padding:3px 10px;white-space:pre;border-bottom:1px solid #161b22}
+.dvw-row{display:flex;white-space:pre;animation:dvw-in .22s ease}
+@keyframes dvw-in{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:translateX(0)}}
+.dvw-g{color:#484f58;width:3.2em;flex:0 0 auto;text-align:right;padding:0 .5em;user-select:none}
+.dvw-sign{width:1.4em;flex:0 0 auto;text-align:center}
+.dvw-code{color:#8b949e;flex:1;overflow:hidden;text-overflow:ellipsis}
+.dvw-r-ctx{background:transparent}
+.dvw-r-add{background:rgba(46,160,67,.13)}
+.dvw-r-add .dvw-sign,.dvw-r-add .dvw-code{color:#4ade80}
+.dvw-r-add .dvw-g{color:#2ea043}
+.dvw-r-del{background:rgba(248,81,73,.12)}
+.dvw-r-del .dvw-sign,.dvw-r-del .dvw-code{color:#f85149}
+.dvw-r-del .dvw-g{color:#da3633}
+.dvw-foot{color:#7d8590;padding:6px 2px 0;font-size:.9em;display:flex;gap:14px;flex-wrap:wrap}
+.dvw-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#4ade80;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+</style>
+</head><body>
+<div class="dvw-wrap" role="img" aria-label="An animated unified git diff for src/api/client.ts streaming in line by line, showing green additions and red deletions with line-number gutters.">
+  <div class="dvw-file"><span>&#9679;</span><b>src/api/client.ts</b><span class="dvw-add">+12</span><span class="dvw-del">-4</span></div>
+  <div class="dvw-body">
+    <div class="dvw-hunk">@@ -10,6 +10,8 @@ export class ApiClient {</div>
+    <div class="dvw-lines" id="dvw-lines"></div>
+  </div>
+  <div class="dvw-foot"><span id="dvw-sum">1 file changed</span></div>
+</div>
+<div class="dvw-cap" aria-hidden="true">diff viewer</div>
+<script>(()=>{"use strict";
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const host=document.getElementById('dvw-lines');
+  const sum=document.getElementById('dvw-sum');
+
+  // type: 0 context, 1 add, -1 del
+  const diff=[
+    {t:0, o:10,n:10, c:"  private base = 'https://api.internal';"},
+    {t:0, o:11,n:11, c:"  async fetch(path: string) {"},
+    {t:-1,o:12,n:0,  c:"    const res = await fetch(this.base + path);"},
+    {t:1, o:0, n:12, c:"    const url = new URL(path, this.base);"},
+    {t:1, o:0, n:13, c:"    const res = await fetch(url, { signal: ctrl.signal });"},
+    {t:0, o:13,n:14, c:"    if (!res.ok) {"},
+    {t:-1,o:14,n:0,  c:"      throw new Error('request failed');"},
+    {t:1, o:0, n:15, c:"      throw new ApiError(res.status, await res.text());"},
+    {t:0, o:15,n:16, c:"    }"},
+    {t:0, o:16,n:17, c:"    return res.json();"},
+    {t:1, o:0, n:18, c:"  }"},
+    {t:1, o:0, n:19, c:"  private ctrl = new AbortController();"},
+    {t:0, o:17,n:20, c:"}"},
+  ];
+
+  const pad=v=>v?String(v).padStart(3,' '):'   ';
+
+  function rowEl(d){
+    const r=document.createElement('div');
+    r.className='dvw-row '+(d.t>0?'dvw-r-add':d.t<0?'dvw-r-del':'dvw-r-ctx');
+    const go=document.createElement('span'); go.className='dvw-g'; go.textContent=pad(d.o);
+    const gn=document.createElement('span'); gn.className='dvw-g'; gn.textContent=pad(d.n);
+    const sg=document.createElement('span'); sg.className='dvw-sign'; sg.textContent=d.t>0?'+':d.t<0?'-':' ';
+    const co=document.createElement('span'); co.className='dvw-code'; co.textContent=d.c;
+    r.append(go,gn,sg,co);
+    return r;
+  }
+
+  const ADDS=diff.filter(d=>d.t>0).length, DELS=diff.filter(d=>d.t<0).length;
+  function footer(done){
+    sum.textContent='1 file changed, '+ADDS+' insertion'+(ADDS!==1?'s':'')+'(+), '+DELS+' deletion'+(DELS!==1?'s':'')+'(-)'+(done?'':' …');
+  }
+
+  let running=true, timer=null, i=0;
+
+  function reset(){ host.innerHTML=''; i=0; }
+
+  function step(){
+    if(!running) return;
+    if(i<diff.length){
+      host.appendChild(rowEl(diff[i])); i++;
+      footer(false);
+      timer=setTimeout(step, 260);
+    }else{
+      footer(true);
+      timer=setTimeout(()=>{ reset(); footer(false); timer=setTimeout(step,420); }, 2600);
+    }
+  }
+
+  if(reduce){
+    diff.forEach(d=>host.appendChild(rowEl(d)));
+    footer(true);
+    return;
+  }
+
+  function stop(){ running=false; clearTimeout(timer); }
+  function play(){ if(running) return; running=true; step(); }
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  step();
+})();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/terminal/07-diff-viewer.html",
+ "title": "Diff Viewer",
+ "description": "A unified git diff viewer that streams a code review in line by line: a file header with +12/-4 counts, a hunk header, then context/addition/deletion lines revealed one at a time with old and new line-number gutters, colored green for additions and red for deletions, before resetting and looping calmly.",
+ "useWhen": "Developer-tool landing pages, code-review or CI dashboards, terminal-aesthetic hero sections, or ambient \"code is changing\" backdrops for engineering products.",
+ "avoidWhen": "Non-technical audiences (the diff content is meaningless without dev context), or light-background UIs — the background is hardcoded dark GitHub navy (#0d1117).",
+ "agentPrompt": "Replace the diff array with a real hunk from your own file, update the file header path and the +12/-4 counts, and slow the per-line reveal from 260ms to 400ms for a calmer stream.",
+ "editableAreas": [
+  "diff line data (diff array: t/o/n/c per row)",
+  "file header path and +/- counts (.dvw-file markup)",
+  "hunk header text (.dvw-hunk)",
+  "per-line reveal + reset timings (260/2600/420ms in step())",
+  "add/del colors (.dvw-r-add / .dvw-r-del CSS)"
+ ],
+ "preserveElements": [
+  "IIFE \"use strict\" wrapper",
+  "visibilitychange stop/play guard with running flag",
+  "prefers-reduced-motion static full-diff fallback (renders all rows, returns early)",
+  "role=\"img\" + aria-label on the diff container",
+  "aria-hidden corner caption"
+ ],
+ "knownLimitations": [
+  "Background and syntax colors are hardcoded dark — must edit CSS to re-theme",
+  "Diff content is a fixed invented hunk; no real syntax highlighting of the code text",
+  "Purely ambient — no click/scroll interaction and no exposed pause control"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "terminal",
+  "diff",
+  "git",
+  "monospace",
+  "code",
+  "dark-mode",
+  "typewriter"
+ ]
+}
+</script>
+</body></html>

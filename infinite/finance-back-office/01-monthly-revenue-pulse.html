@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Monthly revenue pulse: a big animated revenue figure ticks gently with a live delta chip and a compact sparkline trail, breathing softly to signal an always-live number.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monthly Revenue Pulse</title>
+<style>
+:root{
+  --pro-bg:#0d1117; --pro-surface:#161b22; --pro-border:rgba(255,255,255,.08);
+  --pro-text:#e6edf3; --pro-muted:#8b949e; --pro-accent:#3fb970; --pro-radius:14px;
+  --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+.fmp-stage{position:fixed;inset:0;padding:4vmin;display:flex;font-family:var(--pro-font);color:var(--pro-text)}
+.fmp-card{flex:1;min-height:0;background:var(--pro-surface);border:1px solid var(--pro-border);
+  border-radius:var(--pro-radius);padding:3.6vmin;display:flex;flex-direction:column;gap:2vmin;justify-content:center}
+.fmp-eyebrow{font-size:clamp(8px,1.6vmin,10px);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--pro-muted)}
+.fmp-row{display:flex;align-items:baseline;gap:1.4vmin}
+.fmp-num{font-size:clamp(22px,7.2vmin,44px);font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
+  animation:fmp-breathe 3.4s ease-in-out infinite}
+@keyframes fmp-breathe{0%,100%{opacity:1}50%{opacity:.88}}
+.fmp-delta{font-size:clamp(9px,2vmin,12px);font-weight:800;color:var(--pro-accent);font-variant-numeric:tabular-nums}
+.fmp-spark{height:9vmin;min-height:36px}
+.fmp-spark svg{width:100%;height:100%;display:block}
+.fmp-spark path{fill:none;stroke:var(--pro-accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fmp-spark circle{fill:var(--pro-accent)}
+.fmp-foot{font-size:clamp(7.5px,1.5vmin,10px);color:var(--pro-muted);font-weight:600}
+.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--pro-muted);
+  opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+@media (prefers-reduced-motion:reduce){ .fmp-num{animation:none} }
+</style>
+</head>
+<body>
+  <div class="fmp-stage">
+    <div class="fmp-card" id="fmp-root" role="img"
+      aria-label="Monthly revenue pulse showing 58,240 dollars this month, up 6.2 percent, with a six-point sparkline trail trending upward.">
+      <div class="fmp-eyebrow">Revenue this month</div>
+      <div class="fmp-row"><span class="fmp-num" id="fmp-num">$58,240</span><span class="fmp-delta" id="fmp-delta">+6.2%</span></div>
+      <div class="fmp-spark"><svg viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><path id="fmp-line"/><circle id="fmp-dot" r="3"/></svg></div>
+      <div class="fmp-foot" id="fmp-foot">vs. last month &middot; updated just now</div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Monthly Revenue Pulse</div>
+  <script>(function(){"use strict";
+    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var root=document.getElementById('fmp-root');
+    if(!root)return;
+    // Edit `trail` (6-point revenue history) — current figure & delta derive from the last two points.
+    var trail=[49800,51200,52600,54100,55900,58240];
+    var numEl=document.getElementById('fmp-num'), deltaEl=document.getElementById('fmp-delta'),
+        lineEl=document.getElementById('fmp-line'), dot=document.getElementById('fmp-dot'), footEl=document.getElementById('fmp-foot');
+
+    function paint(){
+      var cur=trail[trail.length-1], prev=trail[trail.length-2];
+      numEl.textContent='$'+Math.round(cur).toLocaleString();
+      var pct=((cur-prev)/prev)*100;
+      deltaEl.textContent=(pct>=0?'+':'')+pct.toFixed(1)+'%';
+      var lo=Math.min.apply(null,trail), hi=Math.max.apply(null,trail), span=(hi-lo)||1;
+      var pts=trail.map(function(v,i){ return [(i/(trail.length-1))*200, 34-((v-lo)/span)*28]; });
+      var d='M'+pts[0][0]+','+pts[0][1]; for(var i=1;i<pts.length;i++) d+=' L'+pts[i][0]+','+pts[i][1];
+      lineEl.setAttribute('d',d);
+      var last=pts[pts.length-1]; dot.setAttribute('cx',last[0]); dot.setAttribute('cy',last[1]);
+    }
+    paint();
+    if(reduce)return;
+
+    var running=true, ticks=0;
+    document.addEventListener('visibilitychange',function(){ running=!document.hidden; });
+    setInterval(function(){
+      if(!running)return;
+      var last=trail[trail.length-1];
+      var next=Math.max(30000,Math.round(last+(Math.random()-0.28)*900));
+      trail=trail.slice(1); trail.push(next);
+      paint();
+      ticks++;
+      footEl.textContent = ticks%3===0 ? 'vs. last month · updated just now' : 'vs. last month · '+(ticks*3)+'s ago';
+    },3000);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/finance-back-office/01-monthly-revenue-pulse.html",
+ "title": "Monthly Revenue Pulse",
+ "description": "A big breathing revenue figure with a live percentage delta and a six-point sparkline trail; the number drifts by small realistic increments on a loop so it always reads as a live financial pulse.",
+ "useWhen": "Finance dashboards, executive KPI cards, banking/accounting app overview widgets needing a single always-live revenue glance.",
+ "avoidWhen": "Multi-metric dashboards needing several KPIs at once — pair with other cards rather than stacking many of these.",
+ "agentPrompt": "Edit the `trail` array (6-point revenue history) to set your own starting figures; the headline number and delta derive automatically from the last two points. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "revenue trail data (6-point array)",
+  "drift cadence (3000ms interval)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .fmp-root",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to static painted state",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Revenue drift is simulated for demo, not wired to a real accounting or billing feed"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "revenue",
+  "kpi",
+  "finance",
+  "sparkline",
+  "dashboard",
+  "stat-card",
+  "live-number",
+  "growth",
+  "banking",
+  "fintech"
+ ]
+}
+</script>
+</body>
+</html>

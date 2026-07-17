@@ -1,7 +1,7 @@
 # Forever AI Components
 
 [![600+ components](https://img.shields.io/badge/components-600%2B-blueviolet?style=flat)](https://forever-components.vercel.app/infinite/)
-[![Themes](https://img.shields.io/badge/themes-58-blue?style=flat)](#component-index-by-theme)
+[![Themes](https://img.shields.io/badge/themes-71-blue?style=flat)](#component-index-by-theme)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
 [![Zero deps](https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat)](#)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-☕-FFDD00?style=flat-square)](https://buymeacoffee.com/isas1)
@@ -242,7 +242,7 @@ forever-ai-components/
 
 ## Component index by theme
 
-600+ components across 58 themes:
+600+ components across 71 themes:
 
 ### UI Components
 
@@ -287,7 +287,7 @@ forever-ai-components/
 | De Stijl Neoplastic | 8 |
 | Neo-Brutalism | 6 |
 | Neumorphism | 6 |
-| Terminal | 6 |
+| Terminal | 10 |
 | Blueprint Technical | 1 |
 | Wabi-Sabi | 1 |
 
@@ -329,7 +329,20 @@ forever-ai-components/
 
 | Theme | Count |
 |---|---|
-| Business Graphics | 3 |
+| Business Graphics | 5 |
+| Marketing Sections | 2 |
+| Product Flows | 2 |
+| Dev Status | 2 |
+| Bookings & Services | 2 |
+| Commerce Essentials | 2 |
+| Creator Commerce | 2 |
+| Events & Community | 2 |
+| Finance & Back Office | 2 |
+| Growth Marketing | 2 |
+| Local Storefront | 2 |
+| Studio Portfolio | 2 |
+| Support & Success | 2 |
+| Team & Hiring | 2 |
 
 ---
 

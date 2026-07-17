@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Agent presence roster: a glassy live list of support agents with status dots (online/away/busy/offline) and open-ticket counts that drift and change on their own.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agent Presence Roster</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#4dd0e1;
+    --pro-ok:#3fb950;
+    --pro-warn:#e3b341;
+    --pro-err:#f85149;
+    --pro-radius:14px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .uar-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:1.8vmin;
+    padding:4.2vmin;font-family:var(--pro-font);color:var(--pro-text)}
+  .uar-head{display:flex;align-items:baseline;justify-content:space-between;gap:1.4vmin;user-select:none}
+  .uar-title{margin:0;font-size:clamp(11px,2.4vmin,15px);font-weight:700;letter-spacing:.01em}
+  .uar-chip{font-size:clamp(8px,1.7vmin,11px);font-weight:700;font-variant-numeric:tabular-nums;
+    padding:.5vmin 1.5vmin;border-radius:999px;color:var(--pro-ok);
+    background:color-mix(in srgb,var(--pro-ok) 16%,transparent);white-space:nowrap;
+    transition:background .5s ease,color .5s ease}
+  .uar-panel{flex:1;min-height:0;display:flex;flex-direction:column;gap:1.1vmin;
+    padding:1.6vmin;border-radius:var(--pro-radius);border:1px solid var(--pro-border);
+    background:linear-gradient(165deg,color-mix(in srgb,var(--pro-surface) 92%,var(--pro-accent) 4%),
+      color-mix(in srgb,var(--pro-surface) 96%,transparent));
+    box-shadow:0 0 0 1px color-mix(in srgb,var(--pro-accent) 8%,transparent),
+      0 24px 60px -30px color-mix(in srgb,var(--pro-accent) 35%,transparent)}
+  .uar-row{flex:1;min-height:0;display:flex;align-items:center;gap:1.6vmin;padding:0 1.4vmin;
+    border-radius:calc(var(--pro-radius) - 6px);opacity:0;
+    animation:uar-in .55s cubic-bezier(.22,1,.36,1) forwards;
+    transition:background .4s ease}
+  .uar-row.uar-hi{background:color-mix(in srgb,var(--pro-accent) 7%,transparent)}
+  @keyframes uar-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .uar-av{position:relative;flex:none;width:4.6vmin;height:4.6vmin;min-width:24px;min-height:24px;
+    border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:clamp(8px,1.7vmin,11px);font-weight:700;color:var(--pro-bg);
+    background:linear-gradient(150deg,var(--pro-accent),color-mix(in srgb,var(--pro-accent) 60%,white 25%));
+    box-shadow:0 2px 10px -3px color-mix(in srgb,var(--pro-accent) 60%,transparent)}
+  .uar-dot{position:absolute;right:-1px;bottom:-1px;width:1.5vmin;height:1.5vmin;min-width:8px;
+    min-height:8px;border-radius:50%;border:2px solid var(--pro-surface);
+    background:var(--uar-c,var(--pro-muted));transition:background .5s ease}
+  .uar-dot.uar-pulse{animation:uar-dotpulse 1s ease-out}
+  @keyframes uar-dotpulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--uar-c,var(--pro-accent)) 55%,transparent)}
+    100%{box-shadow:0 0 0 7px color-mix(in srgb,var(--uar-c,var(--pro-accent)) 0%,transparent)}}
+  .uar-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:.3vmin}
+  .uar-name{font-size:clamp(9px,2vmin,12px);font-weight:700;letter-spacing:.005em;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .uar-status{font-size:clamp(7.5px,1.6vmin,10px);color:var(--uar-c,var(--pro-muted));
+    font-weight:600;transition:color .5s ease}
+  .uar-count{flex:none;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:.1vmin}
+  .uar-n{font-size:clamp(11px,2.6vmin,16px);font-weight:800;font-variant-numeric:tabular-nums;
+    line-height:1;transition:color .3s ease}
+  .uar-lbl{font-size:clamp(6.5px,1.4vmin,9px);color:var(--pro-muted);font-weight:600;
+    text-transform:uppercase;letter-spacing:.06em}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @media (prefers-reduced-motion:reduce){
+    .uar-row{animation:none;opacity:1}
+    .uar-dot.uar-pulse{animation:none}
+  }
+</style>
+</head>
+<body>
+  <div class="uar-stage" id="uar-stage" role="img" aria-label="Support agent presence roster, loading">
+    <div class="uar-head">
+      <h1 class="uar-title">Support team</h1>
+      <span class="uar-chip" id="uar-chip">— online</span>
+    </div>
+    <div class="uar-panel" id="uar-panel"></div>
+  </div>
+  <div class="cap" aria-hidden="true">Agent Presence Roster</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var stage=document.getElementById('uar-stage'),
+        panel=document.getElementById('uar-panel'),
+        chip=document.getElementById('uar-chip');
+    if(!stage||!panel)return;
+
+    var STATUS=['online','away','busy','offline'];
+    var LABEL={online:'Online',away:'Away',busy:'Busy',offline:'Offline'};
+    var agents=[
+      {name:'Maya K.',status:'online',tix:4},
+      {name:'Sam R.', status:'busy',  tix:7},
+      {name:'Elin V.',status:'online',tix:2},
+      {name:'Theo N.',status:'away',  tix:5},
+      {name:'Priya D.',status:'online',tix:3},
+      {name:'Jonah P.',status:'offline',tix:0}
+    ];
+
+    function tone(s){ return s==='online'?'var(--pro-ok)':s==='away'?'var(--pro-warn)':
+      s==='busy'?'var(--pro-err)':'var(--pro-muted)'; }
+    function initials(n){ var p=n.split(' '); return ((p[0]||'')[0]+((p[1]||'')[0]||'')).toUpperCase(); }
+
+    agents.forEach(function(a,i){
+      var row=document.createElement('div');
+      row.className='uar-row';
+      row.style.animationDelay=(i*70)+'ms';
+      row.innerHTML=
+        '<div class="uar-av">'+initials(a.name)+'<span class="uar-dot" data-dot></span></div>'+
+        '<div class="uar-info"><div class="uar-name">'+a.name+'</div>'+
+          '<div class="uar-status" data-status>'+LABEL[a.status]+'</div></div>'+
+        '<div class="uar-count"><span class="uar-n" data-n>'+a.tix+'</span>'+
+          '<span class="uar-lbl">open</span></div>';
+      panel.appendChild(row);
+      a.rowEl=row; a.dotEl=row.querySelector('[data-dot]');
+      a.statusEl=row.querySelector('[data-status]'); a.numEl=row.querySelector('[data-n]');
+    });
+
+    function describe(){
+      var online=agents.filter(function(a){return a.status==='online';}).length;
+      var open=agents.reduce(function(s,a){return s+a.tix;},0);
+      return 'Support agent presence roster, '+online+' of '+agents.length+
+        ' agents online, '+open+' open tickets total. '+
+        agents.map(function(a){return a.name+' '+LABEL[a.status]+' '+a.tix+' open';}).join('; ')+'.';
+    }
+    function paintAgent(a,pulse){
+      var c=tone(a.status);
+      a.dotEl.style.setProperty('--uar-c',c);
+      a.statusEl.style.setProperty('--uar-c',c);
+      a.statusEl.textContent=LABEL[a.status];
+      a.numEl.textContent=a.tix;
+      if(pulse){ a.dotEl.classList.remove('uar-pulse'); void a.dotEl.offsetWidth; a.dotEl.classList.add('uar-pulse'); }
+    }
+    function paintAll(){
+      agents.forEach(function(a){ paintAgent(a,false); });
+      var online=agents.filter(function(a){return a.status==='online';}).length;
+      chip.textContent=online+' online';
+      chip.style.color=online>0?'var(--pro-ok)':'var(--pro-muted)';
+      chip.style.background='color-mix(in srgb,'+(online>0?'var(--pro-ok)':'var(--pro-muted)')+' 16%,transparent)';
+      stage.setAttribute('aria-label',describe());
+    }
+    paintAll();
+    if(reduce)return;
+
+    function nextStatus(s){
+      if(s==='online') return Math.random()<0.55?'busy':'away';
+      if(s==='busy')   return 'online';
+      if(s==='away')   return Math.random()<0.75?'online':'away';
+      return Math.random()<0.12?'online':'offline';
+    }
+    function tickTickets(){
+      var a=agents[Math.floor(Math.random()*agents.length)];
+      if(a.status==='offline')return;
+      var d=Math.random()<0.5?-1:1;
+      a.tix=Math.max(0,Math.min(12,a.tix+d));
+      paintAgent(a,false);
+    }
+    function tickStatus(){
+      var a=agents[Math.floor(Math.random()*agents.length)];
+      var ns=nextStatus(a.status);
+      if(ns===a.status)return;
+      a.status=ns; paintAgent(a,true);
+      var online=agents.filter(function(x){return x.status==='online';}).length;
+      chip.textContent=online+' online';
+      chip.style.color=online>0?'var(--pro-ok)':'var(--pro-muted)';
+      chip.style.background='color-mix(in srgb,'+(online>0?'var(--pro-ok)':'var(--pro-muted)')+' 16%,transparent)';
+      stage.setAttribute('aria-label',describe());
+    }
+
+    var running=true,last=0,tixAcc=0,stAcc=0,TIX_STEP=1900,ST_STEP=3100;
+    document.addEventListener('visibilitychange',function(){
+      running=!document.hidden; if(running)last=performance.now();
+    });
+    function frame(ts){
+      if(!running){ last=ts; return requestAnimationFrame(frame); }
+      var dt=Math.min(200,ts-last); last=ts; tixAcc+=dt; stAcc+=dt;
+      while(tixAcc>=TIX_STEP){ tixAcc-=TIX_STEP; tickTickets(); }
+      while(stAcc>=ST_STEP){ stAcc-=ST_STEP; tickStatus(); }
+      requestAnimationFrame(frame);
+    }
+    last=performance.now(); requestAnimationFrame(frame);
+  })();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/support-success/01-agent-presence-roster.html",
+ "title": "Agent Presence Roster",
+ "description": "A glassy live roster of six support agents, each with an avatar initial, status dot (online/away/busy/offline) and open-ticket count; statuses transition and ticket counts drift by one on an autonomous loop, with a brief dot pulse on every change.",
+ "useWhen": "Support/helpdesk dashboards, team-status widgets, CRM sidebars, ops overview panels needing a compact who's-available-now view.",
+ "avoidWhen": "Rosters larger than about eight agents (rows shrink below legible height), or when you need real-time presence wired to an actual chat/helpdesk backend — this is simulated drift for demo.",
+ "agentPrompt": "Edit the agents array (name, status, tix) to set your own team and starting counts; nextStatus() controls the online/away/busy/offline transition odds. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "roster data (agents array: name, status, tix)",
+  "status transition odds (nextStatus function)",
+  "tick cadence (TIX_STEP=1900ms ticket drift, ST_STEP=3100ms status change)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .uar-stage (kept in sync via describe())",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to the populated static roster",
+  "visibilitychange pause"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Status and ticket-count drift are simulated for demo, not wired to a live helpdesk source",
+  "Tuned for five to six rows; more agents will compress row height below comfortable legibility"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "support",
+  "presence",
+  "roster",
+  "status-dot",
+  "helpdesk",
+  "team",
+  "avatar-list",
+  "crm",
+  "tickets",
+  "dashboard"
+ ]
+}
+</script>
+</body>
+</html>

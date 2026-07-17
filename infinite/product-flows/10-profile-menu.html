@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Profile Menu - a user account chip that opens a dropdown on a loop, staggering in Profile, Settings, Billing and Sign out, with an org switcher row and a presence dot cycling online to away.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Profile Menu</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#4f8ff7;
+    --pro-accent-2:#a371f7;
+    --pro-ok:#3fb950;
+    --pro-warn:#d29922;
+    --pro-err:#f85149;
+    --pro-radius:12px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .pfm-stage{position:fixed;inset:0;display:flex;justify-content:center;align-items:center;
+    padding:5vmin;font-family:var(--pro-font);color:var(--pro-text)}
+  .pfm-menu{width:min(92%,54vmin);display:flex;flex-direction:column;gap:1.4vmin;--st:var(--pro-ok)}
+  .pfm-menu.away{--st:var(--pro-warn)}
+  .pfm-chip{display:flex;align-items:center;gap:2vmin;padding:2vmin 2.4vmin;background:var(--pro-surface);
+    border:1px solid var(--pro-border);border-radius:var(--pro-radius);user-select:none;cursor:default}
+  .pfm-menu.open .pfm-chip{border-color:color-mix(in srgb,var(--pro-accent) 45%,var(--pro-border))}
+  .pfm-av{position:relative;flex:none;width:8vmin;height:8vmin;min-width:34px;min-height:34px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-weight:700;letter-spacing:.02em;
+    font-size:clamp(10px,2.5vmin,15px);color:var(--pro-text);
+    background:linear-gradient(135deg,var(--pro-accent),var(--pro-accent-2))}
+  .pfm-av.big{width:11vmin;height:11vmin;min-width:44px;min-height:44px;font-size:clamp(12px,3vmin,18px)}
+  .pfm-av::after{content:"";position:absolute;right:-1%;bottom:-1%;width:32%;height:32%;border-radius:50%;
+    background:var(--st);border:2px solid var(--pro-surface);transition:background .5s ease}
+  .pfm-who{flex:1;min-width:0}
+  .pfm-name{font-size:clamp(10px,2.3vmin,14px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pfm-mail{margin-top:.4vmin;font-size:clamp(8px,1.75vmin,11px);color:var(--pro-muted);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pfm-chev{flex:none;width:3.4vmin;height:3.4vmin;min-width:16px;min-height:16px;color:var(--pro-muted);
+    transition:transform .4s cubic-bezier(.5,1.3,.5,1)}
+  .pfm-menu.open .pfm-chev{transform:rotate(180deg);color:var(--pro-accent)}
+  .pfm-panel{overflow:hidden;max-height:0;opacity:0;transform:translateY(-1.4vmin);background:var(--pro-surface);
+    border:1px solid var(--pro-border);border-radius:var(--pro-radius);
+    transition:max-height .45s ease,opacity .3s ease,transform .45s ease}
+  .pfm-menu.open .pfm-panel{max-height:72vmin;opacity:1;transform:none}
+  .pfm-head{display:flex;align-items:center;gap:2vmin;padding:2.6vmin;border-bottom:1px solid var(--pro-border)}
+  .pfm-pill{display:inline-flex;align-items:center;gap:1vmin;flex:none;padding:.7vmin 1.4vmin;border-radius:999px;
+    font-size:clamp(7.5px,1.6vmin,10px);font-weight:700;background:color-mix(in srgb,var(--st) 16%,transparent);
+    color:var(--st);transition:color .5s ease,background .5s ease}
+  .pfm-sdot{width:1.3vmin;height:1.3vmin;min-width:6px;min-height:6px;border-radius:50%;background:var(--st);
+    transition:background .5s ease}
+  .pfm-org{display:flex;align-items:center;gap:2vmin;padding:2.4vmin 2.6vmin;border-bottom:1px solid var(--pro-border)}
+  .pfm-logo{flex:none;width:7vmin;height:7vmin;min-width:30px;min-height:30px;border-radius:calc(var(--pro-radius) - 5px);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:clamp(9px,2.2vmin,13px);
+    color:var(--pro-accent);background:color-mix(in srgb,var(--pro-accent) 15%,transparent);
+    border:1px solid color-mix(in srgb,var(--pro-accent) 30%,transparent)}
+  .pfm-oinfo{flex:1;min-width:0}
+  .pfm-oname{font-size:clamp(9px,2vmin,12px);font-weight:600}
+  .pfm-oplan{margin-top:.3vmin;font-size:clamp(7.5px,1.55vmin,10px);color:var(--pro-muted)}
+  .pfm-swap{flex:none;width:3.6vmin;height:3.6vmin;min-width:16px;min-height:16px;color:var(--pro-muted)}
+  .pfm-items{list-style:none;margin:0;padding:1.4vmin}
+  .pfm-item{display:flex;align-items:center;gap:2vmin;padding:1.8vmin 1.6vmin;border-radius:calc(var(--pro-radius) - 5px);
+    font-size:clamp(9px,2vmin,12.5px);font-weight:500;color:var(--pro-text);
+    opacity:0;transform:translateX(-1.2vmin);
+    transition:opacity .35s ease,transform .35s ease,background .25s ease}
+  .pfm-menu.open .pfm-item{opacity:1;transform:none}
+  .pfm-item.hot{background:color-mix(in srgb,var(--pro-accent) 12%,transparent)}
+  .pfm-item.sep{margin-top:1.2vmin;border-top:1px solid var(--pro-border);border-radius:0;padding-top:2.4vmin}
+  .pfm-item.danger{color:var(--pro-err)}
+  .pfm-ico{flex:none;width:3.8vmin;height:3.8vmin;min-width:16px;min-height:16px;color:var(--pro-muted)}
+  .pfm-item.danger .pfm-ico{color:var(--pro-err)}
+  .pfm-item .pfm-ltxt{flex:1;min-width:0}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @media (prefers-reduced-motion:reduce){
+    .pfm-chev,.pfm-panel,.pfm-item,.pfm-av::after,.pfm-pill,.pfm-sdot{transition:none}
+  }
+</style>
+</head>
+<body>
+  <div class="pfm-stage">
+    <div class="pfm-menu" id="pfm-root" role="img"
+         aria-label="Account menu for Maya Kessler, maya@northwind.io, online. Dropdown shows organisation Northwind Labs on the Team plan and items Profile, Settings, Billing and Sign out.">
+      <div class="pfm-chip">
+        <div class="pfm-av">MK</div>
+        <div class="pfm-who">
+          <div class="pfm-name">Maya Kessler</div>
+          <div class="pfm-mail">maya@northwind.io</div>
+        </div>
+        <svg class="pfm-chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+      </div>
+      <div class="pfm-panel">
+        <div class="pfm-head">
+          <div class="pfm-av big">MK</div>
+          <div class="pfm-who">
+            <div class="pfm-name">Maya Kessler</div>
+            <div class="pfm-mail">maya@northwind.io</div>
+          </div>
+          <span class="pfm-pill"><span class="pfm-sdot"></span><span id="pfm-stxt">Active</span></span>
+        </div>
+        <div class="pfm-org">
+          <div class="pfm-logo">NL</div>
+          <div class="pfm-oinfo">
+            <div class="pfm-oname">Northwind Labs</div>
+            <div class="pfm-oplan">Team plan · 14 seats</div>
+          </div>
+          <svg class="pfm-swap" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h8l-2-2M13 10H5l2 2"/></svg>
+        </div>
+        <ul class="pfm-items" id="pfm-items"></ul>
+      </div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Profile Menu</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var SV='<svg class="pfm-ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+    var items=[
+      {t:"Profile",  d:'<circle cx="8" cy="5.6" r="2.5"/><path d="M3.4 12.8c.6-2.4 2.4-3.6 4.6-3.6s4 1.2 4.6 3.6"/>'},
+      {t:"Settings", d:'<circle cx="8" cy="8" r="2.1"/><path d="M8 1.6v1.8M8 12.6v1.8M14.4 8h-1.8M3.4 8H1.6M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3M12.5 12.5l-1.3-1.3M4.8 4.8L3.5 3.5"/>'},
+      {t:"Billing",  d:'<rect x="2" y="4" width="12" height="8" rx="1.6"/><path d="M2 6.8h12M4.4 10h2.4"/>'},
+      {t:"Sign out", d:'<path d="M9.4 2.6H4.2a1.2 1.2 0 0 0-1.2 1.2v8.4a1.2 1.2 0 0 0 1.2 1.2h5.2"/><path d="M11 5.4L13.6 8 11 10.6M6.6 8h7"/>', cls:"sep danger"}
+    ];
+    var list=document.getElementById("pfm-items");
+    var root=document.getElementById("pfm-root");
+    var stxt=document.getElementById("pfm-stxt");
+    if(!list||!root)return;
+    items.forEach(function(it,i){
+      var li=document.createElement("li");
+      li.className="pfm-item"+(it.cls?" "+it.cls:"")+(i===0?" hot":"");
+      li.style.transitionDelay=(0.14+i*0.07)+"s";
+      li.innerHTML=SV+it.d+'</svg><span class="pfm-ltxt">'+it.t+'</span>';
+      list.appendChild(li);
+    });
+
+    // Open, cycle presence online->away->online, then close and repeat.
+    var seq=[
+      {open:false, away:false, dur:1100},
+      {open:true,  away:false, dur:1900},
+      {open:true,  away:true,  dur:1900},
+      {open:true,  away:false, dur:1600}
+    ];
+    function apply(p){
+      root.classList.toggle("open",p.open);
+      root.classList.toggle("away",p.away);
+      stxt.textContent=p.away?"Away":"Active";
+    }
+
+    if(reduce){ apply(seq[1]); return; }
+
+    var i=0, running=true, timer=null;
+    apply(seq[0]);
+    function schedule(){
+      timer=setTimeout(function(){
+        if(running){ i=(i+1)%seq.length; apply(seq[i]); }
+        schedule();
+      }, seq[i].dur);
+    }
+    document.addEventListener("visibilitychange",function(){ running=!document.hidden; });
+    schedule();
+  })();
+  </script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/product-flows/10-profile-menu.html",
+ "title": "Profile Menu",
+ "description": "A user account chip that opens a dropdown on a loop — staggering in Profile, Settings, Billing and Sign out, with an org switcher row and a presence dot that cycles from online to away.",
+ "useWhen": "App headers, dashboard top bars, account and settings entry points, or any SaaS shell that needs a user profile dropdown pattern.",
+ "avoidWhen": "When you need a live, click-driven menu with real navigation and focus handling, or a full settings page — this is a looping presentational demo.",
+ "agentPrompt": "Edit the items array (label + SVG icon path) and the chip/head identity (avatar initials, name, email) plus the org row to set your own account and menu; the Sign out item carries the sep+danger class. Tune the loop and presence order via the seq array (open/away flags and dur values). Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "user identity (chip and head avatar initials MK, name Maya Kessler, email maya@northwind.io)",
+  "menu items (items array: label + icon path; Sign out carries the sep+danger class)",
+  "organisation row (.pfm-logo initials, .pfm-oname, .pfm-oplan)",
+  "loop timing + presence order (seq array open/away flags and dur values)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .pfm-menu",
+  "IIFE wrapper with \"use strict\"",
+  "prefers-reduced-motion early return to the open, populated online state",
+  "visibilitychange pause (running flag)",
+  "empty #forever-agent-meta placeholder as the last element"
+ ],
+ "knownLimitations": [
+  "light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "the open, away then close sequence is a scripted demo loop, not a real click-driven menu",
+  "presence status and account/org data are invented placeholders, not wired to a live session"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "profile-menu",
+  "dropdown",
+  "account",
+  "user-menu",
+  "avatar",
+  "presence",
+  "org-switcher",
+  "saas"
+ ]
+}
+</script>
+</body>
+</html>
