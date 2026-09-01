@@ -1,7 +1,7 @@
 # Forever AI Components
 
-[![600+ components](https://img.shields.io/badge/components-600%2B-blueviolet?style=flat)](https://forever-components.vercel.app/infinite/)
-[![Themes](https://img.shields.io/badge/themes-58-blue?style=flat)](#component-index-by-theme)
+[![600+ components](https://img.shields.io/badge/components-600%2B-blueviolet?style=flat)](https://forevercomponents.com/infinite/)
+[![Themes](https://img.shields.io/badge/themes-61-blue?style=flat)](#component-index-by-theme)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
 [![Zero deps](https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat)](#)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-☕-FFDD00?style=flat-square)](https://buymeacoffee.com/isas1)
@@ -18,7 +18,7 @@ The primary consumer is an AI agent building or improving a visual interface. Th
 
 Every component is a single `.html` file. Every component is a URL. Built with CSS, Canvas 2D, and SVG: zero external dependencies, no build step, no framework.
 
-**Live canvas:** https://forever-components.vercel.app/infinite/
+**Live canvas:** https://forevercomponents.com/infinite/
 **Agent entry point:** https://raw.githubusercontent.com/isas1/forever-ai-components/main/agents.json
 **Full index:** https://raw.githubusercontent.com/isas1/forever-ai-components/main/infinite/components.index.json
 
@@ -242,41 +242,41 @@ forever-ai-components/
 
 ## Component index by theme
 
-600+ components across 58 themes:
+600+ components across 61 themes:
 
 ### UI Components
 
 | Theme | Count |
 |---|---|
 | Buttons & Toggles | 11 |
-| Cards | 11 |
-| Loaders | 16 |
+| Cards | 9 |
+| Loaders | 14 |
 | Navigation | 10 |
-| Backgrounds | 10 |
-| Inputs & Switches | 19 |
+| Backgrounds | 9 |
+| Inputs & Switches | 17 |
 | Cursor & Pointer | 6 |
-| Progress & Status | 12 |
+| Progress & Status | 10 |
 | Feedback & States | 12 |
-| Drag & Reorder | 10 |
+| Drag & Reorder | 9 |
 
 ### Animation & Motion
 
 | Theme | Count |
 |---|---|
 | Kinetic Typography | 20 |
-| Micro Data-Viz | 20 |
+| Micro Data-Viz | 19 |
 | CSS 3D & Perspective | 20 |
 | Particles & Physics | 20 |
 | Organic & Nature | 18 |
 | Generative Geometry | 20 |
-| UI Micro-interactions | 21 |
+| UI Micro-interactions | 17 |
 | Retro & Glitch | 20 |
 | Cosmic & Space | 20 |
 | Text Effects | 6 |
 | SVG Animations | 8 |
 | Audio Visualizers | 8 |
 | Charts & Flow | 10 |
-| Fractals & Automata | 10 |
+| Fractals & Automata | 9 |
 
 ### Generative & Geometric Styles
 
@@ -285,9 +285,9 @@ forever-ai-components/
 | Op Art & Moire | 12 |
 | Swiss Typographic | 10 |
 | De Stijl Neoplastic | 8 |
-| Neo-Brutalism | 6 |
-| Neumorphism | 6 |
-| Terminal | 6 |
+| Neo-Brutalism | 5 |
+| Neumorphism | 5 |
+| Terminal | 9 |
 | Blueprint Technical | 1 |
 | Wabi-Sabi | 1 |
 
@@ -329,7 +329,10 @@ forever-ai-components/
 
 | Theme | Count |
 |---|---|
-| Business Graphics | 3 |
+| Business Graphics | 5 |
+| Marketing Sections | 2 |
+| Product Flows | 2 |
+| Dev Status | 2 |
 
 ---
 

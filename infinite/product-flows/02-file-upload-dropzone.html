@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="File upload dropzone - files drop into a dashed area, fill a circular progress ring 0 to 100 percent then show a success check, building a completed list that resets.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>File Upload Dropzone</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#4f8ff7;
+    --pro-ok:#3fb950;
+    --pro-err:#f85149;
+    --pro-accent-2:#a371f7;
+    --pro-radius:12px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .fud-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:2.4vmin;padding:5vmin;font-family:var(--pro-font);color:var(--pro-text)}
+  .fud-head{display:flex;align-items:baseline;justify-content:space-between;user-select:none}
+  .fud-title{font-size:clamp(11px,2.6vmin,15px);font-weight:700;letter-spacing:.02em}
+  .fud-tag{font-size:clamp(8px,1.7vmin,10px);font-weight:600;color:var(--pro-muted)}
+  .fud-zone{flex:1.25;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.6vmin;padding:3vmin;border-radius:var(--pro-radius);border:1.7px dashed color-mix(in srgb,var(--pro-accent) 42%,var(--pro-border));animation:fud-breathe 3.4s ease-in-out infinite}
+  .fud-cloud{width:7vmin;min-width:26px;aspect-ratio:1;color:var(--pro-accent);animation:fud-float 3.4s ease-in-out infinite}
+  .fud-cloud svg{width:100%;height:100%}
+  .fud-hint{font-size:clamp(8px,1.7vmin,11px);color:var(--pro-muted);font-weight:600}
+  .fud-card{display:flex;align-items:center;gap:2.4vmin;width:min(94%,54vmin);background:var(--pro-surface);border:1px solid var(--pro-border);border-radius:var(--pro-radius);padding:2.2vmin 2.8vmin;margin-top:.6vmin}
+  .fud-card.fud-in{animation:fud-drop .55s cubic-bezier(.2,.8,.2,1) both}
+  .fud-ico,.fud-dot{flex:none;aspect-ratio:1;display:grid;place-items:center;font-weight:800;color:var(--k,var(--pro-accent));background:color-mix(in srgb,var(--k,var(--pro-accent)) 16%,transparent)}
+  .fud-ico{width:9vmin;min-width:34px;border-radius:calc(var(--pro-radius) - 4px);font-size:clamp(8px,2vmin,11px);letter-spacing:.04em}
+  .fud-dot{width:6vmin;min-width:24px;border-radius:calc(var(--pro-radius) - 6px);font-size:clamp(6px,1.5vmin,9px);letter-spacing:.03em}
+  .fud-meta{flex:1;min-width:0}
+  .fud-name,.fud-rname{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fud-name{font-size:clamp(9px,2vmin,12px)}
+  .fud-rname{flex:1;min-width:0;font-size:clamp(8px,1.8vmin,11px)}
+  .fud-size,.fud-rsize{color:var(--pro-muted);font-variant-numeric:tabular-nums}
+  .fud-size{font-size:clamp(8px,1.6vmin,10px);margin-top:.4vmin}
+  .fud-rsize{font-size:clamp(7px,1.5vmin,10px)}
+  .fud-ring{--p:0;position:relative;flex:none;width:11vmin;min-width:42px;aspect-ratio:1;border-radius:50%;background:conic-gradient(var(--pro-accent) calc(var(--p)*1%),color-mix(in srgb,var(--pro-accent) 14%,transparent) 0)}
+  .fud-ring::before{content:"";position:absolute;inset:16%;border-radius:50%;background:var(--pro-surface)}
+  .fud-pct{position:absolute;inset:0;display:grid;place-items:center;font-size:clamp(7px,1.8vmin,11px);font-weight:700;font-variant-numeric:tabular-nums;color:var(--pro-text)}
+  .fud-check{position:absolute;inset:0;display:none;place-items:center;color:var(--pro-ok)}
+  .fud-check svg{width:46%;height:46%}
+  .fud-card.fud-done .fud-ring{background:var(--pro-ok)}
+  .fud-card.fud-done .fud-pct{display:none}
+  .fud-card.fud-done .fud-check{display:grid}
+  .fud-list{flex:1;min-height:0;display:flex;flex-direction:column;gap:1.3vmin;overflow:hidden}
+  .fud-row{display:flex;align-items:center;gap:1.8vmin;background:var(--pro-surface);border:1px solid var(--pro-border);border-radius:calc(var(--pro-radius) - 3px);padding:1.3vmin 2vmin;animation:fud-slide .42s ease both}
+  .fud-rcheck{flex:none;width:3.4vmin;min-width:15px;aspect-ratio:1;color:var(--pro-ok)}
+  .fud-rcheck svg{width:100%;height:100%}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+  @keyframes fud-drop{0%{opacity:0;transform:translateY(-16%) scale(.96)}100%{opacity:1;transform:none}}
+  @keyframes fud-slide{0%{opacity:0;transform:translateY(34%)}100%{opacity:1;transform:none}}
+  @keyframes fud-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-9%)}}
+  @keyframes fud-breathe{0%,100%{border-color:color-mix(in srgb,var(--pro-accent) 30%,var(--pro-border));background:color-mix(in srgb,var(--pro-accent) 4%,transparent)}50%{border-color:color-mix(in srgb,var(--pro-accent) 60%,var(--pro-border));background:color-mix(in srgb,var(--pro-accent) 9%,transparent)}}
+  @media (prefers-reduced-motion:reduce){.fud-zone,.fud-cloud,.fud-card,.fud-row{animation:none}.fud-zone{border-color:color-mix(in srgb,var(--pro-accent) 45%,var(--pro-border));background:color-mix(in srgb,var(--pro-accent) 6%,transparent)}}
+</style>
+</head>
+<body>
+  <div class="fud-stage" role="img"
+       aria-label="File upload dropzone: files drop into a dashed area and fill a circular progress ring from 0 to 100 percent, then a completed list builds up with report.pdf, avatar.png and data.csv before resetting.">
+    <div class="fud-head">
+      <span class="fud-title">Upload files</span>
+      <span class="fud-tag">Max 25 MB per file</span>
+    </div>
+    <div class="fud-zone">
+      <div class="fud-cloud" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M7 18a4 4 0 0 1-.5-7.97 5.5 5.5 0 0 1 10.63-1.02A3.5 3.5 0 0 1 17.5 18H7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M12 15v-5m0 0-2 2m2-2 2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="fud-hint">Drag &amp; drop or browse</div>
+      <div class="fud-card" id="fud-card">
+        <div class="fud-ico" id="fud-ico">PDF</div>
+        <div class="fud-meta"><div class="fud-name" id="fud-name">report.pdf</div><div class="fud-size" id="fud-size">2.4 MB</div></div>
+        <div class="fud-ring" id="fud-ring">
+          <div class="fud-pct" id="fud-pct">0%</div>
+          <div class="fud-check"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div class="fud-list" id="fud-list"></div>
+  </div>
+  <div class="cap" aria-hidden="true">File Upload Dropzone</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var CHK='<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    var files=[
+      {name:'report.pdf', kind:'PDF', size:'2.4 MB', color:'var(--pro-err)'},
+      {name:'avatar.png', kind:'IMG', size:'840 KB', color:'var(--pro-accent-2)'},
+      {name:'data.csv',  kind:'CSV', size:'1.1 MB', color:'var(--pro-ok)'}
+    ];
+    var card=document.getElementById('fud-card'), ring=document.getElementById('fud-ring'),
+        pct=document.getElementById('fud-pct'), ico=document.getElementById('fud-ico'),
+        nm=document.getElementById('fud-name'), sz=document.getElementById('fud-size'),
+        list=document.getElementById('fud-list');
+    if(!card)return;
+    var running=true;
+    document.addEventListener('visibilitychange',function(){running=!document.hidden;});
+    function setFile(f){ ico.textContent=f.kind; nm.textContent=f.name; sz.textContent=f.size;
+      card.style.setProperty('--k',f.color); ring.style.setProperty('--p',0); pct.textContent='0%'; }
+    function addRow(f){ var r=document.createElement('div'); r.className='fud-row';
+      r.innerHTML='<span class="fud-dot" style="--k:'+f.color+'">'+f.kind+'</span>'+
+        '<span class="fud-rname">'+f.name+'</span><span class="fud-rsize">'+f.size+'</span>'+
+        '<span class="fud-rcheck">'+CHK+'</span>'; list.appendChild(r); }
+    if(reduce){ files.forEach(addRow); var lf=files[files.length-1]; setFile(lf);
+      ring.style.setProperty('--p',100); pct.textContent='100%'; card.classList.add('fud-done'); return; }
+    var idx=0;
+    function ramp(dur,onEach,onDone){ var el=0,last=null;
+      function step(ts){ if(last===null)last=ts; var dt=Math.min(48,ts-last); last=ts;
+        if(running)el+=dt; var t=Math.min(1,el/dur); onEach(t);
+        if(t<1)requestAnimationFrame(step); else onDone(); }
+      requestAnimationFrame(step); }
+    function cycle(){
+      var f=files[idx];
+      card.classList.remove('fud-done','fud-in'); void card.offsetWidth;
+      setFile(f); card.classList.add('fud-in');
+      ramp(560,function(){},function(){
+        ramp(2000,function(t){ var p=Math.round((1-Math.pow(1-t,2.2))*100);
+          ring.style.setProperty('--p',p); pct.textContent=p+'%'; },function(){
+          card.classList.add('fud-done');
+          ramp(640,function(){},function(){
+            addRow(f); idx++;
+            if(idx<files.length){ ramp(560,function(){},cycle); }
+            else { ramp(1600,function(){},function(){ list.innerHTML=''; idx=0; cycle(); }); }
+          });
+        });
+      });
+    }
+    cycle();
+  })();
+  </script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/product-flows/02-file-upload-dropzone.html",
+ "title": "File Upload Dropzone",
+ "description": "A file upload dropzone: files drop into a dashed area one at a time and fill a circular progress ring from 0 to 100 percent, then flip to a success check while a completed list (report.pdf, avatar.png, data.csv) builds up and resets on a loop.",
+ "useWhen": "Onboarding flows, file-manager and import screens, upload widgets, drag-and-drop illustrations, and product tour steps that need a lively but calm upload visual.",
+ "avoidWhen": "A single linear progress bar is enough, or you need a real drag-and-drop upload wired to XHR/fetch — this is a self-running visual demo with simulated files.",
+ "agentPrompt": "Edit the files array (name, kind, size, color) to set your own upload queue, and the ramp durations to change pacing. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "file queue (files array: name, kind, size, color per-type tint)",
+  "pacing (ramp durations: drop 560ms, fill 2000ms, hold 640ms, reset 1600ms)",
+  "progress-ring size (.fud-ring width) and fill easing (1-Math.pow(1-t,2.2))"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .fud-stage",
+  "IIFE wrapper",
+  "prefers-reduced-motion early return to the populated completed state",
+  "visibilitychange pause (running flag)"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Files, sizes and progress are simulated on a fixed loop, not wired to a real upload or XHR/fetch"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "file-upload",
+  "dropzone",
+  "progress-ring",
+  "upload",
+  "drag-drop",
+  "product-flow",
+  "onboarding",
+  "file-manager"
+ ]
+}
+</script>
+</body>
+</html>

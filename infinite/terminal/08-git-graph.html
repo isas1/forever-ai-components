@@ -1,0 +1,143 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Git Graph — Terminal. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Git Graph</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:clamp(11px,2.2vmin,14px)/1.75 ui-monospace,Menlo,Consolas,"Courier New",monospace}
+.ggr-wrap{position:relative;padding:clamp(9px,2.4vmin,16px) clamp(11px,3vmin,20px);height:100%;display:flex;flex-direction:column;overflow:hidden}
+.ggr-head{color:#2ea043;opacity:.85;border-bottom:1px solid #16241a;padding-bottom:5px;margin-bottom:7px;white-space:pre;flex-shrink:0}
+.ggr-head b{color:#00ff41;font-weight:600}
+.ggr-log{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:0;overflow:hidden}
+.ggr-row{display:flex;align-items:baseline;gap:.7ch;white-space:pre;animation:ggr-in .28s ease both}
+@keyframes ggr-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.ggr-g{display:inline-block;width:4ch;flex-shrink:0;color:#00ff41;text-shadow:0 0 6px rgba(0,255,65,.35)}
+.ggr-rail .ggr-g{color:#1f7a3d;text-shadow:none}
+.ggr-h{color:#c8a24a;flex-shrink:0}
+.ggr-ref{flex-shrink:0;font-weight:600}
+.ggr-ref-main{color:#00ff41}
+.ggr-ref-feat{color:#e5a63b}
+.ggr-ref-tag{color:#e5c33b}
+.ggr-m{color:#9fb0a0;overflow:hidden;text-overflow:ellipsis}
+.ggr-scan{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0,rgba(0,0,0,0) 3px,rgba(0,0,0,.12) 3px,rgba(0,0,0,.12) 4px);mix-blend-mode:multiply;opacity:.5}
+.ggr-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#00ff41;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+</style>
+</head><body>
+<div class="ggr-wrap">
+  <div class="ggr-head"><b>&#x2b25; git</b> log --graph --oneline --decorate  <span style="opacity:.6">~/svc-gateway</span></div>
+  <div class="ggr-log" id="ggr-log" role="img" aria-label="Animated ASCII git commit graph: branches diverge and merge over time as new commits stream in top to bottom, each showing a short hash, occasional ref tag, and message."></div>
+  <div class="ggr-scan" aria-hidden="true"></div>
+</div>
+<div class="ggr-cap" aria-hidden="true">git graph</div>
+<script>(()=>{"use strict";
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const log=document.getElementById('ggr-log');
+  const MAX=13, HEX='0123456789abcdef';
+
+  function hash(){let s='';for(let i=0;i<7;i++)s+=HEX[Math.random()*16|0];return s;}
+  function pick(a){return a[Math.random()*a.length|0];}
+
+  // One seamless cycle: starts and ends in single-lane (main) state.
+  // g = graph glyphs; rows with ● are commits (get hash + message).
+  const cycle=[
+    {g:'●',   ref:['main','ggr-ref-main'], m:['Add token-bucket rate limiter','Harden gateway CORS policy']},
+    {g:'│'},
+    {g:'●',   m:['Refactor auth middleware chain','Split router into modules','Cache JWKS lookups for 5m']},
+    {g:'│╲'},
+    {g:'│ ●', ref:['feat/api','ggr-ref-feat'], m:['Scaffold /v2 resource routes','Draft OpenAPI 3.1 spec']},
+    {g:'● │', m:['Bump pg driver to 8.11.5','Pin lockfile for CI']},
+    {g:'│ ●', m:['Add cursor pagination','Validate query params with zod']},
+    {g:'│ │'},
+    {g:'│ ●', m:['Write contract tests','Cover 404 + 429 edge cases']},
+    {g:'│╱'},
+    {g:'●',   m:['Merge branch feat/api into main','Resolve conflict in router.ts']},
+    {g:'│'},
+    {g:'●',   ref:['tag: v2.4.0','ggr-ref-tag'], m:['Cut release build 2.4.0','Freeze changelog for 2.4.0']},
+    {g:'│'},
+  ];
+
+  let idx=0;
+  function addRow(){
+    const spec=cycle[idx%cycle.length]; idx++;
+    const isCommit=spec.g.indexOf('●')>-1;
+    const row=document.createElement('div');
+    row.className='ggr-row'+(isCommit?'':' ggr-rail');
+    const g=document.createElement('span'); g.className='ggr-g'; g.textContent=spec.g;
+    row.appendChild(g);
+    if(isCommit){
+      const h=document.createElement('span'); h.className='ggr-h'; h.textContent=hash();
+      row.appendChild(h);
+      if(spec.ref){
+        const r=document.createElement('span'); r.className='ggr-ref '+spec.ref[1];
+        r.textContent='('+spec.ref[0]+')'; row.appendChild(r);
+      }
+      const m=document.createElement('span'); m.className='ggr-m'; m.textContent=pick(spec.m);
+      row.appendChild(m);
+    }
+    log.appendChild(row);
+    while(log.children.length>MAX)log.removeChild(log.firstChild);
+  }
+
+  if(reduce){ for(let i=0;i<MAX;i++)addRow(); return; }
+
+  let timer=null;
+  function stop(){clearInterval(timer);timer=null;}
+  function play(){
+    if(timer)return;
+    if(!log.children.length)for(let i=0;i<7;i++)addRow();
+    timer=setInterval(addRow,620);
+  }
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  play();
+})();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/terminal/08-git-graph.html",
+ "title": "Git Graph",
+ "description": "An ASCII git commit graph in a green monospace CRT terminal: box-drawing branch rails (│ ├ └ ╲ ╱ ●) run down the left as commits stream in top-to-bottom, each row pairing graph glyphs with a 7-hex short hash, an occasional decorate ref (main, feat/api, tag: v2.4.0), and a plausible commit message. A feature branch diverges, gathers commits, and merges back over one seamless looping cycle.",
+ "useWhen": "Developer-tool landing pages, version-control or CI/CD dashboards, terminal-aesthetic hero sections, and ambient \"code is alive\" loading backdrops.",
+ "avoidWhen": "Light-background UIs (background is hardcoded dark #0d1117) and non-technical audiences where git graph output carries no meaning. Contexts where continuous motion competes with primary reading content.",
+ "agentPrompt": "Change the interval from 620ms to 400ms, rename the feature branch ref from 'feat/api' to 'feat/billing' and update its commit messages, add a second tag row 'tag: v2.4.1' near the end of the cycle, and raise MAX visible rows from 13 to 18.",
+ "editableAreas": [
+  "commit + rail rows and their message pools (cycle array)",
+  "stream interval (setInterval delay 620)",
+  "max visible rows (MAX=13)",
+  "ref-tag colors (.ggr-ref-main / .ggr-ref-feat / .ggr-ref-tag CSS)",
+  "header label text (.ggr-head)",
+  "graph glyph glow (.ggr-g text-shadow)"
+ ],
+ "preserveElements": [
+  "IIFE 'use strict' wrapper",
+  "visibilitychange stop/play guard with running-timer flag",
+  "prefers-reduced-motion path that fills a static frame then returns early",
+  "seamless single-lane cycle boundaries (first/last rows keep the graph coherent across loops)",
+  "graph glyph column width (.ggr-g width:4ch) that aligns hashes across rows"
+ ],
+ "knownLimitations": [
+  "Background and accent are hardcoded dark green — must edit CSS to retheme",
+  "The graph is a pre-authored looping cycle, not a live repository topology",
+  "Short hashes are regenerated randomly each loop, so they do not persist or reference real commits",
+  "Purely ambient — no click/hover interactivity is exposed"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "terminal",
+  "git",
+  "graph",
+  "ascii",
+  "monospace",
+  "dark-mode",
+  "developer",
+  "stream"
+ ]
+}
+</script>
+</body></html>

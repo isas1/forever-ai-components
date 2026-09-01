@@ -1,0 +1,201 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Test Runner — Terminal. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Test Runner</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;font:clamp(10px,1.85vmin,14px)/1.55 ui-monospace,Menlo,Consolas,monospace}
+.ttr-wrap{position:relative;height:100%;display:flex;flex-direction:column;padding:clamp(8px,2vmin,16px);overflow:hidden}
+.ttr-wrap::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:4;background:repeating-linear-gradient(180deg,rgba(74,222,128,.028) 0 2px,transparent 2px 4px)}
+.ttr-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;border-bottom:1px solid #1b2430;padding-bottom:6px;margin-bottom:6px}
+.ttr-run{color:#4ade80;font-weight:600;letter-spacing:.3px}
+.ttr-tally{white-space:nowrap;font-size:.92em}
+.ttr-body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:1px}
+.ttr-line{white-space:pre;animation:ttr-in .2s ease}
+@keyframes ttr-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+.ttr-dim{color:#3a4657}
+.ttr-ok{color:#4ade80}
+.ttr-warn{color:#f5a524}
+.ttr-err{color:#f76a6a}
+.ttr-hi{color:#e2e8f0}
+.ttr-file{color:#8b98a8}
+.ttr-pass{color:#4ade80;font-weight:600}
+.ttr-fail{color:#f76a6a;font-weight:600}
+.ttr-cur{display:inline-block;width:.5em;height:.95em;margin-left:2px;background:#4ade80;vertical-align:text-bottom;animation:ttr-bl 1.1s step-start infinite}
+@keyframes ttr-bl{0%,100%{opacity:1}50%{opacity:0}}
+.ttr-cap{position:absolute;left:10px;bottom:8px;font:600 10px ui-monospace,monospace;color:#4ade80;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:5}
+</style>
+</head><body>
+<div class="ttr-wrap" role="img" aria-label="A watch-mode test runner streaming passing specs with green ticks, one failing spec that retries and recovers, a live pass and fail tally, per-suite timings, and a final coverage table.">
+  <div class="ttr-head">
+    <span class="ttr-run">RUN  spec v2.1.4  › watch</span>
+    <span class="ttr-tally" id="ttr-tally"></span>
+  </div>
+  <div class="ttr-body" id="ttr-body"></div>
+</div>
+<div class="ttr-cap" aria-hidden="true">test runner</div>
+<script>(()=>{"use strict";
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const body=document.getElementById('ttr-body');
+  const tallyEl=document.getElementById('ttr-tally');
+  const MAX=30;
+
+  const suites=[
+    {f:'auth/token.spec.ts',   ms:214, specs:['signs a JWT with HS256','rejects an expired token','refreshes a token near expiry']},
+    {f:'users/profile.spec.ts',ms:286, specs:['loads a profile by id','patches the display name','404s on a missing user']},
+    {f:'orders/checkout.spec.ts',ms:341,flaky:2,specs:['reserves inventory on hold','applies coupon PROMO10','settles the payment intent','emits an order.receipt event']},
+    {f:'cache/lru.spec.ts',    ms:73,  specs:['evicts the oldest key','hits within capacity']},
+    {f:'graph/router.spec.ts', ms:118, specs:['resolves the shortest path','flags a disconnected node']},
+    {f:'stream/pipe.spec.ts',  ms:168, specs:['pauses on high watermark','drains queued chunks']},
+  ];
+  const TOTAL=suites.reduce((n,s)=>n+s.specs.length,0);
+
+  const W=[16,8,8,8,8];
+  const sep=' '+W.map(w=>'-'.repeat(w)).join('|');
+  const crow=c=>' '+c.map((x,i)=>i?x.padStart(W[i]-1)+' ':x.padEnd(W[i])).join('|');
+  const cov=[
+    ['All files','94.2','88.7','91.5','94.0','ttr-ok'],
+    [' auth','98.1','92.0','100','98.1','ttr-hi'],
+    [' users','95.4','90.3','94.7','95.4','ttr-hi'],
+    [' orders','89.0','81.2','86.4','88.6','ttr-warn'],
+    [' cache','97.8','95.0','100','97.8','ttr-hi'],
+    [' graph','92.6','87.4','90.0','92.6','ttr-hi'],
+    [' stream','93.1','85.9','92.3','93.1','ttr-hi'],
+  ];
+
+  let pass=0,fail=0,dur=0;
+  function tally(){
+    tallyEl.innerHTML='<span class="ttr-pass">✓ '+pass+' passed</span>  '
+      +'<span class="'+(fail?'ttr-fail':'ttr-dim')+'">✗ '+fail+' failed</span>  '
+      +'<span class="ttr-dim">'+pass+'/'+TOTAL+' · '+dur.toFixed(2)+'s</span>';
+  }
+  function line(txt,cls){
+    const d=document.createElement('div');
+    d.className='ttr-line'+(cls?' '+cls:'');
+    d.textContent=txt;
+    body.appendChild(d);
+    while(body.children.length>MAX)body.removeChild(body.firstChild);
+    return d;
+  }
+  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+  function coverage(){
+    line('','');
+    line(' % Coverage report · istanbul','ttr-hi');
+    line(sep,'ttr-dim');
+    line(crow(['File','Stmts','Branch','Funcs','Lines']),'ttr-dim');
+    line(sep,'ttr-dim');
+    cov.forEach(r=>line(crow(r.slice(0,5)),r[5]));
+    line(sep,'ttr-dim');
+  }
+  function summary(){
+    line('','');
+    line(' Test Files  '+suites.length+' passed ('+suites.length+')','ttr-hi');
+    line('      Tests  '+TOTAL+' passed · 1 flaky ('+TOTAL+')','ttr-hi');
+    line('   Duration  '+dur.toFixed(2)+'s','ttr-hi');
+  }
+
+  function staticFrame(){
+    pass=TOTAL;fail=0;dur=suites.reduce((n,s)=>n+s.ms/1000,0);tally();
+    line('$ npx spec --watch','ttr-hi');line('','');
+    suites.forEach(s=>line(' ✓ '+s.f+'  ('+s.specs.length+')  '+s.ms+'ms','ttr-file'));
+    summary();coverage();
+    line('','');line(' watching for file changes…','ttr-dim');
+  }
+
+  let running=true;
+  async function run(){
+    while(running){
+      body.innerHTML='';pass=0;fail=0;dur=0;tally();
+      line('$ npx spec --watch','ttr-hi');line('','');
+      for(const s of suites){
+        if(!running)return;
+        for(let i=0;i<s.specs.length;i++){
+          if(!running)return;
+          await sleep(95);
+          if(s.flaky===i){
+            fail++;tally();
+            line('   ✗ '+s.specs[i],'ttr-err');
+            line('     AssertionError: expected ‘settled’ to equal ‘pending’','ttr-dim');
+            await sleep(280);
+            line('   ↻ retry 1/2 …','ttr-warn');
+            await sleep(300);
+            fail--;pass++;tally();
+            line('   ✓ '+s.specs[i]+'  (recovered)','ttr-ok');
+          }else{
+            pass++;tally();
+            line('   ✓ '+s.specs[i],'ttr-ok');
+          }
+        }
+        dur+=s.ms/1000;tally();
+        line(' ✓ '+s.f+'  ('+s.specs.length+')  '+s.ms+'ms','ttr-file');
+        line('','');
+        await sleep(170);
+      }
+      if(!running)return;
+      summary();coverage();
+      line('','');
+      const w=line(' watching for file changes…','ttr-dim');
+      w.appendChild(Object.assign(document.createElement('span'),{className:'ttr-cur'}));
+      await sleep(2800);
+    }
+  }
+
+  if(reduce){staticFrame();return;}
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)running=false;
+    else if(!running){running=true;run();}
+  });
+  run();
+})();</script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/terminal/09-test-runner.html",
+ "title": "Test Runner",
+ "description": "Simulates a watch-mode test runner: spec suites stream in with green PASS ticks, one flaky spec fails red then retries and recovers, a live pass/fail tally and per-suite timings update in real time, and the run closes with a Stmts/Branch/Funcs/Lines coverage table before restarting on a loop.",
+ "useWhen": "Developer-tool landing pages, CI/testing dashboards, loading screens, or any terminal-aesthetic hero that needs a credible \"tests are running\" ambient backdrop.",
+ "avoidWhen": "Light-background UIs (background is hardcoded dark #0d1117) and non-technical audiences for whom spec output and coverage percentages carry no meaning.",
+ "agentPrompt": "Add a suite {f:'payments/refund.spec.ts', ms:190, specs:['issues a full refund','rejects a double refund']} to the suites array, change the flaky spec's assertion message, and slow the per-spec streaming from 95ms to 160ms.",
+ "editableAreas": [
+  "suite/spec data (suites array: file names, per-suite ms, spec descriptions, flaky index)",
+  "coverage table rows and percentages (cov array)",
+  "per-spec / per-suite streaming delays (sleep 95/170ms and retry 280/300ms)",
+  "max visible lines (MAX=30)",
+  "loop restart pause (sleep 2800ms)",
+  "accent and level colors (.ttr-ok/.ttr-warn/.ttr-err CSS)"
+ ],
+ "preserveElements": [
+  "IIFE with \"use strict\"",
+  "visibilitychange running-flag stop/resume guard",
+  "prefers-reduced-motion staticFrame() early-return path",
+  "role=img + aria-label on the wrapper and aria-hidden corner caption",
+  "live tally element updated via tally()"
+ ],
+ "knownLimitations": [
+  "Background and terminal palette are hardcoded dark — must edit CSS to re-theme",
+  "Not themeable: exposes no --pro-* custom-property block",
+  "Purely ambient with no click interactivity",
+  "With justify-content:flex-end older lines scroll out of view on short viewports; only the newest MAX lines render"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "terminal",
+  "test-runner",
+  "coverage",
+  "monospace",
+  "cli",
+  "dark-mode",
+  "loop",
+  "typewriter"
+ ]
+}
+</script>
+</body></html>

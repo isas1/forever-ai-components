@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Public service status page - six services each with an Operational state pill and a 90-day uptime strip; on a loop one service briefly goes degraded (amber) then recovers, while the header shows 'All systems operational'.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Status Page</title>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#3fb950;
+    --pro-warn:#d29922;
+    --pro-err:#f85149;
+    --pro-radius:12px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --stpg-ok:color-mix(in srgb,var(--pro-accent) 80%,var(--pro-surface));
+    --stpg-track:color-mix(in srgb,var(--pro-text) 8%,var(--pro-surface));
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .stpg-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:2.4vmin;
+    padding:4.4vmin;font-family:var(--pro-font);color:var(--pro-text)}
+  .stpg-banner{display:flex;align-items:center;gap:2vmin;background:var(--pro-surface);
+    border:1px solid var(--pro-border);border-left:3px solid var(--pro-accent);
+    border-radius:var(--pro-radius);padding:2.4vmin 2.8vmin;transition:border-color .6s}
+  .stpg-banner.is-deg{border-left-color:var(--pro-warn)}
+  .stpg-bico{width:4.4vmin;height:4.4vmin;min-width:20px;min-height:20px;border-radius:50%;
+    flex:none;display:grid;place-items:center;background:color-mix(in srgb,var(--pro-accent) 20%,transparent);
+    color:var(--pro-accent);transition:background .6s,color .6s}
+  .stpg-banner.is-deg .stpg-bico{background:color-mix(in srgb,var(--pro-warn) 20%,transparent);color:var(--pro-warn)}
+  .stpg-bico svg{width:2.4vmin;height:2.4vmin;min-width:11px;min-height:11px}
+  .stpg-btxt{display:flex;flex-direction:column;gap:.4vmin;min-width:0}
+  .stpg-btitle{font-size:clamp(11px,2.7vmin,16px);font-weight:700;letter-spacing:.01em}
+  .stpg-bsub{font-size:clamp(8px,1.7vmin,10px);color:var(--pro-muted);font-weight:600}
+  .stpg-updated{margin-left:auto;font-size:clamp(8px,1.6vmin,10px);color:var(--pro-muted);
+    font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .stpg-list{flex:1;display:flex;flex-direction:column;gap:1.4vmin;min-height:0}
+  .stpg-row{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:1.2vmin;
+    background:var(--pro-surface);border:1px solid var(--pro-border);border-radius:var(--pro-radius);
+    padding:1.8vmin 2.4vmin}
+  .stpg-head{display:flex;align-items:center;justify-content:space-between;gap:1.6vmin}
+  .stpg-name{display:flex;align-items:center;gap:1.4vmin;font-size:clamp(10px,2.2vmin,13px);font-weight:600}
+  .stpg-dot{width:1.5vmin;height:1.5vmin;min-width:8px;min-height:8px;border-radius:50%;flex:none;
+    background:var(--pro-accent);transition:background .6s}
+  .stpg-row.is-deg .stpg-dot{background:var(--pro-warn);animation:stpg-blink 1.4s ease-in-out infinite}
+  .stpg-m2{display:flex;align-items:center;gap:1.8vmin}
+  .stpg-up{font-size:clamp(8px,1.8vmin,11px);color:var(--pro-muted);font-weight:600;
+    font-variant-numeric:tabular-nums}
+  .stpg-pill{font-size:clamp(8px,1.6vmin,10px);font-weight:700;letter-spacing:.02em;padding:.5vmin 1.6vmin;
+    border-radius:999px;white-space:nowrap;background:color-mix(in srgb,var(--pro-accent) 15%,transparent);
+    color:var(--pro-accent);transition:background .6s,color .6s}
+  .stpg-row.is-deg .stpg-pill{background:color-mix(in srgb,var(--pro-warn) 16%,transparent);color:var(--pro-warn)}
+  .stpg-bar{position:relative;height:clamp(6px,3.2vmin,15px);border-radius:3px;overflow:hidden;
+    background:linear-gradient(90deg,var(--stpg-ok) 0 62%,transparent 62%),var(--stpg-track);
+    background-size:calc(100%/90) 100%,100% 100%;background-repeat:repeat-x,no-repeat}
+  .stpg-mark{position:absolute;top:0;bottom:0;width:calc(100%/90);border-radius:2px}
+  .stpg-warn{background:var(--pro-warn)}
+  .stpg-err{background:var(--pro-err)}
+  .stpg-now{position:absolute;right:0;top:0;bottom:0;width:calc(100%/90);border-radius:2px;
+    background:var(--pro-accent);animation:stpg-pulse 2.4s ease-in-out infinite;transition:background .6s}
+  .stpg-row.is-deg .stpg-now{background:var(--pro-warn)}
+  .stpg-stage.paused .stpg-now,.stpg-stage.paused .stpg-dot{animation-play-state:paused}
+  .stpg-scale{display:flex;justify-content:space-between;font-size:clamp(7px,1.5vmin,9px);
+    color:var(--pro-muted);font-weight:600;letter-spacing:.02em;padding:0 .4vmin}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @keyframes stpg-pulse{0%,100%{opacity:.35}50%{opacity:1}}
+  @keyframes stpg-blink{0%,100%{opacity:.4}50%{opacity:1}}
+  @media (prefers-reduced-motion:reduce){.stpg-now,.stpg-dot{animation:none!important}}
+</style>
+</head>
+<body>
+  <div class="stpg-stage" id="stpg-root" role="img"
+       aria-label="Service status page. All systems operational. API, Dashboard, Webhooks, CDN, Database and Auth are operational, each with 90-day uptime above 99.8 percent; incidents from the past 90 days appear as amber and red marks in the uptime strips.">
+    <div class="stpg-banner" id="stpg-banner">
+      <span class="stpg-bico"><svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 8.5l2.8 3 6.2-6.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span class="stpg-btxt">
+        <span class="stpg-btitle" id="stpg-btitle">All systems operational</span>
+        <span class="stpg-bsub">Live health across 6 services</span>
+      </span>
+      <span class="stpg-updated">Updated 42s ago</span>
+    </div>
+    <div class="stpg-list" id="stpg-list"></div>
+    <div class="stpg-scale"><span>90 days ago</span><span>Today</span></div>
+  </div>
+  <div class="cap" aria-hidden="true">Status Page</div>
+  <script>(function(){"use strict";
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Invented services + realistic 90-day uptime and past-incident marks (day 0..89, sev warn/err).
+    var services=[
+      {name:"API Gateway", up:"99.98%", inc:[{d:34,s:"warn"}]},
+      {name:"Dashboard",   up:"100%",   inc:[]},
+      {name:"Webhooks",    up:"99.82%", inc:[{d:11,s:"err"},{d:58,s:"warn"}]},
+      {name:"CDN",         up:"99.99%", inc:[{d:73,s:"warn"}]},
+      {name:"Database",    up:"99.95%", inc:[{d:47,s:"warn"}]},
+      {name:"Auth",        up:"100%",   inc:[]}
+    ];
+    var list=document.getElementById("stpg-list");
+    var stage=document.getElementById("stpg-root");
+    var banner=document.getElementById("stpg-banner");
+    var btitle=document.getElementById("stpg-btitle");
+    if(!list)return;
+    services.forEach(function(s){
+      var marks=s.inc.map(function(m){
+        return '<span class="stpg-mark stpg-'+m.s+'" style="left:'+(m.d/90*100).toFixed(2)+'%"></span>';
+      }).join("");
+      var row=document.createElement("div");
+      row.className="stpg-row";
+      row.innerHTML=
+        '<div class="stpg-head">'+
+          '<span class="stpg-name"><span class="stpg-dot"></span>'+s.name+'</span>'+
+          '<span class="stpg-m2"><span class="stpg-up">'+s.up+' uptime</span>'+
+            '<span class="stpg-pill">Operational</span></span>'+
+        '</div>'+
+        '<div class="stpg-bar">'+marks+'<span class="stpg-now"></span></div>';
+      list.appendChild(row);
+      s.row=row; s.pill=row.querySelector(".stpg-pill");
+    });
+
+    function setDeg(s,on){
+      s.row.classList.toggle("is-deg",on);
+      s.pill.textContent=on?"Degraded":"Operational";
+    }
+    function setBanner(on){
+      banner.classList.toggle("is-deg",on);
+      btitle.textContent=on?"Degraded performance in 1 service":"All systems operational";
+    }
+
+    if(reduce)return; // static populated page: all operational, history + incident marks visible
+
+    var running=true;
+    document.addEventListener("visibilitychange",function(){
+      running=!document.hidden;
+      stage.classList.toggle("paused",!running);
+    });
+
+    var idx=0;
+    function cycle(){
+      if(!running){ setTimeout(cycle,700); return; }
+      var s=services[idx];
+      setDeg(s,true); setBanner(true);
+      setTimeout(function(){
+        setDeg(s,false); setBanner(false);
+        idx=(idx+1)%services.length;
+        setTimeout(cycle,3600);
+      },2600);
+    }
+    setTimeout(cycle,2800);
+  })();
+  </script>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/dev-status/01-status-page.html",
+ "title": "Status Page",
+ "description": "A public service status page: six services, each with an Operational state pill and a compact 90-day uptime strip carrying past-incident marks; on a loop one service briefly goes degraded (amber) and recovers, while the header banner tracks 'All systems operational'.",
+ "useWhen": "Status/health pages, uptime dashboards, incident summaries, DevOps or SRE overview panels, trust/status marketing sections.",
+ "avoidWhen": "When you need real-time data wired to a monitoring backend, per-minute granularity, or a full incident timeline with post-mortems — the states and 90-day history here are simulated.",
+ "agentPrompt": "Edit the services array (name, up, inc incident marks with day 0-89 and severity warn/err) to set your own services and history; adjust the loop timings (degrade 2600ms, gap 3600ms) for the auto incident cycle. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent, --pro-warn, --pro-err), and update the catalog bg field to match.",
+ "editableAreas": [
+  "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
+  "service data (services array: name, up percentage, inc incident marks {day 0-89, severity warn/err})",
+  "incident cycle timing (setTimeout: 2600ms degraded, 3600ms gap, 2800ms initial delay)",
+  "uptime bar look (--stpg-ok / --stpg-track tokens, .stpg-bar height and 90-bar background-size)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .stpg-stage",
+  "IIFE wrapper",
+  "prefers-reduced-motion early return to the populated all-operational state",
+  "visibilitychange pause (running flag + .paused class on stage)",
+  "the 90-day bar as a tiled linear-gradient (background-size:calc(100%/90)) rather than 90 DOM divs per row"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "States and 90-day uptime history are simulated on a loop, not wired to a live monitoring source",
+  "The 90-day strip shows one bar per day at fixed granularity; sub-day or hourly detail is not represented"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable"
+ ],
+ "tags": [
+  "status-page",
+  "uptime",
+  "monitoring",
+  "incident",
+  "sla",
+  "devops",
+  "health-check",
+  "dashboard"
+ ]
+}
+</script>
+</body>
+</html>
