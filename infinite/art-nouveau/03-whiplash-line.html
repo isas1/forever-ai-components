@@ -5,14 +5,27 @@
 <meta name="description" content="Paired S-curve whiplash ribbons in gold, sage and rose breathe and sway with five-petal rosette nodes on a dark ground.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Whiplash Line</title>
+<script>/* theme hook: ?theme=light|dark (or data-theme on <html>), before first paint — no flash; standalone stays dark */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  html,body{margin:0;height:100%;background:#0e1310;overflow:hidden}
+  :root{ /* theme tokens — dark defaults; light below. --an03-c0..c4 + --an03-core feed the JS palette. */
+    --an03-bg:#0e1310; --an03-bg0:#1a241d; --an03-bg1:#0e1310; --an03-bg2:#080b09;
+    --an03-c0:#c9a24b; --an03-c1:#e7c98f; --an03-c2:#7e9c63; --an03-c3:#b56a78; --an03-c4:#d9c9a3;
+    --an03-core:#0e1310; --an03-cap:#fff; --an03-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    /* parchment ground; the pale cream/ivory ribbons become deep ochre and teal ink */
+    --an03-bg:#f4f1e6; --an03-bg0:#fdfbf2; --an03-bg1:#f4f1e6; --an03-bg2:#e5dfcc;
+    --an03-c0:#866928; --an03-c1:#7a5e28; --an03-c2:#4f6b3a; --an03-c3:#a95160; --an03-c4:#2f6f68;
+    --an03-core:#f4f1e6; --an03-cap:#262a1d; --an03-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;background:var(--an03-bg);overflow:hidden}
   #an03-stage{position:fixed;inset:0;width:100%;height:100%;display:block;
     /* STATIC vignette + warm glow, never repainted in the loop */
     background:
-      radial-gradient(120% 95% at 40% 22%, #1a241d 0%, #0e1310 58%, #080b09 100%);
+      radial-gradient(120% 95% at 40% 22%, var(--an03-bg0) 0%, var(--an03-bg1) 58%, var(--an03-bg2) 100%);
   }
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--an03-cap);opacity:var(--an03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -22,19 +35,21 @@
  "description": "Five Catmull-Rom S-curve ribbons in gold, sage, and rose breathe with sinusoidal wobble; five-petal rosette nodes pulse along the curves.",
  "useWhen": "Art-nouveau or botanical hero backgrounds, luxury brand ambient displays, decorative section dividers needing organic motion.",
  "avoidWhen": "Contexts requiring legible text overlays (curves dominate). Light backgrounds — dark ground is hardcoded in CSS.",
- "agentPrompt": "Change the palette to jewel tones by replacing COLS with [\"#4a7fa5\",\"#6dbfb8\",\"#a56ea5\",\"#c49a6c\",\"#e8dfc8\"] and increase breathing by setting each RIB amp to 0.08.",
+ "agentPrompt": "Change the palette to jewel tones by replacing COLS with [\"#4a7fa5\",\"#6dbfb8\",\"#a56ea5\",\"#c49a6c\",\"#e8dfc8\"] and increase breathing by setting each RIB amp to 0.08. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "palette (COLS array)",
   "ribbon width per entry (w field in RIB)",
   "breathing amplitude (amp field)",
   "animation speed (sp field)",
-  "node petal count (k<5 loop)"
+  "node petal count (k<5 loop)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion drawStatic() guard",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing with ctx.setTransform"
+  "DPR-aware canvas sizing with ctx.setTransform",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#0e1310) — must edit both CSS and JS to change",
@@ -48,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-nouveau",
@@ -75,7 +91,16 @@
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
   // ---- palette (Art Nouveau/Horta era: muted gold, sage, rose, ivory) ----
-  var COLS=["#c9a24b","#e7c98f","#7e9c63","#b56a78","#d9c9a3"];
+  // every colour the canvas draws with is a token, so a theme flip only re-reads them
+  var root=document.documentElement;
+  var COLS=["#c9a24b","#e7c98f","#7e9c63","#b56a78","#d9c9a3"], CORE="#0e1310";
+  function syncTheme(){ var cs=getComputedStyle(root),v,i;
+    for(i=0;i<5;i++){ v=cs.getPropertyValue("--an03-c"+i).trim(); if(v)COLS[i]=v; }
+    v=cs.getPropertyValue("--an03-core").trim(); if(v)CORE=v; }
+  addEventListener("message",function(e){var d=e.data;   // live re-theme from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce)drawStatic(); }});
+  syncTheme();
 
   // ---- whiplash ribbons. Each is an S-curve described by control anchors;
   //      we precompute static base points and breathe them with cached phase. ----
@@ -182,7 +207,7 @@
       }
       // core
       ctx.globalAlpha=1;
-      ctx.fillStyle="#0e1310";
+      ctx.fillStyle=CORE;
       ctx.beginPath();ctx.arc(0,0,R*0.42,0,6.2832);ctx.fill();
       ctx.fillStyle=COLS[1];
       ctx.beginPath();ctx.arc(0,0,R*0.26,0,6.2832);ctx.fill();

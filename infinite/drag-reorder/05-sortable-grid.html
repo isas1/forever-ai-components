@@ -5,21 +5,27 @@
 <meta name="description" content="A 3x3 grid of primary-colored numbered tiles that spring-reorder as they are dragged or swapped, with auto-demo shuffling.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sortable Grid</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root{--bg:#0c0e13;--ac:#22d3ee}
+  :root{--bg:#0c0e13;--ac:#22d3ee;--dr05-num-ink:#0c0e13;--dr05-shadow:rgba(0,0,0,.5);--dr05-lift-shadow:rgba(0,0,0,.6);--dr05-foc:#fff;--cap:#fff;--cap-o:.42}
+  :root[data-theme="light"]{--bg:#eef1f6;--ac:#0a7686;--dr05-shadow:rgba(27,34,48,.18);--dr05-lift-shadow:rgba(27,34,48,.24);--dr05-foc:#1b2230;--cap:#1b2230;--cap-o:.5}
   *{margin:0;box-sizing:border-box}
   html,body{height:100%}
   body{background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
   #dr05-stage{position:fixed;inset:0;display:grid;place-items:center}
   #dr05-grid{position:relative;outline:none}
   .dr05-t{position:absolute;left:0;top:0;border-radius:7px;will-change:transform;
-    display:grid;place-items:center;color:#0c0e13;font-weight:700;
-    box-shadow:0 6px 22px rgba(0,0,0,.5),inset 0 0 0 1.5px rgba(255,255,255,.14)}
+    display:grid;place-items:center;color:var(--dr05-num-ink);font-weight:700;
+    box-shadow:0 6px 22px var(--dr05-shadow),inset 0 0 0 1.5px rgba(255,255,255,.14)}
   .dr05-t span{font-size:clamp(11px,3.4cqw,20px);letter-spacing:.04em;mix-blend-mode:luminosity;opacity:.92}
-  .dr05-t.lift{box-shadow:0 18px 40px rgba(0,0,0,.6),inset 0 0 0 2px var(--ac);z-index:9}
-  .dr05-t.foc{outline:2px solid #fff;outline-offset:3px;z-index:8}
+  .dr05-t.lift{box-shadow:0 18px 40px var(--dr05-lift-shadow),inset 0 0 0 2px var(--ac);z-index:9}
+  .dr05-t.foc{outline:2px solid var(--dr05-foc);outline-offset:3px;z-index:8}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -29,20 +35,22 @@
  "description": "3x3 grid of colored numbered tiles that spring-animate into position as tiles are dragged or swapped; auto-shuffles on idle as a demo.",
  "useWhen": "Dashboard card reordering, settings panels, any UI where users need to manually sort a fixed set of items with tactile feedback.",
  "avoidWhen": "Lists longer than ~12 items (spring loop scales linearly); contexts where ordering state must persist — this resets on page reload.",
- "agentPrompt": "Change the grid to 4 columns (set COLS=4, N=16, add 7 more PAL entries), increase spring stiffness by changing K from 0.14 to 0.22.",
+ "agentPrompt": "Change the grid to 4 columns (set COLS=4, N=16, add 7 more PAL entries), increase spring stiffness by changing K from 0.14 to 0.22. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "palette colors (PAL array)",
   "grid size (N and COLS)",
   "spring stiffness (K=0.14) and damping (D=0.74)",
   "tile corner radius (border-radius:7px)",
   "idle-to-demo timeout (3600ms)",
-  "demo swap interval (1300ms)"
+  "demo swap interval (1300ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "visibilitychange stop/start guard",
   "prefers-reduced-motion early return",
-  "pointer capture (setPointerCapture)"
+  "pointer capture (setPointerCapture)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Order is not persisted — resets on reload; wire localStorage or a backend to save state",
@@ -56,7 +64,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "drag",
@@ -205,6 +214,7 @@
     else{start();if(demoOn)demoStep();}
   });
   var rTO=0;addEventListener("resize",function(){clearTimeout(rTO);rTO=setTimeout(layout,120);});
+  addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});
 
   grid.addEventListener("pointerdown",ptDown);
   addEventListener("pointermove",ptMove);

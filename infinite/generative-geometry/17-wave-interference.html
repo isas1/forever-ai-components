@@ -5,11 +5,36 @@
 <meta name="description" content="Four orbiting point sources emit ripples whose summed field is drawn as glowing blue marching-squares contour lines on near-black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wave Interference</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#191B1D;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme lives in the one [data-theme="light"] block. --wvi-blend swaps the
+     additive contour glow ('lighter', dark) for normal blending ('source-over', light), where
+     the level sets are drawn as dark steel ink at higher alpha instead. */
+  :root{
+    --wvi-bg:#191B1D; --wvi-blend:lighter;
+    --wvi-crest:176,212,221; --wvi-trough:169,184,188; --wvi-nodal:192,221,228;
+    --wvi-src:208,229,235; --wvi-dot:#EFF6F8;
+    --wvi-a0:0.10; --wvi-a1:0.26; --wvi-anod:.55; --wvi-a-nod2:0.5; --wvi-a-sub:0.16;
+    --wvi-src-a0:0.9; --wvi-src-a1:0.35;
+    --wvi-cap:#B0D4DD; --wvi-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --wvi-bg:#eef3f5; --wvi-blend:source-over;
+    --wvi-crest:20,70,92; --wvi-trough:96,110,116; --wvi-nodal:8,48,64;
+    --wvi-src:12,58,74; --wvi-dot:#0c3a4a;
+    --wvi-a0:0.16; --wvi-a1:0.40; --wvi-anod:.85; --wvi-a-nod2:0.75; --wvi-a-sub:0.24;
+    --wvi-src-a0:0.55; --wvi-src-a1:0.22;
+    --wvi-cap:#2f6d7e; --wvi-cap-o:.8;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--wvi-bg);}
   #wvi-c{display:block;width:100%;height:100%;}
   .wvi-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.16em;color:#B0D4DD;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--wvi-cap);opacity:var(--wvi-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +44,21 @@
  "description": "Four orbiting sources emit ripples drawn as glowing blue marching-squares contour lines on near-black. Pointer adds a fifth interactive wave source.",
  "useWhen": "Science/physics-themed hero backgrounds, generative art displays, dark ambient UI backdrops needing mathematical elegance.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy), low-end mobile (marching-squares grid is CPU-bound), or contexts needing legible foreground text.",
- "agentPrompt": "Change accent color from powder blue to green by replacing 'rgba(176,212,221' with 'rgba(100,255,160', increase grid resolution by changing cell to Math.max(5,m/80), and add a fifth source to the SRC array.",
+ "agentPrompt": "Change accent color from powder blue to green by replacing 'rgba(176,212,221' with 'rgba(100,255,160', increase grid resolution by changing cell to Math.max(5,m/80), and add a fifth source to the SRC array. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "contour levels array (LV)",
   "source orbit params (ox/oy/or/os/k per SRC entry)",
   "cell resolution (Math.max(7,m/64))",
   "accent color (rgb(176,212,221))",
-  "time step (t+=0.012)"
+  "time step (t+=0.012)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard + static draw fallback",
   "visibilitychange pause/start",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Marching-squares loop over the full grid runs every frame — heavy on low-end devices",
@@ -44,7 +71,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "wave",
@@ -86,6 +114,26 @@
     {ox:.66,oy:.66,or:.14,oa:1.0,os:-.26,k:.050}
   ];
   const LV=[-2.4,-1.6,-.8,0,.8,1.6,2.4]; // contour levels of summed field
+  // theme: bg, blend mode, the three contour inks, the source-marker gradient and every
+  // level alpha come from the CSS tokens — read once, and again on a theme flip.
+  const root=document.documentElement;
+  const C={bg:'#191B1D',blend:'lighter',crest:'176,212,221',trough:'169,184,188',
+           nodal:'192,221,228',src:'208,229,235',dot:'#EFF6F8',
+           a0:0.10,a1:0.26,anod:.55,aNod2:'0.5',aSub:'0.16',srcA0:'0.9',srcA1:'0.35'};
+  function syncTheme(){
+    const cs=getComputedStyle(root),s=n=>cs.getPropertyValue(n).trim();
+    C.bg=s('--wvi-bg')||C.bg;C.blend=s('--wvi-blend')||C.blend;
+    C.crest=s('--wvi-crest')||C.crest;C.trough=s('--wvi-trough')||C.trough;
+    C.nodal=s('--wvi-nodal')||C.nodal;C.src=s('--wvi-src')||C.src;C.dot=s('--wvi-dot')||C.dot;
+    C.a0=+(s('--wvi-a0')||C.a0);C.a1=+(s('--wvi-a1')||C.a1);C.anod=+(s('--wvi-anod')||C.anod);
+    C.aNod2=s('--wvi-a-nod2')||C.aNod2;C.aSub=s('--wvi-a-sub')||C.aSub;
+    C.srcA0=s('--wvi-src-a0')||C.srcA0;C.srcA1=s('--wvi-src-a1')||C.srcA1;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce)draw();}
+  });
+  syncTheme();
   let t=0,nudge=0,sx=0,sy=0;
   cv.addEventListener('pointermove',e=>{nudge=1;sx=e.offsetX;sy=e.offsetY;});
 
@@ -143,34 +191,34 @@
 
   function draw(){
     sample();
-    ctx.fillStyle='#191B1D';ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation=C.blend;
     // filled crest glow via dense level set
     for(let n=0;n<LV.length;n++){
       const L=LV[n];
       const dist=Math.abs(L);                       // distance from nodal value 0
       const crest=L>=0;
       // accent for constructive crests, cool steel for troughs; nodal line (L=0) brightest
-      const a=L===0?.55:0.10+0.26*(1-dist/2.6);
+      const a=L===0?C.anod:C.a0+C.a1*(1-dist/2.6);
       const col=crest
-        ? 'rgba(176,212,221,'+a.toFixed(3)+')'
-        : 'rgba(169,184,188,'+a.toFixed(3)+')';
+        ? 'rgba('+C.crest+','+a.toFixed(3)+')'
+        : 'rgba('+C.trough+','+a.toFixed(3)+')';
       contour(L,col, L===0?1.5:1.0);
     }
     // bright sub-levels near nodal lines for the braided sweep
-    contour(0.0,'rgba(192,221,228,0.5)',1.4);
-    contour(-0.2,'rgba(176,212,221,0.16)',0.8);
-    contour(0.2,'rgba(176,212,221,0.16)',0.8);
+    contour(0.0,'rgba('+C.nodal+','+C.aNod2+')',1.4);
+    contour(-0.2,'rgba('+C.crest+','+C.aSub+')',0.8);
+    contour(0.2,'rgba('+C.crest+','+C.aSub+')',0.8);
     ctx.globalCompositeOperation='source-over';
     // source markers
     const m=Math.min(W,H);
     for(const s of SRC){
       const ang=s.oa+t*s.os,x=(s.ox+Math.cos(ang)*s.or)*W,y=(s.oy+Math.sin(ang)*s.or)*H;
       const g=ctx.createRadialGradient(x,y,0,x,y,m*0.05);
-      g.addColorStop(0,'rgba(208,229,235,0.9)');g.addColorStop(.4,'rgba(176,212,221,0.35)');
-      g.addColorStop(1,'rgba(176,212,221,0)');
+      g.addColorStop(0,'rgba('+C.src+','+C.srcA0+')');g.addColorStop(.4,'rgba('+C.crest+','+C.srcA1+')');
+      g.addColorStop(1,'rgba('+C.crest+',0)');
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,m*0.05,0,7);ctx.fill();
-      ctx.fillStyle='#EFF6F8';ctx.beginPath();ctx.arc(x,y,Math.max(1.4,m*0.006),0,7);ctx.fill();
+      ctx.fillStyle=C.dot;ctx.beginPath();ctx.arc(x,y,Math.max(1.4,m*0.006),0,7);ctx.fill();
     }
   }
 

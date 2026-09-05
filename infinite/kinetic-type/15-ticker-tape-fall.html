@@ -5,11 +5,18 @@
 <meta name="description" content="Teal split-flap letter reels spin and brake to lock onto each glyph of a word with motion-blur streaks and a flash on the dark green canvas.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ticker Tape Fall</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#07120f;}
+  :root{ --ttf-bg:#07120f; --ttf-bg-rgb:7,18,15; --ttf-accent:#2ec4b6; --ttf-accent-rgb:46,196,182; --ttf-ink:#d8fff7; --cap-o:.34; } /* canvas paints its own bg — JS reads these via syncTheme() */
+  :root[data-theme="light"]{ --ttf-bg:#eef4f1; --ttf-bg-rgb:238,244,241; --ttf-accent:#1d7a71; --ttf-accent-rgb:29,122,113; --ttf-ink:#005c49; --cap-o:.5; }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--ttf-bg);}
   #ttf-c{display:block;width:100%;height:100%;}
   .ttf-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
-       letter-spacing:.14em;color:#2ec4b6;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--ttf-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +26,22 @@
  "description": "Split-flap letter reels spin and brake staggered onto each letter with motion-blur streaks and a teal glow flash on lock. Auto-cycles four words.",
  "useWhen": "Dark-theme hero displays, departure/arrival board aesthetics, retro terminal branding, looping word reveals.",
  "avoidWhen": "Light backgrounds (hardcoded dark canvas). Words longer than ~8 chars may overflow on narrow viewports.",
- "agentPrompt": "Change the WORDS array to [\"LAUNCH\",\"DEPLOY\",\"SHIP\",\"BUILD\"] and set accent to #a855f7 (update fillStyle '#2ec4b6' and all shadowColor rgba values).",
+ "agentPrompt": "Change the WORDS array to [\"LAUNCH\",\"DEPLOY\",\"SHIP\",\"BUILD\"] and set accent to #a855f7 (update fillStyle '#2ec4b6' and all shadowColor rgba values). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "WORDS array (cycling word list)",
   "accent color (#2ec4b6 teal)",
   "lockAt stagger timing (0.9+i*0.62)",
   "hold duration before next word (2.6s)",
   "initial reel velocity (34+random*10)",
-  "cell/font sizing ratio (cell*0.82)"
+  "cell/font sizing ratio (cell*0.82)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "reduced-motion static fallback (single resting frame)",
   "visibilitychange pause/start guard",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to #07120f — must change CSS and canvas fillRect to use a different background",
@@ -46,7 +55,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "split-flap",
@@ -70,8 +80,14 @@
   const ALPHA="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const WORDS=["DESCEND","CASCADE","FALLING","GRAVITY"];
   let W,H,DPR,cell,fs,ox,oy,word,reels,wi=0,phase=0;
-  function size(){
-    DPR=Math.min(devicePixelRatio||1,2);
+  const htmlEl=document.documentElement; // JS-drawn colours read from tokens via syncTheme()
+  const C={bg:'#07120f',bgRgb:'7,18,15',accent:'#2ec4b6',accentRgb:'46,196,182',ink:'#d8fff7'};
+  function syncTheme(){ const cs=getComputedStyle(htmlEl);
+    C.bg=(cs.getPropertyValue('--ttf-bg')||C.bg).trim(); C.bgRgb=(cs.getPropertyValue('--ttf-bg-rgb')||C.bgRgb).trim();
+    C.accent=(cs.getPropertyValue('--ttf-accent')||C.accent).trim(); C.accentRgb=(cs.getPropertyValue('--ttf-accent-rgb')||C.accentRgb).trim();
+    C.ink=(cs.getPropertyValue('--ttf-ink')||C.ink).trim(); }
+  syncTheme();
+  function size(){ DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     build();
@@ -108,7 +124,7 @@
     let dt=(ts-last)/1000; last=ts; if(dt>0.05)dt=0.05;
     phase+=dt;
     // trail / fade
-    ctx.fillStyle='rgba(7,18,15,0.34)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba('+C.bgRgb+',0.34)';ctx.fillRect(0,0,W,H);
 
     ctx.textAlign='center';ctx.textBaseline='middle';
     const ff='700 '+fs.toFixed(1)+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
@@ -163,15 +179,15 @@
         const center=1-Math.min(1,Math.abs(gy-cy)/(cell*0.62));
         if(r.locked){
           ctx.globalAlpha=k===0?1:0;
-          ctx.shadowColor='rgba(46,196,182,'+(0.55+r.flash*0.4)+')';
+          ctx.shadowColor='rgba('+C.accentRgb+','+(0.55+r.flash*0.4)+')';
           ctx.shadowBlur=(10+r.flash*22);
-          ctx.fillStyle='#d8fff7';
+          ctx.fillStyle=C.ink;
         } else {
           // moving glyph: dim, streaked
           ctx.globalAlpha=(0.16+center*0.7)*(1-blur*0.45);
-          ctx.shadowColor='rgba(46,196,182,0.5)';
+          ctx.shadowColor='rgba('+C.accentRgb+',0.5)';
           ctx.shadowBlur=6+blur*4;
-          ctx.fillStyle='#2ec4b6';
+          ctx.fillStyle=C.accent;
         }
         // motion-blur streaks: stamp ghosts along the travel direction
         if(!r.locked && blur>0.08){
@@ -191,7 +207,7 @@
 
       // lock indicator: a thin accent baseline that snaps in
       if(r.locked||r.flash>0){
-        ctx.strokeStyle='rgba(46,196,182,'+(0.18+r.flash*0.5)+')';
+        ctx.strokeStyle='rgba('+C.accentRgb+','+(0.18+r.flash*0.5)+')';
         ctx.lineWidth=1;
         const lw=fs*0.34;
         ctx.beginPath();
@@ -208,24 +224,28 @@
   }
   function start(){ if(!raf&&!reduce){ last=0; raf=requestAnimationFrame(frame);} }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
-  addEventListener('resize',size);
-  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
-  size();
-  if(reduce){
-    // single resting frame: every reel locked on target
-    ctx.fillStyle='#07120f';ctx.fillRect(0,0,W,H);
+  function paintReduced(){ // single resting frame: every reel locked on target
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.font='700 '+fs.toFixed(1)+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
     for(let i=0;i<reels.length;i++){
       const cy=oy+i*cell;
-      ctx.shadowColor='rgba(46,196,182,0.6)';ctx.shadowBlur=12;
-      ctx.fillStyle='#d8fff7';ctx.fillText(word[i],ox,cy);
+      ctx.shadowColor='rgba('+C.accentRgb+',0.6)';ctx.shadowBlur=12;
+      ctx.fillStyle=C.ink;ctx.fillText(word[i],ox,cy);
       ctx.shadowBlur=0;
-      ctx.strokeStyle='rgba(46,196,182,0.2)';ctx.lineWidth=1;
+      ctx.strokeStyle='rgba('+C.accentRgb+',0.2)';ctx.lineWidth=1;
       const lw=fs*0.34;ctx.beginPath();
       ctx.moveTo(ox-lw,cy+cell*0.42);ctx.lineTo(ox+lw,cy+cell*0.42);ctx.stroke();
     }
-  } else start();
+  }
+  addEventListener('resize',size);
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', e=>{ const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){ htmlEl.setAttribute('data-theme', d.theme); syncTheme(); if(reduce) paintReduced(); }
+  });
+  size();
+  if(reduce){ paintReduced(); } else start();
 })();
 </script>
 </body>

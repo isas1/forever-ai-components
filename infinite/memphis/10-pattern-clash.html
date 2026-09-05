@@ -5,11 +5,21 @@
 <meta name="description" content="Three Memphis pattern bands — dots, zigzags, squiggles, confetti, rings — scroll horizontally in opposing directions split by crisp accent s">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pattern Clash</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#211A17;overflow:hidden}
-  #mp10-stage{position:fixed;inset:0;background:#211A17}
+  /* theme tokens — dark defaults, light re-theme below; --mp10-p0..p6 feed the bands via syncTheme() */
+  :root{--mp10-bg:#211A17;--mp10-cap:#fff;--mp10-cap-o:.42;
+    --mp10-p0:#D345A4;--mp10-p1:#ff4d80;--mp10-p2:#ffd23f;--mp10-p3:#C0B459;--mp10-p4:#ff8c42;--mp10-p5:#f4f0e6;--mp10-p6:#A18798}
+  :root[data-theme="light"]{--mp10-bg:#f7f3ef;--mp10-cap:#211a17;--mp10-cap-o:.5;
+    --mp10-p0:#c12e91;--mp10-p1:#db003f;--mp10-p2:#8a6900;--mp10-p3:#776e2d;--mp10-p4:#bd4a00;--mp10-p5:#2b211c;--mp10-p6:#84677a}
+  html,body{margin:0;height:100%;background:var(--mp10-bg);overflow:hidden}
+  #mp10-stage{position:fixed;inset:0;background:var(--mp10-bg)}
   #mp10-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--mp10-cap);opacity:var(--mp10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +29,21 @@
  "description": "Three Memphis pattern bands — dots, zigzags, squiggles, triangles, rings — scroll in opposing directions at different speeds, split by crisp accent seams.",
  "useWhen": "Memphis or 80s retro themed hero backgrounds, pattern showcases, decorative section dividers with high visual energy.",
  "avoidWhen": "Content-heavy layouts where text must be legible over the background. Low-end mobile where continuous canvas redraws may stutter.",
- "agentPrompt": "Change the top band accent color from '#D345A4' to '#00ff99', slow the top scroll speed from 78 to 48, and increase cell size divisor from 6.2 to 5 for larger motifs.",
+ "agentPrompt": "Change the top band accent color from '#D345A4' to '#00ff99', slow the top scroll speed from 78 to 48, and increase cell size divisor from 6.2 to 5 for larger motifs. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "Memphis color palette (PAL array)",
   "scroll speeds per band (oTop/oMid/oBot multipliers)",
   "cell size divisor (W/6.2)",
   "motif kind assignments per band (kindA/kindB args)",
-  "seam accent colors (#D345A4 / #ff4d80)"
+  "seam accent colors (#D345A4 / #ff4d80)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback (drawOneFrame)",
   "visibilitychange stop/start guards",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No interactivity — purely passive; adding pointer response requires significant rework",
@@ -45,7 +57,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "memphis",
@@ -70,9 +83,19 @@
   "use strict";
   var cv=document.getElementById("mp10-c"),ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
-  // Memphis palette around #D345A4 accent, on #211A17.
+  // Memphis palette around #D345A4 accent — read from theme tokens so light recolours the bands.
+  var root=document.documentElement;
   var BG="#211A17";
   var PAL=["#D345A4","#ff4d80","#ffd23f","#C0B459","#ff8c42","#f4f0e6","#A18798"];
+  function syncTheme(){
+    var cs=getComputedStyle(root),i;
+    for(i=0;i<PAL.length;i++)PAL[i]=cs.getPropertyValue("--mp10-p"+i).trim();
+    BG=cs.getPropertyValue("--mp10-bg").trim();
+  }
+  addEventListener("message",function(e){ // live re-theme broadcast by the canvas
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme();if(reduce)drawOneFrame();}
+  });
 
   var W=0,H=0,DPR=1,band=0,running=false,raf=0,t0=0;
   // motif kinds: 0 dot, 1 zig, 2 squiggle, 3 confetti-triangle, 4 ring
@@ -148,13 +171,13 @@
   function drawSeams(){
     // thin accent rule lines where bands meet (static, crisp)
     ctx.save();
-    ctx.fillStyle="#211A17";
+    ctx.fillStyle=BG;
     // top seam
     ctx.fillRect(0,band-2.5,W,5);
     ctx.fillRect(0,band*2-2.5,W,5);
-    ctx.fillStyle="#D345A4";
+    ctx.fillStyle=PAL[0];
     ctx.fillRect(0,band-1.2,W,2.4);
-    ctx.fillStyle="#ff4d80";
+    ctx.fillStyle=PAL[1];
     ctx.fillRect(0,band*2-1.2,W,2.4);
     ctx.restore();
   }
@@ -172,11 +195,11 @@
 
     var cell=Math.max(30,Math.min(64,W/6.2));
     // Band 1: magenta dots + zigzags
-    drawBand(0,band,oTop,0,1,"#D345A4","#ffd23f",cell,2);
+    drawBand(0,band,oTop,0,1,PAL[0],PAL[2],cell,2);
     // Band 2 (clash core): pink squiggles + confetti, opposite dir, tighter cell
-    drawBand(band,band,oMid,2,3,"#ff4d80","#C0B459",cell*0.86,57);
+    drawBand(band,band,oMid,2,3,PAL[1],PAL[3],cell*0.86,57);
     // Band 3: gold rings + dots
-    drawBand(band*2,H-band*2,oBot,4,0,"#C0B459","#ff8c42",cell,113);
+    drawBand(band*2,H-band*2,oBot,4,0,PAL[3],PAL[4],cell,113);
 
     drawSeams();
     raf=requestAnimationFrame(frame);
@@ -185,9 +208,9 @@
   function drawOneFrame(){
     ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
     var cell=Math.max(30,Math.min(64,W/6.2));
-    drawBand(0,band,W*0.18,0,1,"#D345A4","#ffd23f",cell,2);
-    drawBand(band,band,-W*0.22,2,3,"#ff4d80","#C0B459",cell*0.86,57);
-    drawBand(band*2,H-band*2,W*0.1,4,0,"#C0B459","#ff8c42",cell,113);
+    drawBand(0,band,W*0.18,0,1,PAL[0],PAL[2],cell,2);
+    drawBand(band,band,-W*0.22,2,3,PAL[1],PAL[3],cell*0.86,57);
+    drawBand(band*2,H-band*2,W*0.1,4,0,PAL[3],PAL[4],cell,113);
     drawSeams();
   }
 
@@ -199,6 +222,7 @@
     running=false;if(raf)cancelAnimationFrame(raf);raf=0;
   }
 
+  syncTheme();
   resize();
   window.addEventListener("resize",function(){
     resize();

@@ -5,16 +5,33 @@
 <meta name="description" content="Yellow bell icon swings and rings with an expanding wave ripple while a red count badge pops into view.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Notification Bell</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#13131f;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c03-bg:#13131f; --c03-bell:#ffd45c; --c03-clap:#ffb13c; --c03-wave:#ffd45c;
+    --c03-badge-bg:#ff4d6d; --c03-badge-ink:#fff; --c03-badge-shadow:rgba(255,77,109,.6);
+    --c03-cap:#fff; --c03-cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --c03-bg:#f2f2f8; --c03-bell:#b28300; --c03-clap:#c77700; --c03-wave:#b28300;
+    --c03-badge-bg:#db0027; --c03-badge-ink:#fff; --c03-badge-shadow:rgba(219,0,39,.35);
+    --c03-cap:#1b2130; --c03-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c03-bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   #wrap{position:fixed;inset:0;display:grid;place-items:center;cursor:pointer}
   #stage{position:relative;width:46%;max-width:160px;aspect-ratio:1;display:grid;place-items:center}
-  svg{width:100%;overflow:visible}
-  .bell{fill:#ffd45c;transform-origin:50% 14%}
-  .clap{fill:#ffb13c}
-  .badge{position:absolute;right:16%;top:12%;min-width:20px;height:20px;padding:0 4px;border-radius:11px;background:#ff4d6d;color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center;transform:scale(0);box-shadow:0 2px 6px rgba(255,77,109,.6)}
-  .wave{position:absolute;border:2px solid #ffd45c;border-radius:50%;width:30%;aspect-ratio:1;opacity:0;pointer-events:none}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  #stage svg{width:100%;overflow:visible}
+  .bell{fill:var(--c03-bell);transform-origin:50% 14%}
+  .clap{fill:var(--c03-clap)}
+  .badge{position:absolute;right:16%;top:12%;min-width:20px;height:20px;padding:0 4px;border-radius:11px;background:var(--c03-badge-bg);color:var(--c03-badge-ink);font-size:12px;font-weight:700;display:grid;place-items:center;transform:scale(0);box-shadow:0 2px 6px var(--c03-badge-shadow)}
+  .wave{position:absolute;border:2px solid var(--c03-wave);border-radius:50%;width:30%;aspect-ratio:1;opacity:0;pointer-events:none}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--c03-cap);opacity:var(--c03-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -23,23 +40,25 @@
  "description": "SVG bell swings and rings with a ripple wave on click; a red badge counter pops in with a springy bounce and increments each ring. Auto-cycles every 2 seconds.",
  "useWhen": "Notification icons, alert triggers, inbox or activity bell in nav bars or dashboards.",
  "avoidWhen": "Passive display contexts — remove the auto-cycle loop before production use. Avoid where badge count semantics need real data wiring.",
- "agentPrompt": "Change badge color from #ff4d6d to #6366f1, increase swing angle from 16deg to 24deg in the swing array, and slow the auto-cycle interval from 2000 to 3000ms.",
+ "agentPrompt": "Change badge color from #ff4d6d to #6366f1, increase swing angle from 16deg to 24deg in the swing array, and slow the auto-cycle interval from 2000 to 3000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "bell fill color (#ffd45c)",
   "badge background (#ff4d6d)",
   "swing angles array ([0,-16,14,-10,7,-4,0])",
-  "auto-cycle interval (2000ms)",
   "wave expansion scale (1.8)",
-  "ring animation duration (820ms)"
+  "ring animation duration (820ms)",
+  "idle demo cadence (FIRST=450 / DEMO_EVERY=2600 / IDLE_BACK=3600 ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause/resume guard",
   "prefers-reduced-motion check (reduce var)",
   "Web Animations API animate() calls on bell + clap + wave + badge",
-  "IIFE-free but click listener on wrap"
+  "IIFE wrapper + click listener on wrap",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Auto-cycles and resets counter at n>=4 — wire to real notification count before shipping",
+  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
   "Badge div lacks aria-live region for screen reader announcements",
   "SVG bell path hardcoded — not easily restyled beyond fill color"
  ],
@@ -50,7 +69,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bell",
@@ -74,6 +94,7 @@
 </div>
 <div class="cap">Notification</div>
 <script>
+(()=>{
 const bell=document.getElementById('bell'),clap=document.getElementById('clap'),badge=document.getElementById('badge'),wave=document.getElementById('wave'),wrap=document.getElementById('wrap');
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;let n=0;
 const swing=[0,-16,14,-10,7,-4,0].map((d,i,a)=>({transform:'rotate('+d+'deg)',offset:i/(a.length-1)}));
@@ -84,11 +105,29 @@ function ring(){
   n++;badge.textContent=n;
   badge.animate([{transform:'scale(0)'},{transform:'scale(1.4)'},{transform:'scale(1)'}],{duration:420,fill:'forwards',easing:'cubic-bezier(.2,1.5,.4,1)'});
 }
-wrap.addEventListener('click',ring);
-let timer;
-function loop(){if(reduce)return;timer=setTimeout(()=>{if(n>=4){n=0;badge.style.transform='scale(0)';}else ring();loop();},2000);}
-document.addEventListener('visibilitychange',()=>{document.hidden?clearTimeout(timer):loop();});
-loop();
+/* Idle demo: a bell nobody clicks reads as dead on the wall, so it rings itself — first ring
+   ~FIRST ms after mount, then one every DEMO_EVERY ms, through the same ring() a real click
+   runs. A real click takes over (demo off); the demo returns after IDLE_BACK ms of quiet.
+   setInterval drives it so the cadence stays even. */
+const TICK=100,FIRST=450,DEMO_EVERY=2600,IDLE_BACK=3600;
+let demo=true,t=0,idle=0,timer=0,firstRun=true;
+function takeover(){demo=false;idle=0;}
+wrap.addEventListener('click',()=>{takeover();ring();});
+function tick(){
+  if(!demo){idle+=TICK;if(idle>=IDLE_BACK){demo=true;t=0;firstRun=true;}return;}
+  t+=TICK;if(t<(firstRun?FIRST:DEMO_EVERY))return;
+  t=0;firstRun=false;
+  if(n>=4)n=0;   // inbox cleared — the next ring re-pops the badge at 1
+  ring();
+}
+function start(){if(!timer&&!reduce)timer=setInterval(tick,TICK);}
+function stop(){clearInterval(timer);timer=0;}
+document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',(e)=>{const d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))document.documentElement.setAttribute('data-theme',d.theme);});
+if(reduce){n=2;badge.textContent=n;badge.style.transform='scale(1)';}   // reduced motion: one static, representative state
+else start();
+})();
 </script>
 </body>
 </html>

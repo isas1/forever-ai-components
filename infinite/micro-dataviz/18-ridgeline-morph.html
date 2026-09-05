@@ -5,11 +5,26 @@
 <meta name="description" content="Stacked rust-toned ridgeline of layered density curves continuously morphing between bimodal and unimodal peaks with glowing crests.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ridgeline Morph</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1C1B1A;}
+  /* theme tokens — dark values are the defaults; the rgb triples feed the JS rgba() alphas
+     (--rm-fill ridge wash, --rm-crest top edge, --rm-peak mode markers) */
+  :root{
+    --rm-bg:#1C1B1A; --rm-accent:#AE6147; --rm-tick:rgba(174,97,71,0.07);
+    --rm-fill:48,43,46; --rm-crest:174,97,71; --rm-peak:255,255,255; --rm-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --rm-bg:#f4f2f0; --rm-accent:#a35b43; --rm-tick:rgba(163,91,67,0.16);
+    --rm-fill:214,196,184; --rm-crest:163,91,67; --rm-peak:60,32,22; --rm-cap-o:.6;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--rm-bg);}
   #rm-c{display:block;width:100%;height:100%;}
   .rm-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:#AE6147;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--rm-accent);opacity:var(--rm-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +34,21 @@
  "description": "14 stacked rust-toned density curves continuously morph between bimodal and unimodal distributions with glowing crests; pointer Y position amplifies nearby ridges.",
  "useWhen": "Data dashboard hero backgrounds, statistical visualization demos, ambient displays with an analytical aesthetic.",
  "avoidWhen": "Contexts needing real data — distributions are synthetic. Light backgrounds (hardcoded dark background).",
- "agentPrompt": "Change ROWS to 10, set accent color AC to '#80cbc4' (teal), and slow the morph cycle by changing t+=0.006 to t+=0.003.",
+ "agentPrompt": "Change ROWS to 10, set accent color AC to '#80cbc4' (teal), and slow the morph cycle by changing t+=0.006 to t+=0.003. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "row count (ROWS=14)",
   "morph speed (t += 0.006)",
   "accent color (AC='#AE6147')",
   "ridge height multiplier (ridge=gap*3.1)",
-  "sample resolution (SAMP=120)"
+  "sample resolution (SAMP=120)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion guard (static single frame)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and canvas fill — must change both to alter theme",
@@ -44,7 +61,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "ridgeline",
@@ -65,7 +83,26 @@
 (function(){
   const cv=document.getElementById('rm-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const AC='#AE6147';
+  // theme: every colour the canvas draws with is read from the tokens, once per switch
+  const root=document.documentElement, C={};
+  let ready=0;
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--rm-bg').trim();
+    C.ac=cs.getPropertyValue('--rm-accent').trim();
+    C.tick=cs.getPropertyValue('--rm-tick').trim();
+    C.fill=cs.getPropertyValue('--rm-fill').trim();
+    C.crest=cs.getPropertyValue('--rm-crest').trim();
+    C.peak=cs.getPropertyValue('--rm-peak').trim();
+    if(reduce&&ready)frame();                   // running loop repaints itself
+  }
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
+  syncTheme();
   let W,H,DPR;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -97,7 +134,7 @@
 
   function frame(){
     t+=reduce?0:0.006;
-    ctx.fillStyle='#1C1B1A';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
 
     const padX=W*0.10, padTop=H*0.12, padBot=H*0.10;
     const plotW=W-padX*2, plotH=H-padTop-padBot;
@@ -106,7 +143,7 @@
     const n=nudge; nudge*=0.93;
 
     // faint baseline axis ticks
-    ctx.strokeStyle='rgba(174,97,71,0.07)';ctx.lineWidth=1;
+    ctx.strokeStyle=C.tick;ctx.lineWidth=1;
     for(let g=0;g<=4;g++){
       const gx=padX+plotW*g/4;
       ctx.beginPath();ctx.moveTo(gx,padTop);ctx.lineTo(gx,H-padBot);ctx.stroke();
@@ -148,7 +185,7 @@
       // fill: dark violet wash, depth-shaded so front rows read brighter
       const dep=i/(ROWS-1);
       const fl=0.40+0.30*(1-dep);
-      ctx.fillStyle=`rgba(${28+ (140-28)*0.18|0},${27+ (132-27)*0.16|0},${26+ (120-26)*0.22|0},${fl})`;
+      ctx.fillStyle=`rgba(${C.fill},${fl})`;
       ctx.fill();
 
       // accent stroke along the top edge, brighter where density is high
@@ -159,15 +196,15 @@
         if(s===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
       }
       const lal=0.30+0.55*(1-dep);
-      ctx.strokeStyle=`rgba(174,97,71,${lal})`;
+      ctx.strokeStyle=`rgba(${C.crest},${lal})`;
       ctx.lineWidth=1.1;
-      ctx.shadowColor=AC;ctx.shadowBlur=6*(1-dep)+1;
+      ctx.shadowColor=C.ac;ctx.shadowBlur=6*(1-dep)+1;
       ctx.stroke();
       ctx.shadowBlur=0;
 
       // small mode-peak markers (truth-per-pixel: mark the actual maxima)
       const peaks=m>0.18?[mu1,mu2]:[ (mu1+mu2)/2 ];
-      ctx.fillStyle=`rgba(255,255,255,${0.5+0.4*(1-dep)})`;
+      ctx.fillStyle=`rgba(${C.peak},${0.5+0.4*(1-dep)})`;
       peaks.forEach(mp=>{
         let dd=gauss(mp,mu1,w1)+a2*gauss(mp,mu2,w2);
         const px=padX+plotW*mp, py=yb-dd*inv*h;
@@ -181,6 +218,7 @@
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  ready=1;
   if(reduce){frame();}else start();
 })();
 </script>

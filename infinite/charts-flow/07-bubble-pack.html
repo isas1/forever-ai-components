@@ -5,14 +5,20 @@
 <meta name="description" content="Circle-packing bubble chart where mint, teal, amber and coral circles settle together under gentle gravity, the largest values pulling towar">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bubble Pack</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root{--bg:#0a0d12;--accent:#5ad1a0}
+  :root{--bg:#0a0d12;--accent:#5ad1a0;--ch07-cap:#fff;--ch07-cap-o:.42;--ch07-cross:rgba(217,210,196,0.07);--ch07-vig0:rgba(90,209,160,0.05);--ch07-vig1:rgba(10,13,18,0);--ch07-c0:#5ad1a0;--ch07-c1:#2f9e7e;--ch07-c2:#e8b552;--ch07-c3:#e0654a;--ch07-c4:#7d8fb3;--ch07-c5:#d9d2c4} /* dark = defaults; JS re-reads these in syncTheme() */
+  :root[data-theme="light"]{--bg:#f1f4f8;--accent:#237e59;--ch07-cap:#1b2130;--ch07-cap-o:.5;--ch07-cross:rgba(40,50,60,0.10);--ch07-vig0:rgba(35,126,89,0.06);--ch07-vig1:rgba(241,244,248,0);--ch07-c0:#2c9e6f;--ch07-c1:#1d6b54;--ch07-c2:#906613;--ch07-c3:#c63f22;--ch07-c4:#5a6f99;--ch07-c5:#7c6d50} /* light re-theme */
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%}
   body{background:var(--bg);overflow:hidden}
   #ch07-stage{position:fixed;inset:0;display:block}
   #ch07-c{position:absolute;inset:0;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ch07-cap);opacity:var(--ch07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -22,20 +28,22 @@
  "description": "64 mint/teal/amber/coral circles settle under gravity with collision physics; size encodes value. Large bubbles pull toward center with a breathing pulse.",
  "useWhen": "Data visualization contexts needing a lively proportional chart — portfolio breakdowns, category distributions, or ambient dashboard backgrounds.",
  "avoidWhen": "Contexts requiring labeled or interactive data points — bubbles have no text labels and no click/hover handlers. Avoid on low-end devices if many redraws are expected.",
- "agentPrompt": "Change bubble count to 80 by setting N=80, swap PAL array to blues/purples palette, and slow breathing animation by changing the 0.0012 multiplier to 0.0006.",
+ "agentPrompt": "Change bubble count to 80 by setting N=80, swap PAL array to blues/purples palette, and slow breathing animation by changing the 0.0012 multiplier to 0.0006. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "bubble count (N=64)",
   "color palette (PAL array)",
   "gravity strength (k=0.0016*dt weight factor)",
   "breathing speed (t*0.0012)",
   "radius scale (scale = m * 0.052)",
-  "damping factor (0.86)"
+  "damping factor (0.86)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "typed-array particle store (px/py/vx/vy/pr/pv/tr)",
   "visibilitychange pause/resume",
   "reduced-motion static settle path",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "O(N^2) pairwise collision loop — keep N at or below 110 cap or perf degrades",
@@ -49,7 +57,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bubble-chart",
@@ -76,8 +85,17 @@
   var cv = document.getElementById('ch07-c');
   var ctx = cv.getContext('2d');
 
-  // Bauhaus / constructivist data palette around the brand mint.
+  // Bauhaus / constructivist data palette around the brand mint — read from tokens in syncTheme.
   var PAL = ['#5ad1a0','#2f9e7e','#e8b552','#e0654a','#7d8fb3','#d9d2c4'];
+  var root = document.documentElement;
+  var BG='#0a0d12', CROSS='rgba(217,210,196,0.07)', VIG0='rgba(90,209,160,0.05)', VIG1='rgba(10,13,18,0)';
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    for(var i=0;i<PAL.length;i++) PAL[i]=g('--ch07-c'+i);
+    BG=g('--bg'); CROSS=g('--ch07-cross'); VIG0=g('--ch07-vig0'); VIG1=g('--ch07-vig1');
+    if(W){ buildVignette(); if(reduce) draw(0); }   // the cached gradient bakes in its colours
+  }
+  addEventListener('message',function(e){ var d=e.data; if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
 
   var W=0,H=0,DPR=1,CX=0,CY=0,scale=1;
   var N=64;                       // <=110 cap
@@ -157,15 +175,15 @@
   var vg=null;
   function buildVignette(){
     vg=ctx.createRadialGradient(CX,CY,0,CX,CY,Math.max(W,H)*0.62);
-    vg.addColorStop(0,'rgba(90,209,160,0.05)');
-    vg.addColorStop(1,'rgba(10,13,18,0)');
+    vg.addColorStop(0,VIG0);
+    vg.addColorStop(1,VIG1);
   }
 
   function draw(t){
-    ctx.fillStyle='#0a0d12'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
     if(vg){ ctx.fillStyle=vg; ctx.fillRect(0,0,W,H); }
     // structural Bauhaus crosshair (static, thin)
-    ctx.strokeStyle='rgba(217,210,196,0.07)'; ctx.lineWidth=1;
+    ctx.strokeStyle=CROSS; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(CX,0); ctx.lineTo(CX,H); ctx.moveTo(0,CY); ctx.lineTo(W,CY); ctx.stroke();
 
     for(var i=0;i<N;i++){
@@ -203,7 +221,7 @@
   function start(){ if(running)return; running=true; last=0; raf=requestAnimationFrame(frame); }
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
-  function init(){ layout(); buildVignette(); place(); }
+  function init(){ layout(); syncTheme(); place(); }
   init();
 
   if(reduce){

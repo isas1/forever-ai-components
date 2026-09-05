@@ -5,12 +5,31 @@
 <meta name="description" content="Hot-pink gooey metaball blobs drift and merge fluidly via high-contrast threshold, with the cursor adding an extra attracting blob.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Metaball Fluid</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#120016}
-  #c{display:block;width:100%;height:100%;filter:contrast(18) blur(0.4px)}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --c07-fx is the goo threshold
+     filter; --c07-rgb0/--c07-rgbk are the per-pixel blob colour (base + field-strength slope)
+     the JS writes into the low-res ImageData; --c07-scap caps the field strength that feeds
+     that ramp. Dark brightens toward a white-hot core (uncapped); light runs the ramp the
+     other way, pink rim to deep-wine core, capped so the core never blows out to black. */
+  :root{
+    --c07-bg:#120016; --c07-cap:#ff5ea8; --c07-cap-o:.6;
+    --c07-fx:contrast(18) blur(0.4px); --c07-rgb0:255 40 120; --c07-rgbk:0 30 20; --c07-scap:1e9;
+  }
+  :root[data-theme="light"]{
+    --c07-bg:#f7eef8; --c07-cap:#d60062; --c07-cap-o:.7;
+    --c07-fx:contrast(3) blur(0.4px); --c07-rgb0:167.4 137.8 151.8; --c07-rgbk:-2.07 -3.11 -2.51; --c07-scap:10;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c07-bg)}
+  #c{display:block;width:100%;height:100%;filter:var(--c07-fx)}
   .wrap{position:relative;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#ff5ea8;opacity:.6;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
+    color:var(--c07-cap);opacity:var(--c07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -19,17 +38,19 @@
  "description": "7 hot-pink blobs drift and merge via a high-contrast canvas threshold; cursor adds an attracting blob that pulls them toward the pointer.",
  "useWhen": "Ambient backgrounds, loading screens, creative portfolio hero sections.",
  "avoidWhen": "Low-end mobile (CPU-bound pixel loop). Contexts requiring legible text overlays.",
- "agentPrompt": "Change color from pink to electric blue (#00eaff), reduce blob count to 5, increase off-screen resolution for sharper edges (divide by 2 instead of 4).",
+ "agentPrompt": "Change color from pink to electric blue (#00eaff), reduce blob count to 5, increase off-screen resolution for sharper edges (divide by 2 instead of 4). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "blob count (n=7)",
   "blob color (hue base 300)",
   "off-screen resolution divisor (/4)",
-  "pointer attractor strength (120)"
+  "pointer attractor strength (120)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "low-res offscreen canvas pattern (critical for perf)",
   "visibility pause",
-  "pointer blob attractor"
+  "pointer blob attractor",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound pixel loop — heavy on low-end devices",
@@ -38,7 +59,8 @@
  "tier": "curated",
  "labels": [
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "canvas",
@@ -56,11 +78,21 @@
 <div class="wrap"><canvas id="c"></canvas></div>
 <div class="cap">Metaball Fluid</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
 let W,H,DPR,blobs=[],t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 // low-res offscreen for cheap metaballs
 const off=document.createElement('canvas'),ox=off.getContext('2d');
 let LW,LH,imgData;
+const root=document.documentElement;
+let R0=255,G0=40,B0=120,RK=0,GK=30,BK=20,SCAP=1e9;   // blob colour = base + capped field strength * slope, per channel
+function syncTheme(){const cs=getComputedStyle(root),n=k=>cs.getPropertyValue(k).trim().split(/\s+/).map(Number);
+  const a=n('--c07-rgb0'),b=n('--c07-rgbk');
+  R0=a[0];G0=a[1];B0=a[2];RK=b[0];GK=b[1];BK=b[2];SCAP=n('--c07-scap')[0];}
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',e=>{const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
+syncTheme();
 function size(){DPR=1;W=cv.clientWidth;H=cv.clientHeight;cv.width=W;cv.height=H;
   LW=Math.max(40,Math.round(W/4));LH=Math.max(40,Math.round(H/4));off.width=LW;off.height=LH;
   imgData=ox.createImageData(LW,LH);init();}
@@ -85,7 +117,8 @@ function step(){
     if(hasP){const dx=xx-px,dy=yy-py;s+=120/(dx*dx+dy*dy+1);}
     const i=(yy*LW+xx)*4;
     if(s>1){const hue=300-Math.min(120,s*40);
-      d[i]=255;d[i+1]=Math.min(255,40+s*30);d[i+2]=Math.min(255,120+s*20);d[i+3]=255;}
+      const sc=s<SCAP?s:SCAP;
+      d[i]=Math.min(255,R0+sc*RK);d[i+1]=Math.min(255,G0+sc*GK);d[i+2]=Math.min(255,B0+sc*BK);d[i+3]=255;}
     else{d[i+3]=0;}
   }
   ox.putImageData(img,0,0);
@@ -97,6 +130,7 @@ function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
 play();
+})();
 </script>
 </body>
 </html>

@@ -5,20 +5,35 @@
 <meta name="description" content="Lenia smooth-life automaton: glowing organic teal-to-cyan blobs glide and pulse across a dark field with a soft radial glow.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lenia</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#06070b}
+  /* theme tokens — dark defaults (solid-dark-bg contract), light in the one
+     [data-theme="light"] block. --fr04-r0..r4 = the density ramp the JS blits: dark
+     brighter = denser, light the same hues inverted so denser = deeper ink. The canvas
+     composites additively on the dark ground, so light swaps the blend to multiply. */
+  :root{--fr04-bg:#06070b;--fr04-bg1:#0c0e18;--fr04-bg2:#06070b;--fr04-blend:screen;
+    --fr04-g1:rgba(29,172,201,.16);--fr04-g2:rgba(96,210,200,.06);--fr04-cap:#fff;--fr04-cap-o:.42;
+    --fr04-r0:#06070b;--fr04-r1:#0f3c46;--fr04-r2:#1dacc9;--fr04-r3:#8ce0d4;--fr04-r4:#e8f5f0}
+  :root[data-theme="light"]{--fr04-bg:#eef5f6;--fr04-bg1:#f8fcfc;--fr04-bg2:#eef5f6;--fr04-blend:multiply;
+    --fr04-g1:rgba(21,122,143,.13);--fr04-g2:rgba(45,140,130,.06);--fr04-cap:#123338;--fr04-cap-o:.62;
+    --fr04-r0:#f1f2f6;--fr04-r1:#c6e7ee;--fr04-r2:#3ab9d3;--fr04-r3:#308c7f;--fr04-r4:#2c5847}
+  html,body{margin:0;height:100%;background:var(--fr04-bg)}
   #fr04-stage{position:fixed;inset:0;overflow:hidden;background:
-    radial-gradient(120% 120% at 50% 40%, #0c0e18 0%, #06070b 70%);
+    radial-gradient(120% 120% at 50% 40%, var(--fr04-bg1) 0%, var(--fr04-bg2) 70%);
     display:grid;place-items:center}
   /* static glow — never repaints */
   #fr04-glow{position:absolute;width:78%;height:78%;border-radius:50%;
-    background:radial-gradient(circle, rgba(29,172,201,.16) 0%, rgba(96,210,200,.06) 45%, transparent 70%);
+    background:radial-gradient(circle, var(--fr04-g1) 0%, var(--fr04-g2) 45%, transparent 70%);
     pointer-events:none}
   #fr04-c{width:100%;height:100%;display:block;
     image-rendering:auto;
-    mix-blend-mode:screen;
+    mix-blend-mode:var(--fr04-blend);
     will-change:transform}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--fr04-cap);opacity:var(--fr04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -28,19 +43,21 @@
  "description": "Lenia smooth-life automaton: glowing teal-to-cyan blobs drift and pulse on a dark field via a typed-array convolution sim scaled up with CSS.",
  "useWhen": "Ambient hero backgrounds for science, generative art, or creative tech themes. Dark-mode showcases needing organic, living motion.",
  "avoidWhen": "Low-end CPUs (toroidal convolution loop runs every frame). Contexts needing light backgrounds or legible text overlaid on the canvas.",
- "agentPrompt": "Change MU to 0.18 and SIG to 0.025 to shift blob behavior toward tighter, faster-pulsing clusters, and update the ramp stops to warm amber tones.",
+ "agentPrompt": "Change MU to 0.18 and SIG to 0.025 to shift blob behavior toward tighter, faster-pulsing clusters, and update the ramp stops to warm amber tones. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid size (N=96)",
   "kernel radius (R=12)",
   "growth params (MU=0.15, SIG=0.03, DT=0.1)",
   "color ramp stops array",
-  "simulation rate (STEP=1000/22)"
+  "simulation rate (STEP=1000/22)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static settled frame)",
   "visibilitychange pause",
-  "toroidal boundary wrapping in step()"
+  "toroidal boundary wrapping in step()",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "O(N^2 x KLEN) convolution per frame — heavy on low-end devices at larger grid sizes",
@@ -52,7 +69,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "cellular-automata",
@@ -154,24 +172,30 @@
   // --- render: single ImageData blit at grid res, CSS scales up ---
   var img = ctx.createImageData(N,N);
   var data = img.data;
-  // accent palette ramp: deep teal -> #1DACC9 -> teal highlight
+  // density ramp, rebuilt from the CSS tokens on every theme switch: dark runs
+  // bg -> deep teal -> accent -> highlight, light runs the same hues inverted.
   var RAMP=256, rampR=new Uint8Array(RAMP), rampG=new Uint8Array(RAMP), rampB=new Uint8Array(RAMP);
-  (function(){
+  var root=document.documentElement, STOP_AT=[0.00,0.30,0.62,0.85,1.00];
+  function hex2rgb(h){ h=(h||'').trim().replace('#','');
+    if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; var v=parseInt(h,16);
+    return h.length===6&&isFinite(v)?[(v>>16)&255,(v>>8)&255,v&255]:[0,0,0]; }
+  function buildRamp(){
+    var cs=getComputedStyle(root);
     function lerp(a,b,t){return a+(b-a)*t;}
-    var stops=[
-      [0.00,  6,  7, 11],
-      [0.30, 15, 60, 70],
-      [0.62, 29,172,201],
-      [0.85,140,224,212],
-      [1.00,232,245,240]
-    ];
-    for(var i=0;i<RAMP;i++){
+    var stops=[],i;
+    for(i=0;i<5;i++){ var c=hex2rgb(cs.getPropertyValue('--fr04-r'+i)); stops.push([STOP_AT[i],c[0],c[1],c[2]]); }
+    for(i=0;i<RAMP;i++){
       var t=i/(RAMP-1),a=stops[0],b=stops[stops.length-1];
       for(var j=0;j<stops.length-1;j++){ if(t>=stops[j][0]&&t<=stops[j+1][0]){a=stops[j];b=stops[j+1];break;} }
       var lt=(t-a[0])/(b[0]-a[0]||1);
       rampR[i]=lerp(a[1],b[1],lt)|0; rampG[i]=lerp(a[2],b[2],lt)|0; rampB[i]=lerp(a[3],b[3],lt)|0;
     }
-  })();
+  }
+  function syncTheme(){ buildRamp(); draw(); }   // repaint at once, reduced-motion included
+  addEventListener('message',function(ev){ var d=ev.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme(); } });
+  buildRamp();
 
   function draw(){
     var p=0;

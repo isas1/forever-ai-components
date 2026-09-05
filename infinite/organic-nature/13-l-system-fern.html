@@ -5,11 +5,31 @@
 <meta name="description" content="L-system fern frond on near-black, fiddlehead tips uncurl and respire in a glowing green breathing loop, pointer accelerates growth.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>L-System Fern</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#071510;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. --fern-t0/-t1 are the stem->tip tone
+     ramp and --fern-fade the per-frame trail wash, all "r,g,b" so the alpha maths in
+     the script is untouched; --fern-blend keeps the additive glow on black and turns
+     it into a soft ink halo on paper (where the tip ramp runs dark instead of bright). */
+  :root{
+    --fern-bg:#071510; --fern-cap:#5fcf80; --fern-cap-o:.34;
+    --fern-fade:7,21,16; --fern-t0:40,110,70; --fern-t1:95,207,128;
+    --fern-blend:lighter; --fern-glow:95,207,128;
+  }
+  :root[data-theme="light"]{
+    --fern-bg:#eef5ee; --fern-cap:#267e40; --fern-cap-o:.62;
+    --fern-fade:238,245,238; --fern-t0:132,176,142; --fern-t1:26,96,54;
+    --fern-blend:source-over; --fern-glow:38,126,64;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--fern-bg);}
   #fern-cv{display:block;width:100%;height:100%;}
   .fern-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:#5fcf80;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--fern-cap);opacity:var(--fern-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +39,22 @@
  "description": "A procedural fern frond grows depth-by-depth from a fiddlehead spiral, uncurling and breathing back in a looping cycle; tips glow bright green as they emerge.",
  "useWhen": "Nature or botanical themes, ambient generative backgrounds, creative portfolio heroes, or anywhere a slow organic growth loop adds life.",
  "avoidWhen": "Contexts requiring a static or motionless background; low-end devices where many canvas draw calls per frame may stutter.",
- "agentPrompt": "Change the base angle unit from AX=0.018 to AX=0.028 for tighter spiral coils, and shift the tip accent color in the tone() function to a warm gold (r=207,g=180,b=60) instead of green.",
+ "agentPrompt": "Change the base angle unit from AX=0.018 to AX=0.028 for tighter spiral coils, and shift the tip accent color in the tone() function to a warm gold (r=207,g=180,b=60) instead of green. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "base angle unit (AX=0.018)",
   "max recursion depth (MAXD=46)",
   "animation speed (sp=0.0042)",
   "stem color in tone() function",
   "growth scale (scale=Math.min(W,H)/520)",
-  "pointer/click boost strength (pointerBoost=1 / 1.6)"
+  "pointer/click boost strength (pointerBoost=1 / 1.6)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Segment count grows large at MAXD=46 — reducing depth significantly cuts draw cost",
@@ -46,7 +68,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "l-system",
@@ -67,12 +90,34 @@
 (function(){
   const cv=document.getElementById('fern-cv'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const root=document.documentElement;
+  // every colour the canvas draws with comes from the tokens, re-read once per switch
+  const C={bg:'',fade:'',t0:[40,110,70],t1:[95,207,128],blend:'lighter',glow:''};
+  function syncTheme(){
+    const cs=getComputedStyle(root),trip=k=>cs.getPropertyValue(k).split(',').map(Number);
+    C.bg=cs.getPropertyValue('--fern-bg').trim();
+    C.fade=cs.getPropertyValue('--fern-fade').trim();
+    C.t0=trip('--fern-t0');C.t1=trip('--fern-t1');
+    C.blend=cs.getPropertyValue('--fern-blend').trim();
+    C.glow=cs.getPropertyValue('--fern-glow').trim();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      // repaint the ground at once: the 0.30 trail wash would otherwise ghost the old palette
+      ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);if(reduce)render(1);
+    }
+  });
+  syncTheme();
   let W,H,DPR,scale;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
-    scale=Math.min(W,H)/520;
+    // the frond is ~64 turtle units tall: /520 drew it 32px high in a 264px tile with strokes
+    // thicker than it was long (audit: a blob at the caption). /88 fills ~75% of the tile.
+    scale=Math.min(W,H)/88;
   }
   addEventListener('resize',size);size();
 
@@ -85,7 +130,7 @@
     if(depth>maxDepth||len<2)return;
     // pinna stem segment
     const nx=x+Math.cos(ang)*len, ny=y+Math.sin(ang)*len;
-    segs.push({x0:x,y0:y,x1:nx,y1:ny,d:depth,w:Math.max(.4,(maxDepth-depth)*0.55+order*0.4),order:order});
+    segs.push({x0:x,y0:y,x1:nx,y1:ny,d:depth,w:Math.max(.22,(maxDepth-depth)*0.05+order*0.12),order:order});
     // continue main rachis
     grow(nx,ny,ang-0.03,len*0.86,depth+1,maxDepth,order);
     // side pinnae alternate left/right, each is itself a smaller fern (self-similar)
@@ -101,21 +146,21 @@
   const maxBirth=segs[segs.length-1].d;
 
   // respiration cycle: grow out (uncurl) then breathe back in
-  let phase=0;
+  let phase=1.35;          // mount half-unfurled: from 0 the frond took 12s to appear (audit: flat)
   let pointerBoost=0;
   cv.addEventListener('pointermove',()=>{pointerBoost=1;});
   cv.addEventListener('click',()=>{pointerBoost=1.6;});
 
   function tone(t){
-    // deep stem green -> bright accent at the curling tips
-    const r=Math.round(40+ (95-40)*t);
-    const g=Math.round(110+ (207-110)*t);
-    const b=Math.round(70+ (128-70)*t);
+    // deep stem green -> bright accent at the curling tips (light: pale sage -> deep green)
+    const r=Math.round(C.t0[0]+(C.t1[0]-C.t0[0])*t);
+    const g=Math.round(C.t0[1]+(C.t1[1]-C.t0[1])*t);
+    const b=Math.round(C.t0[2]+(C.t1[2]-C.t0[2])*t);
     return 'rgb('+r+','+g+','+b+')';
   }
 
   function render(growth){
-    ctx.fillStyle='rgba(7,21,16,'+(reduce?1:0.30)+')';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba('+C.fade+','+(reduce?1:0.30)+')';ctx.fillRect(0,0,W,H);
     ctx.save();
     // anchor near bottom-center, fern rises upward
     ctx.translate(W*0.5, H*0.94);
@@ -144,9 +189,9 @@
       const glow=1-e;
       if(glow>0.25){
         ctx.save();
-        ctx.globalCompositeOperation='lighter';
-        ctx.strokeStyle='rgba(95,207,128,'+(0.18*glow)+')';
-        ctx.lineWidth=s.w*(0.6+0.4*e)+6*glow;
+        ctx.globalCompositeOperation=C.blend;
+        ctx.strokeStyle='rgba('+C.glow+','+(0.18*glow)+')';
+        ctx.lineWidth=s.w*(0.6+0.4*e)+1.4*glow;
         ctx.beginPath();ctx.moveTo(s.x0,s.y0);ctx.lineTo(x1,y1);ctx.stroke();
         ctx.restore();
       }
@@ -161,7 +206,7 @@
 
   function frame(){
     if(!reduce){
-      const sp = 0.0042*(1+pointerBoost);
+      const sp = 0.0075*(1+pointerBoost);       // ~7s to unfurl, then breathe back
       phase += sp;
       pointerBoost*=0.95;
     }
@@ -175,7 +220,7 @@
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){ctx.fillStyle='#071510';ctx.fillRect(0,0,W,H);render(1);}else start();
+  if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);render(1);}else start();
 })();
 </script>
 </body>

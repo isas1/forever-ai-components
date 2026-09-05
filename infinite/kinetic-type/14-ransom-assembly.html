@@ -5,11 +5,26 @@
 <meta name="description" content="Clashing mixed-font letters on cut-paper swatches fly in from random edges and spring-tumble into the word RANSOM, then reassemble.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ransom Assembly</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#141414;}
+  /* theme tokens — dark values are the defaults; light re-theme = the [data-theme="light"] block.
+     canvas paints its own bg every frame, so JS reads these via syncTheme(), not CSS. */
+  :root{
+    --ra-bg:#141414; --ra-accent:#e63946; --ra-accent-rgb:230,57,70; --ra-swatch:#ededed;
+    --ra-ink:#141414; --cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --ra-bg:#f5f1e8; --ra-accent:#d61b29; --ra-accent-rgb:214,27,41; --ra-swatch:#ffffff;
+    --ra-ink:#141414; --cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--ra-bg);}
   #ra-c{display:block;width:100%;height:100%;}
   .ra-cap{position:fixed;right:10px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
-       letter-spacing:.14em;color:#e63946;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--ra-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +34,22 @@
  "description": "Mixed-font letters on cut-paper swatches fly in from random edges and spring-tumble into RANSOM, then reassemble. Click to restart.",
  "useWhen": "Dark hero sections needing dramatic kinetic type. Title screens, creative portfolio intros, or thriller-themed UIs.",
  "avoidWhen": "Contexts requiring readable static text at all times — letters are off-screen between cycles. Low-end mobile may stutter.",
- "agentPrompt": "Change WORD to 'HELLO', swap ACC to '#f4a261', and increase spring stiffness from 0.10 to 0.18 so letters snap into place faster.",
+ "agentPrompt": "Change WORD to 'HELLO', swap ACC to '#f4a261', and increase spring stiffness from 0.10 to 0.18 so letters snap into place faster. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "target word (WORD constant)",
   "accent color (ACC = #e63946)",
   "spring stiffness range (0.10 + random*0.05)",
   "damping range (0.78 + random*0.06)",
   "font families array (fams)",
-  "settle hold duration (settleHold > 120 frames)"
+  "settle hold duration (settleHold > 120 frames)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and ctx.setTransform",
   "visibilitychange stop/start guard",
   "prefers-reduced-motion static fallback",
-  "glyphW cache (measureText called once in layout, not per frame)"
+  "glyphW cache (measureText called once in layout, not per frame)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "WORD is hardcoded to 6 chars — fams/wts/caseFlip/wsc arrays must be extended to match if word length changes",
@@ -46,7 +63,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -67,7 +85,19 @@
 (function(){
   const cv=document.getElementById('ra-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const WORD="RANSOM", BG="#141414", ACC="#e63946";
+  const WORD="RANSOM";
+  // JS-drawn colours — read from tokens so the canvas repaints correctly on theme switch
+  const htmlEl=document.documentElement;
+  const C={bg:'#141414',accent:'#e63946',accentRgb:'230,57,70',swatch:'#ededed',ink:'#141414'};
+  function syncTheme(){
+    const cs=getComputedStyle(htmlEl);
+    C.bg=(cs.getPropertyValue('--ra-bg')||'#141414').trim();
+    C.accent=(cs.getPropertyValue('--ra-accent')||'#e63946').trim();
+    C.accentRgb=(cs.getPropertyValue('--ra-accent-rgb')||'230,57,70').trim();
+    C.swatch=(cs.getPropertyValue('--ra-swatch')||'#ededed').trim();
+    C.ink=(cs.getPropertyValue('--ra-ink')||'#141414').trim();
+  }
+  syncTheme();
   // each glyph: distinct clashing weight/family/size/case -> ransom-note clash
   const fams=['Georgia,serif','"Times New Roman",serif','Impact,sans-serif',
               'Courier,monospace','"Arial Black",sans-serif','Verdana,sans-serif'];
@@ -145,7 +175,7 @@
     const pw=g.tx? (xsW(i)+s*0.22): s*0.8, ph=s*1.18;
     const w=xsW(i)+s*0.24;
     const inv=caseFlip[i];
-    ctx.fillStyle= inv? ACC : '#ededed';
+    ctx.fillStyle= inv? C.accent : C.swatch;
     // jagged-ish swatch via slightly rotated rect
     ctx.save();
     ctx.rotate((i%2?1:-1)*0.02);
@@ -156,7 +186,7 @@
     // the glyph
     ctx.font=wts[i]+' '+s+'px '+fams[i];
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillStyle= inv? '#141414' : '#141414';
+    ctx.fillStyle= C.ink;
     ctx.fillText(ch, 0, s*0.04);
     ctx.restore();
   }
@@ -167,9 +197,9 @@
     ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
   }
   function frame(){
-    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     // faint baseline guide
-    ctx.strokeStyle='rgba(230,57,70,0.16)';ctx.lineWidth=1;
+    ctx.strokeStyle='rgba('+C.accentRgb+',0.16)';ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(W*0.08,baseY+sizes_max()*0.55);
     ctx.lineTo(W*0.92,baseY+sizes_max()*0.55);ctx.stroke();
     let allSet=true;
@@ -192,9 +222,18 @@
     for(let i=0;i<G;i++){const g=glyphs[i];const d=Math.hypot(g.x-mx,g.y-my);
       if(d<g.sz*0.7){g.vx+=(g.x-mx)*0.06;g.vy+=(g.y-my)*0.06;g.vrot+=0.05;}}
   });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', e=>{
+    const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      htmlEl.setAttribute('data-theme', d.theme);
+      syncTheme();
+      if(reduce){ ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H); for(let i=0;i<G;i++) paper(i,glyphs[i],true); }
+    }
+  });
   layout();
   if(reduce){
-    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     for(let i=0;i<G;i++){const g=glyphs[i];g.x=g.tx;g.y=g.ty;g.rot=0;g.tilt=(i%2?1:-1)*0.04;}
     for(let i=0;i<G;i++) paper(i,glyphs[i],true);
   } else { resetAll(); start(); }

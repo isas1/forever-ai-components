@@ -5,11 +5,24 @@
 <meta name="description" content="Cyan SPH fluid pours into a basin, sloshes and drains on a slow cycle with glowing metaball particles; pointer tilts the liquid.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Liquid Pour SPH</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#071a22;}
+  /* theme tokens — dark defaults; light palette below. --lps-g* feed the baked glow sprite,
+     --lps-blend swaps additive glow for normal blending on a light ground. */
+  :root{--lps-bg:#071a22; --lps-fade:rgba(7,26,34,0.30); --lps-accent:#34d6ff; --lps-cap-o:.34; --lps-blend:lighter;
+    --lps-wall:rgba(52,214,255,0.16); --lps-stream:rgba(52,214,255,0.10); --lps-core:210,248,255; --lps-ca:0.22; --lps-ck:0.5;
+    --lps-g0:rgba(120,236,255,0.26); --lps-g1:rgba(52,214,255,0.182); --lps-g2:rgba(20,120,150,0);}
+  :root[data-theme="light"]{--lps-bg:#eef5f8; --lps-fade:rgba(238,245,248,0.30); --lps-accent:#007694; --lps-cap-o:.62; --lps-blend:source-over;
+    --lps-wall:rgba(0,118,148,0.24); --lps-stream:rgba(0,118,148,0.16); --lps-core:3,58,80; --lps-ca:0.30; --lps-ck:0.5;
+    --lps-g0:rgba(0,96,126,0.26); --lps-g1:rgba(0,130,166,0.182); --lps-g2:rgba(150,200,215,0);}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--lps-bg);}
   #lps{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
-       letter-spacing:.14em;color:#34d6ff;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--lps-accent);opacity:var(--lps-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +32,22 @@
  "description": "200 SPH fluid particles pour into a basin, slosh, and drain on a slow cycle with additive-blend cyan glow; pointer move tilts the fluid sideways.",
  "useWhen": "Ambient hero backgrounds for tech/creative sites, loading screens, interactive art installations requiring realistic-feeling fluid.",
  "avoidWhen": "Low-end mobile or battery-sensitive contexts — double-density SPH relaxation loop runs 2 substeps per frame. Avoid where text legibility over the background matters.",
- "agentPrompt": "Change the fluid color to molten orange by replacing the glow stops to 'rgba(255,140,30,0.26)' and 'rgba(255,100,10,0.182)', and set REST=3.0 to make the fluid less compressed.",
+ "agentPrompt": "Change the fluid color to molten orange by replacing the glow stops to 'rgba(255,140,30,0.26)' and 'rgba(255,100,10,0.182)', and set REST=3.0 to make the fluid less compressed. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "particle count (N=200)",
   "SPH stiffness (STIFF=0.55) and rest density (REST=2.6)",
   "glow color stops in buildGlow()",
   "basin proportions (bx0=W*0.30, bx1=W*0.70, floorY=H*0.82)",
   "pour oscillation amplitude (*(bx1-bx0)*0.22)",
-  "gravity strength (GRAV=0.30)"
+  "gravity strength (GRAV=0.30)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "precomputed glow sprite pattern (buildGlow) — avoids per-particle gradient cost",
   "double-substep loop (2 × dt*0.5) for stability",
   "visibilitychange pause/resume",
-  "reduced-motion static pool fallback"
+  "reduced-motion static pool fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Spatial hash uses string keys — allocation pressure at high N; switch to integer keys for >300 particles",
@@ -45,7 +60,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "sph",
@@ -72,6 +88,15 @@
   // precomputed glow sprite (rebuilt on resize) — avoids createRadialGradient per particle/frame
   const glow=document.createElement('canvas'),gctx=glow.getContext('2d');
   let glowR=0;
+  // all painted colours come from tokens; a flip re-reads them and re-bakes the glow sprite
+  const root=document.documentElement, C={};
+  function syncTheme(){const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    C.bg=g('--lps-bg');C.fade=g('--lps-fade');C.wall=g('--lps-wall');C.stream=g('--lps-stream');C.blend=g('--lps-blend');
+    C.g0=g('--lps-g0');C.g1=g('--lps-g1');C.g2=g('--lps-g2');C.core=g('--lps-core');C.ca=+g('--lps-ca');C.ck=+g('--lps-ck');
+    if(glowR)buildGlow(glowR);}                // a stale sprite would keep the old palette
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();
+      if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);draw();}}});
   function buildGlow(r){
     glowR=Math.max(2,r);
     const d=Math.ceil(glowR*2);
@@ -79,9 +104,7 @@
     const c=glowR;
     const g=gctx.createRadialGradient(c,c,0,c,c,glowR);
     // bake the MAX alpha (0.26); per-particle brightness scales down via globalAlpha
-    g.addColorStop(0,'rgba(120,236,255,0.26)');
-    g.addColorStop(0.45,'rgba(52,214,255,0.182)');
-    g.addColorStop(1,'rgba(20,120,150,0)');
+    g.addColorStop(0,C.g0);g.addColorStop(0.45,C.g1);g.addColorStop(1,C.g2);
     gctx.clearRect(0,0,d,d);
     gctx.fillStyle=g;gctx.fillRect(0,0,d,d);
   }
@@ -93,7 +116,7 @@
     bx0=W*0.30; bx1=W*0.70; floorY=H*0.82; topY=H*0.40;
     buildGlow(S*0.052*0.92);
   }
-  addEventListener('resize',size);size();
+  syncTheme();addEventListener('resize',size);size();
 
   // ---- SPH params (tuned light for ~22 live iframes) ----
   const N=reduce?180:200;
@@ -188,18 +211,18 @@
 
   // ---- render: metaball-ish glow + crest highlights ----
   function draw(){
-    ctx.fillStyle='rgba(7,26,34,0.30)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.fade;ctx.fillRect(0,0,W,H);
     // basin walls
-    ctx.strokeStyle='rgba(52,214,255,0.16)';ctx.lineWidth=Math.max(1.4,S*0.004);
+    ctx.strokeStyle=C.wall;ctx.lineWidth=Math.max(1.4,S*0.004);
     ctx.beginPath();
     ctx.moveTo(bx0,topY); ctx.lineTo(bx0,floorY); ctx.lineTo(bx1,floorY); ctx.lineTo(bx1,topY);
     ctx.stroke();
     // pour stream hint
-    ctx.strokeStyle='rgba(52,214,255,0.10)';ctx.lineWidth=Math.max(1,S*0.006);
+    ctx.strokeStyle=C.stream;ctx.lineWidth=Math.max(1,S*0.006);
     ctx.beginPath();ctx.moveTo(pourX,0);ctx.lineTo(pourX,topY-S*0.05);ctx.stroke();
 
     const r=h()*0.92;
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=C.blend;
     // draw precomputed glow sprite per particle (cheap) instead of a fresh gradient each
     for(const p of P){
       const sp=Math.min(1,(Math.abs(p.vx)+Math.abs(p.vy))/(S*0.03));
@@ -210,7 +233,7 @@
     // bright cores
     for(const p of P){
       const sp=Math.min(1,(Math.abs(p.vx)+Math.abs(p.vy))/(S*0.035));
-      ctx.fillStyle='rgba(210,248,255,'+(0.22+sp*0.5)+')';
+      ctx.fillStyle='rgba('+C.core+','+(C.ca+sp*C.ck)+')';
       ctx.beginPath();ctx.arc(p.x,p.y,r*0.18,0,6.283);ctx.fill();
     }
     ctx.globalCompositeOperation='source-over';
@@ -236,7 +259,7 @@
   document.addEventListener('visibilitychange',()=>{if(reduce)return;document.hidden?stop():start();});
 
   if(reduce){
-    ctx.fillStyle='#071a22';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     // settle a resting pool
     for(let i=0;i<120;i++) P.push({x:bx0+Math.random()*(bx1-bx0),
        y:floorY-Math.random()*(floorY-topY)*0.45,px:0,py:0,vx:0,vy:0});

@@ -5,6 +5,11 @@
 <meta name="description" content="Horizontal install conduit with marching diamond data packets, a scan cursor and gated Download/Verify/Install/Done phase labels.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Install Phases</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
     --pg10-bg:#0b0d12;
@@ -14,6 +19,23 @@
     --pg10-edge:#2a3042;
     --pg10-ink:#e8eaf2;
     --pg10-dim:#5a6075;
+    --pg10-pipe-ring:rgba(174,97,71,.05);
+    --pg10-fill1:rgba(174,97,71,.22); --pg10-fill2:rgba(107,107,71,.18);
+    --pg10-pkt-ring:rgba(174,97,71,.55); --pg10-pkt-shadow:rgba(174,97,71,.28);
+    --pg10-cap:#fff; --pg10-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --pg10-bg:#f2f4f8;
+    --pg10-accent:#a35b43;
+    --pg10-accent2:#6b6b47;
+    --pg10-track:#e2e5ee;
+    --pg10-edge:#c3c8d6;
+    --pg10-ink:#1b2130;
+    --pg10-dim:#5a6075;
+    --pg10-pipe-ring:rgba(163,91,67,.10);
+    --pg10-fill1:rgba(163,91,67,.28); --pg10-fill2:rgba(107,107,71,.22);
+    --pg10-pkt-ring:rgba(163,91,67,.6); --pg10-pkt-shadow:rgba(163,91,67,.22);
+    --pg10-cap:#1b2130; --pg10-cap-o:.5;
   }
   html,body{height:100%;margin:0}
   .pg10-stage{
@@ -33,13 +55,13 @@
   .pg10-pipe{
     position:relative;height:clamp(34px,9vw,52px);
     border-radius:10px;background:var(--pg10-track);
-    box-shadow:inset 0 0 0 1px var(--pg10-edge),0 0 0 1px rgba(174,97,71,.05);
+    box-shadow:inset 0 0 0 1px var(--pg10-edge),0 0 0 1px var(--pg10-pipe-ring);
     overflow:hidden;
   }
   /* progress fill behind packets — scaleX, compositor only */
   .pg10-fill{
     position:absolute;inset:0;transform-origin:left center;transform:scaleX(0);
-    background:linear-gradient(90deg,rgba(174,97,71,.22),rgba(107,107,71,.18));
+    background:linear-gradient(90deg,var(--pg10-fill1),var(--pg10-fill2));
     will-change:transform;
   }
   /* phase gate dividers — static */
@@ -51,7 +73,7 @@
     position:absolute;top:50%;left:0;width:clamp(9px,2.4vw,13px);height:clamp(9px,2.4vw,13px);
     margin:-6px 0 0 -6px;border-radius:3px;
     background:var(--pg10-accent);
-    box-shadow:0 0 0 1px rgba(174,97,71,.55),0 6px 14px rgba(174,97,71,.28);
+    box-shadow:0 0 0 1px var(--pg10-pkt-ring),0 6px 14px var(--pg10-pkt-shadow);
     transform:translate3d(0,0,0) rotate(45deg) scale(.7);
     will-change:transform,opacity;
   }
@@ -77,7 +99,7 @@
   .pg10-phase{color:var(--pg10-ink)}
   .pg10-phase b{color:var(--pg10-accent);font-weight:700}
   .pg10-pct{color:var(--pg10-ink);font-size:13px}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--pg10-cap);opacity:var(--pg10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -87,23 +109,25 @@
  "description": "Marching diamond packets stream along a gated conduit through Download, Verify, Install, Done phases; a scan cursor and label row track progress.",
  "useWhen": "Software install flows, pipeline status displays, or developer-tool UIs needing ambient terminal-style progress.",
  "avoidWhen": "Light or colorful backgrounds — colors are hardcoded dark navy. Not suitable as a real progress bar without external control.",
- "agentPrompt": "Change PHASES to ['Fetch','Build','Test','Deploy'] and set --pg10-accent to #f59e0b for a warm amber conduit.",
+ "agentPrompt": "Change PHASES to ['Fetch','Build','Test','Deploy'] and set --pg10-accent to #f59e0b for a warm amber conduit. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "phase labels (PHASES array)",
   "packet count (POOL=10)",
   "progress speed (dt*0.085 coefficient)",
   "accent colors (--pg10-accent, --pg10-accent2)",
   "packet march speed (SPEED=0.18)",
-  "hold pause duration (1300ms)"
+  "hold pause duration (1300ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard",
   "visibilitychange pause/resume",
-  "aria progressbar + aria-valuenow updates"
+  "aria progressbar + aria-valuenow updates",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background hardcoded dark navy — edit CSS vars to change",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Auto-cycles; no external API to control progress",
   "Packet positions normalized, not tied to real bytes"
  ],
@@ -114,7 +138,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "progress",
@@ -164,6 +189,11 @@
   var pctEl=document.getElementById('pg10-pct');
   var root=document.getElementById('pg10-root');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data; if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
 
   var labs=[];
   for(var i=0;i<N;i++){

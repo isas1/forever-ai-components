@@ -8,13 +8,27 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block */
 :root{
   --bg-900:#08090d;
   --accent-iris:#EBD5A2; --accent-cyan:#D8D097; --accent-magenta:#BCB6A9;
   --text-2:#8a91a8;
+  --blob-blend:screen; --blob-sat:1.3; --cap-o:.7;
   --font-display:"Space Grotesk",system-ui,sans-serif;
   --ease-in-out:cubic-bezier(0.65,0,0.35,1);
+}
+:root[data-theme="light"]{
+  --bg-900:#f4f2ec;
+  --accent-iris:#b3811f; --accent-cyan:#a89a3e; --accent-magenta:#98846a;
+  --text-2:#4a463d;
+  --blob-blend:multiply; --blob-sat:1.05; --cap-o:.62;
 }
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;overflow:hidden;}
@@ -23,9 +37,9 @@ body{background:var(--bg-900);}
 .stage{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-900);}
 
 .c02-mesh{position:absolute;inset:0;overflow:hidden;}
-.c02-mesh__field{position:absolute;inset:-20%;filter:blur(40px) saturate(1.3);}
+.c02-mesh__field{position:absolute;inset:-20%;filter:blur(40px) saturate(var(--blob-sat));}
 .c02-mesh__blob{position:absolute;width:55%;height:55%;border-radius:50%;
-  mix-blend-mode:screen;will-change:transform;}
+  mix-blend-mode:var(--blob-blend);will-change:transform;}
 .c02-mesh__blob--1{background:radial-gradient(circle,var(--accent-iris),transparent 65%);
   top:0;left:0;animation:c02-mesh-m1 7s var(--ease-in-out) infinite alternate;}
 .c02-mesh__blob--2{background:radial-gradient(circle,var(--accent-cyan),transparent 65%);
@@ -41,7 +55,7 @@ body{background:var(--bg-900);}
 
 .caption{position:absolute;left:12px;bottom:10px;z-index:5;
   font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-2);opacity:.7;pointer-events:none;}
+  text-transform:uppercase;color:var(--text-2);opacity:var(--cap-o);pointer-events:none;}
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;}
@@ -54,22 +68,24 @@ body{background:var(--bg-900);}
  "description": "Four blurred radial blobs in cream, gold, and tan drift and scale on a dark background with screen blend mode, creating a soft animated mesh gradient.",
  "useWhen": "Dark-mode hero backgrounds, app loading screens, or any canvas needing ambient color without drawing attention.",
  "avoidWhen": "Light backgrounds (hardcoded dark base). Layouts requiring legible text overlays — blobs may compete with contrast.",
- "agentPrompt": "Change the palette to warm tones by setting --accent-iris to #ff7c40, --accent-cyan to #ffd700, and --accent-magenta to #ff3d00, then slow all animations by 3 seconds each.",
+ "agentPrompt": "Change the palette to warm tones by setting --accent-iris to #ff7c40, --accent-cyan to #ffd700, and --accent-magenta to #ff3d00, then slow all animations by 3 seconds each. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "blob colors (--accent-iris, --accent-cyan, --accent-magenta CSS vars)",
   "animation durations (7s / 8.5s / 6.5s / 9.5s)",
   "blob size (width/height 55%)",
   "blur intensity (blur(40px))",
   "field overshoot margin (-20% inset)",
-  "background base color (--bg-900)"
+  "background base color (--bg-900)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "mix-blend-mode:screen on blobs",
   "IIFE visibilitychange pause handler",
-  "prefers-reduced-motion guard"
+  "prefers-reduced-motion guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded dark — must override CSS var to use on light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "No JS-driven randomness; blobs follow fixed alternate keyframes, so motion is predictable/looping"
  ],
  "tier": "curated",
@@ -79,7 +95,8 @@ body{background:var(--bg-900);}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "mesh-gradient",
@@ -110,6 +127,13 @@ body{background:var(--bg-900);}
 <script>
 (function(){
   "use strict";
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // Every colour is a CSS token, so flipping the attribute is the whole switch.
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))
+      document.documentElement.setAttribute("data-theme",d.theme);
+  });
   document.addEventListener("visibilitychange",function(){
     var b=document.querySelectorAll(".c02-mesh__blob");
     var s=document.hidden?"paused":"running";

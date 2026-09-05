@@ -8,7 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&family=Inter:wght@400&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
     --bg-800:#0d0f16; --bg-surface:#1c2030;
     --text-0:#f4f6fb; --text-2:#8a91a8;
@@ -20,10 +27,25 @@
     --font-body:"Inter",system-ui,sans-serif;
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
     --ease-spring:cubic-bezier(0.34,1.56,0.64,1); --dur-slow:520ms;
+    --cap-o:.4;
+    --c09-page-a:#12141d; --c09-page-b:#08090d;
+    --c09-card3-a:#2b2013; --c09-card3-b:#14100a;
+    --c09-card2-a:#16263a; --c09-card2-b:#0d141d;
+  }
+  :root[data-theme="light"]{
+    --bg-800:#eef0f5; --bg-surface:#ffffff;
+    --text-0:#1b2130; --text-2:#666e89;
+    --accent-iris:#647542; --accent-cyan:#8d6749; --accent-magenta:#5c6670;
+    --border-mid:rgba(20,24,38,0.12);
+    --shadow-lift:0 18px 40px -24px rgba(20,24,38,0.28);
+    --cap-o:.55;
+    --c09-page-a:#eef1f6; --c09-page-b:#f2f4f8;
+    --c09-card3-a:#f3ece0; --c09-card3-b:#e7dcc9;
+    --c09-card2-a:#e3ecf3; --c09-card2-b:#d3e0ec;
   }
   *,*::before,*::after{box-sizing:border-box;}
-  html,body{margin:0;height:100%;overflow:hidden;}
-  body{background:radial-gradient(80% 70% at 50% 30%,#12141d,#08090d);
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c09-page-b);}
+  body{background:radial-gradient(80% 70% at 50% 30%,var(--c09-page-a),var(--c09-page-b));
     font-family:var(--font-body);}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
   .c09-stack{position:relative;width:42vmin;height:53vmin;max-width:210px;max-height:268px;
@@ -33,9 +55,9 @@
     display:flex;flex-direction:column;justify-content:space-between;transform-origin:bottom center;
     transition:transform var(--dur-slow) var(--ease-spring),
       box-shadow var(--dur-slow) var(--ease-out-soft);}
-  .c09-stack__card--3{background:linear-gradient(160deg,#2b2013,#14100a);
+  .c09-stack__card--3{background:linear-gradient(160deg,var(--c09-card3-a),var(--c09-card3-b));
     transform:translateY(0) rotate(0deg) scale(0.9);z-index:1;}
-  .c09-stack__card--2{background:linear-gradient(160deg,#16263a,#0d141d);
+  .c09-stack__card--2{background:linear-gradient(160deg,var(--c09-card2-a),var(--c09-card2-b));
     transform:translateY(0) rotate(0deg) scale(0.95);z-index:2;}
   .c09-stack__card--1{background:linear-gradient(160deg,var(--bg-surface),var(--bg-800));
     transform:translateY(0) rotate(0deg) scale(1);z-index:3;}
@@ -50,7 +72,7 @@
   .c09-stack__card--3 .c09-stack__dot{background:linear-gradient(120deg,var(--accent-magenta),var(--accent-iris));}
   .c09-stack__lbl{font-family:var(--font-display);font-weight:600;font-size:13px;color:var(--text-0);margin:0;}
   .c09-stack__meta{font-size:11px;color:var(--text-2);margin:0;}
-  .cap{position:fixed;left:10px;bottom:8px;color:var(--accent-iris);opacity:.4;
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--accent-iris);opacity:var(--cap-o);
     font-family:var(--font-body);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
   @media (prefers-reduced-motion:reduce){.c09-stack__card{transition-duration:.001ms;}}
 </style>
@@ -61,22 +83,24 @@
  "description": "Three layered gradient cards auto-cycle and fan out with a springy rotation on hover; cards spread left and right then restack when cursor leaves.",
  "useWhen": "Card collection previews, playlist/deck UI, portfolio thumbnails where showing multiple items in compact space matters.",
  "avoidWhen": "Contexts needing legible card content — the fanned back cards are partially obscured. Avoid when auto-cycle motion conflicts with focused reading layouts.",
- "agentPrompt": "Change the fan rotation from 9deg to 14deg by editing the rotate(9deg) and rotate(-9deg) values in the hover/auto CSS rules, and slow the spring to 700ms by updating --dur-slow.",
+ "agentPrompt": "Change the fan rotation from 9deg to 14deg by editing the rotate(9deg) and rotate(-9deg) values in the hover/auto CSS rules, and slow the spring to 700ms by updating --dur-slow. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "fan rotation angle (rotate(9deg) / rotate(-9deg))",
   "spring duration (--dur-slow: 520ms)",
-  "auto-cycle timing (2800ms / 2200ms delays in tick())",
+  "idle demo cadence (DEMO_ON=1900 / DEMO_OFF=1600 / DEMO_FIRST=400 ms, resume IDLE_RESUME=3500 ms)",
   "card gradient colors (--bg-surface, accent vars)",
-  "card dimensions (42vmin / 53vmin)"
+  "card dimensions (42vmin / 53vmin)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (transition-duration:.001ms)",
   "visibilitychange stop/start",
-  "pointerenter pause logic"
+  "idle demo cycle (setInterval step() + hold()/release() takeover — the demo class shares every rule with :hover)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Auto-cycle pauses on hover but resumes on pointerleave — may feel surprising if user lingers nearby",
+  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
   "Card content labels are placeholder text only; real content must be wired in"
  ],
  "tier": "curated",
@@ -86,7 +110,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "cards",
@@ -121,19 +146,38 @@
 <script>
 (function(){
   "use strict";
+  /* idle demo: on the wall nobody hovers the deck, so it fans itself open. One 100ms interval
+     drives it — first fan ~0.4s after mount, then fanned 1.9s / restacked 1.6s. Real hover or
+     focus takes over (the demo class is dropped, so :hover alone drives the very same rules — no
+     fighting) and the demo only returns after ~3.5s of idleness. */
   var reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var card=document.querySelector(".c09-stack");
-  var timer=0, fanned=false, paused=false;
-  function tick(){
-    if(!paused){ fanned=!fanned; card.classList.toggle("c09-stack--auto",fanned); }
-    timer=setTimeout(tick,fanned?2800:2200);
+  var card=document.querySelector(".c09-stack"), AUTO="c09-stack--auto";
+  var DEMO_ON=1900, DEMO_OFF=1600, DEMO_FIRST=400, IDLE_RESUME=3500, TICK=100;
+  var T0=DEMO_OFF-DEMO_FIRST;                  // so the first (and every resumed) pass lands DEMO_FIRST in
+  var timer=0, fanned=false, demo=true, held=false, idle=0, t=T0;
+  function step(){
+    if(!demo){                                  // a real visitor is driving — wait them out
+      if(!held&&(idle+=TICK)>=IDLE_RESUME){ demo=true; t=T0; }
+      return;
+    }
+    if((t+=TICK)>=(fanned?DEMO_ON:DEMO_OFF)){ fanned=!fanned; t=0; card.classList.toggle(AUTO,fanned); }
   }
-  card.addEventListener("pointerenter",function(){paused=true;card.classList.remove("c09-stack--auto");});
-  card.addEventListener("pointerleave",function(){paused=false;});
-  function start(){if(!timer&&!reduce)tick();}
-  function stop(){clearTimeout(timer);timer=0;}
+  function hold(){ demo=false; held=true; idle=0; fanned=false; t=0; card.classList.remove(AUTO); }
+  function release(){ held=card.matches(":hover,:focus-within"); idle=0; }
+  card.addEventListener("pointerenter",hold);
+  card.addEventListener("pointerdown",hold);
+  card.addEventListener("pointerleave",release);
+  card.addEventListener("focusin",hold);
+  card.addEventListener("focusout",release);
+  function start(){if(!timer&&!reduce)timer=setInterval(step,TICK);}
+  function stop(){clearInterval(timer);timer=0;}
   document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
-  if(!reduce)setTimeout(tick,1200);
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);
+  });
+  start();
 })();
 </script>
 </body>

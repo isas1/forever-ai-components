@@ -5,12 +5,20 @@
 <meta name="description" content="A Swiss typographic layout whose margin frame, red gutter rule and measure bars breathe and skew in proportional rhythm.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Margin Dance</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark defaults + the light re-theme (Swiss paper stock) */
   :root{
-    --sw10-bg:#0f0f10;
-    --sw10-red:#e8482b;
-    --sw10-ink:#f4f1ea;
-    --sw10-dim:#56565a;
+    --sw10-bg:#0f0f10; --sw10-red:#e8482b; --sw10-ink:#f4f1ea; --sw10-dim:#56565a;
+    --sw10-base:rgba(244,241,234,.045); --sw10-cap:#fff; --sw10-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --sw10-bg:#f4f3ef; --sw10-red:#cf3316; --sw10-ink:#141416; --sw10-dim:#a19f97;
+    --sw10-base:rgba(20,20,22,.06); --sw10-cap:#141416; --sw10-cap-o:.55;
   }
   html,body{margin:0;height:100%;background:var(--sw10-bg)}
   #sw10-stage{
@@ -32,13 +40,8 @@
   /* baseline rhythm: faint horizontal grid lines, static (no repaint) */
   #sw10-baselines{
     position:absolute;inset:0;pointer-events:none;
-    background:repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent calc(8.333% - 1px),
-      rgba(244,241,234,.045) calc(8.333% - 1px),
-      rgba(244,241,234,.045) 8.333%
-    );
+    background:repeating-linear-gradient(to bottom,transparent 0,transparent calc(8.333% - 1px),
+      var(--sw10-base) calc(8.333% - 1px),var(--sw10-base) 8.333%);
   }
   /* the moving margin frame: a stroked rectangle laid out at the resting
      margins, then *scaled and nudged via transform only* to breathe. */
@@ -99,7 +102,7 @@
   .sw10-bar:nth-child(4){opacity:.4;background:var(--sw10-red);opacity:.85}
   .sw10-bar:nth-child(5){opacity:.5}
 
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--sw10-cap);opacity:var(--sw10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -108,20 +111,22 @@
  "description": "Swiss typographic grid breathes: margin frame scales, red gutter rule drifts, display word skews, and measure bars pulse — all compositor-only transforms.",
  "useWhen": "Dark-mode editorial heroes, design portfolio headers, or any context needing calm ambient typographic motion with a modernist grid feel.",
  "avoidWhen": "Light backgrounds (dark palette hardcoded). Layouts where legible body text is needed — the text is purely decorative.",
- "agentPrompt": "Change the accent color from #e8482b to #00aaff, slow the breath cycle by changing the time multiplier from 0.00042 to 0.00025, and update the display word from 'Margin/Dance' to 'Grid/Lock'.",
+ "agentPrompt": "Change the accent color from #e8482b to #00aaff, slow the breath cycle by changing the time multiplier from 0.00042 to 0.00025, and update the display word from 'Margin/Dance' to 'Grid/Lock'. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "breath speed (0.00042 multiplier in rAF)",
   "accent color (--sw10-red: #e8482b)",
   "frame scale swing (b*0.11 and b*0.07)",
   "gutter drift amount (b * -3.6 vw)",
   "display word text content",
-  "bar count and stagger phase offsets"
+  "bar count and stagger phase offsets",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (apply(0.6) static fallback)",
   "visibilitychange pause/resume",
-  "will-change:transform on animated elements"
+  "will-change:transform on animated elements",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background and text colors are hardcoded CSS variables — light-theme adaptation requires changing all four root vars",
@@ -134,7 +139,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "swiss",
@@ -173,6 +179,8 @@
 <script>
 (function(){
   "use strict";
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});
   var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
   var word  = document.getElementById('sw10-word');
   var frame = document.getElementById('sw10-frame');

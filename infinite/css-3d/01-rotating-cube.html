@@ -5,19 +5,36 @@
 <meta name="description" content="Glowing sage-green wireframe cube with radial-orb faces slowly rotating in CSS 3D, reacting subtly to pointer movement on deep charcoal.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Rotating Cube</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1B1E1A;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c01-bg:#1B1E1A; --c01-edge:rgba(177,204,164,.5); --c01-fill:rgba(216,178,151,.12);
+    --c01-inner:rgba(177,204,164,.25); --c01-orb-a:#B1CCA4; --c01-orb-b:#D8B297;
+    --c01-cap:#B1CCA4; --c01-cap-o:.32;
+  }
+  :root[data-theme="light"]{
+    --c01-bg:#f1f4ef; --c01-edge:#557944; --c01-fill:rgba(152,97,57,.12);
+    --c01-inner:rgba(85,121,68,.18); --c01-orb-a:#6a9654; --c01-orb-b:#986139;
+    --c01-cap:#242a20; --c01-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c01-bg);
     font-family:system-ui,-apple-system,sans-serif;}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:600px;}
   #cube{position:relative;width:38vmin;height:38vmin;transform-style:preserve-3d;
     transform:rotateX(-22deg) rotateY(0deg);will-change:transform;}
-  .face{position:absolute;inset:0;border:1px solid rgba(177,204,164,.5);
+  .face{position:absolute;inset:0;border:1px solid var(--c01-edge);
     display:flex;align-items:center;justify-content:center;
-    background:rgba(216,178,151,.12);box-shadow:inset 0 0 30px rgba(177,204,164,.25);
+    background:var(--c01-fill);box-shadow:inset 0 0 30px var(--c01-inner);
     backface-visibility:visible;}
   .face::after{content:"";width:46%;height:46%;border-radius:50%;
-    background:radial-gradient(circle,#B1CCA4,#D8B297 70%,transparent);
+    background:radial-gradient(circle,var(--c01-orb-a),var(--c01-orb-b) 70%,transparent);
     filter:blur(1px);opacity:.85;}
   .f1{transform:translateZ(19vmin)}
   .f2{transform:rotateY(180deg) translateZ(19vmin)}
@@ -25,7 +42,7 @@
   .f4{transform:rotateY(-90deg) translateZ(19vmin)}
   .f5{transform:rotateX(90deg) translateZ(19vmin)}
   .f6{transform:rotateX(-90deg) translateZ(19vmin)}
-  .cap{position:fixed;left:10px;bottom:8px;color:#B1CCA4;opacity:.32;
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--c01-cap);opacity:var(--c01-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -35,18 +52,20 @@
  "description": "Glowing sage-green wireframe cube slowly auto-rotates in CSS 3D with a subtle sine-wave tilt; pointer movement offsets the rotation to follow the cursor.",
  "useWhen": "Hero backgrounds, tech or data product landing pages, dark-mode ambient displays needing a 3D accent.",
  "avoidWhen": "Light backgrounds (hardcoded dark charcoal). Contexts where pointer distraction competes with UI controls above the cube.",
- "agentPrompt": "Change the cube face glow color from sage to gold by replacing #B1CCA4 and rgba(177,204,164,.5) with #ffe07e and rgba(255,220,120,.5), and slow rotation to ry+=0.25.",
+ "agentPrompt": "Change the cube face glow color from sage to gold by replacing #B1CCA4 and rgba(177,204,164,.5) with #ffe07e and rgba(255,220,120,.5), and slow rotation to ry+=0.25. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "rotation speed (ry += 0.5)",
   "pointer influence range (tx *40 / ty *30)",
   "face glow color (#B1CCA4)",
   "cube size (38vmin)",
-  "perspective depth (600px)"
+  "perspective depth (600px)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange stop/start guards",
   "prefers-reduced-motion static fallback",
-  "viewport cache with resize listener (never per-frame)"
+  "viewport cache with resize listener (never per-frame)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to dark navy — must edit CSS to use on light pages",
@@ -59,7 +78,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "3d",
@@ -83,6 +103,7 @@
 </div>
 <div class="cap">Rotating Cube</div>
 <script>
+(function(){
   const cube=document.getElementById('cube');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let ry=0,rx=-22,tx=0,ty=0,raf;
@@ -100,7 +121,12 @@
   function start(){if(!raf&&!reduce)loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);});
   if(reduce){cube.style.transform='rotateX(-22deg) rotateY(35deg)';}else start();
+})();
 </script>
 </body>
 </html>

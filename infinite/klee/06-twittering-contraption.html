@@ -5,16 +5,30 @@
 <meta name="description" content="Twittering Contraption — Playful Geometric Notation. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Twittering Contraption</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#23201b;overflow:hidden}
+  /* theme tokens — dark values are the defaults; light = warm paper ground, chalk lines become ink, hues deepened */
+  :root{
+    --kle06-bg:#23201b; --kle06-ink:#efe7d6; --kle06-wire:rgba(239,231,214,.6); --kle06-rod:rgba(239,231,214,.3);
+    --kle06-h0:#c96f4a; --kle06-h1:#3a8a8c; --kle06-h2:#d9a441; --kle06-h3:#46566b; --kle06-h4:#7a4b6b;
+  }
+  :root[data-theme="light"]{
+    --kle06-bg:#efe7d6; --kle06-ink:#2a2620; --kle06-wire:rgba(42,38,32,.6); --kle06-rod:rgba(42,38,32,.3);
+    --kle06-h0:#a15130; --kle06-h1:#307173; --kle06-h2:#85601b; --kle06-h3:#46566b; --kle06-h4:#7a4b6b;
+  }
+  html,body{margin:0;height:100%;background:var(--kle06-bg);overflow:hidden}
   #kle06-scene{position:fixed;inset:0;overflow:hidden}
-  .kle06-wire{position:absolute;left:6%;right:6%;top:30%;height:2px;background:rgba(239,231,214,.6);}
+  .kle06-wire{position:absolute;left:6%;right:6%;top:30%;height:2px;background:var(--kle06-wire);}
   .kle06-crank{position:absolute;left:50%;bottom:18px;width:54px;height:54px;transform:translateX(-50%);}
   @keyframes kle06-spin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
   .kle06-bird{position:absolute;transform-origin:bottom center;will-change:transform;}
   @keyframes kle06-bob{0%,100%{transform:rotate(-9deg);}50%{transform:rotate(9deg);}}
   @keyframes kle06-chirp{0%,72%,100%{opacity:0;transform:translateY(0) scale(.7);}80%,92%{opacity:1;transform:translateY(-6px) scale(1);}}
-  .kle06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#efe7d6;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .kle06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--kle06-ink);opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion: reduce){ .kle06-bird,.kle06-crank{animation:none !important;} }
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -24,18 +38,20 @@
  "description": "Four Bauhaus-style wire birds bob on a horizontal wire and chirp musical notes while a hand-crank below spins. Inspired by Bauhaus's 1922 painting.",
  "useWhen": "Art/creative portfolio backgrounds, generative-art showcases, ambient decorative tiles with a whimsical mechanical theme.",
  "avoidWhen": "Light-theme UIs — background is hardcoded dark #23201b and won't adapt. Contexts needing interactivity.",
- "agentPrompt": "Increase bird count to 6 by changing N=4 to N=6, and slow the crank rotation from 4s to 8s in the kle06-spin animation.",
+ "agentPrompt": "Increase bird count to 6 by changing N=4 to N=6, and slow the crank rotation from 4s to 8s in the kle06-spin animation. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "bird count (N=4)",
   "color palette (HUES array)",
   "bob speed per bird (1.6+i*0.4 seconds)",
   "crank spin duration (4s in kle06-spin)",
-  "wire vertical position (top:30%)"
+  "wire vertical position (top:30%)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED check)",
-  "aria-label on scene div for accessibility"
+  "aria-label on scene div for accessibility",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to dark #23201b — must edit CSS to change",
@@ -48,7 +64,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "birds",
@@ -69,7 +86,7 @@
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const scene=document.getElementById('kle06-scene'); if(!scene) return;
-  const HUES=['#c96f4a','#3a8a8c','#d9a441','#46566b','#7a4b6b'];
+  const HUES=['var(--kle06-h0)','var(--kle06-h1)','var(--kle06-h2)','var(--kle06-h3)','var(--kle06-h4)'];
   const wire=document.createElement('div'); wire.className='kle06-wire'; scene.appendChild(wire);
   const N=4;
   for(let i=0;i<N;i++){
@@ -79,12 +96,12 @@
     b.className='kle06-bird';
     b.style.cssText=`left:${x}%;top:30%;width:44px;height:52px;margin-left:-22px;margin-top:-44px;`;
     b.innerHTML=`<svg viewBox="0 0 44 52" width="44" height="52" aria-hidden="true">
-      <line x1="22" y1="52" x2="22" y2="30" stroke="#efe7d6" stroke-width="2"/>
-      <circle cx="22" cy="22" r="9" fill="none" stroke="${col}" stroke-width="2.4"/>
-      <circle cx="22" cy="22" r="2.4" fill="#efe7d6"/>
-      <path d="M31 22 l10 -3 -10 -3" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round"/>
-      <path d="M22 13 q4 -9 -3 -10" fill="none" stroke="#efe7d6" stroke-width="2"/>
-      <path d="M22 13 q-4 -9 3 -10" fill="none" stroke="#efe7d6" stroke-width="2"/>
+      <line x1="22" y1="52" x2="22" y2="30" style="stroke:var(--kle06-ink)" stroke-width="2"/>
+      <circle cx="22" cy="22" r="9" fill="none" style="stroke:${col}" stroke-width="2.4"/>
+      <circle cx="22" cy="22" r="2.4" style="fill:var(--kle06-ink)"/>
+      <path d="M31 22 l10 -3 -10 -3" fill="none" style="stroke:${col}" stroke-width="2.4" stroke-linejoin="round"/>
+      <path d="M22 13 q4 -9 -3 -10" fill="none" style="stroke:var(--kle06-ink)" stroke-width="2"/>
+      <path d="M22 13 q-4 -9 3 -10" fill="none" style="stroke:var(--kle06-ink)" stroke-width="2"/>
     </svg>`;
     if(!REDUCED){ b.style.animation=`kle06-bob ${(1.6+i*0.4).toFixed(2)}s ease-in-out ${(-i*0.3).toFixed(2)}s infinite`; }
     else { b.style.transform=`rotate(${(i%2?6:-6)}deg)`; }
@@ -97,18 +114,26 @@
     scene.appendChild(chirp);
   }
   const rod=document.createElement('div');
-  rod.style.cssText='position:absolute;left:50%;top:30%;bottom:44px;width:2px;background:rgba(239,231,214,.3);transform:translateX(-50%);';
+  rod.style.cssText='position:absolute;left:50%;top:30%;bottom:44px;width:2px;background:var(--kle06-rod);transform:translateX(-50%);';
   scene.appendChild(rod);
   const crank=document.createElement('div');
   crank.className='kle06-crank';
   crank.innerHTML=`<svg viewBox="0 0 54 54" width="54" height="54" aria-hidden="true">
-    <circle cx="27" cy="27" r="22" fill="none" stroke="#3a8a8c" stroke-width="2.4"/>
-    <line x1="27" y1="27" x2="27" y2="6" stroke="#c96f4a" stroke-width="3" stroke-linecap="round"/>
-    <circle cx="27" cy="6" r="4.5" fill="#d9a441" stroke="#efe7d6" stroke-width="1.6"/>
-    <circle cx="27" cy="27" r="3.4" fill="#efe7d6"/>
+    <circle cx="27" cy="27" r="22" fill="none" style="stroke:var(--kle06-h1)" stroke-width="2.4"/>
+    <line x1="27" y1="27" x2="27" y2="6" style="stroke:var(--kle06-h0)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="27" cy="6" r="4.5" style="fill:var(--kle06-h2);stroke:var(--kle06-ink)" stroke-width="1.6"/>
+    <circle cx="27" cy="27" r="3.4" style="fill:var(--kle06-ink)"/>
   </svg>`;
   if(!REDUCED){ crank.style.animation='kle06-spin 4s linear infinite'; }
   scene.appendChild(crank);
+
+  // live re-theme: every colour above is a var() reference, so re-stamping data-theme repaints the scene
+  window.addEventListener('message', (e)=>{
+    const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme', d.theme);
+    }
+  });
 })();
 </script>
 </body>

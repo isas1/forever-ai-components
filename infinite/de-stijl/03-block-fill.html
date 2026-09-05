@@ -5,10 +5,25 @@
 <meta name="description" content="Red, blue and yellow rectangles wipe and rise in sequence to fill cells of a black De Stijl grid on warm white.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Block Fill</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block: warm paper goes true white on a warm
+     gallery wall and the heavy black drop shadow becomes a soft tinted one. */
   :root{
     --ds03-bg:#0e0e10; --ds03-line:#0a0a0c; --ds03-paper:#ece9e1;
     --ds03-red:#c8202a; --ds03-blu:#1b5fc4; --ds03-yel:#f2c014;
+    --ds03-shadow:0 0 0 1px #000, 0 24px 60px -20px #000;
+    --ds03-cap:#fff; --ds03-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --ds03-bg:#f2f0ea; --ds03-paper:#ffffff;
+    --ds03-shadow:0 0 0 1px var(--ds03-line), 0 18px 44px -26px rgba(20,20,26,.42);
+    --ds03-cap:#14141a; --ds03-cap-o:.55;
   }
   html,body{margin:0;height:100%;background:var(--ds03-bg)}
   #ds03-stage{
@@ -20,7 +35,7 @@
     position:relative;width:86vmin;height:86vmin;max-width:640px;max-height:640px;
     background:var(--ds03-paper);
     /* static, never-repainting depth — a single drop shadow, not animated */
-    box-shadow:0 0 0 1px #000, 0 24px 60px -20px #000;
+    box-shadow:var(--ds03-shadow);
   }
   /* black grid bars: pure horizontal / vertical, asymmetric placement */
   .ds03-bar{position:absolute;background:var(--ds03-line)}
@@ -43,7 +58,7 @@
     64%{transform:scaleX(1)} 78%,100%{transform:scaleX(0)}
   }
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--ds03-cap);opacity:var(--ds03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
     .ds03-fill{transform:scaleY(1)!important}
@@ -57,19 +72,21 @@
  "description": "Primary-color rectangles wipe and rise in staggered sequence to fill cells of an asymmetric black De Stijl grid on warm white; loops continuously.",
  "useWhen": "Art/design-themed backgrounds, gallery intros, or hero sections needing bold geometric ambient motion.",
  "avoidWhen": "Contexts needing legible text overlays — large color blocks dominate the canvas. Avoid if brand palette conflicts with primary red/blue/yellow.",
- "agentPrompt": "Change the cycle duration from 5200ms to 3500ms by editing `--d:5200ms` in `.ds03-fill`, and shift red to a warmer tone by updating `--ds03-red` to `#e03030`.",
+ "agentPrompt": "Change the cycle duration from 5200ms to 3500ms by editing `--d:5200ms` in `.ds03-fill`, and shift red to a warmer tone by updating `--ds03-red` to `#e03030`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "animation duration (--d:5200ms)",
   "grid line positions (x=.34, .66; y=.40, .72 in C array)",
   "bar weight (BW=2.6)",
   "cell colors (--ds03-red, --ds03-blu, --ds03-yel)",
   "per-cell delay values (6th element in C rows)",
-  "fill direction per cell (y/x/x-r)"
+  "fill direction per cell (y/x/x-r)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause/resume logic",
   "grid bars rendered last (above fills)",
-  "prefers-reduced-motion guard with static fill fallback"
+  "prefers-reduced-motion guard with static fill fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Grid proportions are hardcoded as percentages — changing composition requires recalculating all cell x/y/w/h values",
@@ -82,7 +99,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "de-stijl",
@@ -152,6 +170,14 @@
   }
   document.addEventListener("visibilitychange",function(){
     setState(document.hidden?"paused":"running");
+  });
+
+  // live re-theme: every colour here is painted from a var(--ds03-*) token, so flipping
+  // the attribute is enough — no cached colour strings to invalidate.
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))
+      document.documentElement.setAttribute("data-theme",d.theme);
   });
 })();
 </script>

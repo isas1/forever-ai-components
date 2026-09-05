@@ -4,25 +4,42 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block. -rgb tokens feed the JS colour lerp. */
+:root{
+  --tte04-bg:#0a0b10; --tte04-ink:#eef0f6; --tte04-ink-rgb:238,240,246;
+  --tte04-acc:#f5d76e; --tte04-acc-rgb:245,215,110;
+  --tte04-glow-max:.5; --tte04-glow-static:.28; --tte04-cap-o:.42;
+}
+:root[data-theme="light"]{
+  --tte04-bg:#f2f4f8; --tte04-ink:#1b2130; --tte04-ink-rgb:27,33,48;
+  --tte04-acc:#866a09; --tte04-acc-rgb:134,106,9;
+  --tte04-glow-max:.35; --tte04-glow-static:.2; --tte04-cap-o:.5;
+}
 html,body{margin:0;height:100%;overflow:hidden}
-body{background:#0a0b10;display:grid;place-items:center}
+body{background:var(--tte04-bg);display:grid;place-items:center}
 .tte04-stage{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
 .tte04-word{display:flex;font-family:"Inter",system-ui,sans-serif;
   font-size:clamp(38px,17vmin,118px);line-height:1;letter-spacing:-.01em;
   font-variation-settings:"wght" 100;will-change:contents}
-.tte04-l{display:inline-block;color:#eef0f6;
+.tte04-l{display:inline-block;color:var(--tte04-ink);
   /* glow lives on a static text-shadow so the per-frame wght change never repaints a blur */
-  text-shadow:0 0 18px rgba(245,215,110,0);
+  text-shadow:0 0 18px rgba(var(--tte04-acc-rgb),0);
   font-variation-settings:"wght" 100;
   transform:translateZ(0);transform-origin:50% 60%}
 .tte04-sp{display:inline-block;width:.34em}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#f5d76e;opacity:.42;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+  color:var(--tte04-acc);opacity:var(--tte04-cap-o);letter-spacing:.1em;text-transform:uppercase;user-select:none}
 @media (prefers-reduced-motion:reduce){
   .tte04-word{font-variation-settings:"wght" 460}
-  .tte04-l{font-variation-settings:"wght" 460!important;color:#f5d76e;
-    text-shadow:0 0 16px rgba(245,215,110,.28)!important}
+  .tte04-l{font-variation-settings:"wght" 460!important;color:var(--tte04-acc);
+    text-shadow:0 0 16px rgba(var(--tte04-acc-rgb),var(--tte04-glow-static))!important}
 }
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -31,19 +48,21 @@ body{background:#0a0b10;display:grid;place-items:center}
  "description": "A bell-curve wave of font-weight travels left-to-right across the word WEIGHT; crest letters bulge bold, lift slightly, and warm to gold glow.",
  "useWhen": "Hero or section titles needing ambient kinetic motion. Brand name displays on dark backgrounds.",
  "avoidWhen": "Light backgrounds (hardcoded dark canvas). Words longer than ~8 characters where wave shape becomes unclear.",
- "agentPrompt": "Change TEXT to \"MOTION\", slow the wave by setting SPEED to 1.2, and shift the accent color to electric blue by replacing 245,215,110 with 100,180,255.",
+ "agentPrompt": "Change TEXT to \"MOTION\", slow the wave by setting SPEED to 1.2, and shift the accent color to electric blue by replacing 245,215,110 with 100,180,255. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (TEXT variable)",
   "wave speed (SPEED=2.05)",
   "font weight range (MIN=130, MAX=860)",
   "bell curve width (0.62 sigma)",
-  "accent color (245,215,110 gold)"
+  "accent color (245,215,110 gold)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "prefers-reduced-motion guard and CSS fallback",
   "visibilitychange pause with banked elapsed time",
   "IIFE wrapper",
-  "bell() function shaping the weight envelope"
+  "bell() function shaping the weight envelope",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Requires Inter variable font from Google Fonts — offline use degrades to system font with no weight axis",
@@ -57,7 +76,8 @@ body{background:#0a0b10;display:grid;place-items:center}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -75,6 +95,7 @@ body{background:#0a0b10;display:grid;place-items:center}
 <script>(function(){
   var word=document.getElementById('tte04-w');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root=document.documentElement;
   var TEXT="WEIGHT";
   var letters=[];
   for(var i=0;i<TEXT.length;i++){
@@ -82,6 +103,21 @@ body{background:#0a0b10;display:grid;place-items:center}
     s.className='tte04-l';s.textContent=TEXT[i];
     word.appendChild(s);letters.push(s);
   }
+  // JS-drawn colours are read from tokens so the wave stays theme-aware
+  var inkRGB=[238,240,246],accRGB=[245,215,110],glowMax=0.5;
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    inkRGB=(cs.getPropertyValue('--tte04-ink-rgb')||'238,240,246').trim().split(',').map(Number);
+    accRGB=(cs.getPropertyValue('--tte04-acc-rgb')||'245,215,110').trim().split(',').map(Number);
+    glowMax=parseFloat(cs.getPropertyValue('--tte04-glow-max'))||0.5;
+  }
+  syncTheme();
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
   if(reduce){return;}                 // CSS reduced-motion block paints the static frame
 
   var N=letters.length;
@@ -109,8 +145,8 @@ body{background:#0a0b10;display:grid;place-items:center}
       L.style.transform='translateY('+lift.toFixed(3)+'em) scale('+sc.toFixed(3)+')';
       // colour + glow ride the same envelope; glow alpha capped so repaint stays cheap
       var g=b*b;
-      L.style.color='rgb('+(238+ (245-238)*g|0)+','+(240-(240-215)*g|0)+','+(246-(246-110)*g|0)+')';
-      L.style.textShadow='0 0 '+(10+22*g).toFixed(0)+'px rgba(245,215,110,'+(0.5*g).toFixed(3)+')';
+      L.style.color='rgb('+(inkRGB[0]+(accRGB[0]-inkRGB[0])*g|0)+','+(inkRGB[1]+(accRGB[1]-inkRGB[1])*g|0)+','+(inkRGB[2]+(accRGB[2]-inkRGB[2])*g|0)+')';
+      L.style.textShadow='0 0 '+(10+22*g).toFixed(0)+'px rgba('+accRGB[0]+','+accRGB[1]+','+accRGB[2]+','+(glowMax*g).toFixed(3)+')';
     }
     raf=requestAnimationFrame(frame);
   }

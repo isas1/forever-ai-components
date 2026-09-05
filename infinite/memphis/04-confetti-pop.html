@@ -5,11 +5,21 @@
 <meta name="description" content="Geometric confetti shapes (dots, zigzags, triangles, bars, pluses) burst upward and fall with gravity in repeating pops on deep plum.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Confetti Pop</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#141019;overflow:hidden}
-  #mp04-stage{position:fixed;inset:0;background:#141019}
+  /* theme tokens — dark defaults, light re-theme below; --mp04-p0..p5 feed the confetti via syncTheme() */
+  :root{--mp04-bg:#141019;--mp04-cap:#fff;--mp04-cap-o:.42;
+    --mp04-p0:#36d6c3;--mp04-p1:#ff5e8a;--mp04-p2:#ffd23f;--mp04-p3:#7b6cff;--mp04-p4:#ff8a3d;--mp04-p5:#f4f1ea}
+  :root[data-theme="light"]{--mp04-bg:#f6f2f8;--mp04-cap:#2b2733;--mp04-cap-o:.5;
+    --mp04-p0:#18776b;--mp04-p1:#db003c;--mp04-p2:#8a6900;--mp04-p3:#4833ff;--mp04-p4:#bd4b00;--mp04-p5:#2b2733}
+  html,body{margin:0;height:100%;background:var(--mp04-bg);overflow:hidden}
+  #mp04-stage{position:fixed;inset:0;background:var(--mp04-bg)}
   #mp04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--mp04-cap);opacity:var(--mp04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +29,22 @@
  "description": "Memphis geometric shapes burst upward with gravity and rotation in repeating pops on deep plum. Dots, zigzags, triangles, bars, and pluses auto-cycle.",
  "useWhen": "Celebration screens, launch announcements, festive hero backgrounds with an 80s geometric aesthetic.",
  "avoidWhen": "Contexts needing legible overlaid text or calm motion — bursts are frequent and high-energy. Low-end mobile with limited CPU.",
- "agentPrompt": "Replace COL with [\"#ff2d78\",\"#00c9ff\",\"#ffe600\",\"#ff6b00\",\"#ffffff\"] and set nextBurst = ts + 280 + rnd()*200 to tighten burst frequency.",
+ "agentPrompt": "Replace COL with [\"#ff2d78\",\"#00c9ff\",\"#ffe600\",\"#ff6b00\",\"#ffffff\"] and set nextBurst = ts + 280 + rnd()*200 to tighten burst frequency. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "burst interval (520 + rnd()*340 ms)",
   "particle pool size (N=104)",
   "shape size range (6 + rnd()*14)",
   "color palette (COL array)",
   "gravity (vy += 0.045)",
-  "lifetime (70 + rnd()*70 frames)"
+  "lifetime (70 + rnd()*70 frames)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static frame fallback",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Fixed pool of 104 particles — heavy overlap recycles live particles early causing flicker",
@@ -45,7 +57,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "confetti",
@@ -72,8 +85,18 @@
   var dpr=Math.min(2,window.devicePixelRatio||1);
   var W=0,H=0,run=true,raf=0,t0=0;
 
-  // Memphis palette around #36d6c3 accent on #141019
-  var COL=["#36d6c3","#ff5e8a","#ffd23f","#7b6cff","#ff8a3d","#f4f1ea"];
+  // Memphis palette around #36d6c3 accent — read from theme tokens so light recolours every pop.
+  var root=document.documentElement;
+  var COL=["#36d6c3","#ff5e8a","#ffd23f","#7b6cff","#ff8a3d","#f4f1ea"], BG="#141019";
+  function syncTheme(){
+    var cs=getComputedStyle(root),i;
+    for(i=0;i<COL.length;i++)COL[i]=cs.getPropertyValue("--mp04-p"+i).trim();
+    BG=cs.getPropertyValue("--mp04-bg").trim();
+  }
+  addEventListener("message",function(e){ // live re-theme broadcast by the canvas
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme();if(reduce)staticFrame();}
+  });
   // shape kinds: 0 dot, 1 zigzag, 2 squiggle, 3 triangle, 4 bar, 5 plus
   var N=104;
   var px=new Float32Array(N),py=new Float32Array(N),vx=new Float32Array(N),vy=new Float32Array(N);
@@ -108,7 +131,7 @@
   }
 
   function clearBg(){
-    ctx.fillStyle="#141019"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
     // static terrazzo speckle backdrop (drawn each frame, no layout reads, cheap)
   }
 
@@ -168,7 +191,7 @@
   }
 
   function start(){
-    resize();
+    syncTheme(); resize();
     if(reduce){ staticFrame(); return; }
     nextBurst=0; t0=0; run=true;
     raf=requestAnimationFrame(frame);

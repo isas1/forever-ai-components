@@ -5,22 +5,42 @@
 <meta name="description" content="Seven gold and dusty-rose playing cards fanning open and closed in a smooth 3D spread on a warm dark background.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Card Deck Fan</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1E1A1B;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c02-bg:#1E1A1B; --c02-card:linear-gradient(150deg,#ffe9b8,#E8B0B5 55%,#e0743a);
+    --c02-card-alt:linear-gradient(150deg,#EBE5E6,#BCA9AB 55%,#D8C197);
+    --c02-edge:#fff7e6; --c02-drop:rgba(0,0,0,.4);
+    --c02-ink:#a83a1a; --c02-ink-alt:#3d2b2e; --c02-emboss:rgba(255,255,255,.5);
+    --c02-cap:#E8B0B5; --c02-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --c02-bg:#f7f1f0; --c02-card:linear-gradient(150deg,#ffdf9c,#e08f96 55%,#c2531c);
+    --c02-card-alt:linear-gradient(150deg,#ded6d7,#a4908f 55%,#c0a56b);
+    --c02-edge:#b2795f; --c02-drop:rgba(90,45,35,.22);
+    --c02-cap:#3a2b28; --c02-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c02-bg);
     font-family:system-ui,-apple-system,sans-serif;}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:900px;}
   #deck{position:relative;width:24vmin;height:34vmin;transform-style:preserve-3d;
     transform:rotateX(8deg);}
   .card{position:absolute;inset:0;border-radius:9px;transform-origin:50% 130%;
-    background:linear-gradient(150deg,#ffe9b8,#E8B0B5 55%,#e0743a);
-    border:2px solid #fff7e6;box-shadow:0 8px 22px rgba(0,0,0,.4);
+    background:var(--c02-card);
+    border:2px solid var(--c02-edge);box-shadow:0 8px 22px var(--c02-drop);
     display:flex;align-items:center;justify-content:center;}
-  .card span{font-size:6vmin;font-weight:700;color:#a83a1a;
-    text-shadow:0 1px 0 rgba(255,255,255,.5);}
-  .card:nth-child(even){background:linear-gradient(150deg,#EBE5E6,#BCA9AB 55%,#D8C197);}
-  .card:nth-child(even) span{color:#3d2b2e;}
-  .cap{position:fixed;left:10px;bottom:8px;color:#E8B0B5;opacity:.34;
+  .card span{font-size:6vmin;font-weight:700;color:var(--c02-ink);
+    text-shadow:0 1px 0 var(--c02-emboss);}
+  .card:nth-child(even){background:var(--c02-card-alt);}
+  .card:nth-child(even) span{color:var(--c02-ink-alt);}
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--c02-cap);opacity:var(--c02-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -30,19 +50,21 @@
  "description": "Seven gold-and-mauve playing cards fan open and closed in a sine-wave 3D arc using CSS rotateZ and perspective transform.",
  "useWhen": "Game or casino-themed hero sections, card-based UI previews, or ambient backgrounds needing elegant 3D motion.",
  "avoidWhen": "Contexts requiring legible overlaid text — constant fanning competes for attention. Avoid when reduced-motion users are primary audience.",
- "agentPrompt": "Slow the cycle by changing t+=0.018 to t+=0.010 and reduce max spread from spread*30 to spread*20 for a subtler fan.",
+ "agentPrompt": "Slow the cycle by changing t+=0.018 to t+=0.010 and reduce max spread from spread*30 to spread*20 for a subtler fan. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "card count (N=7)",
   "fan spread angle (spread*30)",
   "animation speed (t+=0.018)",
   "card glyph labels (glyph array)",
-  "gold/mauve card gradients"
+  "gold/mauve card gradients",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "prefers-reduced-motion guard and static fallback",
   "visibilitychange stop/start",
   "transform-origin: 50% 130% pivot",
-  "preserve-3d on #deck"
+  "preserve-3d on #deck",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No interactivity — cards cycle autonomously; wire a click to toggle state for production",
@@ -55,7 +77,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "cards",
@@ -73,6 +96,7 @@
 <div id="stage"><div id="deck"></div></div>
 <div class="cap">Card Deck Fan</div>
 <script>
+(function(){
   const deck=document.getElementById('deck');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const N=7,glyph=['A','K','Q','J','10','9','8'],cards=[];
@@ -94,9 +118,14 @@
   function start(){if(!raf&&!reduce)loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);});
   if(reduce){cards.forEach((c,i)=>{const k=i-(N-1)/2;
     c.style.transform=`rotateZ(${k*26}deg) translateY(${-Math.abs(k)*10}px)`;});}
   else start();
+})();
 </script>
 </body>
 </html>

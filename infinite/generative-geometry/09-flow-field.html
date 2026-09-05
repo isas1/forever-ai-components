@@ -5,11 +5,27 @@
 <meta name="description" content="100 peach-gold particles streaming along a Perlin-style flow field on dark charcoal, deflecting around the cursor.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flow Field</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1D1917}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --gg09-fade is the per-frame trail wash,
+     the p- numbers feed the JS hsla() of each particle streak. */
+  :root{
+    --gg09-bg:#1D1917; --gg09-fade:rgba(29,25,23,0.06); --gg09-cap:#EEBAA0; --gg09-cap-o:.45;
+    --gg09-p-s:80; --gg09-p-l:65; --gg09-p-a:0.5;
+  }
+  :root[data-theme="light"]{
+    --gg09-bg:#f6f2f0; --gg09-fade:rgba(246,242,240,0.05); --gg09-cap:#b15020; --gg09-cap-o:.8;
+    --gg09-p-s:75; --gg09-p-l:36; --gg09-p-a:0.75;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--gg09-bg)}
   #c{display:block;width:100%;height:100%}
   #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
-       color:#EEBAA0;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+       color:var(--gg09-cap);opacity:var(--gg09-cap-o);letter-spacing:.5px;pointer-events:none;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,18 +34,20 @@
  "description": "100 peach-gold particles stream along a value-noise flow field on dark charcoal; cursor deflects nearby particles within a 120px radius.",
  "useWhen": "Dark-mode hero backgrounds, generative art demos, ambient looping canvases where subtle interactivity rewards exploration.",
  "avoidWhen": "Light backgrounds (hardcoded dark charcoal). Contexts requiring legible text overlays — trails accumulate over content.",
- "agentPrompt": "Change particle count from N=100 to 200, shift hue range from 350–410 to warm amber (30–60), and increase deflection radius from 120 to 180.",
+ "agentPrompt": "Change particle count from N=100 to 200, shift hue range from 350–410 to warm amber (30–60), and increase deflection radius from 120 to 180. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "particle count (N=100)",
   "hue range (h: Math.random()*60+350)",
   "trail fade opacity (rgba(6,10,18,0.06))",
   "flow speed (1.6 multiplier)",
-  "cursor deflection radius (120)"
+  "cursor deflection radius (120)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause",
-  "reduced-motion static pre-render fallback (60 frames)"
+  "reduced-motion static pre-render fallback (60 frames)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Value-noise function is a sine approximation — lacks true Perlin coherence at large scales",
@@ -43,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "flow-field",
@@ -66,24 +85,42 @@
   let W,H,DPR,parts,mouse=null,seed=Math.random()*1000;
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   const N=100;
+  // theme: every canvas colour is read from the CSS tokens, once at start and once per switch
+  const root=document.documentElement;
+  const C={bg:'#1D1917',fade:'rgba(29,25,23,0.06)',pS:80,pL:65,pA:'0.5'};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--gg09-bg').trim()||C.bg;
+    C.fade=cs.getPropertyValue('--gg09-fade').trim()||C.fade;
+    C.pS=parseFloat(cs.getPropertyValue('--gg09-p-s'))||80;
+    C.pL=parseFloat(cs.getPropertyValue('--gg09-p-l'))||65;
+    C.pA=cs.getPropertyValue('--gg09-p-a').trim()||C.pA;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      // the trail buffer still holds the other palette — repaint it in the new bg
+      if(parts){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);if(reduce)for(let k=0;k<60;k++)draw(k*16);}}
+  });
+  syncTheme();
   // cheap value-noise
   function noise(x,y,t){
     return (Math.sin(x*1.7+t*0.3+seed)+Math.sin(y*1.9-t*0.2)+Math.sin((x+y)*1.1+t*0.15))*0.5;
   }
   function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
-    ctx.fillStyle='#1D1917';ctx.fillRect(0,0,W,H);init();}
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);init();}
   function init(){parts=[];for(let i=0;i<N;i++)parts.push(mk());}
   function mk(){return {x:Math.random()*W,y:Math.random()*H,h:Math.random()*60+350,life:Math.random()*200};}
   function draw(t){
-    ctx.fillStyle='rgba(29,25,23,0.06)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.fade;ctx.fillRect(0,0,W,H);
     const sc=4/Math.min(W,H);
     for(const p of parts){
       let a=noise(p.x*sc,p.y*sc,t*0.001)*Math.PI*2;
       if(mouse){const dx=p.x-mouse.x,dy=p.y-mouse.y,d=Math.hypot(dx,dy);
         if(d<120){a+=Math.atan2(dy,dx)*(1-d/120)*1.5;}}
       const nx=p.x+Math.cos(a)*1.6,ny=p.y+Math.sin(a)*1.6;
-      ctx.strokeStyle='hsla('+p.h+',80%,65%,0.5)';ctx.lineWidth=1.1;
+      ctx.strokeStyle='hsla('+p.h+','+C.pS+'%,'+C.pL+'%,'+C.pA+')';ctx.lineWidth=1.1;
       ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(nx,ny);ctx.stroke();
       p.x=nx;p.y=ny;p.life--;
       if(p.life<0||p.x<0||p.x>W||p.y<0||p.y>H)Object.assign(p,mk());

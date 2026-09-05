@@ -5,11 +5,29 @@
 <meta name="description" content="Apollonian circle packing of nested tangent rings in gold-to-blue tones, breathing through a slow infinite zoom with vignette.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Apollonian Gasket</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0d1b2a;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme lives in the one [data-theme="light"] block. --apg-c0/--apg-c1 are the
+     ends of the depth ramp the ring strokes interpolate along. */
+  :root{
+    --apg-bg:#0d1b2a; --apg-cap:#e0a458; --apg-cap-o:.34;
+    --apg-c0:224,164,88; --apg-c1:114,124,208; --apg-fill-a:0.06;
+    --apg-vig:13,27,42; --apg-vig-a:0.9;
+  }
+  :root[data-theme="light"]{
+    --apg-bg:#eef4f9; --apg-cap:#7a4a0e; --apg-cap-o:.7;
+    --apg-c0:104,62,10; --apg-c1:34,46,124; --apg-fill-a:0.05;
+    --apg-vig:238,244,249; --apg-vig-a:0.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--apg-bg);}
   #apg-c{display:block;width:100%;height:100%;}
   .apg-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
-       letter-spacing:.14em;color:#e0a458;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--apg-cap);opacity:var(--apg-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +37,21 @@
  "description": "Recursive Apollonian circle packing with infinite slow zoom; circles shift from gold to blue by depth, with vignette and pointer/click nudge.",
  "useWhen": "Math/science landing pages, generative art backdrops, contemplative infinite-zoom fractal backgrounds.",
  "avoidWhen": "Contexts needing legible overlaid text — the constant zoom and vignette compete with reading. Low-end devices may stutter.",
- "agentPrompt": "Change the color palette from gold-to-blue to magenta-to-cyan by editing the cr/cg/cb formula: set cr=Math.round(220-heat*80), cg=Math.round(60+heat*140), cb=Math.round(180+heat*60).",
+ "agentPrompt": "Change the color palette from gold-to-blue to magenta-to-cyan by editing the cr/cg/cb formula: set cr=Math.round(220-heat*80), cg=Math.round(60+heat*140), cb=Math.round(180+heat*60). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "zoom speed (t*0.0009)",
   "max recursion depth (MAX=7)",
   "color gradient per depth (cr/cg/cb formula)",
   "curvature cutoff (c4.b>900)",
-  "nudge strength on click (nudge=1.6)"
+  "nudge strength on click (nudge=1.6)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "DPR-aware canvas sizing",
   "visibilitychange pause/start",
-  "prefers-reduced-motion static-frame guard"
+  "prefers-reduced-motion static-frame guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Hundreds of arc calls per frame — heavier on low-end devices at high DPR",
@@ -44,7 +64,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "apollonian",
@@ -65,6 +86,23 @@
 (function(){
   const cv=document.getElementById('apg-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // theme: bg, the two ends of the depth colour ramp, the shallow-fill alpha and the
+  // vignette wash are all read from the CSS tokens (once, and again on a theme flip).
+  const root=document.documentElement;
+  const C={bg:'#0d1b2a',c0:[224,164,88],c1:[114,124,208],fa:'0.06',vig:'13,27,42',vigA:'0.9'};
+  function syncTheme(){
+    const cs=getComputedStyle(root),s=n=>cs.getPropertyValue(n).trim(),
+          rgb=n=>{const v=s(n);return v?v.split(',').map(Number):null;};
+    C.bg=s('--apg-bg')||C.bg;
+    C.c0=rgb('--apg-c0')||C.c0;C.c1=rgb('--apg-c1')||C.c1;
+    C.fa=s('--apg-fill-a')||C.fa;
+    C.vig=s('--apg-vig')||C.vig;C.vigA=s('--apg-vig-a')||C.vigA;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce&&W)draw();}
+  });
+  syncTheme();
   let W,H,DPR,cx,cy,R;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -121,7 +159,7 @@
   cv.addEventListener('click',()=>{nudge=1.6;});
 
   function draw(){
-    ctx.fillStyle='#0d1b2a';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     // slow breathing zoom 1.0 -> ~2.4 then loop, with depth fade-in keyed to zoom
     const phase=(t*0.0009)%1;
     const zoom=1+Math.pow(phase,1.3)*2.6+nudge*0.25;
@@ -143,14 +181,16 @@
       }
       const heat=c.b<0?0:Math.min(1,c.d/6);
       // accent -> cool stroke gradient by depth
-      const cr=Math.round(224-heat*110), cg=Math.round(164-heat*40), cb=Math.round(88+heat*120);
+      const cr=Math.round(C.c0[0]+heat*(C.c1[0]-C.c0[0])),
+            cg=Math.round(C.c0[1]+heat*(C.c1[1]-C.c0[1])),
+            cb=Math.round(C.c0[2]+heat*(C.c1[2]-C.c0[2]));
       ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
       ctx.globalAlpha=a;
       ctx.lineWidth=Math.max(0.4,(0.9-c.d*0.08))/zoom;
       ctx.strokeStyle='rgb('+cr+','+cg+','+cb+')';
       // faint fill on shallow circles for body
       if(c.b>0&&c.d<3){
-        ctx.fillStyle='rgba('+cr+','+cg+','+cb+','+(0.06).toFixed(2)+')';
+        ctx.fillStyle='rgba('+cr+','+cg+','+cb+','+C.fa+')';
         ctx.fill();
       }
       ctx.stroke();
@@ -158,7 +198,7 @@
     ctx.restore();ctx.globalAlpha=1;
     // vignette to sink edges
     const g=ctx.createRadialGradient(cx,cy,R*0.5,cx,cy,R*1.5);
-    g.addColorStop(0,'rgba(13,27,42,0)');g.addColorStop(1,'rgba(13,27,42,0.9)');
+    g.addColorStop(0,'rgba('+C.vig+',0)');g.addColorStop(1,'rgba('+C.vig+','+C.vigA+')');
     ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
   }
   function frame(){t+=16;draw();raf=requestAnimationFrame(frame);}

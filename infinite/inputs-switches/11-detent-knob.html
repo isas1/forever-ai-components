@@ -5,12 +5,28 @@
 <meta name="description" content="Knurled rotary knob that spring-snaps between 12 detents with flashing tick marks and a two-digit value readout in orange.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Detent Knob</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1b1d22;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Knob body/hub stay a
+     dark physical surface in both themes; only the page bg + off-knob accents shift. */
+  :root{
+    --dk-bg:#1b1d22; --dk-acc:#ff5c3a; --dk-flash:#ff5c3a; --dk-tick:rgba(255,255,255,0.16);
+    --dk-cap:#ff5c3a; --dk-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --dk-bg:#f2f3f6; --dk-flash:#d62500; --dk-tick:rgba(27,33,48,0.18);
+    --dk-cap:#1b2130; --dk-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--dk-bg);}
   #dk-c{display:block;width:100%;height:100%;cursor:grab;}
   #dk-c:active{cursor:grabbing;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
-       letter-spacing:.14em;color:#ff5c3a;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--dk-cap);opacity:var(--dk-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -20,19 +36,23 @@
  "description": "Knurled rotary knob snaps through 12 detents via a Hooke's-law spring; tick marks flash orange on land and a two-digit value readout counts up.",
  "useWhen": "Audio/synth UIs, settings panels, or any control demo needing a tactile rotary feel with discrete stepped values.",
  "avoidWhen": "Contexts needing continuous value input or pointer-drag rotation rather than click-nudge stepping.",
- "agentPrompt": "Change STEPS to 8 for coarser detents, set ACC to '#00eaff' for a cyan accent, and increase K to 0.035 for a snappier spring.",
+ "agentPrompt": "Change STEPS to 8 for coarser detents, set ACC to '#00eaff' for a cyan accent, and increase K to 0.035 for a snappier spring. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "detent count (STEPS=12)",
   "accent color (ACC='#ff5c3a')",
   "spring stiffness (K=0.020)",
   "damping factor (DAMP=0.86)",
   "knob size ratio (R=min(W,H)*0.30)",
-  "auto-advance dwell range (38+random*34)"
+  "auto-advance dwell range (38+random*34)",
+  "idle demo cadence (LEAD=18 / GAP=12 / BACK=108 / CYCLE=180 / RESUME=216 frames, SWEEP=3 detents)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange stop/start guards",
-  "prefers-reduced-motion snap fallback"
+  "prefers-reduced-motion snap fallback",
+  "idle demo sweep (same detent path as a real drag; real input takes over, resumes after RESUME)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Click nudges one detent at a time — no drag-to-rotate gesture",
@@ -46,7 +66,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "knob",
@@ -67,7 +88,21 @@
 (function(){
   const cv=document.getElementById('dk-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ACC='#ff5c3a', BG='#1b1d22', STEPS=12, TAU=Math.PI*2, STEP=TAU/STEPS;
+  const ACC='#ff5c3a', STEPS=12, TAU=Math.PI*2, STEP=TAU/STEPS;
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--dk-bg').trim();
+    C.tick=cs.getPropertyValue('--dk-tick').trim();
+    C.flash=cs.getPropertyValue('--dk-flash').trim();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   let W,H,DPR,cx,cy,R;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -84,7 +119,6 @@
   const K=0.020, DAMP=0.86;     // spring stiffness, damping -> overshoot+settle
   let value=0, shownValue=0;    // readout (counts up smoothly)
   const flash=new Array(STEPS).fill(0); // per-notch tick-mark flash
-  let auto=0, dwell=0, dir=1;
 
   function setTarget(i){
     target=i;
@@ -92,44 +126,53 @@
     flash[value]=1;
   }
   cv.addEventListener('pointerdown',e=>{ // click nudges to nearest direction
+    takeover();                          // real input ends the idle demo
     const x=e.offsetX-cx, y=e.offsetY-cy;
     setTarget(target + (x>=0?1:-1));
-    auto=0; dwell=0;
   });
 
-  function frame(){
-    // autopilot: drift through detents, pausing in each pocket
-    if(!reduce){
-      auto++;
-      if(auto>dwell){
-        if(Math.random()<0.18) dir*=-1;
-        setTarget(target+dir);
-        dwell=auto+38+Math.random()*34;
-      }
+  // idle demo: nothing on the wall grabs a knob, so it turns itself through the very same
+  // setTarget() a click runs — SWEEP detents clockwise starting LEAD frames (~0.3 s) after mount,
+  // a pause in the pocket, then the same sweep back, one round trip every CYCLE frames (~3 s).
+  // Each landing flashes its notch and steps the readout, exactly as a real nudge does.
+  // A real click takes over (demo stops); it resumes after RESUME frames (~3.6 s) of quiet.
+  const LEAD=18,GAP=12,BACK=108,CYCLE=180,RESUME=216,SWEEP=3;
+  let demo=true,d=0,idleF=0;
+  function takeover(){ demo=false;idleF=0; }
+  function demoStep(){
+    if(!demo){ if(++idleF>RESUME){ demo=true;idleF=0;d=0; } return; }
+    d++;
+    for(let i=0;i<SWEEP;i++){
+      if(d===LEAD+i*GAP) setTarget(target+1); else if(d===BACK+i*GAP) setTarget(target-1);
     }
+    if(d>=CYCLE) d=0;
+  }
+
+  function frame(){
+    if(!reduce) demoStep();
     const tAng=target*STEP;
     const f=(tAng-ang)*K;                 // Hooke: F = -k x
     vel=(vel+f)*DAMP;
     ang+=reduce?(tAng-ang):vel;           // reduce -> snap, no loop motion
     shownValue+=(value-shownValue)*0.22;
 
-    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     ctx.save();ctx.translate(cx,cy);
 
     // ---- detent ring: ticks + flashing pockets ----
     for(let i=0;i<STEPS;i++){
       const a=i*STEP-Math.PI/2;
       const fl=flash[i]; flash[i]*=0.90;
-      const r0=R*1.18, r1=R*(fl>0.02?1.40:1.30);
-      ctx.strokeStyle=fl>0.02?ACC:'rgba(255,255,255,0.16)';
-      ctx.globalAlpha=fl>0.02?(0.45+fl*0.55):0.6;
-      ctx.lineWidth=fl>0.02?(2+fl*2):1.4;
+      const r0=R*1.16, r1=R*(fl>0.02?1.44:1.34);
+      ctx.strokeStyle=fl>0.02?C.flash:C.tick;
+      ctx.globalAlpha=fl>0.02?(0.5+fl*0.5):0.9;      // ticks carry the tile at 264px
+      ctx.lineWidth=fl>0.02?(2.6+fl*2.4):2.2;
       ctx.beginPath();
       ctx.moveTo(Math.cos(a)*r0,Math.sin(a)*r0);
       ctx.lineTo(Math.cos(a)*r1,Math.sin(a)*r1);
       ctx.stroke();
       if(fl>0.04){ // flash bloom dot at the notch
-        ctx.fillStyle=ACC;ctx.globalAlpha=fl*0.8;
+        ctx.fillStyle=C.flash;ctx.globalAlpha=fl*0.8;
         ctx.beginPath();ctx.arc(Math.cos(a)*r1,Math.sin(a)*r1,2.2+fl*4,0,TAU);ctx.fill();
       }
     }
@@ -139,15 +182,15 @@
     const g=ctx.createRadialGradient(-R*0.4,-R*0.4,R*0.1,0,0,R);
     g.addColorStop(0,'#34373f');g.addColorStop(0.7,'#26282e');g.addColorStop(1,'#16171b');
     ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,R,0,TAU);ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;
+    ctx.strokeStyle='rgba(255,255,255,0.16)';ctx.lineWidth=1.6;
     ctx.beginPath();ctx.arc(0,0,R*0.99,0,TAU);ctx.stroke();
-    ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=2;
+    ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=3;
     ctx.beginPath();ctx.arc(0,0,R*0.78,0,TAU);ctx.stroke();
     // knurled grip dashes around the rim
     ctx.save();ctx.rotate(ang);
     for(let i=0;i<48;i++){
       ctx.rotate(TAU/48);
-      ctx.strokeStyle='rgba(0,0,0,0.4)';ctx.lineWidth=1;
+      ctx.strokeStyle='rgba(0,0,0,0.45)';ctx.lineWidth=1.5;
       ctx.beginPath();ctx.moveTo(0,-R*0.97);ctx.lineTo(0,-R*0.85);ctx.stroke();
     }
     ctx.restore();
@@ -156,22 +199,22 @@
     ctx.save();ctx.rotate(ang);
     const grad=ctx.createLinearGradient(0,-R*0.7,0,0);
     grad.addColorStop(0,ACC);grad.addColorStop(1,'rgba(255,92,58,0.25)');
-    ctx.strokeStyle=grad;ctx.lineCap='round';ctx.lineWidth=R*0.055;
+    ctx.strokeStyle=grad;ctx.lineCap='round';ctx.lineWidth=R*0.075;
     ctx.beginPath();ctx.moveTo(0,-R*0.16);ctx.lineTo(0,-R*0.70);ctx.stroke();
     ctx.fillStyle=ACC;ctx.shadowColor=ACC;ctx.shadowBlur=R*0.18;
-    ctx.beginPath();ctx.arc(0,-R*0.70,R*0.05,0,TAU);ctx.fill();
+    ctx.beginPath();ctx.arc(0,-R*0.70,R*0.07,0,TAU);ctx.fill();
     ctx.shadowBlur=0;
     ctx.restore();
 
     // ---- center hub + value readout ----
     ctx.fillStyle='#1f2127';ctx.beginPath();ctx.arc(0,0,R*0.40,0,TAU);ctx.fill();
-    ctx.strokeStyle='rgba(255,92,58,0.35)';ctx.lineWidth=1.2;
+    ctx.strokeStyle='rgba(255,92,58,0.5)';ctx.lineWidth=1.6;
     ctx.beginPath();ctx.arc(0,0,R*0.40,0,TAU);ctx.stroke();
     ctx.fillStyle=ACC;ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.font='700 '+(R*0.34).toFixed(0)+'px ui-monospace,monospace';
+    ctx.font='700 '+(R*0.40).toFixed(0)+'px ui-monospace,monospace';
     ctx.fillText(String(Math.round(shownValue)).padStart(2,'0'),0,-R*0.02);
-    ctx.fillStyle='rgba(255,255,255,0.32)';
-    ctx.font='600 '+(R*0.085).toFixed(0)+'px ui-monospace,monospace';
+    ctx.fillStyle='rgba(255,255,255,0.45)';
+    ctx.font='600 '+(R*0.10).toFixed(0)+'px ui-monospace,monospace';
     ctx.fillText('DETENT',0,R*0.21);
 
     ctx.restore();

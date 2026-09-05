@@ -5,11 +5,27 @@
 <meta name="description" content="Overlapping radial white ray bursts on black drift and warp into slow shimmering moire interference with a soft central bloom.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Interference</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a}
-  #op10-stage{position:fixed;inset:0;background:#0a0a0a;overflow:hidden}
+  /* theme tokens — dark values are the defaults; light inverts the ground/ink pair
+     (ink rays on white paper) and swaps the additive blend for a subtractive one,
+     so crossing rays still compound where they interfere. */
+  :root{
+    --op10-bg:#0a0a0a; --op10-ink-rgb:255,255,255; --op10-blend:lighter; --op10-a:1;
+    --op10-cap:#fff; --op10-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --op10-bg:#f4f4f2; --op10-ink-rgb:20,20,20; --op10-blend:multiply; --op10-a:1.9;
+    --op10-cap:#141414; --op10-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--op10-bg)}
+  #op10-stage{position:fixed;inset:0;background:var(--op10-bg);overflow:hidden}
   #op10-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op10-cap);opacity:var(--op10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +35,22 @@
  "description": "Three slowly rotating radial ray bursts overlap additively on black, generating shimmering moire interference patterns with a soft central bloom.",
  "useWhen": "Dark ambient backgrounds, generative art displays, op-art or psychedelic themed hero sections.",
  "avoidWhen": "Light backgrounds (hardcoded dark), contexts requiring legible text overlay, or low-end devices sensitive to rAF loops.",
- "agentPrompt": "Change SRC[0].rays to 120 and SRC[1].rays to 120 to increase interference density, then set all stroke opacity to 0.15 for stronger contrast.",
+ "agentPrompt": "Change SRC[0].rays to 120 and SRC[1].rays to 120 to increase interference density, then set all stroke opacity to 0.15 for stronger contrast. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ray count per source (SRC[k].rays, 64–88)",
   "spin speed per source (SRC[k].spin, 0.007–0.013)",
   "warp amount (SRC[k].wob, 0.07–0.10)",
   "stroke opacity (rgba alpha in ctx.strokeStyle)",
   "bloom radius (DIAG*0.20)",
-  "source positions (SRC[k].x / SRC[k].y)"
+  "source positions (SRC[k].x / SRC[k].y)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "globalCompositeOperation='lighter' (creates additive interference)",
   "IIFE wrapper",
   "visibilitychange pause",
-  "reduced-motion static fallback (drawOneFrame)"
+  "reduced-motion static fallback (drawOneFrame)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background hardcoded to #0a0a0a — must edit CSS and fillStyle to change",
@@ -44,7 +62,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "op-art",
@@ -70,6 +89,24 @@
   var cv=document.getElementById('op10-c');
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root=document.documentElement;
+
+  // colours + blend the canvas draws with — read once, and once per switch
+  var C={bg:'#0a0a0a',ink:'255,255,255',blend:'lighter',a:1};
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--op10-bg').trim();
+    C.ink=cs.getPropertyValue('--op10-ink-rgb').trim();
+    C.blend=cs.getPropertyValue('--op10-blend').trim();
+    C.a=parseFloat(cs.getPropertyValue('--op10-a'))||1;   // ink weight: subtractive strokes need more body on paper
+    if(reduce&&W)drawOneFrame();   // static fallback must repaint on a live switch
+  }
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
 
   // Three radial burst sources. Each emits N straight rays from a center.
   // Overlapping ray fields create moire interference where lines cross.
@@ -112,11 +149,11 @@
     if(!run) return;
     t=now*0.001;
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle='#0a0a0a';
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
 
-    // additive overlap = bright shimmer where ray fields interfere
-    ctx.globalCompositeOperation='lighter';
+    // overlap compounds where ray fields interfere (additive on black, subtractive on paper)
+    ctx.globalCompositeOperation=C.blend;
     ctx.lineCap='butt';
 
     var len=DIAG;
@@ -126,10 +163,10 @@
       s.wph += 0.0;
       var breathe=0.5+0.5*Math.sin(t*0.35 + k*2.0); // slow opacity breathing
       if(s.acc){
-        ctx.strokeStyle='rgba(255,255,255,'+(0.05+0.05*breathe)+')';
+        ctx.strokeStyle='rgba('+C.ink+','+(0.05+0.05*breathe)*C.a+')';
         ctx.lineWidth=0.7;
       }else{
-        ctx.strokeStyle='rgba(255,255,255,'+(0.09+0.07*breathe)+')';
+        ctx.strokeStyle='rgba('+C.ink+','+(0.09+0.07*breathe)*C.a+')';
         ctx.lineWidth=0.6;
       }
       // animate warp phase slowly for living moire
@@ -142,9 +179,9 @@
     var pulse=0.5+0.5*Math.sin(t*0.5);
     var rad=DIAG*0.20;
     var g=ctx.createRadialGradient(CX,CY,0,CX,CY,rad);
-    g.addColorStop(0,'rgba(255,255,255,'+(0.10+0.06*pulse)+')');
-    g.addColorStop(0.6,'rgba(255,255,255,0.02)');
-    g.addColorStop(1,'rgba(255,255,255,0)');
+    g.addColorStop(0,'rgba('+C.ink+','+(0.10+0.06*pulse)*C.a+')');
+    g.addColorStop(0.6,'rgba('+C.ink+','+0.02*C.a+')');
+    g.addColorStop(1,'rgba('+C.ink+',0)');
     ctx.fillStyle=g;
     ctx.beginPath();
     ctx.arc(CX,CY,rad,0,Math.PI*2);
@@ -155,21 +192,21 @@
 
   function drawOneFrame(){
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle='#0a0a0a';
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=C.blend;
     ctx.lineCap='butt';
     for(var k=0;k<SRC.length;k++){
       var s=SRC[k];
-      ctx.strokeStyle=s.acc?'rgba(255,255,255,0.07)':'rgba(255,255,255,0.12)';
+      ctx.strokeStyle=s.acc?'rgba('+C.ink+','+0.07*C.a+')':'rgba('+C.ink+','+0.12*C.a+')';
       ctx.lineWidth=s.acc?0.7:0.6;
       drawBurst(s,DIAG);
     }
     var rad=DIAG*0.20;
     var g=ctx.createRadialGradient(CX,CY,0,CX,CY,rad);
-    g.addColorStop(0,'rgba(255,255,255,0.13)');
-    g.addColorStop(0.6,'rgba(255,255,255,0.02)');
-    g.addColorStop(1,'rgba(255,255,255,0)');
+    g.addColorStop(0,'rgba('+C.ink+','+0.13*C.a+')');
+    g.addColorStop(0.6,'rgba('+C.ink+','+0.02*C.a+')');
+    g.addColorStop(1,'rgba('+C.ink+',0)');
     ctx.fillStyle=g;
     ctx.beginPath();ctx.arc(CX,CY,rad,0,Math.PI*2);ctx.fill();
   }
@@ -191,6 +228,7 @@
     else if(!run){ run=true; raf=requestAnimationFrame(frame); }
   });
 
+  syncTheme();
   resize();
   start();
 })();

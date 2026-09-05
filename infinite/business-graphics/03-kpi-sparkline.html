@@ -5,206 +5,178 @@
 <meta name="description" content="KPI Sparkline Board - Business Graphics. Interactive metrics widgets with scrubbable canvas trend charts and status callouts.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KPI Sparkline Board</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root {
-    --bg-900: #0a0b0e; --bg-800: #12131a; --border-color: rgba(255, 255, 255, 0.05);
-    --accent-revenue: #5C6670; --accent-users: #75894D; --accent-conversions: #10b981; --accent-bounce: #f59e0b;
-    --text-primary: #f3f4f6; --text-muted: #6b7280;
-  }
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-900); }
-  .bg03-stage {
-    position: fixed; inset: 0; display: flex; flex-direction: column; padding: 20px;
-    font-family: system-ui, -apple-system, sans-serif; color: var(--text-primary);
-  }
-  .bg03-header { margin-bottom: 16px; user-select: none; }
-  .bg03-header h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-  .bg03-header p { margin: 4px 0 0 0; font-size: 10px; color: var(--text-muted); }
-  .bg03-grid { flex: 1; display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); gap: 12px; min-height: 0; }
-  .bg03-card {
-    background: var(--bg-800); border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;
-    display: flex; flex-direction: column; position: relative; cursor: pointer; overflow: hidden;
-    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-  }
-  .bg03-card:hover { transform: translateY(-2px); border-color: rgba(255, 255, 255, 0.12); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }
-  .bg03-card-meta { display: flex; justify-content: space-between; align-items: flex-start; user-select: none; }
-  .bg03-card-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
-  .bg03-card-trend { font-size: 9px; font-weight: 700; font-family: ui-monospace, monospace; padding: 2px 6px; border-radius: 4px; background: rgba(16, 185, 129, 0.1); color: var(--accent-conversions); }
-  .bg03-card-trend.down { background: rgba(244, 63, 94, 0.1); color: #f43f5e; }
-  .bg03-card-value { font-size: clamp(18px, 4.2vmin, 26px); font-weight: 800; font-family: ui-monospace, monospace; margin: 4px 0 8px 0; color: var(--accent-color, var(--accent-revenue)); }
-  .bg03-sparkline-container { flex: 1; position: relative; width: 100%; min-height: 40px; }
-  .bg03-sparkline-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
-  .bg03-tooltip {
-    position: absolute; background: rgba(10, 11, 14, 0.95); border: 1px solid var(--border-color);
-    padding: 4px 8px; border-radius: 4px; font-size: 9px; font-family: ui-monospace, monospace;
-    color: var(--text-primary); pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 10;
-  }
-  .cap { position: fixed; left: 8px; bottom: 7px; font: 600 10px/1 ui-monospace, Menlo, monospace; color: var(--accent-users); opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; user-select: none; pointer-events: none; }
-  @media (max-width: 420px) {
-    .bg03-grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); gap: 8px; }
-    .bg03-card-value { margin: 2px 0 4px 0; }
-  }
-  @media (prefers-reduced-motion: reduce) { * { transform: none !important; transition: none !important; } .bg03-card:hover { transform: none !important; } }
+  :root{--bg-900:#0a0b0e;--bg-800:#12131a;--border-color:rgba(255,255,255,.05);--border-hover:rgba(255,255,255,.12);--accent-revenue:#5C6670;--accent-users:#75894D;--accent-conversions:#10b981;--accent-bounce:#f59e0b;--text-primary:#f3f4f6;--text-muted:#6b7280;--down:#f43f5e;--tooltip-bg:rgba(10,11,14,.95);--grid-line:rgba(255,255,255,.03);--crosshair:rgba(255,255,255,.15);--scrub-ring:#fff}:root[data-theme="light"]{--bg-900:#f0f1f5;--bg-800:#fff;--border-color:rgba(0,0,0,.08);--border-hover:rgba(0,0,0,.16);--accent-revenue:#5C6670;--accent-users:#617240;--accent-conversions:#0b7c56;--accent-bounce:#996206;--text-primary:#1b2130;--text-muted:#666d7a;--down:#d90c2f;--tooltip-bg:rgba(255,255,255,.97);--grid-line:rgba(0,0,0,.05);--crosshair:rgba(0,0,0,.18);--scrub-ring:#1b2130}*,*::before,*::after{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:var(--bg-900)}.bg03-stage{position:fixed;inset:0;display:flex;flex-direction:column;padding:20px;font-family:system-ui,-apple-system,sans-serif;color:var(--text-primary)}.bg03-header{margin-bottom:16px;user-select:none}.bg03-header h1{margin:0;font-size:15px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}.bg03-header p{margin:4px 0 0 0;font-size:10px;color:var(--text-muted)}.bg03-grid{flex:1;display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(2,1fr);gap:12px;min-height:0}.bg03-card{background:var(--bg-800);border:1px solid var(--border-color);border-radius:8px;padding:14px;display:flex;flex-direction:column;position:relative;cursor:pointer;overflow:hidden;transition:transform .2s,border-color .2s,box-shadow .2s}.bg03-card:hover{transform:translateY(-2px);border-color:var(--border-hover);box-shadow:0 6px 20px rgba(0,0,0,.4)}.bg03-card-meta{display:flex;justify-content:space-between;align-items:flex-start;user-select:none}.bg03-card-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}.bg03-card-trend{font-size:9px;font-weight:700;font-family:ui-monospace,monospace;padding:2px 6px;border-radius:4px;background:color-mix(in srgb,var(--accent-conversions) 10%,transparent);color:var(--accent-conversions)}.bg03-card-trend.down{background:color-mix(in srgb,var(--down) 10%,transparent);color:var(--down)}.bg03-card-value{font-size:clamp(18px,4.2vmin,26px);font-weight:800;font-family:ui-monospace,monospace;margin:4px 0 8px 0;color:var(--accent-color,var(--accent-revenue))}.bg03-sparkline-container{flex:1;position:relative;width:100%;min-height:40px}.bg03-sparkline-canvas{position:absolute;left:0;top:0;width:100%;height:100%}.bg03-tooltip{position:absolute;background:var(--tooltip-bg);border:1px solid var(--border-color);padding:4px 8px;border-radius:4px;font-size:9px;font-family:ui-monospace,monospace;color:var(--text-primary);pointer-events:none;opacity:0;transition:opacity .15s;z-index:10}.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--accent-users);opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}@media (max-width:420px){.bg03-stage{padding:14px}.bg03-header{margin-bottom:8px}.bg03-header h1{font-size:12px}.bg03-header p{display:none}.bg03-grid{grid-template-columns:1fr;grid-template-rows:repeat(4,1fr);gap:6px}.bg03-card{padding:6px 9px}.bg03-card-value{display:none}.bg03-sparkline-container{min-height:14px}}@media (prefers-reduced-motion:reduce){*{transform:none !important;transition:none !important}.bg03-card:hover{transform:none !important}}
 </style>
 </head>
 <body>
-  <div class="bg03-stage" id="bg03-root">
-    <div class="bg03-header">
-      <h1 id="bg03-title-el">Enterprise KPI Dashboard</h1>
-      <p id="bg03-desc-el">Performance metrics with interactive trend sparklines</p>
-    </div>
-    <div class="bg03-grid" id="bg03-board"></div>
-  <script>(function(){"use strict";
-    var kpis = [
-      { id: "revenue", title: "ARR Revenue", value: "$2,482,100", trend: "+14.2%", trendUp: true, color: "#5C6670", points: [30, 38, 35, 45, 52, 48, 60, 68, 65, 78, 85, 92] },
-      { id: "users", title: "Active Users", value: "451,902", trend: "+8.7%", trendUp: true, color: "#75894D", points: [120, 140, 135, 160, 175, 170, 192, 210, 205, 230, 245, 260] },
-      { id: "conversions", title: "Checkout Rate", value: "2.84%", trend: "-0.4%", trendUp: false, color: "#10b981", points: [3.1, 3.0, 2.9, 2.8, 2.85, 2.78, 2.82, 2.84, 2.81, 2.86, 2.83, 2.84] },
-      { id: "bounce", title: "Page Load Time", value: "1.24s", trend: "-12.5%", trendUp: true, color: "#f59e0b", points: [1.6, 1.55, 1.5, 1.45, 1.38, 1.42, 1.35, 1.3, 1.28, 1.25, 1.26, 1.24] }
-    ];
-    var board = document.getElementById("bg03-board");
-    if (!board) return;
-    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    var html = "";
-    kpis.forEach(function(kpi, idx) {
-      var trendCls = kpi.trendUp ? "bg03-card-trend" : "bg03-card-trend down";
-      html += '<div class="bg03-card" id="bg03-card-' + kpi.id + '" style="--accent-color: ' + kpi.color + '">' +
-                '<div class="bg03-card-meta">' +
-                  '<span class="bg03-card-title">' + kpi.title + '</span>' +
-                  '<span class="' + trendCls + '">' + kpi.trend + '</span>' +
-                '</div>' +
-                '<div class="bg03-card-value">' + kpi.value + '</div>' +
-                '<div class="bg03-sparkline-container">' +
-                  '<canvas class="bg03-sparkline-canvas" data-index="' + idx + '"></canvas>' +
-                '</div>' +
-                '<div class="bg03-tooltip" id="bg03-tooltip-' + kpi.id + '"></div>' +
-              '</div>';
-    });
-    board.innerHTML = html;
-    var canvases = board.querySelectorAll(".bg03-sparkline-canvas");
-    var activeScrubIndices = [-1, -1, -1, -1];
-    var pulseOffset = 0; // ambient motion offset
+<div class="bg03-stage" id="bg03-root" role="img" aria-label="Enterprise KPI dashboard: ARR revenue, active users, checkout rate and page load time, each with a live sparkline of its last twelve samples and a period-over-period delta.">
+<div class="bg03-header">
+<h1 id="bg03-title-el">Enterprise KPI Dashboard</h1>
+<p id="bg03-desc-el">Performance metrics with interactive trend sparklines</p>
+</div>
+<div class="bg03-grid" id="bg03-board"></div>
+<script>(function(){"use strict";
+var root = document.documentElement;
+// v0 is the headline value; points is a live 12-sample window in the same real units, and the
+// delta chip re-derives from how far the metric has drifted off that baseline.
+var kpis = [
+{ id:"revenue", title:"ARR Revenue", v0:2482100, base:14.2, varName:"--accent-revenue", vol:.0022, amp:.012, w:.07, ph:0 },
+{ id:"users", title:"Active Users", v0:451902, base:8.7, varName:"--accent-users", vol:.0026, amp:.014, w:.055, ph:2.1 },
+{ id:"conversions", title:"Checkout Rate", v0:2.84, base:-.4, varName:"--accent-conversions", vol:.004, amp:.018, w:.09, ph:4.3 },
+{ id:"bounce", title:"Page Load Time", v0:1.24, base:-12.5, varName:"--accent-bounce", vol:.005, amp:.02, w:.065, ph:1.2, invert:true }
+];
+// colours JS draws with — read from tokens, re-read on theme switch
+var C = {};
+function syncTheme() {
+var cs = getComputedStyle(root);
+kpis.forEach(function(kpi) { kpi.color = cs.getPropertyValue(kpi.varName).trim(); });
+C.grid = cs.getPropertyValue('--grid-line').trim();
+C.crosshair = cs.getPropertyValue('--crosshair').trim();
+C.ring = cs.getPropertyValue('--scrub-ring').trim();
+}
+var board = document.getElementById("bg03-board");
+if (!board) return;
+var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+syncTheme();
+function fmt(k, v) {
+return k.id === "revenue" ? "$" + Math.round(v).toLocaleString()
+: k.id === "users" ? Math.round(v).toLocaleString()
+: k.id === "conversions" ? v.toFixed(2) + "%" : v.toFixed(2) + "s";
+}
+function pct(p) { return (p >= 0 ? "+" : "") + p.toFixed(1) + "%"; }
+var html = "";
+kpis.forEach(function(kpi, idx) {
+var pts = [], start = kpi.v0 / (1 + kpi.base / 100);   // seed the stated trend, in real units
+for (var i = 0; i < 12; i++) pts.push(start + (kpi.v0 - start) * (i / 11) + kpi.v0 * Math.sin(i * 1.9 + kpi.ph) * kpi.vol * 1.6);
+pts[11] = kpi.v0; kpi.points = pts; kpi.v = kpi.v0; kpi.mom = 0;
+var up = kpi.invert ? kpi.base < 0 : kpi.base > 0;
+html += '<div class="bg03-card" id="bg03-card-' + kpi.id + '" style="--accent-color: var(' + kpi.varName + ')">' +
+'<div class="bg03-card-meta">' +
+'<span class="bg03-card-title">' + kpi.title + '</span>' +
+'<span class="bg03-card-trend' + (up ? '' : ' down') + '">' + pct(kpi.base) + '</span>' +
+'</div>' +
+'<div class="bg03-card-value">' + fmt(kpi, kpi.v0) + '</div>' +
+'<div class="bg03-sparkline-container">' +
+'<canvas class="bg03-sparkline-canvas" data-index="' + idx + '"></canvas>' +
+'</div>' +
+'<div class="bg03-tooltip" id="bg03-tooltip-' + kpi.id + '"></div>' +
+'</div>';
+});
+board.innerHTML = html;
+var canvases = board.querySelectorAll(".bg03-sparkline-canvas");
+var activeScrubIndices = [-1, -1, -1, -1];
 
-    function drawSparkline(canvas, idx) {
-      var ctx = canvas.getContext("2d");
-      var rect = canvas.getBoundingClientRect();
-      var w = canvas.width = rect.width * window.devicePixelRatio;
-      var h = canvas.height = rect.height * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-      var width = rect.width, height = rect.height;
-      var kpi = kpis[idx], pts = kpi.points;
-      var min = Math.min.apply(null, pts), max = Math.max.apply(null, pts), range = max - min || 1;
-      var count = pts.length, coords = [];
-      for (var i = 0; i < count; i++) {
-        var x = (i / (count - 1)) * width;
-        var pVal = pts[i];
-        // add subtle ambient wave offsets to the end of the line for active-at-rest visual cue
-        if (i === count - 1 && !reduce && activeScrubIndices[idx] === -1) {
-          pVal += Math.sin(pulseOffset + idx) * (range * 0.015);
-        }
-        var y = height - 6 - ((pVal - min) / range) * (height - 12);
-        coords.push({ x: x, y: y, val: pts[i] });
-      }
-      ctx.clearRect(0, 0, width, height);
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.03)"; ctx.lineWidth = 0.8;
-      for (var gl = 1; gl < 4; gl++) {
-        var gly = (gl / 4) * height; ctx.beginPath(); ctx.moveTo(0, gly); ctx.lineTo(width, gly); ctx.stroke();
-      }
-      ctx.strokeStyle = kpi.color; ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.lineJoin = "round";
-      ctx.beginPath(); ctx.moveTo(coords[0].x, coords[0].y);
-      for (var j = 1; j < count; j++) { ctx.lineTo(coords[j].x, coords[j].y); }
-      ctx.stroke();
-      var grad = ctx.createLinearGradient(0, 0, 0, height);
-      grad.addColorStop(0, kpi.color + "33"); grad.addColorStop(1, kpi.color + "00");
-      ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(coords[0].x, coords[0].y);
-      for (var k = 1; k < count; k++) { ctx.lineTo(coords[k].x, coords[k].y); }
-      ctx.lineTo(width, height); ctx.lineTo(0, height); ctx.closePath(); ctx.fill();
+function drawSparkline(canvas, idx) {
+var ctx = canvas.getContext("2d");
+var rect = canvas.getBoundingClientRect();            // re-fits the bitmap to CSS size + DPR
+var w = canvas.width = rect.width * window.devicePixelRatio;
+var h = canvas.height = rect.height * window.devicePixelRatio;
+ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+var width = rect.width, height = rect.height;
+var kpi = kpis[idx], pts = kpi.points;
+var min = Math.min.apply(null, pts), max = Math.max.apply(null, pts), range = max - min || 1;
+var count = pts.length, coords = [];
+for (var i = 0; i < count; i++) {
+var x = (i / (count - 1)) * width;
+var y = height - 6 - ((pts[i] - min) / range) * (height - 12);
+coords.push({ x: x, y: y, val: pts[i] });
+}
+ctx.clearRect(0, 0, width, height);
+ctx.strokeStyle = C.grid; ctx.lineWidth = 0.8;
+for (var gl = 1; gl < 4; gl++) {
+var gly = (gl / 4) * height; ctx.beginPath(); ctx.moveTo(0, gly); ctx.lineTo(width, gly); ctx.stroke();
+}
+ctx.strokeStyle = kpi.color; ctx.lineWidth = 2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+ctx.beginPath(); ctx.moveTo(coords[0].x, coords[0].y);
+for (var j = 1; j < count; j++) { ctx.lineTo(coords[j].x, coords[j].y); }
+ctx.stroke();
+var grad = ctx.createLinearGradient(0, 0, 0, height);
+grad.addColorStop(0, kpi.color + "33"); grad.addColorStop(1, kpi.color + "00");
+ctx.fillStyle = grad; ctx.beginPath(); ctx.moveTo(coords[0].x, coords[0].y);
+for (var k = 1; k < count; k++) { ctx.lineTo(coords[k].x, coords[k].y); }
+ctx.lineTo(width, height); ctx.lineTo(0, height); ctx.closePath(); ctx.fill();
+var head = coords[count - 1];                          // live head marker on the newest sample
+ctx.fillStyle = kpi.color; ctx.beginPath(); ctx.arc(head.x - 1.5, head.y, 2.2, 0, Math.PI * 2); ctx.fill();
 
-      var scrubX = activeScrubIndices[idx];
-      if (scrubX >= 0 && scrubX <= width) {
-        var nearestIdx = Math.round((scrubX / width) * (count - 1));
-        var p = coords[nearestIdx];
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)"; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(p.x, 0); ctx.lineTo(p.x, height); ctx.stroke();
-        ctx.fillStyle = kpi.color; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        var tooltip = document.getElementById("bg03-tooltip-" + kpi.id);
-        if (tooltip) {
-          var displayVal = p.val;
-          if (kpi.id === "revenue") displayVal = "$" + Math.round(p.val).toLocaleString();
-          else if (kpi.id === "conversions") displayVal = p.val.toFixed(2) + "%";
-          else if (kpi.id === "bounce") displayVal = p.val.toFixed(2) + "s";
-          tooltip.textContent = displayVal; tooltip.style.opacity = "1";
-          var cardRect = canvas.parentElement.parentElement.getBoundingClientRect();
-          var ttX = p.x + 14 - (tooltip.offsetWidth / 2);
-          ttX = Math.max(8, Math.min(cardRect.width - tooltip.offsetWidth - 8, ttX));
-          tooltip.style.left = ttX + "px"; tooltip.style.top = (p.y - 20) + "px";
-        }
-      } else {
-        var tooltipHide = document.getElementById("bg03-tooltip-" + kpi.id);
-        if (tooltipHide) tooltipHide.style.opacity = "0";
-      }
-    }
-    function initCanvases() {
-      canvases.forEach(function(canvas, idx) {
-        drawSparkline(canvas, idx);
-        var card = canvas.parentElement.parentElement;
-        card.addEventListener("mousemove", function(e) {
-          if (reduce) return;
-          activeScrubIndices[idx] = e.clientX - canvas.getBoundingClientRect().left;
-          drawSparkline(canvas, idx);
-        });
-        card.addEventListener("mouseleave", function() { activeScrubIndices[idx] = -1; drawSparkline(canvas, idx); });
-        card.addEventListener("touchmove", function(e) {
-          if (reduce || e.touches.length === 0) return;
-          activeScrubIndices[idx] = e.touches[0].clientX - canvas.getBoundingClientRect().left;
-          drawSparkline(canvas, idx);
-        });
-        card.addEventListener("touchend", function() { activeScrubIndices[idx] = -1; drawSparkline(canvas, idx); });
-      });
-    }
-    initCanvases();
-    window.addEventListener("resize", initCanvases);
-    var running = true;
-    function simulateMetrics() {
-      if (!running || reduce) return;
-      kpis.forEach(function(kpi, idx) {
-        var pts = kpi.points;
-        var lastVal = pts[pts.length - 1];
-        var delta = (Math.random() - 0.5) * (lastVal * 0.04);
-        var newVal = Number((lastVal + delta).toFixed(2));
-        pts.shift(); pts.push(newVal);
-        var cardValEl = board.querySelector("#bg03-card-" + kpi.id + " .bg03-card-value");
-        if (cardValEl) {
-          if (kpi.id === "revenue") cardValEl.textContent = "$" + Math.round(newVal).toLocaleString();
-          else if (kpi.id === "users") cardValEl.textContent = Math.round(newVal).toLocaleString();
-          else if (kpi.id === "conversions") cardValEl.textContent = newVal.toFixed(2) + "%";
-          else if (kpi.id === "bounce") cardValEl.textContent = newVal.toFixed(2) + "s";
-        }
-        drawSparkline(canvases[idx], idx);
-      });
-      setTimeout(simulateMetrics, 3000);
-    }
-    if (!reduce) { setTimeout(simulateMetrics, 3000); }
-    
-    // Ambient tick loop for visual motion at rest
-    function tickAmbient() {
-      if (!running || reduce) return;
-      pulseOffset += 0.05;
-      canvases.forEach(function(canvas, idx) {
-        if (activeScrubIndices[idx] === -1) {
-          drawSparkline(canvas, idx);
-        }
-      });
-      requestAnimationFrame(tickAmbient);
-    }
-    if (!reduce) { requestAnimationFrame(tickAmbient); }
-
-    document.addEventListener("visibilitychange", function() {
-      running = !document.hidden;
-      if (running && !reduce) { requestAnimationFrame(tickAmbient); }
-    });
-  })();
-  </script>
+var scrubX = activeScrubIndices[idx];
+if (scrubX >= 0 && scrubX <= width) {
+var nearestIdx = Math.round((scrubX / width) * (count - 1));
+var p = coords[nearestIdx];
+ctx.strokeStyle = C.crosshair; ctx.lineWidth = 1;
+ctx.beginPath(); ctx.moveTo(p.x, 0); ctx.lineTo(p.x, height); ctx.stroke();
+ctx.fillStyle = kpi.color; ctx.strokeStyle = C.ring; ctx.lineWidth = 1.5;
+ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+var tooltip = document.getElementById("bg03-tooltip-" + kpi.id);
+if (tooltip) {
+tooltip.textContent = fmt(kpi, p.val); tooltip.style.opacity = "1";
+var cardRect = canvas.parentElement.parentElement.getBoundingClientRect();
+var ttX = p.x + 14 - (tooltip.offsetWidth / 2);
+ttX = Math.max(8, Math.min(cardRect.width - tooltip.offsetWidth - 8, ttX));
+tooltip.style.left = ttX + "px"; tooltip.style.top = (p.y - 20) + "px";
+}
+} else {
+var tooltipHide = document.getElementById("bg03-tooltip-" + kpi.id);
+if (tooltipHide) tooltipHide.style.opacity = "0";
+}
+}
+function initCanvases() {
+canvases.forEach(function(canvas, idx) {
+drawSparkline(canvas, idx);
+var card = canvas.parentElement.parentElement;
+card.addEventListener("mousemove", function(e) {
+if (reduce) return;
+activeScrubIndices[idx] = e.clientX - canvas.getBoundingClientRect().left;
+drawSparkline(canvas, idx);
+});
+card.addEventListener("mouseleave", function() { activeScrubIndices[idx] = -1; drawSparkline(canvas, idx); });
+card.addEventListener("touchmove", function(e) {
+if (reduce || e.touches.length === 0) return;
+activeScrubIndices[idx] = e.touches[0].clientX - canvas.getBoundingClientRect().left;
+drawSparkline(canvas, idx);
+});
+card.addEventListener("touchend", function() { activeScrubIndices[idx] = -1; drawSparkline(canvas, idx); });
+});
+}
+initCanvases();
+window.addEventListener("resize", function() {
+canvases.forEach(function(canvas, idx) { drawSparkline(canvas, idx); });   // re-fit to the new box
+});
+addEventListener("message", function(e) {
+var d = e.data;
+if (d && d.type === "forever:theme" && (d.theme === "light" || d.theme === "dark")) {
+root.setAttribute("data-theme", d.theme); syncTheme();
+canvases.forEach(function(canvas, idx) { drawSparkline(canvas, idx); });
+}
+});
+var running = true, t = 0;
+function step() {          // one fresh sample per card: short-term noise over a slow breathing trend
+if (!running) return;
+t++;
+kpis.forEach(function(kpi, idx) {
+var pts = kpi.points, last = pts[pts.length - 1];
+var target = kpi.v0 * (1 + Math.sin((t + kpi.ph) * kpi.w) * kpi.amp);
+kpi.mom = kpi.mom * 0.72 + (Math.random() - 0.5) * kpi.vol;
+kpi.v = last + (target - last) * 0.22 + last * kpi.mom;
+pts.shift(); pts.push(kpi.v);
+var card = document.getElementById("bg03-card-" + kpi.id);
+card.querySelector(".bg03-card-value").textContent = fmt(kpi, kpi.v);
+var delta = kpi.base + (kpi.v / kpi.v0 - 1) * 100, up = kpi.invert ? delta < 0 : delta > 0;
+var chip = card.querySelector(".bg03-card-trend");
+chip.textContent = pct(delta);
+chip.className = "bg03-card-trend" + (up ? "" : " down");
+drawSparkline(canvases[idx], idx);
+});
+}
+if (!reduce) { setTimeout(function() { step(); setInterval(step, 600); }, 450); }
+document.addEventListener("visibilitychange", function() { running = !document.hidden; });
+})();
+</script>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/business-graphics/03-kpi-sparkline.html",
@@ -212,17 +184,21 @@
  "description": "KPI metric cards featuring interactive, scrubbable sparkline trends on HTML5 canvas with custom tooltip tracking.",
  "useWhen": "Executive business reports, dashboard overview pages, analytics summaries.",
  "avoidWhen": "High-density data-viz where users need exact grid coordinate reading (charts have no y-axis labels).",
- "agentPrompt": "Modify the initial values of kpis array to set custom starting metrics, and change background to light color.",
+ "agentPrompt": "Modify the initial values of kpis array to set custom starting metrics, and change background to light color. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "KPI data (kpis array)",
   "metric simulation update interval (simulateMetrics 3000ms)",
   "card layout gap (12px in bg03-grid)",
-  "sparkline stroke widths (lineWidth=2)"
+  "sparkline stroke widths (lineWidth=2)",
+  "sparkline feed (setInterval(step, 600 ms): one new point per KPI, deltas re-derived from the series)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR scaling logic in drawSparkline",
   "pointer/touch move and leave listeners",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "ambient sparkline feed (step interval; DPR-aware canvases re-fit on resize)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Tooltip positions dynamically by math which can wrap on extremely narrow screens",
@@ -235,7 +211,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "sparkline",

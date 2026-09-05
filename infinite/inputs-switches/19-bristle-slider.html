@@ -5,11 +5,19 @@
 <meta name="description" content="Gold handle drags across a field of teal-green bristles that bend, spring, and glow with travel speed on a dark green ground.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bristle Slider</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#102418;}
+  /* theme tokens — dark defaults; light re-theme is the [data-theme="light"] block */
+  :root{ --bs-bg:#102418; --bs-acc:#ffd23f; --bs-acc-rgb:255,210,63; --bs-cap:#ffd23f; --bs-cap-o:.34; }
+  :root[data-theme="light"]{ --bs-bg:#eef6f0; --bs-acc:#8a6900; --bs-acc-rgb:138,105,0; --bs-cap:#1b2130; --bs-cap-o:.5; }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bs-bg);}
   #bs-c{display:block;width:100%;height:100%;touch-action:none;cursor:ew-resize;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
-       letter-spacing:.14em;color:#ffd23f;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--bs-cap);opacity:var(--bs-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +27,22 @@
  "description": "A gold handle drags through a field of teal bristles that bend, spring back, and shift gold near the cursor; autonomous sweep runs when idle.",
  "useWhen": "Range inputs or scrubbers needing tactile, organic feel. Hero sections with interactive ambient motion.",
  "avoidWhen": "Forms requiring precise value readout — no numeric label is displayed. Low-end mobile where spring physics per frame may stutter.",
- "agentPrompt": "Change bristle color at rest from teal to deep purple by editing cr/cg/cb base values (56,102,70) to (80,40,140), and increase bristle count density by changing the divisor in Math.round(bw/9) to bw/6.",
+ "agentPrompt": "Change bristle color at rest from teal to deep purple by editing cr/cg/cb base values (56,102,70) to (80,40,140), and increase bristle count density by changing the divisor in Math.round(bw/9) to bw/6. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "bristle density (bw/9 divisor)",
   "bristle resting color (cr/cg/cb base values)",
   "spring stiffness (k=120) and damping (damp=11)",
   "handle/accent color (AC='#ffd23f')",
   "bristle reach radius (gap*4.2)",
-  "autonomous sweep speed (dt*0.9)"
+  "autonomous sweep speed (dt*0.9)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange stop/start guards",
   "reduced-motion static fallback (single resting frame)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No numeric value readout — not suitable as a production form input without adding a label",
@@ -45,7 +55,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "slider",
@@ -66,7 +77,16 @@
 (function(){
   const cv=document.getElementById('bs-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const BG='#102418',AC='#ffd23f';
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--bs-bg').trim(); C.acc=cs.getPropertyValue('--bs-acc').trim();
+    C.accRgb=cs.getPropertyValue('--bs-acc-rgb').trim();
+    const p=C.accRgb.split(',').map(Number); C.accR=p[0];C.accG=p[1];C.accB=p[2];
+  }
+  addEventListener('message',function(e){ const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
+  syncTheme();
   let W,H,DPR,N,bx,by,bw,gap,baseY,len;
   // bristle state: bend angle + angular velocity
   let bend=[],vel=[];
@@ -135,11 +155,11 @@
   }
 
   function draw(){
-    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const hx=px();
 
     // track groove
-    ctx.strokeStyle='rgba(255,210,63,0.14)';
+    ctx.strokeStyle=`rgba(${C.accRgb},0.14)`;
     ctx.lineWidth=Math.max(1,len*0.05);
     ctx.beginPath();ctx.moveTo(bx,baseY+2);ctx.lineTo(bx+bw,baseY+2);ctx.stroke();
 
@@ -156,9 +176,9 @@
       const g=Math.abs(a);
       // colour: resting = muted teal-green, bent = accent gold
       const mix=Math.min(1,g*1.7+lit*0.6);
-      const cr=Math.round(56+(255-56)*mix);
-      const cg=Math.round(102+(210-102)*mix);
-      const cb=Math.round(70+(63-70)*mix);
+      const cr=Math.round(56+(C.accR-56)*mix);
+      const cg=Math.round(102+(C.accG-102)*mix);
+      const cb=Math.round(70+(C.accB-70)*mix);
       ctx.strokeStyle='rgb('+cr+','+cg+','+cb+')';
       ctx.lineWidth=Math.max(1,len*0.085)*(1+lit*0.5);
       ctx.lineCap='round';
@@ -175,22 +195,22 @@
 
     // handle: a blade that drags through the field
     const grad=ctx.createLinearGradient(hx,by-len,hx,baseY+len*0.2);
-    grad.addColorStop(0,'rgba(255,210,63,0)');
-    grad.addColorStop(0.5,'rgba(255,210,63,0.22)');
-    grad.addColorStop(1,'rgba(255,210,63,0)');
+    grad.addColorStop(0,`rgba(${C.accRgb},0)`);
+    grad.addColorStop(0.5,`rgba(${C.accRgb},0.22)`);
+    grad.addColorStop(1,`rgba(${C.accRgb},0)`);
     ctx.fillStyle=grad;
     ctx.fillRect(hx-len*0.10,by-len*1.1,len*0.20,len*2.2);
 
-    ctx.fillStyle=AC;
+    ctx.fillStyle=C.acc;
     ctx.beginPath();
     const r=Math.max(5,len*0.26);
     ctx.arc(hx,by-len*0.15,r,0,6.2832);ctx.fill();
     // inner ring confessing speed
-    ctx.strokeStyle=BG;ctx.lineWidth=Math.max(1.5,r*0.16);
+    ctx.strokeStyle=C.bg;ctx.lineWidth=Math.max(1.5,r*0.16);
     ctx.beginPath();ctx.arc(hx,by-len*0.15,r*0.5,0,6.2832);ctx.stroke();
     // speed ticks radiating
     const sp=Math.min(1,speed*1.6);
-    ctx.strokeStyle=AC;ctx.globalAlpha=0.5*sp;
+    ctx.strokeStyle=C.acc;ctx.globalAlpha=0.5*sp;
     ctx.lineWidth=Math.max(1,r*0.12);
     for(let s=0;s<6;s++){
       const ang=(s/6)*6.2832+t*2;

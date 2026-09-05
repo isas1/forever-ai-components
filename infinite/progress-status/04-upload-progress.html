@@ -5,10 +5,27 @@
 <meta name="description" content="A circular upload dial with a file glyph fills a rust-toned ring to 100%, then swaps to a green success checkmark on completion.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Upload Progress</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
     --bg:#0b0d12; --accent:#AE6147; --accent2:#6B6B47;
     --track:#1b1f2b; --ink:#eef0f7; --mute:#6f768c; --ok:#3ddc97;
+    --base-glow:rgba(174,97,71,.42); --head-glow:rgba(107,107,71,.8);
+    --base-glow-done:rgba(61,220,151,.5);
+    --dot-glow:rgba(174,97,71,.7); --dot-glow-done:rgba(61,220,151,.7);
+    --cap:#fff; --cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --accent:#a35b43; --accent2:#6b6b47;
+    --track:#e2e5ee; --ink:#1b2130; --mute:#686f83; --ok:#177e51;
+    --base-glow:rgba(163,91,67,.25); --head-glow:rgba(107,107,71,.35);
+    --base-glow-done:rgba(23,126,81,.3);
+    --dot-glow:rgba(163,91,67,.35); --dot-glow-done:rgba(23,126,81,.35);
+    --cap:#1b2130; --cap-o:.5;
   }
   *{margin:0;box-sizing:border-box}
   html,body{height:100%}
@@ -28,7 +45,7 @@
   #pg04-base{
     position:absolute; inset:0; border-radius:50%;
     border:clamp(7px,2.4vmin,12px) solid var(--track);
-    box-shadow:0 0 46px -6px rgba(174,97,71,.42);
+    box-shadow:0 0 46px -6px var(--base-glow);
   }
   /* compositor-only pie: two halves clipped to semicircles, rotated to sweep the arc.
      no width/dashoffset repaint — pure rotate transforms. */
@@ -53,7 +70,7 @@
   #pg04-head{
     position:absolute; left:50%; top:0; width:clamp(7px,2.4vmin,12px); height:clamp(7px,2.4vmin,12px);
     margin-left:calc(clamp(7px,2.4vmin,12px) / -2); border-radius:50%;
-    background:var(--accent2); box-shadow:0 0 12px 1px rgba(107,107,71,.8); z-index:3;
+    background:var(--accent2); box-shadow:0 0 12px 1px var(--head-glow); z-index:3;
     transform-origin:center calc(min(46vmin,228px) / 2); transform:rotate(0deg);
   }
   /* center: file glyph + numeric readout, swap to tick on done */
@@ -63,6 +80,8 @@
     transition:opacity .28s ease, transform .34s cubic-bezier(.3,1.4,.4,1);
   }
   #pg04-file{width:clamp(22px,8vmin,38px); height:auto; display:block}
+  #pg04-file path{stroke:var(--accent2)}
+  #pg04-file path:last-child{stroke:var(--accent)}
   #pg04-pct{
     font:600 clamp(20px,8.6vmin,42px)/1 ui-monospace,Menlo,monospace;
     letter-spacing:-.02em; font-variant-numeric:tabular-nums; color:var(--ink);
@@ -82,7 +101,7 @@
   #pg04-dial.done #pg04-glyph{opacity:0; transform:scale(.7)}
   #pg04-dial.done #pg04-tick{opacity:1; transform:scale(1)}
   #pg04-dial.done #pg04-tick path{stroke-dashoffset:0}
-  #pg04-dial.done #pg04-base{box-shadow:0 0 46px -6px rgba(61,220,151,.5)}
+  #pg04-dial.done #pg04-base{box-shadow:0 0 46px -6px var(--base-glow-done)}
   #pg04-dial.done #pg04-head{opacity:0; transition:opacity .2s ease}
   #pg04-dial.done .pg04-half i{background:var(--ok); transition:background .3s ease}
   /* meta row: filename + status */
@@ -96,10 +115,10 @@
     font:600 clamp(8px,2vmin,10px)/1 ui-monospace,Menlo,monospace;
     letter-spacing:.18em; text-transform:uppercase; color:var(--mute);
   }
-  #pg04-dot{width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px 1px rgba(174,97,71,.7)}
+  #pg04-dot{width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px 1px var(--dot-glow)}
   #pg04-status.done{color:var(--ok)}
-  #pg04-status.done #pg04-dot{background:var(--ok); box-shadow:0 0 8px 1px rgba(61,220,151,.7)}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  #pg04-status.done #pg04-dot{background:var(--ok); box-shadow:0 0 8px 1px var(--dot-glow-done)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
   }
@@ -111,19 +130,21 @@
  "description": "Circular rust-toned ring fills to 100% with a leading dot and numeric readout; completes with a green checkmark draw-in. Auto-cycles.",
  "useWhen": "File upload flows, task completion indicators, any bounded progress metric needing a polished circular display.",
  "avoidWhen": "Indeterminate loading states where progress is unknown, or contexts requiring real upload data — remove the auto-cycle loop before shipping.",
- "agentPrompt": "Change accent color to #f97316, increase fill duration to 4000ms (FILL variable), and rename the filename label from 'archive-2026.zip' to 'report.pdf'.",
+ "agentPrompt": "Change accent color to #f97316, increase fill duration to 4000ms (FILL variable), and rename the filename label from 'archive-2026.zip' to 'report.pdf'. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--accent, --accent2)",
   "success color (--ok)",
   "animation durations (FILL=2800, HOLD=1500, RESET=650)",
   "filename label (#pg04-name text)",
-  "ring stroke width (clamp values in border)"
+  "ring stroke width (clamp values in border)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "two-half pie ring technique (pg04-rL / pg04-rR rotate pattern)",
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — must be wired to real upload progress events before production use",
@@ -136,7 +157,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "progress",
@@ -164,9 +186,9 @@
         <div id="pg04-core" aria-hidden="true">
           <div id="pg04-glyph">
             <svg id="pg04-file" viewBox="0 0 24 30" fill="none">
-              <path d="M3 2h11l7 7v19a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke="#6B6B47" stroke-width="1.6"/>
-              <path d="M14 2v7h7" stroke="#6B6B47" stroke-width="1.6" stroke-linejoin="round"/>
-              <path d="M6.5 15h11M6.5 19h11M6.5 23h7" stroke="#AE6147" stroke-width="1.6" stroke-linecap="round"/>
+              <path d="M3 2h11l7 7v19a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke-width="1.6"/>
+              <path d="M14 2v7h7" stroke-width="1.6" stroke-linejoin="round"/>
+              <path d="M6.5 15h11M6.5 19h11M6.5 23h7" stroke-width="1.6" stroke-linecap="round"/>
             </svg>
             <div id="pg04-pct"><b>0</b><span>%</span></div>
           </div>
@@ -210,6 +232,11 @@
   }
 
   var lastPct = -1, doneOn = false;
+
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data; if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
   function setReadout(p){
     var v = Math.round(p*100);
     if(v === lastPct) return;

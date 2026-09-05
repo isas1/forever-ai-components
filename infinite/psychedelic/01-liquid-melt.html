@@ -5,18 +5,40 @@
 <meta name="description" content="Slow lava-lamp metaball blobs swirl in complementary pink and cyan, remixing hues while warped MELT lettering stretches and skews above them">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Liquid Melt</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  /* theme tokens — dark values are the defaults; light poster palette below.
+     The metaball field is drawn in JS from --ps01-sat/-l0/-lk/-lb/-lcap/-ldir:
+     dark ramps lightness UP with the field, light ramps it DOWN (ink on cream). */
+  :root{
+    --ps01-bg:#0a0612; --ps01-sat:.85; --ps01-l0:.10; --ps01-lk:.42;
+    --ps01-lb:.55; --ps01-lcap:.62; --ps01-ldir:1; --ps01-hue:260; --ps01-hamp:90;
+    --ps01-word:#fff; --ps01-word-blend:overlay;
+    --ps01-glow1:rgba(255,61,166,.55); --ps01-glow2:rgba(80,200,255,.35);
+    --ps01-cap:#fff; --ps01-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --ps01-bg:#f6f0f4; --ps01-sat:.60; --ps01-l0:.99; --ps01-lk:-.15;
+    --ps01-lb:.78; --ps01-lcap:.72; --ps01-ldir:-1; --ps01-hue:300; --ps01-hamp:70;
+    --ps01-word:#3a0f2e; --ps01-word-blend:multiply;
+    --ps01-glow1:rgba(198,20,110,.30); --ps01-glow2:rgba(11,94,128,.20);
+    --ps01-cap:#3a0f2e; --ps01-cap-o:.62;
+  }
+  html,body{margin:0;height:100%;background:var(--ps01-bg);overflow:hidden}
   #ps01-stage{position:fixed;inset:0;display:block}
   #ps01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* warped psychedelic caption word, set in a static glow that never repaints */
   #ps01-word{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
     font:800 clamp(34px,15vmin,150px)/0.9 "Bungee","Arial Black",Impact,sans-serif;
-    letter-spacing:.01em;text-align:center;color:#fff;mix-blend-mode:overlay;
-    text-shadow:0 0 28px rgba(255,61,166,.55),0 0 60px rgba(80,200,255,.35);
+    letter-spacing:.01em;text-align:center;color:var(--ps01-word);mix-blend-mode:var(--ps01-word-blend);
+    text-shadow:0 0 28px var(--ps01-glow1),0 0 60px var(--ps01-glow2);
     pointer-events:none;user-select:none;white-space:nowrap}
   #ps01-word span{display:inline-block;will-change:transform}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ps01-cap);opacity:var(--ps01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}#ps01-word span{transform:none!important}}
 </style>
 <link href="https://fonts.googleapis.com/css2?family=Bungee&display=swap" rel="stylesheet">
@@ -27,19 +49,21 @@
  "description": "7 lava-lamp blobs drift and merge with cycling pink-to-cyan hues on a dark canvas; \"MELT\" lettering warps per-glyph with skew and scale transforms above.",
  "useWhen": "Dark-themed hero sections, psychedelic or creative portfolio backgrounds, ambient screensaver-style displays.",
  "avoidWhen": "Light backgrounds (canvas bg hardcoded dark), content layouts requiring legible text overlays, low-end mobile (pixel loop per frame).",
- "agentPrompt": "Change the word from 'MELT' to 'FLUX', shift hue range to 60+90 (yellow-to-green band) by editing the `hue = 260 + 90*Math.sin(hp)` line, and increase blob count NB from 7 to 10.",
+ "agentPrompt": "Change the word from 'MELT' to 'FLUX', shift hue range to 60+90 (yellow-to-green band) by editing the `hue = 260 + 90*Math.sin(hp)` line, and increase blob count NB from 7 to 10. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "display word (WORD variable)",
   "blob count (NB=7)",
   "hue range (260 + 90*Math.sin)",
   "blob speed (vx/vy *= 0.00026)",
-  "letter warp intensity (0.16 scale, 10px translateY, 5deg skewX)"
+  "letter warp intensity (0.16 scale, 10px translateY, 5deg skewX)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "low-res 88x88 canvas upscaled via CSS (perf critical)",
   "IIFE wrapper",
   "reduced-motion static-frame guard",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Pixel loop runs every frame — CPU-bound on low-end devices",
@@ -52,7 +76,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "metaball",
@@ -76,6 +101,7 @@
 (function(){
   "use strict";
   var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var root = document.documentElement;
   var stage = document.getElementById("ps01-stage");
   var cv = document.getElementById("ps01-c");
   var ctx = cv.getContext("2d", {alpha:false});
@@ -123,11 +149,11 @@
         }
         // map field -> hue cycling between magenta(330) and cyan(190) + slow swirl
         var hp = (sum*0.5 + phase + fx*0.7 + fy*0.5);
-        var hue = 260 + 90*Math.sin(hp);   // 170..350 : pink<->cyan band
-        var lit = sum>1.0 ? 0.55 : 0.10 + 0.42*sum; // blob body vs deep bg
-        if (lit>0.62) lit=0.62;
-        // cheap HSL->RGB, bg tinted toward #0a0612 when field is low
-        var c = hsl(hue, 0.85, lit);
+        var hue = HC + HA*Math.sin(hp);    // dark 170..350 : pink<->cyan band
+        var lit = sum>1.0 ? LB : L0 + LK*sum;      // blob body vs deep bg
+        if (LDIR*lit > LDIR*LCAP) lit=LCAP;        // clamp toward the ink end
+        // cheap HSL->RGB; the ramp direction/limits come from the theme tokens
+        var c = hsl(hue, SAT, lit);
         d[k]=c[0]; d[k+1]=c[1]; d[k+2]=c[2]; d[k+3]=255;
         k+=4; idx++;
       }
@@ -187,7 +213,24 @@
     if(document.hidden) stop(); else if(!reduce) play();
   });
 
+  // JS-drawn colours read the tokens once at start and once per theme switch
+  var SAT=0.85, L0=0.10, LK=0.42, LB=0.55, LCAP=0.62, LDIR=1, HC=260, HA=90;
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){return parseFloat(cs.getPropertyValue(n));};
+    SAT=g("--ps01-sat"); L0=g("--ps01-l0"); LK=g("--ps01-lk");
+    LB=g("--ps01-lb"); LCAP=g("--ps01-lcap"); LDIR=g("--ps01-ldir");
+    HC=g("--ps01-hue"); HA=g("--ps01-hamp");
+  }
+  addEventListener("message", function(e){
+    var d=e.data;
+    if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme", d.theme); syncTheme();
+      if(reduce){ paint(2600); }                  // repaint the static frame
+    }
+  });
+
   size();
+  syncTheme();
   if(reduce){ step(2600); paint(2600); warp(0); return; }  // one calm static frame
   play();
 })();

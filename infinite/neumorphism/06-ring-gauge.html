@@ -2,19 +2,37 @@
 <meta charset="utf-8">
 <meta name="description" content="Ring Gauge — Neumorphism. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ring Gauge</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-html,body{margin:0;height:100%;overflow:hidden;background:#181D1B;display:flex;align-items:center;justify-content:center}
-.neu-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#8a91a8;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Light neumorphism needs a
+     soft grey-white ground with a white highlight + tinted-grey shadow pair. */
+  :root{
+    --neu-bg:#181D1B; --neu-track:#101412; --neu-shadow-a:#101412; --neu-shadow-b:#222925;
+    --neu-grad-a:#5A8C73; --neu-grad-b:#4B5560; --neu-pct:#c4c9da; --neu-unit:#555e7a; --cap-o:.35;
+  }
+  :root[data-theme="light"]{
+    --neu-bg:#e6e9ef; --neu-track:#c9cfda; --neu-shadow-a:rgba(163,169,184,.55); --neu-shadow-b:#ffffff;
+    --neu-grad-a:#48705c; --neu-grad-b:#4b5560; --neu-pct:#5a6790; --neu-unit:#555e7a; --cap-o:.5;
+  }
+html,body{margin:0;height:100%;overflow:hidden;background:var(--neu-bg);display:flex;align-items:center;justify-content:center}
+.neu-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:var(--neu-unit);opacity:var(--cap-o);letter-spacing:.5px;pointer-events:none;z-index:99}
 .neu-wrap{position:relative;width:180px;height:180px}
 .neu-svg{width:180px;height:180px;transform:rotate(-90deg)}
-.neu-track{fill:none;stroke:#101412;stroke-width:14;filter:drop-shadow(2px 2px 4px #101412) drop-shadow(-2px -2px 4px #222925)}
+.neu-track{fill:none;stroke:var(--neu-track);stroke-width:14;filter:drop-shadow(2px 2px 4px var(--neu-shadow-a)) drop-shadow(-2px -2px 4px var(--neu-shadow-b))}
 .neu-ring{fill:none;stroke:url(#rg);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 120ms linear}
 .neu-center{
   position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:2px;
 }
-.neu-pct{font:700 32px/1 system-ui,-apple-system,sans-serif;color:#c4c9da;letter-spacing:-1px}
-.neu-unit{font:600 10px/1 system-ui,-apple-system,sans-serif;letter-spacing:2px;color:#555e7a}
+.neu-pct{font:700 32px/1 system-ui,-apple-system,sans-serif;color:var(--neu-pct);letter-spacing:-1px}
+.neu-unit{font:600 10px/1 system-ui,-apple-system,sans-serif;letter-spacing:2px;color:var(--neu-unit)}
+#rgA{stop-color:var(--neu-grad-a)}
+#rgB{stop-color:var(--neu-grad-b)}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/neumorphism/06-ring-gauge.html",
@@ -22,21 +40,23 @@ html,body{margin:0;height:100%;overflow:hidden;background:#181D1B;display:flex;a
  "description": "SVG ring gauge fills with a sage-to-slate gradient arc over 4 seconds, counting a numeric percentage; resets and loops continuously.",
  "useWhen": "Dashboard widgets, loading indicators, or metric displays on dark neumorphic UIs needing ambient animated progress.",
  "avoidWhen": "Light backgrounds (hardcoded dark charcoal). Contexts needing user-driven real data — wire setVal() externally and remove the auto-loop.",
- "agentPrompt": "Change the label from 'LOAD' to 'CPU', set gradient stops to #ff6b6b and #ff9f43, and slow the fill cycle to 6000ms by updating DURATION=6000.",
+ "agentPrompt": "Change the label from 'LOAD' to 'CPU', set gradient stops to #ff6b6b and #ff9f43, and slow the fill cycle to 6000ms by updating DURATION=6000. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gradient colors (stop-color #5A8C73 / #4B5560)",
   "DURATION constant (4000ms)",
   "INTERVAL step rate (80ms)",
   "ring stroke-width (10)",
-  "label text (.neu-unit content 'LOAD')"
+  "label text (.neu-unit content 'LOAD')",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (sets static 65% fallback)",
-  "visibilitychange pause/play"
+  "visibilitychange pause/play",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded dark charcoal — must edit CSS to change",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Auto-loops by default; remove setInterval and call setVal() with live data for production use"
  ],
  "tier": "curated",
@@ -46,7 +66,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#181D1B;display:flex;a
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "gauge",
@@ -64,8 +85,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#181D1B;display:flex;a
   <svg class="neu-svg" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop offset="0%" stop-color="#5A8C73"/>
-        <stop offset="100%" stop-color="#4B5560"/>
+        <stop id="rgA" offset="0%" stop-color="#5A8C73"/>
+        <stop id="rgB" offset="100%" stop-color="#4B5560"/>
       </linearGradient>
     </defs>
     <circle class="neu-track" cx="90" cy="90" r="72"/>
@@ -104,6 +125,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#181D1B;display:flex;a
   function stop(){clearInterval(timer);}
   function play(){if(reduce){setVal(65);return;}timer=setInterval(step,INTERVAL);}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',(e)=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme',d.theme);
+  });
   play();
 })();</script>
 </body></html>

@@ -5,16 +5,19 @@
 <meta name="description" content="A heart dips then springs into a magenta-mint gradient fill, firing a 96-particle synthwave burst of dots and ring shards.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Like Burst</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
+  :root{--fb07-bg:#0b0d12;--fb07-mint:#34d399;--fb07-cyan:#5eead4;--fb07-mag:#f472b6;--fb07-vio:#a78bfa;--fb07-sun:#fbbf24;--fb07-mint-rgb:52,211,153;--fb07-cyan-rgb:94,234,212;--fb07-idle:#11151c;--fb07-cap:#fff;--fb07-cap-o:.42;--fb07-hint-o:.34}
+  :root[data-theme="light"]{--fb07-bg:#f2f4f8;--fb07-mint:#1b7c59;--fb07-cyan:#107e6d;--fb07-mag:#d51177;--fb07-vio:#6b3bf7;--fb07-sun:#8e6703;--fb07-mint-rgb:27,124,89;--fb07-cyan-rgb:16,126,109;--fb07-idle:#fff;--fb07-cap:#182029;--fb07-cap-o:.5;--fb07-hint-o:.55}
   html,body{margin:0;height:100%}
-  body{background:#0b0d12;overflow:hidden}
+  body{background:var(--fb07-bg);overflow:hidden}
   #fb07-stage{position:fixed;inset:0;display:grid;place-items:center;outline:none}
-  #fb07-stage:focus-visible{box-shadow:inset 0 0 0 2px rgba(52,211,153,.55)}
+  #fb07-stage:focus-visible{box-shadow:inset 0 0 0 2px rgba(var(--fb07-mint-rgb),.55)}
   #fb07-c{width:100%;height:100%;display:block}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--fb07-cap);opacity:var(--fb07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   #fb07-hint{position:fixed;right:9px;bottom:7px;font:600 9px/1 ui-monospace,Menlo,monospace;
-    color:#34d399;opacity:.34;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+    color:var(--fb07-mint);opacity:var(--fb07-hint-o);letter-spacing:.1em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -24,24 +27,26 @@
  "description": "Heart dips then spring-pops into a magenta-mint gradient, firing a 96-particle synthwave burst of dots and ring shards. Auto-cycles when idle.",
  "useWhen": "Social feeds, reaction buttons, content-save interactions needing a dramatic particle burst on dark backgrounds.",
  "avoidWhen": "Light backgrounds (hardcoded dark canvas). Remove auto-cycle logic before shipping in production.",
- "agentPrompt": "Change particle count from N=96 to N=64, replace SWATCH with warm tones [\"#f97316\",\"#fbbf24\",\"#ef4444\"], and slow the animation by increasing DUR from 1100 to 1600.",
+ "agentPrompt": "Change particle count from N=96 to N=64, replace SWATCH with warm tones [\"#f97316\",\"#fbbf24\",\"#ef4444\"], and slow the animation by increasing DUR from 1100 to 1600. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "particle count (N=96)",
   "color palette (SWATCH array)",
   "heart scale unit (R = Math.min(W,H)*0.20)",
   "spring damping (Math.pow(2,-7*t))",
   "burst lifetime (DUR=1100)",
-  "auto-cycle gap (AUTO_GAP=2600)"
+  "auto-cycle gap (AUTO_GAP=2600)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "IIFE wrapper",
-  "aria-live region for screen readers"
+  "aria-live region for screen readers",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — remove nextAuto logic for production use",
-  "Background hardcoded dark (#0b0d12) — requires CSS edit to change",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "No reduced-motion fallback beyond a single static liked-heart frame"
  ],
  "tier": "curated",
@@ -51,7 +56,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "heart",
@@ -83,9 +89,14 @@
   var live  = document.getElementById("fb07-live");
   var ctx   = cv.getContext("2d");
 
-  // synthwave/vaporwave palette around the brand mint
-  var MINT="#34d399", CYAN="#5eead4", MAG="#f472b6", VIO="#a78bfa", SUN="#fbbf24";
-  var SWATCH=[MINT,CYAN,MAG,VIO,SUN];
+  var root=document.documentElement, MINT,CYAN,MAG,VIO,SUN,SWATCH,MINT_RGB,CYAN_RGB,IDLE, PK=["mint","cyan","mag","vio","sun"];
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=PK.map(function(k){return cs.getPropertyValue("--fb07-"+k).trim();});
+    MINT=v[0];CYAN=v[1];MAG=v[2];VIO=v[3];SUN=v[4]; SWATCH=[MINT,CYAN,MAG,VIO,SUN];
+    MINT_RGB=cs.getPropertyValue("--fb07-mint-rgb").trim(); CYAN_RGB=cs.getPropertyValue("--fb07-cyan-rgb").trim(); IDLE=cs.getPropertyValue("--fb07-idle").trim();
+  }
+  addEventListener("message",function(e){ var d=e.data; if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce)drawOneFrame(); } });
+  syncTheme();
 
   var W=0,H=0,cx=0,cy=0,R=0,DPR=1;
   function resize(){
@@ -149,8 +160,8 @@
     // static radial glow gradient (no per-frame filter/shadow repaint of layout)
     if(glow>0){
       var g=ctx.createRadialGradient(cx,cy,R*0.2,cx,cy,R*1.9);
-      g.addColorStop(0,"rgba(52,211,153,"+(0.16*glow).toFixed(3)+")");
-      g.addColorStop(1,"rgba(52,211,153,0)");
+      g.addColorStop(0,"rgba("+MINT_RGB+","+(0.16*glow).toFixed(3)+")");
+      g.addColorStop(1,"rgba("+MINT_RGB+",0)");
       ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
     }
     heartPath(scale);
@@ -159,8 +170,8 @@
       lg.addColorStop(0,MAG); lg.addColorStop(1,MINT);
       ctx.fillStyle=lg; ctx.fill();
     } else {
-      ctx.fillStyle="#11151c"; ctx.fill();
-      ctx.lineWidth=Math.max(2,R*0.07); ctx.strokeStyle="rgba(94,234,212,.55)"; ctx.stroke();
+      ctx.fillStyle=IDLE; ctx.fill();
+      ctx.lineWidth=Math.max(2,R*0.07); ctx.strokeStyle="rgba("+CYAN_RGB+",.55)"; ctx.stroke();
     }
   }
 

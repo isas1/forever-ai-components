@@ -5,12 +5,27 @@
 <meta name="description" content="An olive-to-terracotta gradient donut ring eases its fill to random percentages with a leading dot and centered LOAD percent readout.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Donut Ring Progress</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1D1F19;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --c03-a/-b/-track/-ink feed the canvas. */
+  :root{
+    --c03-bg:#1D1F19; --c03-cap:#75894D; --c03-cap-o:.4;
+    --c03-a:#75894D; --c03-b:#A57855; --c03-track:#ffffff14; --c03-ink:#ffffff; --c03-blur:12;
+  }
+  :root[data-theme="light"]{
+    --c03-bg:#f4f5ee; --c03-cap:#647542; --c03-cap-o:.62;
+    --c03-a:#647542; --c03-b:#8d6749; --c03-track:#1d1f191f; --c03-ink:#1e2118; --c03-blur:6;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c03-bg);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
-    color:#75894D;opacity:.4;text-transform:uppercase}
+    color:var(--c03-cap);opacity:var(--c03-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -19,22 +34,24 @@
  "description": "Olive-to-terracotta gradient donut ring eases its fill to random targets with a leading dot and large centered percentage readout. Tap to jump to a new value.",
  "useWhen": "Loading screens, dashboard KPI widgets, progress indicators where a glanceable percentage with ambient motion fits the design.",
  "avoidWhen": "Contexts needing multiple simultaneous rings or precise, user-controlled progress — the target is randomized automatically.",
- "agentPrompt": "Change the gradient colors from olive/terracotta to amber/orange by setting A='#ffb347' and B='#ff6b35', then increase ring thickness by changing lw=R*0.34 to lw=R*0.44.",
+ "agentPrompt": "Change the gradient colors from olive/terracotta to amber/orange by setting A='#ffb347' and B='#ff6b35', then increase ring thickness by changing lw=R*0.34 to lw=R*0.44. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gradient colors (A and B constants)",
   "ring thickness (lw=R*0.34)",
   "easing speed (cur += (tgt-cur)*0.06)",
   "hold duration before retargeting (hold>90)",
-  "initial target value (tgt=0.72)"
+  "initial target value (tgt=0.72)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas resize",
   "visibilitychange pause guard",
   "prefers-reduced-motion snap (reduce branch)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded to #161226 — must edit CSS to use on light backgrounds",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Label reads 'LOAD' — purely cosmetic, must be changed for non-loading contexts"
  ],
  "tier": "curated",
@@ -44,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "donut",
@@ -65,8 +83,24 @@
 (function(){
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  let W,H,DPR; const A='#75894D',B='#A57855';
+  const root=document.documentElement;
+  let W,H,DPR; let A='#75894D',B='#A57855';
+  const C={track:'',ink:'',blur:12};
   let cur=0,tgt=0.72,hold=0;
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    A=cs.getPropertyValue('--c03-a').trim();          // arc gradient is rebuilt from A/B each frame
+    B=cs.getPropertyValue('--c03-b').trim();
+    C.track=cs.getPropertyValue('--c03-track').trim();
+    C.ink=cs.getPropertyValue('--c03-ink').trim();
+    C.blur=parseFloat(cs.getPropertyValue('--c03-blur'))||0;
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
   function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
   let last=0;
@@ -79,19 +113,19 @@
     const cx=W/2,cy=H/2, R=Math.min(W,H)*0.32, lw=R*0.34;
     // track
     ctx.lineWidth=lw;ctx.lineCap='round';
-    ctx.strokeStyle='#ffffff14';
+    ctx.strokeStyle=C.track;
     ctx.beginPath();ctx.arc(cx,cy,R,0,Math.PI*2);ctx.stroke();
     // progress arc
     const start=-Math.PI/2, end=start+Math.PI*2*Math.max(0.001,cur);
     const g=ctx.createLinearGradient(cx-R,cy-R,cx+R,cy+R);
     g.addColorStop(0,A);g.addColorStop(1,B);
-    ctx.strokeStyle=g;ctx.shadowColor=A;ctx.shadowBlur=12;
+    ctx.strokeStyle=g;ctx.shadowColor=A;ctx.shadowBlur=C.blur;
     ctx.beginPath();ctx.arc(cx,cy,R,start,end);ctx.stroke();ctx.shadowBlur=0;
     // leading dot
-    ctx.fillStyle='#fff';
+    ctx.fillStyle=C.ink;
     ctx.beginPath();ctx.arc(cx+Math.cos(end)*R,cy+Math.sin(end)*R,lw*0.22,0,7);ctx.fill();
     // pct text
-    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=C.ink;ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.font='700 '+(R*0.5)+'px ui-monospace,monospace';
     ctx.fillText(Math.round(cur*100)+'%',cx,cy-R*0.04);
     ctx.fillStyle=A;ctx.font='600 '+(R*0.16)+'px ui-monospace,monospace';
@@ -102,7 +136,7 @@
   addEventListener('resize',resize);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
   cv.addEventListener('pointerdown',()=>{tgt=0.2+Math.random()*0.78});
-  resize();raf();
+  syncTheme();resize();raf();
 })();
 </script>
 </body>

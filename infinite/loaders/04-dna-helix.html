@@ -5,25 +5,42 @@
 <meta name="description" content="Two columns of glowing dots swing past each other and shift color to trace a rotating DNA double-helix spinner.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DNA Helix</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block */
 :root{
   --bg-900:#08090d;
   --accent-iris:#DA3E8C; --accent-cyan:#C0B459; --accent-magenta:#A18794;
+  --glow-a:rgba(218,62,140,.16); --glow-b:rgba(192,180,89,.16);
+  --text-0:#e8ecf6; --text-2:#aeb6cc;
+  --cap:#C0B459; --cap-o:.45;
   /* swing amplitude scales with the viewport so the helix reads well on
      phone, tablet and desktop without any JS measurement */
   --amp:clamp(20px,7vmin,42px);
   --node:clamp(9px,2.4vmin,15px);
+}
+:root[data-theme="light"]{
+  --bg-900:#f2f4f8;
+  --accent-iris:#cd277a; --accent-cyan:#776e2d; --accent-magenta:#846775;
+  --glow-a:rgba(218,62,140,.18); --glow-b:rgba(192,180,89,.18);
+  --text-0:#1b2130; --text-2:#5b6478;
+  --cap:#1b2130; --cap-o:.5;
 }
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden}
 body{
   background:var(--bg-900);
   background-image:
-    radial-gradient(60vw 40vw at 15% -10%,rgba(218,62,140,.16),transparent 60%),
-    radial-gradient(50vw 40vw at 90% 0%,rgba(192,180,89,.16),transparent 55%);
+    radial-gradient(60vw 40vw at 15% -10%,var(--glow-a),transparent 60%),
+    radial-gradient(50vw 40vw at 90% 0%,var(--glow-b),transparent 55%);
   display:grid;place-items:center;
   font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  color:#e8ecf6;
+  color:var(--text-0);
 }
 .c04-wrap{display:flex;flex-direction:column;align-items:center;gap:clamp(20px,5vmin,40px);
   padding:24px;text-align:center}
@@ -44,12 +61,12 @@ body{
 
 /* cycling status line — fades between quirky messages as the wait grows */
 .c04-msg{min-height:1.4em;font-size:clamp(13px,3.6vmin,17px);font-weight:500;letter-spacing:.01em;
-  color:#aeb6cc;max-width:min(86vw,420px);line-height:1.4;
+  color:var(--text-2);max-width:min(86vw,420px);line-height:1.4;
   opacity:1;transition:opacity .4s ease}
 .c04-msg.is-out{opacity:0}
 
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#C0B459;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms!important;animation-iteration-count:1!important}
   .c04-msg{transition:none}
@@ -62,20 +79,22 @@ body{
  "description": "Two columns of 10 glowing dots swing left-right in opposite phases, tracing a rotating DNA double helix. Cycling status messages fade in below.",
  "useWhen": "Loading screens where a quirky, science-themed spinner fits the brand tone. Works well for biotech, data, or developer tools.",
  "avoidWhen": "Contexts needing a neutral or minimal loader — the cycling text messages are opinionated and must be replaced for production use.",
- "agentPrompt": "Change accent colors to green/lime tones: set --accent-iris to #22c55e, --accent-cyan to #a3e635, --accent-magenta to #4ade80, and slow the swing cycle to 2.4s.",
+ "agentPrompt": "Change accent colors to green/lime tones: set --accent-iris to #22c55e, --accent-cyan to #a3e635, --accent-magenta to #4ade80, and slow the swing cycle to 2.4s. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent colors (--accent-iris, --accent-cyan, --accent-magenta)",
   "node count (COUNT=10)",
   "swing duration (1.8s in animation shorthand)",
   "swing amplitude (--amp CSS variable)",
   "status messages (MSGS array)",
-  "message cycle interval (2600ms)"
+  "message cycle interval (2600ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "visibilitychange pause on both animation and timer",
   "prefers-reduced-motion guard (CSS + JS branch)",
-  "aria-label on helix + aria-live on status"
+  "aria-label on helix + aria-live on status",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Node positions calculated once on load — resize does not reflow node layout",
@@ -89,7 +108,8 @@ body{
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "loader",
@@ -111,10 +131,11 @@ body{
 <div class="cap">DNA Helix</div>
 <script>
 (function(){
-  var root=document.getElementById('c04-dna');
-  if(!root) return;
-  var COUNT=10, h=root.clientHeight||150,
-      node=parseFloat(getComputedStyle(root).getPropertyValue('--node'))||12;
+  var root=document.documentElement;
+  var host=document.getElementById('c04-dna');
+  if(!host) return;
+  var COUNT=10, h=host.clientHeight||150,
+      node=parseFloat(getComputedStyle(host).getPropertyValue('--node'))||12;
   for(var i=0;i<COUNT;i++){
     var t=i/(COUNT-1);
     var top=(t*(h-node))+'px';
@@ -125,10 +146,10 @@ body{
     var b=document.createElement('span');
     b.className='c04-dna__node c04-dna__node--b';
     b.style.top=top; b.style.animationDelay=delay;
-    root.appendChild(a); root.appendChild(b);
+    host.appendChild(a); host.appendChild(b);
   }
   function vis(){var s=document.hidden?'paused':'running';
-    root.querySelectorAll('.c04-dna__node').forEach(function(n){n.style.animationPlayState=s;});}
+    host.querySelectorAll('.c04-dna__node').forEach(function(n){n.style.animationPlayState=s;});}
   document.addEventListener('visibilitychange',vis);vis();
 
   // quirky status line: early ones are upbeat, later ones acknowledge the wait.
@@ -157,6 +178,13 @@ body{
   document.addEventListener('visibilitychange',function(){
     clearInterval(timer);
     if(!document.hidden){ timer=setInterval(tick,2600); }
+  });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);
+    }
   });
 })();
 </script>

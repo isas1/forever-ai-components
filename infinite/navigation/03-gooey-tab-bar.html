@@ -8,21 +8,40 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
+    --bg:#0d0f16; --glow-a:rgba(192,132,89,0.16);
     --bg-surface:#1c2030;
     --text-2:#8a91a8;
     --accent-iris:#E04729;
+    --on-accent:#fff;
     --border-soft:rgba(255,255,255,0.07);
     --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
     --dur-base:280ms;
+    --cap:#fff; --cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow-a:rgba(152,97,58,0.12);
+    --bg-surface:#ffffff;
+    --text-2:#5b6178;
+    --accent-iris:#cd3a1e;
+    --on-accent:#fff;
+    --border-soft:rgba(0,0,0,0.08);
+    --cap:#2a1710; --cap-o:.5;
   }
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden}
   body{
-    background:#0d0f16;
-    background-image:radial-gradient(50vw 40vw at 90% 0%,rgba(192,132,89,0.16),transparent 55%);
+    background:var(--bg);
+    background-image:radial-gradient(50vw 40vw at 90% 0%,var(--glow-a),transparent 55%);
     font-family:"Inter",system-ui,sans-serif;
     display:grid;place-items:center;
   }
@@ -47,8 +66,8 @@
     color:var(--text-2);cursor:pointer;border-radius:999px;
     transition:color var(--dur-base) var(--ease-out-soft);
   }
-  .c03-tabs__btn.c03-tabs__btn--active{color:#fff}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  .c03-tabs__btn.c03-tabs__btn--active{color:var(--on-accent)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
   @media (prefers-reduced-motion:reduce){.c03-tabs__blob{transition-duration:.001ms!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -58,19 +77,21 @@
  "description": "Pill-shaped tab bar with a vermillion blob that slides between tabs using a spring easing and SVG goo filter for liquid merge effect on dark surface.",
  "useWhen": "Bottom nav bars, in-app tab switching, any dark-UI context needing a premium tactile navigation feel.",
  "avoidWhen": "Light-background UIs (background is hardcoded dark). More than 4-5 tabs — blob sizing breaks on narrow viewports.",
- "agentPrompt": "Change accent color from #E04729 to #f43f5e, increase blob transition to 640ms, and add a fourth tab button labeled \"Search\" after \"Cloud\".",
+ "agentPrompt": "Change accent color from #E04729 to #f43f5e, increase blob transition to 640ms, and add a fourth tab button labeled \"Search\" after \"Cloud\". Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--accent-iris: #E04729)",
   "blob spring transition duration (480ms)",
   "tab labels (Home / Library / Cloud)",
   "auto-cycle interval (1700ms)",
-  "padding and gap between buttons"
+  "padding and gap between buttons",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "SVG goo filter (#c03-goo feGaussianBlur + feColorMatrix)",
   "IIFE wrapper",
   "prefers-reduced-motion guard in loop()",
-  "visibilitychange stop/start"
+  "visibilitychange stop/start",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — remove loop() call before shipping in production",
@@ -83,7 +104,8 @@
   "easy-to-modify",
   "mobile-ready",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "navigation",
@@ -122,6 +144,13 @@
   var blob=document.getElementById('c03-blob');
   var btns=Array.prototype.slice.call(bar.querySelectorAll('.c03-tabs__btn'));
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
   function move(btn){
     btns.forEach(function(x){x.classList.remove('c03-tabs__btn--active');});
     btn.classList.add('c03-tabs__btn--active');

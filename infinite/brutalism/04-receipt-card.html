@@ -2,17 +2,30 @@
 <meta charset="utf-8">
 <meta name="description" content="Receipt Card — Neo-Brutalism. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Receipt Card</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-html,body{margin:0;height:100%;overflow:hidden;background:#111;display:flex;align-items:center;justify-content:center}
-.bru-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#b8ff57;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --bru-bg:#111; --bru-surface:#111; --bru-accent:#b8ff57; --cap-o:.35;
+  }
+  :root[data-theme="light"]{
+    --bru-bg:#eef0e9; --bru-surface:#ffffff; --bru-accent:#447600; --cap-o:.5;
+  }
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bru-bg);display:flex;align-items:center;justify-content:center}
+.bru-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:var(--bru-accent);opacity:var(--cap-o);letter-spacing:.5px;pointer-events:none;z-index:99}
 .bru-receipt{
-  border:3px solid #b8ff57;
-  box-shadow:5px 5px 0 #b8ff57;
+  border:3px solid var(--bru-accent);
+  box-shadow:5px 5px 0 var(--bru-accent);
   padding:18px 22px 16px;
-  background:#111;
+  background:var(--bru-surface);
   min-width:220px;
   max-width:90%;
-  color:#b8ff57;
+  color:var(--bru-accent);
   font:600 .82rem/1.6 ui-monospace,"Courier New",monospace;
 }
 .bru-rhead{
@@ -22,7 +35,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#111;display:flex;alig
   text-align:center;
   margin-bottom:6px;
 }
-.bru-rdash{border:none;border-top:1px dashed #b8ff57;margin:8px 0;}
+.bru-rdash{border:none;border-top:1px dashed var(--bru-accent);margin:8px 0;}
 .bru-rrow{display:flex;justify-content:space-between;opacity:0;}
 .bru-rrow.bru-visible{opacity:1;}
 .bru-rtotal{
@@ -30,7 +43,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#111;display:flex;alig
   font:900 1.05rem/1.5 "Arial Black","Arial",Impact,system-ui,sans-serif;
   letter-spacing:.06em;
   text-transform:uppercase;
-  border-top:2px solid #b8ff57;
+  border-top:2px solid var(--bru-accent);
   margin-top:4px;
   padding-top:4px;
   opacity:0;
@@ -46,18 +59,20 @@ html,body{margin:0;height:100%;overflow:hidden;background:#111;display:flex;alig
  "description": "A neo-brutalist receipt card with lime-green monospace text on black; line items fade in one-by-one with a staggered delay, revealing a running total.",
  "useWhen": "Order confirmations, checkout summaries, or brutalist-themed UI demos that need a structured itemized reveal.",
  "avoidWhen": "Light-background pages (background hardcoded #111). Real-time or interactive checkout flows — items and prices are static.",
- "agentPrompt": "Change the order items and prices in the `rows` array, update the `totals` array to match running sums, and set the accent color from #b8ff57 to #ff4d4d.",
+ "agentPrompt": "Change the order items and prices in the `rows` array, update the `totals` array to match running sums, and set the accent color from #b8ff57 to #ff4d4d. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (#b8ff57 throughout CSS)",
   "row items and prices (rows array + HTML span text)",
   "running totals (totals array)",
   "stagger delay between rows (delay values: 0/420/840/1260)",
-  "loop pause before restart (2200ms)"
+  "loop pause before restart (2200ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static reveal fallback)",
-  "visibilitychange pause/play handler"
+  "visibilitychange pause/play handler",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to #111 — must edit CSS to use on light pages",
@@ -70,7 +85,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#111;display:flex;alig
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "receipt",
@@ -139,6 +155,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#111;display:flex;alig
   function play(){stop();run();}
 
   document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',(e)=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme',d.theme);
+  });
   if(reduce){
     rows.forEach(r=>document.getElementById(r.id).classList.add('bru-visible'));
     totalEl.classList.add('bru-visible');

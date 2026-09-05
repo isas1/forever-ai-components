@@ -7,18 +7,29 @@
 <title>3D Push Button</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
+    --c10-bg:#08090d; --c10-glow-a:rgba(218,62,140,0.16);
     --text-0:#f4f6fb;
     --grad-iris-cyan:linear-gradient(120deg,#DA3E8C,#C0B459);
     --r-md:14px;
+    --cap:#fff; --cap-o:.28;
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
     --dur-fast:160ms;
     --font-display:"Space Grotesk",system-ui,sans-serif;
   }
+  :root[data-theme="light"]{
+    --c10-bg:#f2f4f8; --c10-glow-a:rgba(205,39,122,0.10);
+    --cap:#1b2130; --cap-o:.5;
+  }
   html,body{margin:0;height:100%;overflow:hidden}
-  body{background:#08090d;display:grid;place-items:center;
-    background-image:radial-gradient(60vw 40vw at 30% -10%,rgba(218,62,140,0.16),transparent 60%);}
+  body{background:var(--c10-bg);display:grid;place-items:center;
+    background-image:radial-gradient(60vw 40vw at 30% -10%,var(--c10-glow-a),transparent 60%);}
   #stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c10-push{position:relative;border:0;background:none;cursor:pointer;padding:0;border-radius:var(--r-md);outline-offset:4px;}
@@ -36,7 +47,7 @@
   .c10-push:active .c10-push__shadow,
   .c10-push.is-pressed .c10-push__shadow{transform:translateY(2px);filter:blur(0.5px);}
 
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;font-family:var(--font-display)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c10-push__face,.c10-push__shadow{transition-duration:.001ms}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -46,22 +57,25 @@
  "description": "Magenta-to-gold gradient button with a layered edge and drop shadow that depresses on press and springs back, mimicking a physical key. Auto-cycles as demo.",
  "useWhen": "CTAs, form submit buttons, or any action trigger that benefits from tactile physical feedback.",
  "avoidWhen": "Passive display contexts — remove the auto-cycle setTimeout loop before shipping in production.",
- "agentPrompt": "Change the button label to 'Subscribe', update the gradient to linear-gradient(120deg,#f97316,#ec4899), and increase the idle press interval from 1800ms to 3000ms.",
+ "agentPrompt": "Change the button label to 'Subscribe', update the gradient to linear-gradient(120deg,#f97316,#ec4899), and increase the idle press interval from 1800ms to 3000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "button label (Push down text)",
   "gradient colors (--grad-iris-cyan)",
   "press depth (translateY -7px face / 8px shadow)",
   "edge background color (#A18794 / #C0B459)",
-  "auto-cycle interval (1800ms)"
+  "idle demo cadence (DEMO_EVERY=3000 ms between presses, HOLD_MS=450 ms depressed)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (transition-duration:.001ms)",
   "visibilitychange pause",
-  "three-layer structure (shadow / edge / face)"
+  "three-layer structure (shadow / edge / face)",
+  ".is-pressed demo class sharing the :active rules + takeover on real hover/press/focus",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Auto-cycles by default — remove setTimeout loop for production use",
+  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
   "Edge color is a static dusty-mauve/gold pair and must be updated manually if gradient changes"
  ],
  "tier": "curated",
@@ -71,7 +85,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "button",
@@ -100,18 +115,32 @@
   var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
   var btn = document.querySelector(".c10-push");
 
-  // autonomous idle: depress and release the key on a loop
-  var timer=null;
-  function press(){
-    btn.classList.add("is-pressed");
-    timer=setTimeout(function(){
-      btn.classList.remove("is-pressed");
-      timer=setTimeout(press, 1800);
-    }, 220);
+  // idle demo: the key only depresses on :hover/:active and nothing on the wall ever touches it,
+  // so the demo adds .is-pressed — the same CSS rules :active uses — first press ~0.4 s after
+  // mount, held HOLD_MS, then one press every DEMO_EVERY ms. Real input takes over and hands the
+  // key back to :active; the demo resumes after IDLE_RESUME ms of quiet.
+  var TICK=100, DEMO_EVERY=3000, HOLD_MS=450, IDLE_RESUME=3600, LEAD=400;
+  var demo=true, down=false, phase=DEMO_EVERY-LEAD, idle=0, clock=null;
+  function setPressed(on){ down=on; btn.classList.toggle("is-pressed", on); }
+  function tick(){
+    if(!demo){ if(over) idle=0; else idle+=TICK; if(idle>=IDLE_RESUME){ demo=true; idle=0; phase=DEMO_EVERY-LEAD; } return; }
+    phase+=TICK;
+    if(phase >= (down?HOLD_MS:DEMO_EVERY)){ phase=0; setPressed(!down); }
   }
-  function stop(){ clearTimeout(timer); btn.classList.remove("is-pressed"); }
-  document.addEventListener("visibilitychange", function(){ document.hidden?stop():(reduce||press()); });
-  if(!reduce) setTimeout(press, 900);
+  function takeover(){ demo=false; idle=0; setPressed(false); }   // real input ends the idle demo
+  var over=false;                              // demo stays off while a pointer rests on the control
+  btn.addEventListener("pointerenter", function(){ over=true; takeover(); });
+  btn.addEventListener("pointerleave", function(){ over=false; idle=0; });
+  btn.addEventListener("pointerdown", takeover);
+  btn.addEventListener("focus", takeover);
+  function start(){ if(!clock && !reduce) clock=setInterval(tick, TICK); }
+  function stop(){ clearInterval(clock); clock=null; setPressed(false); }
+  document.addEventListener("visibilitychange", function(){ document.hidden ? stop() : start(); });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message", function(e){
+    var d=e.data; if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);
+  });
+  start();                                     // reduced motion: start() is a no-op, key sits at rest
 })();
 </script>
 </body>

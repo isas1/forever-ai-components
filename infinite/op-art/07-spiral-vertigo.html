@@ -5,18 +5,38 @@
 <meta name="description" content="Two counter-rotating black-and-white Archimedean spirals with a faint off-pitch overlay breeding moire fringes and illusory depth pull.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Spiral Vertigo</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
-  #op07-stage{position:fixed;inset:0;display:block;background:#0a0a0a}
+  /* theme tokens — dark values are the defaults; light inverts the ground/ink pair
+     (ink spirals on white paper); the rim vignette fades toward paper, not black.
+     --op07-ink-rgb feeds the JS stroke alphas. */
+  :root{
+    --op07-bg:#0a0a0a; --op07-ink-rgb:255,255,255;
+    --op07-glow:rgba(255,255,255,.12); --op07-glow-t:rgba(255,255,255,0);
+    --op07-vig-t:rgba(0,0,0,0); --op07-vig:rgba(0,0,0,.66);
+    --op07-cap:#fff; --op07-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --op07-bg:#f4f4f2; --op07-ink-rgb:20,20,20;
+    --op07-glow:rgba(20,20,20,.06); --op07-glow-t:rgba(20,20,20,0);
+    --op07-vig-t:rgba(244,244,242,0); --op07-vig:rgba(244,244,242,.72);
+    --op07-cap:#141414; --op07-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--op07-bg);overflow:hidden}
+  #op07-stage{position:fixed;inset:0;display:block;background:var(--op07-bg)}
   #op07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* static core glow + rim vignette — painted once, never repaints */
   #op07-stage::after{
     content:"";position:absolute;inset:0;pointer-events:none;
     background:
-      radial-gradient(circle at 50% 50%, rgba(255,255,255,.12) 0%, rgba(255,255,255,0) 18%),
-      radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 54%, rgba(0,0,0,.66) 100%);
+      radial-gradient(circle at 50% 50%, var(--op07-glow) 0%, var(--op07-glow-t) 18%),
+      radial-gradient(circle at 50% 50%, var(--op07-vig-t) 54%, var(--op07-vig) 100%);
   }
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op07-cap);opacity:var(--op07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -26,22 +46,24 @@
  "description": "Two counter-rotating Archimedean spirals at near-equal pitch create shifting moire fringes and illusory depth pull on a dark background.",
  "useWhen": "Dark hero backgrounds, op-art or psychedelic themes, loading screens where strong visual motion sets a mood.",
  "avoidWhen": "Contexts requiring readable text overlays or calm ambience. Avoid for users prone to motion sensitivity.",
- "agentPrompt": "Change rotation speed from 0.18 to 0.08 for a slower drift, set moire overlay alpha from 0.22 to 0.45 for stronger fringe contrast, and reduce TURNS from 7 to 5.",
+ "agentPrompt": "Change rotation speed from 0.18 to 0.08 for a slower drift, set moire overlay alpha from 0.22 to 0.45 for stronger fringe contrast, and reduce TURNS from 7 to 5. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "rotation speed (t*0.18 in drawSpiral calls)",
   "moire pitch offset (breathe*1.045)",
   "moire overlay alpha (0.22)",
   "line weight of primary arms (2.4)",
   "TURNS count (7)",
-  "pitch breathing amplitude (0.05)"
+  "pitch breathing amplitude (0.05)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "pre-allocated Float32Array trig tables (COS/SIN/RAD)",
   "visibilitychange pause/resume guards",
-  "reduced-motion static fallback (drawOneFrame)"
+  "reduced-motion static fallback (drawOneFrame)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background hardcoded #0a0a0a — cannot compose over light backgrounds without CSS edits",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Strong vertigo may trigger discomfort; reduced-motion guard shows static frame only",
   "No pointer interactivity — entirely passive"
  ],
@@ -51,7 +73,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "spiral",
@@ -78,6 +101,20 @@
   var stage = document.getElementById("op07-stage");
   var cvs = document.getElementById("op07-c");
   var ctx = cvs.getContext("2d");
+  var root = document.documentElement;
+
+  // the spiral colour JS draws with — read once from the token, once per switch
+  var C={ink:"255,255,255"};
+  function syncTheme(){
+    C.ink=getComputedStyle(root).getPropertyValue("--op07-ink-rgb").trim();
+    if(reduce&&W)render(1.1);   // static fallback must repaint on a live switch
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme();
+    }
+  });
 
   var W=0,H=0,cx=0,cy=0,maxR=0,dpr=1,pitch=1;
   // An Archimedean spiral drawn as a single polyline of many short
@@ -129,7 +166,7 @@
       y = cy + r*(bx*s + by*c);
       if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
     }
-    ctx.strokeStyle = "rgba(255,255,255,"+baseAlpha+")";
+    ctx.strokeStyle = "rgba("+C.ink+","+baseAlpha+")";
     ctx.stroke();
   }
 
@@ -152,6 +189,7 @@
     render(1.1); // a composed, legible still
   }
 
+  syncTheme();
   if(reduce){ drawOneFrame(); return; }
 
   var running=true, rafId=0, start=0;

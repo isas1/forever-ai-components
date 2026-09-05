@@ -8,11 +8,24 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block. --dot-* feed the canvas. */
 :root{
   --bg-900:#08090d;
-  --text-2:#8a91a8;
+  --text-2:#8a91a8; --cap-o:.7;
+  --dot-1:#D0C3DF; --dot-2:#D8C197; --dot-3:#B2A9BC; --link-a:.5;
   --font-display:"Space Grotesk",system-ui,sans-serif;
+}
+:root[data-theme="light"]{
+  --bg-900:#f3f2f6;
+  --text-2:#45414d; --cap-o:.62;
+  --dot-1:#825faa; --dot-2:#866832; --dot-3:#776987; --link-a:.7;
 }
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;overflow:hidden;}
@@ -23,7 +36,7 @@ body{background:var(--bg-900);}
 .c03-const canvas{display:block;width:100%;height:100%;}
 .caption{position:absolute;left:12px;bottom:10px;z-index:5;
   font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-2);opacity:.7;pointer-events:none;}
+  text-transform:uppercase;color:var(--text-2);opacity:var(--cap-o);pointer-events:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -32,19 +45,21 @@ body{background:var(--bg-900);}
  "description": "18–60 lilac/tan/mauve particles drift and bounce; nearby pairs connect with fading lines, forming a shifting constellation network on a dark background.",
  "useWhen": "Dark-theme hero backgrounds, tech or data-science landing pages, ambient looping screensavers needing a networked/connected motif.",
  "avoidWhen": "Light backgrounds (hardcoded dark canvas). Layouts with dense text overlays — moving lines compete with reading.",
- "agentPrompt": "Change COLORS to [\"#ff6b35\",\"#f7c59f\",\"#efefd0\"] for a warm palette, increase LINK distance from 96 to 140, and set particle count cap from 60 to 80.",
+ "agentPrompt": "Change COLORS to [\"#ff6b35\",\"#f7c59f\",\"#efefd0\"] for a warm palette, increase LINK distance from 96 to 140, and set particle count cap from 60 to 80. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (COLORS array)",
   "link distance threshold (LINK=96)",
   "particle count range (min 18, max 60)",
   "particle speed (vx/vy * 0.35)",
-  "particle radius range (1 + random * 1.6)"
+  "particle radius range (1 + random * 1.6)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing with ResizeObserver",
   "IIFE wrapper",
   "reduced-motion guard (static single frame)",
-  "visibilitychange pause"
+  "visibilitychange pause",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "O(n²) line-drawing loop — at max 60 particles this is fine, but raising count past ~100 will drop frames on low-end devices",
@@ -58,7 +73,8 @@ body{background:var(--bg-900);}
   "minimal-deps",
   "mobile-ready",
   "agent-ready",
-  "easy-to-modify"
+  "easy-to-modify",
+  "light-ready"
  ],
  "tags": [
   "particles",
@@ -111,16 +127,33 @@ body{background:var(--bg-900);}
 
   var host=document.querySelector("[data-c03]");
   if(!host) return;
-  var COLORS=["#D0C3DF","#D8C197","#B2A9BC"],particles=[];
+  var root=document.documentElement;
+  var COLORS=["#D0C3DF","#D8C197","#B2A9BC"],LINKA=0.5,particles=[];
+  // canvas colours live in CSS tokens: read once at start and once per theme switch
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    COLORS=[(cs.getPropertyValue("--dot-1")||"#D0C3DF").trim(),
+            (cs.getPropertyValue("--dot-2")||"#D8C197").trim(),
+            (cs.getPropertyValue("--dot-3")||"#B2A9BC").trim()];
+    LINKA=parseFloat(cs.getPropertyValue("--link-a"))||0.5;
+    for(var i=0;i<particles.length;i++) particles[i].c=COLORS[particles[i].ci];  // drop cached colour strings
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme);syncTheme();if(REDUCED) render();
+    }
+  });
   var cv=setupCanvas(host,{onResize:build});
 
   function build(w,h){
     var count=Math.round((w*h)/9000);count=Math.max(18,Math.min(60,count));
     particles=[];
     for(var i=0;i<count;i++){
+      var ci=(Math.random()*COLORS.length)|0;
       particles.push({x:Math.random()*w,y:Math.random()*h,
         vx:(Math.random()-0.5)*0.35,vy:(Math.random()-0.5)*0.35,
-        r:1+Math.random()*1.6,c:COLORS[(Math.random()*COLORS.length)|0]});
+        r:1+Math.random()*1.6,ci:ci,c:COLORS[ci]});
     }
   }
 
@@ -137,7 +170,7 @@ body{background:var(--bg-900);}
       for(j=i+1;j<particles.length;j++){
         q=particles[j];dx=p.x-q.x;dy=p.y-q.y;dist=Math.sqrt(dx*dx+dy*dy);
         if(dist<LINK){
-          ctx.globalAlpha=(1-dist/LINK)*0.5;ctx.strokeStyle=p.c;ctx.lineWidth=0.7;
+          ctx.globalAlpha=(1-dist/LINK)*LINKA;ctx.strokeStyle=p.c;ctx.lineWidth=0.7;
           ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
         }
       }
@@ -149,6 +182,7 @@ body{background:var(--bg-900);}
     }
   }
 
+  syncTheme();
   if(REDUCED){render();return;}
   runLoop(render);
 })();

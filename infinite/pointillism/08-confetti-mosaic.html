@@ -2,11 +2,22 @@
 <meta name="description" content="Confetti dots fly in from the edges and settle into three horizontal color bands, then gently shimmer in place.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Confetti Mosaic</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
-  #po08-stage{position:fixed;inset:0;background:#0d0f14}
+  /* theme tokens — dark defaults, light in [data-theme="light"]. --po08-bands: a base/fleck pair per band. */
+  :root{--po08-bg:#0d0f14;--po08-cap:#fff;--po08-cap-o:.42;
+    --po08-bands:240 168 48/120 86 168/40 150 170/235 120 70/150 70 140/120 180 120}
+  :root[data-theme="light"]{ /* canvas-linen ground, the bands deepened to pigment */
+    --po08-bg:#f4efe3;--po08-cap:#2b2418;--po08-cap-o:.55;
+    --po08-bands:188 116 8/86 58 140/16 110 126/186 74 30/112 38 104/54 124 58}
+  html,body{margin:0;height:100%;background:var(--po08-bg);overflow:hidden}
+  #po08-stage{position:fixed;inset:0;background:var(--po08-bg)}
   #po08-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--po08-cap);opacity:var(--po08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -15,19 +26,21 @@
  "description": "104 confetti dots fly in from the edges, settle into three color bands (amber/teal/plum), then shimmer with sine-wave opacity.",
  "useWhen": "Decorative hero backgrounds or splash pages that benefit from an energetic build-in followed by calm ambient motion.",
  "avoidWhen": "Contexts requiring legible text overlays or light-mode UIs — background is hardcoded dark.",
- "agentPrompt": "Change BANDS to sunset palette (warm red, orange, gold base colors) and slow settle duration from 2600 to 4000ms.",
+ "agentPrompt": "Change BANDS to sunset palette (warm red, orange, gold base colors) and slow settle duration from 2600 to 4000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "dot count (N=104)",
   "settle duration (2600ms)",
   "BANDS base and fleck colors",
   "shimmer speed (sh += 0.012)",
-  "dot radius range (0.012..0.022 of min dimension)"
+  "dot radius range (0.012..0.022 of min dimension)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback (drawStatic)",
   "visibilitychange stop/run guard",
-  "single rAF chain (looping flag)"
+  "single rAF chain (looping flag)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to #0d0f14 — edit CSS and paintBg to change",
@@ -40,7 +53,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "pointillism",
@@ -67,13 +81,9 @@
   var ctx = cv.getContext('2d');
   var W=0,H=0,DPR=1;
 
-  // Divisionist palette: warm amber band, deep cyan band, plum band.
-  // Each "band" mixes its base hue with complementary flecks (optical mixing).
-  var BANDS = [
-    {base:[240,168,48],  flk:[120,86,168]},   // amber over violet fleck
-    {base:[40,150,170],  flk:[235,120,70]},   // teal over coral fleck
-    {base:[150,70,140],  flk:[120,180,120]}   // plum over green fleck
-  ];
+  // Divisionist palette: amber/teal/plum bands, each mixing its base hue with a
+  // complementary fleck. Read from --po08-bands by syncTheme().
+  var root=document.documentElement, BANDS=[], BG='#0d0f14';
 
   var N = 104;                  // dot count cap
   // typed arrays — allocation-free per frame
@@ -82,6 +92,7 @@
   var tx=new Float32Array(N), ty=new Float32Array(N);   // settled target
   var rad=new Float32Array(N), spin=new Float32Array(N), spd=new Float32Array(N);
   var col=new Array(N);   // precomputed 'rgb(r,g,b)' strings — no per-frame allocation
+  var bnd=new Uint8Array(N), flk=new Uint8Array(N), jit=new Float32Array(N); // recolour inputs
 
   function rnd(a,b){return a+Math.random()*(b-a);}
 
@@ -92,14 +103,10 @@
     for(var ry=0; ry<rows; ry++){
       for(var cx2=0; cx2<cols; cx2++){
         if(i>=N) break;
-        var band = ry<3?0 : ry<5?1 : 2;
-        var b=BANDS[band];
-        // optical mixing: ~28% of dots use the complementary fleck color
-        var useF = Math.random()<0.28;
-        var c = useF? b.flk : b.base;
-        // slight per-dot value jitter so the field shimmers like a pointillist field
-        var j = rnd(-26,26);
-        col[i]='rgb('+clamp(c[0]+j)+','+clamp(c[1]+j)+','+clamp(c[2]+j)+')';
+        bnd[i] = ry<3?0 : ry<5?1 : 2;
+        // optical mixing: ~28% of dots take the complementary fleck, and a per-dot
+        // value jitter makes the field shimmer like a pointillist mosaic
+        flk[i] = Math.random()<0.28?1:0; jit[i] = rnd(-26,26);
         var gx = mx+cx2*gw + rnd(-gw*0.22,gw*0.22);
         var gy = my+ry*gh  + rnd(-gh*0.22,gh*0.22);
         tx[i]=gx; ty[i]=gy;
@@ -112,19 +119,26 @@
         i++;
       }
     }
+    recolor();
   }
   function clamp(v){return v<0?0:v>255?255:v|0;}
+  // Cached color strings: a flip rebuilds them, leaving the mosaic layout put.
+  function recolor(){
+    for(var i=0;i<N;i++){
+      var b=BANDS[bnd[i]], c=flk[i]?b.flk:b.base, j=jit[i];
+      col[i]='rgb('+clamp(c[0]+j)+','+clamp(c[1]+j)+','+clamp(c[2]+j)+')';
+    }
+  }
 
   function size(){
     DPR=Math.min(2,window.devicePixelRatio||1);
     W=cv.clientWidth; H=cv.clientHeight;
     cv.width=Math.max(1,W*DPR); cv.height=Math.max(1,H*DPR);
-    ctx.setTransform(DPR,0,0,DPR,0,0);
-    layout();
+    ctx.setTransform(DPR,0,0,DPR,0,0); layout();
   }
 
   function paintBg(){
-    ctx.fillStyle='#0d0f14';
+    ctx.fillStyle=BG;
     ctx.fillRect(0,0,W,H);
   }
 
@@ -138,11 +152,8 @@
     y+=Math.sin(spin[i]*1.3)*drift*H*0.04;
     px[i]=x; py[i]=y;
     var r=rad[i]*(0.55+s*0.45);
-    ctx.beginPath();
-    ctx.arc(x,y,r,0,6.2832);
-    ctx.fillStyle=col[i];
-    ctx.globalAlpha=0.55+s*0.45;
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(x,y,r,0,6.2832);
+    ctx.fillStyle=col[i]; ctx.globalAlpha=0.55+s*0.45; ctx.fill();
   }
 
   // ONE rAF loop, two phases: 0 = intro build, 1 = settled shimmer.
@@ -211,6 +222,17 @@
     t0=0; phase=0; run();
   }
 
+  // JS-drawn colors read the tokens, so CSS stays the single source of truth.
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    BG=cs.getPropertyValue('--po08-bg').trim();
+    var t=cs.getPropertyValue('--po08-bands').trim().split('/').map(function(q){return q.trim().split(/\s+/).map(Number);});
+    BANDS=[{base:t[0],flk:t[1]},{base:t[2],flk:t[3]},{base:t[4],flk:t[5]}];
+    if(col[0]){ recolor(); if(reduce) drawStatic(); }
+  }
+  addEventListener('message',function(e){var d=e.data;   // live re-theme from the canvas
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
+
   var ro;
   window.addEventListener('resize',function(){
     if(ro)clearTimeout(ro);
@@ -222,6 +244,7 @@
     else if(!reduce){ run(); }        // resume current phase; never stacks loops
   });
 
+  syncTheme();
   start();
 })();
 </script>

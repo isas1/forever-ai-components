@@ -5,13 +5,30 @@
 <meta name="description" content="A pulsing orange fruit loader with glowing segment animations.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fruit Orange</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#08090d}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c14-bg:#08090d; --c14-glow-a:rgba(124,92,255,.16); --c14-glow-b:rgba(34,211,238,.16);
+    --c14-peel:#f97316; --c14-peel-sh:rgba(249,115,22,0.5);
+    --c14-seg-a:#f59e0b; --c14-seg-b:#ff781f; --c14-core:#f4f6fb; --c14-cap-o:.45;
+  }
+  :root[data-theme="light"]{
+    --c14-bg:#f2f4f8; --c14-glow-a:rgba(124,92,255,.18); --c14-glow-b:rgba(34,211,238,.18);
+    --c14-peel:#b94e05; --c14-peel-sh:rgba(185,78,5,0.3);
+    --c14-seg-a:#c07c08; --c14-seg-b:#f05f00; --c14-core:#241b12; --c14-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c14-bg)}
   body{
     display:grid;place-items:center;
     background-image:
-      radial-gradient(60vw 40vw at 15% -10%,rgba(124,92,255,.16),transparent 60%),
-      radial-gradient(50vw 40vw at 90% 0%,rgba(34,211,238,.16),transparent 55%);
+      radial-gradient(60vw 40vw at 15% -10%,var(--c14-glow-a),transparent 60%),
+      radial-gradient(50vw 40vw at 90% 0%,var(--c14-glow-b),transparent 55%);
   }
   .c14-orange {
     width: 120px; height: 120px;
@@ -20,12 +37,15 @@
   }
   .c14-peel {
     fill: none;
-    stroke: #f97316;
+    stroke: var(--c14-peel);
     stroke-width: 4;
-    filter: drop-shadow(0 0 5px rgba(249,115,22,0.5));
+    filter: drop-shadow(0 0 5px var(--c14-peel-sh));
+  }
+  .c14-core {
+    fill: var(--c14-core);
   }
   .c14-segment {
-    fill: #f59e0b;
+    fill: var(--c14-seg-a);
     opacity: 0.15;
     transform-origin: 60px 60px;
     animation: c14-pulse 1.6s ease-in-out infinite;
@@ -43,11 +63,11 @@
     to { transform: rotate(360deg); }
   }
   @keyframes c14-pulse {
-    0%, 100% { opacity: 0.15; fill: #f59e0b; }
-    50% { opacity: 1; fill: #ff781f; }
+    0%, 100% { opacity: 0.15; fill: var(--c14-seg-a); }
+    50% { opacity: 1; fill: var(--c14-seg-b); }
   }
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 "Space Grotesk",ui-monospace,monospace;
-    color:#f97316;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--c14-peel);opacity:var(--c14-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     .c14-orange, .c14-segment {
       animation: none !important;
@@ -62,19 +82,21 @@
  "description": "SVG orange cross-section: 8 wedge segments pulse amber-to-orange in a sequential wave while the whole slice rotates slowly on an 8s spin.",
  "useWhen": "Playful loading indicators for food, health, or consumer apps. Anywhere a fruit motif or warm radial spinner fits the brand.",
  "avoidWhen": "Corporate or enterprise contexts. Background hardcoded dark — needs CSS override for light themes.",
- "agentPrompt": "Change to a lemon by updating .c14-peel stroke to #facc15 and both fill values in c14-pulse keyframe from #f59e0b/#ff781f to #fef08a/#facc15. Stop rotation by setting animation: none on .c14-orange. Reduce to 6 segments by deleting the last two nth-child rules and two path elements.",
+ "agentPrompt": "Change to a lemon by updating .c14-peel stroke to #facc15 and both fill values in c14-pulse keyframe from #f59e0b/#ff781f to #fef08a/#facc15. Stop rotation by setting animation: none on .c14-orange. Reduce to 6 segments by deleting the last two nth-child rules and two path elements. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "peel stroke color (#f97316 on .c14-peel)",
   "segment pulse colors (#f59e0b and #ff781f inside c14-pulse keyframe)",
   "spin speed (8s on .c14-orange animation)",
   "pulse wave delay increment (0.2s per nth-child)",
-  "segment count (nth-child rules + matching path elements in SVG)"
+  "segment count (nth-child rules + matching path elements in SVG)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "transform-origin: 60px 60px on .c14-segment — rotation pivot at SVG center; wrong value breaks the wave",
   "visibilitychange pause handler for both .c14-orange and all .c14-segment nodes",
   "prefers-reduced-motion guard",
-  "c14- namespace on all classes"
+  "c14- namespace on all classes",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "All 8 segment path elements share the identical d attribute — position comes from nth-child rotate transforms only; adding a 9th segment requires both a new path element and a new nth-child rule",
@@ -87,7 +109,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "orange",
@@ -106,7 +129,7 @@
 <body>
 <svg class="c14-orange" viewBox="0 0 120 120" width="120" height="120">
   <circle class="c14-peel" cx="60" cy="60" r="50" />
-  <circle cx="60" cy="60" r="5" fill="#f4f6fb" />
+  <circle class="c14-core" cx="60" cy="60" r="5" />
   <path class="c14-segment" d="M 60 17 A 43 43 0 0 1 89 29 L 63 56 A 5 5 0 0 1 57 56 Z" />
   <path class="c14-segment" d="M 60 17 A 43 43 0 0 1 89 29 L 63 56 A 5 5 0 0 1 57 56 Z" />
   <path class="c14-segment" d="M 60 17 A 43 43 0 0 1 89 29 L 63 56 A 5 5 0 0 1 57 56 Z" />
@@ -129,6 +152,10 @@
   }
   document.addEventListener('visibilitychange', vis);
   vis();
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data; if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
 })();
 </script>
 </body>

@@ -5,11 +5,26 @@
 <meta name="description" content="Guarded military toggle switch where a hazard-striped red safety cover lifts, the chrome lever throws, and slams shut with a commit flash.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Toggle Latch</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0f1410;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The green-black hardware
+     panel stays a dark physical surface in both themes; only the wall behind it +
+     off-panel accents shift. */
+  :root{
+    --tl-bg:#0f1410; --tl-cap:#9fe870; --tl-cap-o:.34; --tl-pulse-rgb:159,232,112;
+  }
+  :root[data-theme="light"]{
+    --tl-bg:#eef4ee; --tl-cap:#1b2130; --tl-cap-o:.5; --tl-pulse-rgb:60,123,20;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--tl-bg);}
   #tl-c{display:block;width:100%;height:100%;cursor:pointer;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
-       letter-spacing:.14em;color:#9fe870;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--tl-cap);opacity:var(--tl-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +34,23 @@
  "description": "Hazard-striped red safety cover lifts, chrome lever throws to armed, commit flash races across the cover as it slams shut. Click to trigger.",
  "useWhen": "Dark-themed dashboards, dramatic on/off controls, game UIs needing tactile mechanical weight for a toggle action.",
  "avoidWhen": "Light backgrounds (panel hardcoded dark green-black). High-frequency toggling — multi-phase animation takes ~154 frames per cycle.",
- "agentPrompt": "Change accent color from green to red alert by setting AC='#ff4444', update ARMED/SAFE legend colors to match, and slow the cover lift by changing DUR.lift to 70.",
+ "agentPrompt": "Change accent color from green to red alert by setting AC='#ff4444', update ARMED/SAFE legend colors to match, and slow the cover lift by changing DUR.lift to 70. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (AC='#9fe870')",
   "phase durations (DUR object: lift/throw/slam/rest)",
   "cover swing angle (cover*1.05 rad)",
   "lever travel arc (ang=(lever-0.5)*1.6)",
-  "hazard stripe color (#f4d03f) and opacity (0.16)"
+  "hazard stripe color (#f4d03f) and opacity (0.16)",
+  "idle demo cadence (LEAD=24 / GAP=14 / RESUME=216 frames; ARMED↔SAFE flip every ~2.8 s)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "phase state machine (phase/pt guards prevent re-triggering mid-animation)",
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
-  "reduced-motion guard with static draw fallback"
+  "reduced-motion guard with static draw fallback",
+  "idle demo flip (the same trigger() a click runs; real input takes over)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "pointermove randomly triggers animation (~1.2% chance per event) — remove before production use",
@@ -44,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "toggle",
@@ -66,6 +86,17 @@
   const cv=document.getElementById('tl-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const AC='#9fe870';
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    C.pulseRgb=getComputedStyle(root).getPropertyValue('--tl-pulse-rgb').trim();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   let W,H,DPR,S,cx,cy;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -80,14 +111,21 @@
   let phase=0,pt=0,cover=0,lever=0,recoil=0,flash=0,t=0,on=false;
   const DUR={lift:46,throw:14,slam:30,rest:64};
   function trigger(){ if(phase===0){ phase=1; pt=0; } }
-  cv.addEventListener('click',trigger);
-  cv.addEventListener('pointermove',e=>{ if(phase===0&&Math.random()<0.012) trigger(); });
+  cv.addEventListener('click',()=>{ takeover(); trigger(); });
+  cv.addEventListener('pointermove',takeover);
+  // idle demo: nothing on the wall clicks a latch, so it runs the very same trigger() a real click
+  // runs — first throw LEAD frames (~0.4 s) after mount, then an ARMED<->SAFE flip every ~2.8 s
+  // (154-frame cycle + GAP). Real input takes over; demo resumes after RESUME frames (~3.6 s) idle.
+  const LEAD=24, GAP=14, RESUME=216; let demo=true, dwell=GAP-LEAD, idleF=0;
+  function takeover(){ demo=false; idleF=0; }
+  function demoStep(){ if(!demo){ if(++idleF>RESUME){ demo=true; idleF=0; dwell=0; } return; }
+    if(phase===0 && ++dwell>=GAP){ dwell=0; trigger(); } }
 
   function ease(x){ return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2; }
 
   function step(){
     if(reduce) return;
-    pt++;
+    demoStep(); pt++;
     if(phase===1){ // lift cover
       cover=ease(Math.min(pt/DUR.lift,1))*1.0;
       if(pt>=DUR.lift){ phase=2; pt=0; }
@@ -109,9 +147,8 @@
     t++;
   }
 
-  function rr(x,y,w,h,r){ ctx.beginPath();ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath(); }
+  function rr(x,y,w,h,r){ ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath(); }
 
   function draw(){
     ctx.clearRect(0,0,W,H);
@@ -142,18 +179,16 @@
     ctx.rotate(ang);
     // lever shaft (chrome)
     const L=52*S;
-    const lg=ctx.createLinearGradient(-6*S,0,6*S,0);
-    lg.addColorStop(0,'#5a5f58');lg.addColorStop(.42,'#e8efe2');
-    lg.addColorStop(.5,'#fbfff7');lg.addColorStop(.6,'#cfd6c8');lg.addColorStop(1,'#43463f');
+    const lg=ctx.createLinearGradient(-6*S,0,6*S,0);lg.addColorStop(0,'#5a5f58');
+    lg.addColorStop(.42,'#e8efe2');lg.addColorStop(.5,'#fbfff7');lg.addColorStop(.6,'#cfd6c8');lg.addColorStop(1,'#43463f');
     ctx.fillStyle=lg;rr(-5.5*S,-L,11*S,L+8*S,5*S);ctx.fill();
     // knob
-    const kg=ctx.createRadialGradient(-3*S,-L-2*S,1,0,-L,13*S);
-    kg.addColorStop(0,'#ffffff');kg.addColorStop(.4,'#d6ddcf');kg.addColorStop(1,'#6a6f66');
+    const kg=ctx.createRadialGradient(-3*S,-L-2*S,1,0,-L,13*S);kg.addColorStop(0,'#ffffff');kg.addColorStop(.4,'#d6ddcf');kg.addColorStop(1,'#6a6f66');
     ctx.fillStyle=kg;ctx.beginPath();ctx.arc(0,-L,11*S,0,Math.PI*2);ctx.fill();
     // tip glow when on
     if(lever>0.5){ ctx.fillStyle='rgba(159,232,112,'+(0.5*(lever-.5)*2)+')';
       ctx.beginPath();ctx.arc(0,-L,5*S,0,Math.PI*2);ctx.fill(); }
-    ctx.restore();ctx.restore();
+    ctx.restore();
 
     // --- SAFETY COVER (lifts from top hinge) ---
     const hingeY=-58*S;
@@ -171,8 +206,7 @@
     // hazard stripes
     ctx.save();rr(-cw/2,0,cw,chh,12*S);ctx.clip();
     ctx.globalAlpha=0.16;ctx.strokeStyle='#f4d03f';ctx.lineWidth=7*S;
-    for(let i=-3;i<14;i++){ ctx.beginPath();ctx.moveTo(-cw/2+i*16*S,0);
-      ctx.lineTo(-cw/2+i*16*S+chh,chh);ctx.stroke(); }
+    for(let i=-3;i<14;i++){ ctx.beginPath();ctx.moveTo(-cw/2+i*16*S,0);ctx.lineTo(-cw/2+i*16*S+chh,chh);ctx.stroke(); }
     ctx.restore();
     // chrome bezel
     ctx.lineWidth=4*S;
@@ -183,25 +217,21 @@
     if(flash>0.02){
       const fx=-cw/2 + (1-flash)*cw;
       ctx.save();rr(-cw/2,0,cw,chh,12*S);ctx.clip();
-      const fg=ctx.createLinearGradient(fx-14*S,0,fx+14*S,0);
-      fg.addColorStop(0,'rgba(255,255,255,0)');
-      fg.addColorStop(.5,'rgba(255,255,255,'+(0.95*flash)+')');
-      fg.addColorStop(1,'rgba(255,255,255,0)');
+      const fg=ctx.createLinearGradient(fx-14*S,0,fx+14*S,0);fg.addColorStop(0,'rgba(255,255,255,0)');
+      fg.addColorStop(.5,'rgba(255,255,255,'+(0.95*flash)+')');fg.addColorStop(1,'rgba(255,255,255,0)');
       ctx.fillStyle=fg;ctx.fillRect(fx-16*S,0,32*S,chh);
       ctx.restore();
     }
     // grip ridges
     ctx.strokeStyle='rgba(0,0,0,0.28)';ctx.lineWidth=2*S;
-    for(let i=0;i<3;i++){ ctx.beginPath();ctx.moveTo(-30*S,(80+i*8)*S);
-      ctx.lineTo(30*S,(80+i*8)*S);ctx.stroke(); }
+    for(let i=0;i<3;i++){ ctx.beginPath();ctx.moveTo(-30*S,(80+i*8)*S);ctx.lineTo(30*S,(80+i*8)*S);ctx.stroke(); }
     // hinge barrel
     ctx.fillStyle='#23271f';ctx.beginPath();ctx.arc(0,0,7*S,0,Math.PI*2);ctx.fill();
     ctx.restore();
 
     // commit pulse ring on panel
-    if(flash>0.02){ ctx.strokeStyle='rgba(159,232,112,'+(flash*0.6)+')';
-      ctx.lineWidth=2*S;ctx.beginPath();
-      ctx.arc(0,0,(60+(1-flash)*30)*S,0,Math.PI*2);ctx.stroke(); }
+    if(flash>0.02){ ctx.strokeStyle='rgba('+C.pulseRgb+','+(flash*0.6)+')';ctx.lineWidth=2*S;
+      ctx.beginPath();ctx.arc(0,0,(60+(1-flash)*30)*S,0,Math.PI*2);ctx.stroke(); }
     ctx.restore();
   }
 
@@ -210,7 +240,7 @@
   function start(){ if(!raf&&!reduce)raf=requestAnimationFrame(loop); }
   function stop(){ cancelAnimationFrame(raf);raf=0; }
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){ draw(); } else start();
+  if(reduce){ cover=1;lever=1;on=true;draw(); } else start();
 })();
 </script>
 </body>

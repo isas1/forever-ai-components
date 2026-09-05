@@ -5,11 +5,31 @@
 <meta name="description" content="Falling Snow — Ukiyo-e Weather &amp; Road. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Falling Snow</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#16202b;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The canvas reads every
+     colour back through syncTheme(), so both palettes stay CSS-owned. */
+  :root{
+    --hir03-bg:#16202b; --hir03-cap:#f2f0e8; --hir03-cap-o:.5;
+    --hir03-night:#16202b; --hir03-ink:#16202b; --hir03-indigo:#1f3a5f; --hir03-snow:#f2f0e8;
+    --hir03-sky:#7fa8c8; --hir03-green:#6f8f6a; --hir03-sienna:#9a5b3b;
+    --hir03-flake:rgba(242,240,232,.92);
+  }
+  :root[data-theme="light"]{
+    --hir03-bg:#eef2f6; --hir03-cap:#16202b; --hir03-cap-o:.55;
+    --hir03-night:#a9bccd; --hir03-ink:#16202b; --hir03-indigo:#cfdde8; --hir03-snow:#fbfaf5;
+    --hir03-sky:#cfe0ec; --hir03-green:#7f9a76; --hir03-sienna:#b07a52;
+    --hir03-flake:rgba(58,86,120,.5);
+  }
+  html,body{margin:0;height:100%;background:var(--hir03-bg);overflow:hidden}
   #hir03-stage{position:fixed;inset:0;width:100%;height:100%}
   #hir03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .hir03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f2f0e8;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .hir03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--hir03-cap);opacity:var(--hir03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,23 +38,25 @@
  "description": "Snow flakes drift and sway over a ukiyo-e night scene: indigo sky, snow-capped rooftops, and a lone layered pine. Static fallback for reduced-motion.",
  "useWhen": "Seasonal or cultural hero backgrounds, winter themes, Japanese art-inspired decorative panels.",
  "avoidWhen": "Light-mode UIs (background hardcoded dark navy). Layouts requiring legible text over the canvas.",
- "agentPrompt": "Increase snowflake count by changing N cap from 120 to 200 and the density multiplier from 0.22 to 0.35, then shift the sky palette to a deeper midnight blue by setting PAL.indigo to '#0d2240'.",
+ "agentPrompt": "Increase snowflake count by changing N cap from 120 to 200 and the density multiplier from 0.22 to 0.35, then shift the sky palette to a deeper midnight blue by setting PAL.indigo to '#0d2240'. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "snowflake count (N cap=120, density 0.22)",
   "flake speed range (14..44 px/s)",
   "flake size range (1..3.6 r)",
   "palette colors (PAL object)",
-  "scene layout ratios (W/H multipliers for roofs and pine)"
+  "scene layout ratios (W/H multipliers for roofs and pine)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing in fitCanvas()",
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED)",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Scene redraws every frame — no dirty-rect optimisation; heavy on very low-end devices at large viewport",
-  "Background hardcoded dark navy in CSS; must edit both CSS and PAL.ink to change"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -42,7 +64,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "easy-to-modify"
+  "easy-to-modify",
+  "light-ready"
  ],
  "tags": [
   "snow",
@@ -78,7 +101,20 @@
     const pb=[parseInt(b.slice(1,3),16),parseInt(b.slice(3,5),16),parseInt(b.slice(5,7),16)];
     return 'rgb('+pa.map((v,i)=>Math.round(v+(pb[i]-v)*k)).join(',')+')';
   }
-  const PAL={snow:'#f2f0e8',ink:'#16202b',indigo:'#1f3a5f',skySoft:'#7fa8c8',green:'#6f8f6a',sienna:'#9a5b3b'};
+  const PAL={snow:'',ink:'',indigo:'',skySoft:'',green:'',sienna:'',night:'',flake:''};
+  const root=document.documentElement;
+  function syncTheme(){                      // every drawn colour is re-read from the tokens
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue('--hir03-'+n).trim();
+    PAL.snow=g('snow');PAL.ink=g('ink');PAL.indigo=g('indigo');PAL.skySoft=g('sky');
+    PAL.green=g('green');PAL.sienna=g('sienna');PAL.night=g('night');PAL.flake=g('flake');
+  }
+  addEventListener('message',function(e){     // live re-theme from the canvas
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(REDUCED) draw(performance.now());
+    }
+  });
+  syncTheme();
   let S=fitCanvas(cv), flakes=[];
   function seed(){
     flakes=[];
@@ -88,8 +124,8 @@
   seed();
   function scene(ctx,W,H){
     const g=ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0,PAL.ink);
-    g.addColorStop(0.6,mix(PAL.ink,PAL.indigo,0.5));
+    g.addColorStop(0,PAL.night);
+    g.addColorStop(0.6,mix(PAL.night,PAL.indigo,0.5));
     g.addColorStop(1,mix(PAL.indigo,PAL.snow,0.20));
     ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
     ctx.fillStyle=mix(PAL.snow,PAL.skySoft,0.10);
@@ -123,7 +159,7 @@
     let dt=(now-last)/1000;last=now;if(dt>0.05)dt=0.05;
     const ctx=S.ctx,W=S.w,H=S.h;
     scene(ctx,W,H);
-    ctx.fillStyle='rgba(242,240,232,.92)';
+    ctx.fillStyle=PAL.flake;
     for(const f of flakes){
       if(!REDUCED){
         f.y+=f.sp*dt;

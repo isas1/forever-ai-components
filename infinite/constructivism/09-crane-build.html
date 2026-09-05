@@ -5,11 +5,28 @@
 <meta name="description" content="A Constructivist tower crane sways and hoists red blocks onto a growing stack over a red diagonal wedge in red, black, white and amber.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Crane Build</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0c0d;overflow:hidden}
-  #cv09-stage{position:fixed;inset:0;background:#0c0c0d}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light re-theme is
+     the [data-theme="light"] block, re-read by syncTheme(). --red is the big wedge (a vermillion
+     on paper, 4.15:1) while --red2 keeps the 4.83:1 red for the thin jib line and rule.
+     --ground (the ground-plane wedge) sat
+     exactly on the dark bg, so it stays bg-tied; --ink (outlines, mast, nested square) was also
+     bg-coloured but always sits ON a block, so it becomes real ink; --wht are highlights riding
+     the red/ink shapes and stay light; --mark (the slab band, "09" numeral and foundation) sits
+     on the open ground and flips to ink. */
+  :root{--c09-bg:#0c0c0d;--c09-ground:#0c0c0d;--c09-red:#d11f1f;--c09-red2:#d11f1f;--c09-ink:#0c0c0d;
+    --c09-wht:#f3f0e7;--c09-mark:#f3f0e7;--c09-amber:#e8b32c;--c09-cap:#ffffff;--c09-cap-o:.42}
+  :root[data-theme="light"]{--c09-bg:#f7f3ea;--c09-ground:#f7f3ea;--c09-red:#d93a1c;--c09-red2:#d11f1f;--c09-ink:#17171a;
+    --c09-wht:#fbf8f0;--c09-mark:#1b1a17;--c09-amber:#86640f;--c09-cap:#1b1a17;--c09-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--c09-bg);overflow:hidden}
+  #cv09-stage{position:fixed;inset:0;background:var(--c09-bg)}
   #cv09-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--c09-cap);opacity:var(--c09-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +36,22 @@
  "description": "A Constructivist tower crane sways and hoists a red block while a stack builds on a foundation; bold red wedge, white band, and amber rule compose the backdrop.",
  "useWhen": "Constructivist or industrial-themed hero sections, portfolio backgrounds, or motion displays needing bold geometric storytelling.",
  "avoidWhen": "Light-background UIs (background is hardcoded near-black). Contexts where legible text overlays are needed — the crane and stacking blocks compete for attention.",
- "agentPrompt": "Change the jib color from RED to AMBER and increase crane swing amplitude from 0.07 to 0.14 to make the sway more dramatic.",
+ "agentPrompt": "Change the jib color from RED to AMBER and increase crane swing amplitude from 0.07 to 0.14 to make the sway more dramatic. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color constants (RED, WHT, AMBER, INK)",
   "crane swing amplitude (0.07)",
   "mast height (S*0.52)",
   "hoist cycle speed (time*0.22)",
   "stack block count cycle (% 4)",
-  "jib boom length (S*0.46)"
+  "jib boom length (S*0.46)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback (scene(2.4))",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and JS — must change in both places",
@@ -46,7 +65,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "constructivism",
@@ -68,7 +88,10 @@
 <script>
 (function(){
   "use strict";
-  var RED="#d11f1f", BG="#0c0c0d", INK="#0c0c0d", WHT="#f3f0e7", AMBER="#e8b32c";
+  // every colour the canvas draws with is read from the theme tokens
+  var root=document.documentElement, C={}, KEYS=["bg","ground","red","red2","ink","wht","mark","amber"];
+  function syncTheme(){ var cs=getComputedStyle(root); for(var k=0;k<KEYS.length;k++) C[KEYS[k]]=cs.getPropertyValue("--c09-"+KEYS[k]).trim(); }
+  addEventListener("message",function(e){ var d=e.data; if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce) scene(2.4); } });
   var cv=document.getElementById("cv09-c"), ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var W=0,H=0,DPR=1,S=0,running=true,raf=0,t0=0;
@@ -84,11 +107,11 @@
 
   // static photomontage backdrop: diagonal red wedge + black bands + white slab
   function backdrop(){
-    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     var cx=W*0.5, cy=H*0.5;
     // big red diagonal wedge (Lissitzky energy)
     ctx.save();
-    ctx.fillStyle=RED;
+    ctx.fillStyle=C.red;
     ctx.beginPath();
     ctx.moveTo(W*0.62,0); ctx.lineTo(W,0); ctx.lineTo(W,H*0.46); ctx.lineTo(W*0.30,H);
     ctx.lineTo(0,H); ctx.lineTo(0,H*0.78); ctx.closePath(); ctx.fill();
@@ -96,17 +119,17 @@
     // white slab band cutting through
     ctx.save();
     ctx.translate(cx,cy); ctx.rotate(-0.62);
-    ctx.fillStyle=WHT;
+    ctx.fillStyle=C.mark;
     ctx.fillRect(-S*0.95,S*0.30,S*1.9,Math.max(10,S*0.052));
     ctx.restore();
     // thin amber rule
     ctx.save();
     ctx.translate(cx,cy); ctx.rotate(-0.62);
-    ctx.fillStyle=AMBER;
+    ctx.fillStyle=C.amber;
     ctx.fillRect(-S*0.95,S*0.30-Math.max(5,S*0.026),S*1.9,Math.max(2,S*0.008));
     ctx.restore();
-    // ground plane (black)
-    ctx.fillStyle=INK;
+    // ground plane (bg-coloured: negative space in both themes)
+    ctx.fillStyle=C.ground;
     ctx.beginPath();
     ctx.moveTo(0,H*0.86); ctx.lineTo(W,H*0.74); ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath(); ctx.fill();
   }
@@ -119,27 +142,27 @@
     var lw=Math.max(3,S*0.018);
     // mast (black with red outline strokes -> use solid ink + white edge)
     ctx.lineCap="round"; ctx.lineJoin="round";
-    ctx.strokeStyle=INK; ctx.lineWidth=lw*2.2;
+    ctx.strokeStyle=C.ink; ctx.lineWidth=lw*2.2;
     line(bx,by,topx,topy);
-    ctx.strokeStyle=WHT; ctx.lineWidth=lw*0.5;
+    ctx.strokeStyle=C.wht; ctx.lineWidth=lw*0.5;
     line(bx,by,topx,topy);
     // counter-jib (short, left) + counterweight block
     var cjx=topx-S*0.16, cjy=topy+S*0.02;
-    ctx.strokeStyle=INK; ctx.lineWidth=lw*1.6; line(topx,topy,cjx,cjy);
-    block(cjx-S*0.05,cjy-S*0.01,S*0.085,S*0.06,RED,0);
+    ctx.strokeStyle=C.ink; ctx.lineWidth=lw*1.6; line(topx,topy,cjx,cjy);
+    block(cjx-S*0.05,cjy-S*0.01,S*0.085,S*0.06,C.red,0);
     // jib (boom) up-right, with slight swing
     var blen=S*0.46, ang=-0.34+swing;     // radians from horizontal
     var jx=topx+Math.cos(ang)*blen, jy=topy+Math.sin(ang)*blen;
-    ctx.strokeStyle=RED; ctx.lineWidth=lw*1.4; line(topx,topy,jx,jy);
+    ctx.strokeStyle=C.red2; ctx.lineWidth=lw*1.4; line(topx,topy,jx,jy);
     // lattice ticks on jib
-    ctx.strokeStyle=WHT; ctx.lineWidth=Math.max(1,lw*0.28);
+    ctx.strokeStyle=C.wht; ctx.lineWidth=Math.max(1,lw*0.28);
     for(var i=1;i<7;i++){
       var f=i/7, px=topx+(jx-topx)*f, py=topy+(jy-topy)*f;
       var nx=Math.cos(ang+Math.PI/2)*S*0.03, ny=Math.sin(ang+Math.PI/2)*S*0.03;
       line(px-nx,py-ny,px+nx,py+ny);
     }
     // tie-bar from top to jib mid (suprematist triangle feel)
-    ctx.strokeStyle=AMBER; ctx.lineWidth=Math.max(1,lw*0.4);
+    ctx.strokeStyle=C.amber; ctx.lineWidth=Math.max(1,lw*0.4);
     line(topx,topy-S*0.0,(topx+jx)/2,(topy+jy)/2);
     return {jx:jx, jy:jy, by:by};
   }
@@ -149,7 +172,7 @@
   function block(x,y,w,h,fill,rot){
     ctx.save(); ctx.translate(x+w/2,y+h/2); ctx.rotate(rot||0);
     ctx.fillStyle=fill; ctx.fillRect(-w/2,-h/2,w,h);
-    ctx.strokeStyle=INK; ctx.lineWidth=Math.max(1.5,S*0.006); ctx.strokeRect(-w/2,-h/2,w,h);
+    ctx.strokeStyle=C.ink; ctx.lineWidth=Math.max(1.5,S*0.006); ctx.strokeRect(-w/2,-h/2,w,h);
     ctx.restore();
   }
 
@@ -166,32 +189,32 @@
     var hookY=groundY-(groundY-topY)*lift;
     var hookX=c.jx + Math.sin(time*0.5)*S*0.012; // tiny pendulum
     // cable
-    ctx.strokeStyle=WHT; ctx.lineWidth=Math.max(1,S*0.004);
+    ctx.strokeStyle=C.wht; ctx.lineWidth=Math.max(1,S*0.004);
     line(c.jx,c.jy,hookX,hookY-S*0.03);
     // the raised block (red square, suprematist)
     var bs=S*0.12;
-    block(hookX-bs/2,hookY-bs/2,bs,bs,RED,Math.sin(time*0.5)*0.05);
+    block(hookX-bs/2,hookY-bs/2,bs,bs,C.red,Math.sin(time*0.5)*0.05);
     // small black square nested (montage)
-    block(hookX-bs*0.18,hookY-bs*0.18,bs*0.36,bs*0.36,INK,Math.sin(time*0.5)*0.05);
+    block(hookX-bs*0.18,hookY-bs*0.18,bs*0.36,bs*0.36,C.ink,Math.sin(time*0.5)*0.05);
 
     // stacked finished blocks on the right base (the build grows over time)
     var stackX=W*0.78, baseY=H*0.80, u=S*0.11;
     var built=Math.floor(((time*0.22)%4));   // 0..3 blocks placed cyclically
-    var cols=[INK,WHT,RED,AMBER];
+    var cols=[C.ink,C.wht,C.red,C.amber];   // rebuilt per frame, so a theme flip recolours it
     for(var k=0;k<built;k++){
       block(stackX-u/2,baseY-u*(k+1)+u*0.06,u,u*0.92,cols[k%4],0);
     }
     // foundation slab
-    block(stackX-u*0.9,baseY,u*1.8,u*0.22,WHT,0);
+    block(stackX-u*0.9,baseY,u*1.8,u*0.22,C.mark,0);
 
     // big slab numeral / mark — constructivist typographic anchor
     ctx.save();
-    ctx.fillStyle=WHT;
+    ctx.fillStyle=C.mark;
     ctx.font="900 "+Math.round(S*0.11)+"px Helvetica,Arial,sans-serif";
     ctx.textBaseline="alphabetic";
     ctx.translate(W*0.085,H*0.30); ctx.rotate(-0.06);
     ctx.fillText("09",0,0);
-    ctx.fillStyle=RED;
+    ctx.fillStyle=C.red2;
     ctx.fillRect(0,S*0.022,S*0.20,Math.max(3,S*0.012));
     ctx.restore();
   }
@@ -213,6 +236,7 @@
   });
   window.addEventListener("resize",function(){ size(); if(reduce) scene(2.4); });
 
+  syncTheme();
   size();
   start();
 })();

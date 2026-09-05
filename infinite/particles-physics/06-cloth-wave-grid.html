@@ -5,11 +5,28 @@
 <meta name="description" content="A 10x10 wireframe mesh ripples like cloth in cyan-to-violet hues, bulging away from the cursor on a dark teal field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cloth Wave Grid</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#071018}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The --c06-ls/--c06-ll/--c06-la
+     (line) and --c06-ns/--c06-nl (node) numbers feed the JS hsl() strings;
+     the cyan-to-violet hue ramp is shared by both themes. */
+  :root{
+    --c06-bg:#071018; --c06-cap:#7dd3fc; --c06-cap-o:.5;
+    --c06-ls:80; --c06-ll:62; --c06-la:0.5; --c06-ns:90; --c06-nl:70;
+  }
+  :root[data-theme="light"]{
+    --c06-bg:#eef4f9; --c06-cap:#0474a9; --c06-cap-o:.6;
+    --c06-ls:75; --c06-ll:32; --c06-la:0.55; --c06-ns:80; --c06-nl:26;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c06-bg)}
   #c{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#7dd3fc;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--c06-cap);opacity:var(--c06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +35,21 @@
  "description": "An 11x11 wireframe grid ripples like cloth via sine/cosine waves in cyan-to-violet hues; mesh nodes bulge away from the cursor on hover.",
  "useWhen": "Dark-mode hero backgrounds, generative-art sections, tech/data-viz aesthetic headers needing ambient motion with subtle interactivity.",
  "avoidWhen": "Light backgrounds (hardcoded dark body), layouts needing legible text overlays, or contexts sensitive to continuous canvas redraws on low-end devices.",
- "agentPrompt": "Change grid density to 16x16 by setting COLS=16 and ROWS=16, increase the pointer repulsion radius from 60 to 90, and shift the hue base from 190 to 260 for a purple-to-magenta palette.",
+ "agentPrompt": "Change grid density to 16x16 by setting COLS=16 and ROWS=16, increase the pointer repulsion radius from 60 to 90, and shift the hue base from 190 to 260 for a purple-to-magenta palette. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid density (COLS=10, ROWS=10)",
   "wave amplitude (6 in sine/cosine terms)",
   "pointer repulsion radius (60) and force (16)",
   "hue base and spread (190+c*7+r*3)",
-  "animation speed (t += 0.03)"
+  "animation speed (t += 0.03)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/play guards",
   "pointerleave reset (pointer.x=-999)",
-  "IIFE-equivalent scoped const/let block"
+  "IIFE-equivalent scoped const/let block",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No prefers-reduced-motion fallback — reduced flag is read but step() still runs full animation on first frame only; loop does not stop",
@@ -42,7 +61,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "easy-to-modify"
+  "easy-to-modify",
+  "light-ready"
  ],
  "tags": [
   "canvas",
@@ -60,9 +80,18 @@
 <canvas id="c"></canvas>
 <div class="cap">Cloth Wave Grid</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
 let W,H,DPR,t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const COLS=10,ROWS=10;
+const root=document.documentElement;
+let LS=80,LL=62,LA=0.5,NS=90,NL=70;   // hsl saturation/lightness/alpha for the mesh lines and nodes
+function syncTheme(){const cs=getComputedStyle(root),n=k=>parseFloat(cs.getPropertyValue(k));
+  LS=n('--c06-ls');LL=n('--c06-ll');LA=n('--c06-la');NS=n('--c06-ns');NL=n('--c06-nl');}
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',e=>{const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
+syncTheme();
 function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
 addEventListener('resize',size);size();
@@ -81,11 +110,11 @@ function step(){
     if(dd<60){const f=(60-dd)/60*16;px+=dx/(dd||1)*f;py+=dy/(dd||1)*f;}
     pts[r][c]={x:px,y:py};}}
   for(let r=0;r<=ROWS;r++)for(let c=0;c<=COLS;c++){const p=pts[r][c];
-    const h=190+c*7+r*3;x.strokeStyle='hsla('+h+',80%,62%,0.5)';x.lineWidth=1;
+    const h=190+c*7+r*3;x.strokeStyle='hsla('+h+','+LS+'%,'+LL+'%,'+LA+')';x.lineWidth=1;
     if(c<COLS){x.beginPath();x.moveTo(p.x,p.y);x.lineTo(pts[r][c+1].x,pts[r][c+1].y);x.stroke();}
     if(r<ROWS){x.beginPath();x.moveTo(p.x,p.y);x.lineTo(pts[r+1][c].x,pts[r+1][c].y);x.stroke();}}
   for(let r=0;r<=ROWS;r++)for(let c=0;c<=COLS;c++){const p=pts[r][c];
-    x.fillStyle='hsl('+(190+c*7+r*3)+',90%,70%)';
+    x.fillStyle='hsl('+(190+c*7+r*3)+','+NS+'%,'+NL+'%)';
     x.beginPath();x.arc(p.x,p.y,1.5,0,7);x.fill();}
 }
 let raf;function loop(){step();raf=requestAnimationFrame(loop);}
@@ -93,6 +122,7 @@ function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
 play();
+})();
 </script>
 </body>
 </html>

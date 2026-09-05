@@ -8,32 +8,52 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
+    --bg:#0d0f16; --glow-a:rgba(192,180,89,0.16);
     --text-0:#f4f6fb;
     --text-2:#8a91a8;
     --text-3:#565d73;
     --accent-cyan:#C0B459;
+    --hover-bg:rgba(255,255,255,0.04);
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
     --dur-base:280ms;
+    --cap:#fff; --cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow-a:rgba(119,110,45,0.10);
+    --text-0:#1b2130;
+    --text-2:#5b6178;
+    --text-3:#8b90a3;
+    --accent-cyan:#776e2d;
+    --hover-bg:rgba(0,0,0,0.05);
+    --cap:#201d10; --cap-o:.5;
   }
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden}
   body{
-    background:#0d0f16;
-    background-image:radial-gradient(50vw 40vw at 90% 0%,rgba(192,180,89,0.16),transparent 55%);
+    background:var(--bg);
+    background-image:radial-gradient(50vw 40vw at 90% 0%,var(--glow-a),transparent 55%);
     font-family:"Inter",system-ui,sans-serif;
     display:grid;place-items:center;padding:16px;
   }
   .c08-crumb{display:flex;align-items:center;font-size:14px;flex-wrap:wrap;justify-content:center}
   .c08-crumb__seg{display:flex;align-items:center}
+  .c08-crumb__seg--off{display:none}
   .c08-crumb__link{
     border:0;background:none;font-family:"Inter",system-ui,sans-serif;
     font-size:14px;font-weight:500;color:var(--text-2);
     padding:5px 10px;border-radius:8px;cursor:pointer;
     transition:color var(--dur-base),background var(--dur-base);
   }
-  .c08-crumb__link:hover{color:var(--text-0);background:rgba(255,255,255,0.04)}
+  .c08-crumb__link:hover{color:var(--text-0);background:var(--hover-bg)}
   .c08-crumb__link--active{color:var(--accent-cyan)}
   .c08-crumb__chev{width:16px;height:16px;position:relative;flex:0 0 auto}
   .c08-crumb__chev svg{width:100%;height:100%;display:block}
@@ -46,7 +66,7 @@
   .c08-crumb__seg:nth-child(3) .c08-crumb__chev path{animation-delay:240ms}
   .c08-crumb__seg:nth-child(4) .c08-crumb__chev path{animation-delay:360ms}
   @keyframes c08-crumb-draw{to{stroke-dashoffset:0}}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
   @media (prefers-reduced-motion:reduce){.c08-crumb__chev path{animation:none!important;stroke-dashoffset:0!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -56,22 +76,26 @@
  "description": "SVG chevron separators draw themselves in with a stroke-dashoffset animation; the active gold crumb auto-advances down the trail every 2.6 seconds.",
  "useWhen": "Navigation demos, onboarding flows, or any UI showing hierarchical page location with a polished dark-mode aesthetic.",
  "avoidWhen": "Light-background layouts (background hardcoded dark navy). Production breadcrumbs — remove the auto-cycle loop and wire real navigation links.",
- "agentPrompt": "Change the accent color from gold to a different hue by setting --accent-cyan to your color of choice (e.g. #6f9b7a for sage), and slow the active-crumb cycle interval from 2600ms to 4000ms.",
+ "agentPrompt": "Change the accent color from gold to a different hue by setting --accent-cyan to your color of choice (e.g. #6f9b7a for sage), and slow the active-crumb cycle interval from 2600ms to 4000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--accent-cyan)",
   "cycle interval (2600ms in setTimeout)",
   "chevron draw duration (520ms)",
   "stagger delay per chevron (k*120ms)",
-  "number of crumb segments"
+  "number of crumb segments",
+  "idle demo cadence (TICK=100, FIRST=500, EVERY=1200 ms, resume IDLE_BACK=3600 ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce check + CSS @media block)",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "idle demo walk (setInterval phase clock; a real click takes over)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — remove the loop() call for production use",
-  "Background color hardcoded to dark navy; incompatible with light themes without CSS edits",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Button elements lack aria-current on the active crumb — add aria-current='page' for production"
  ],
  "tier": "curated",
@@ -81,7 +105,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "breadcrumb",
@@ -108,7 +133,11 @@
   </span>
   <span class="c08-crumb__seg">
     <span class="c08-crumb__chev"><svg viewBox="0 0 16 16"><path d="M6 3 L11 8 L6 13"/></svg></span>
-    <button class="c08-crumb__link c08-crumb__link--active">Nebula</button>
+    <button class="c08-crumb__link c08-crumb__link--active" aria-current="page">Nebula</button>
+  </span>
+  <span class="c08-crumb__seg c08-crumb__seg--off">
+    <span class="c08-crumb__chev"><svg viewBox="0 0 16 16"><path d="M6 3 L11 8 L6 13"/></svg></span>
+    <button class="c08-crumb__link">Track 07</button>
   </span>
 </nav>
 <div class="cap">Breadcrumb Trail</div>
@@ -116,35 +145,54 @@
 (function(){
   var nav=document.getElementById('c08-crumb');
   if(!nav)return;
+  var segs=Array.prototype.slice.call(nav.querySelectorAll('.c08-crumb__seg'));
   var links=Array.prototype.slice.call(nav.querySelectorAll('.c08-crumb__link'));
   var chevs=Array.prototype.slice.call(nav.querySelectorAll('.c08-crumb__chev path'));
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  links.forEach(function(l){
-    l.addEventListener('click',function(){
-      links.forEach(function(x){x.classList.remove('c08-crumb__link--active');});
-      l.classList.add('c08-crumb__link--active');
-    });
+  var N=segs.length, OFF='c08-crumb__seg--off';
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
   });
-  /* autonomous idle: redraw the chevron trail, advancing the active crumb */
-  var i=links.length-1,timer;
-  function redraw(){
-    chevs.forEach(function(p,k){
-      p.style.animation='none';
-      void p.getBoundingClientRect();
-      p.style.animation='c08-crumb-draw 520ms var(--ease-out-soft) '+(k*120)+'ms forwards';
-    });
-    links.forEach(function(x){x.classList.remove('c08-crumb__link--active');});
-    links[i].classList.add('c08-crumb__link--active');
+  /* setDepth is the ONE path a crumb changes by: a click truncates the trail to the crumb you
+     picked, the idle demo drills back down. Both re-run the chevron stroke-draw, staggered. */
+  function setDepth(d){
+    var k=0;
+    for(var i=0;i<N;i++){
+      var on=i<d, active=(i===d-1);
+      segs[i].classList.toggle(OFF,!on);
+      links[i].classList.toggle('c08-crumb__link--active',active);
+      if(active)links[i].setAttribute('aria-current','page');else links[i].removeAttribute('aria-current');
+      if(on&&i>0){
+        var p=chevs[i-1];
+        p.style.animation='none';
+        void p.getBoundingClientRect();
+        p.style.animation='c08-crumb-draw 520ms var(--ease-out-soft) '+((k++)*120)+'ms forwards';
+      }
+    }
   }
-  function loop(){
-    if(reduce)return;
-    timer=setTimeout(function(){
-      i=(i+1)%links.length;redraw();loop();
-    },2600);
+  links.forEach(function(l,i){
+    l.addEventListener('click',function(){takeover();setDepth(i+1);});
+  });
+  /* idle demo: nobody clicks a breadcrumb on the wall, so the trail walks itself — drill into
+     Track 07, jump back up to Library, drill down again — through the same setDepth() a click
+     calls. A real click takes over; the walk returns after IDLE_BACK ms of quiet. */
+  var STEPS=[5,2,3,4], si=0;
+  var TICK=100, FIRST=500, EVERY=1200, IDLE_BACK=3600;
+  var demo=true, first=true, t=0, idle=0, timer=0;
+  function takeover(){demo=false;idle=0;}
+  function step(){
+    if(!demo){ if((idle+=TICK)>=IDLE_BACK){demo=true;first=true;t=0;} return; }
+    if((t+=TICK)<(first?FIRST:EVERY))return;
+    t=0;first=false;setDepth(STEPS[si++%STEPS.length]);
   }
-  function stop(){clearTimeout(timer);}
-  document.addEventListener('visibilitychange',function(){document.hidden?stop():loop();});
-  loop();
+  function start(){if(!timer&&!reduce)timer=setInterval(step,TICK);}
+  function stop(){clearInterval(timer);timer=0;}
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  start();   // reduced motion: no walk — the trail rests on the full Home › … › Nebula path
 })();
 </script>
 </body>

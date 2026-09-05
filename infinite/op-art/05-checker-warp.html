@@ -5,14 +5,23 @@
 <meta name="description" content="A black-and-white checkerboard bends and swells around an invisible central lens, slowly rotating and drifting.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Checker Warp</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
-  #op05-stage{position:fixed;inset:0;background:#0a0a0a}
+  /* theme tokens — dark values are the defaults; light swaps the checker pair
+     (ink squares on paper) and fades the vignette toward paper instead of black. */
+  :root{--op05-bg:#0a0a0a;--op05-ink:#f2f2f2;--op05-ring:rgba(255,255,255,0.10);--op05-vig-t:rgba(10,10,10,0);--op05-vig:rgba(10,10,10,.72);--op05-vig-p:52%;--op05-cap:#fff;--op05-cap-o:.42}
+  :root[data-theme="light"]{--op05-bg:#f6f6f4;--op05-ink:#1e1e1e;--op05-ring:rgba(20,20,20,0.16);--op05-vig-t:rgba(246,246,244,0);--op05-vig:rgba(246,246,244,.80);--op05-vig-p:44%;--op05-cap:#141414;--op05-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--op05-bg);overflow:hidden}
+  #op05-stage{position:fixed;inset:0;background:var(--op05-bg)}
   #op05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* static vignette to seat the lens into the field — never repaints */
   #op05-stage::after{content:"";position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(circle at 50% 50%,rgba(10,10,10,0) 52%,rgba(10,10,10,.72) 100%)}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    background:radial-gradient(circle at 50% 50%,var(--op05-vig-t) var(--op05-vig-p),var(--op05-vig) 100%)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op05-cap);opacity:var(--op05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -22,19 +31,21 @@
  "description": "A black-and-white checkerboard bends around a breathing lens at the center, slowly rotating and drifting for a hypnotic op-art illusion.",
  "useWhen": "Dark-mode hero backgrounds, op-art or retro aesthetics, ambient screensaver-style displays.",
  "avoidWhen": "Layouts needing legible text overlays; users sensitive to optical illusions or motion; light-background designs (background hardcoded dark).",
- "agentPrompt": "Change CELL size to 20 (larger squares), slow the swell cycle by setting time*0.00025 instead of 0.00045, and tint white squares to pale amber (#f5e6c8).",
+ "agentPrompt": "Change CELL size to 20 (larger squares), slow the swell cycle by setting time*0.00025 instead of 0.00045, and tint white squares to pale amber (#f5e6c8). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "checker cell size (CELL = Math.max(14, m/11))",
   "lens radius (LR = m*0.42)",
   "swell speed and depth (time*0.00045, 0.34 + 0.30*Math.sin)",
   "rotation speed (time*0.000055)",
-  "checker drift speed (time*0.00018)"
+  "checker drift speed (time*0.00018)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "Float32Array vertex cache (drawFrame._vx/_vy) for perf",
   "visibilitychange pause/resume guard",
   "reduced-motion static-frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Quad-fill approach means edges are straight line segments, not true smooth curves — visible at low cell counts",
@@ -46,7 +57,8 @@
   "accessible",
   "mobile-ready",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "op-art",
@@ -72,6 +84,20 @@
   var stage = document.getElementById('op05-stage');
   var cv = document.getElementById('op05-c');
   var ctx = cv.getContext('2d');
+  var root = document.documentElement;
+
+  // colours the canvas draws with — read once from the tokens, once per switch
+  var C={bg:'#0a0a0a',ink:'#f2f2f2',ring:'rgba(255,255,255,0.10)'};
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--op05-bg').trim(); C.ink=cs.getPropertyValue('--op05-ink').trim();
+    C.ring=cs.getPropertyValue('--op05-ring').trim();
+    if(reduce&&W)drawFrame(1400);   // static fallback must repaint on a live switch
+  }
+  addEventListener('message',function(e){   // live re-theme from the canvas
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); }
+  });
 
   var W=0,H=0,DPR=1,CX=0,CY=0,LR=0,CELL=0;
   var running=false, raf=0, t0=0;
@@ -108,7 +134,7 @@
     var rot = reduce ? 0.18 : time*0.000055;                       // slow turn
     var drift = reduce ? 0 : time*0.00018;                         // checker slide
 
-    ctx.fillStyle = '#0a0a0a';
+    ctx.fillStyle = C.bg;
     ctx.fillRect(0,0,W,H);
 
     // Build deformed checker by scanning a polar-aware grid.
@@ -155,7 +181,7 @@
       for(i=0;i<dim-1;i++){
         // checker parity with slow diagonal drift
         var par = ((i + j + Math.floor(pshift)) & 1);
-        ctx.fillStyle = par ? '#f2f2f2' : '#0a0a0a';
+        ctx.fillStyle = par ? C.ink : C.bg;
         if(!par) continue; // black == background, skip fill = fewer ops
         idx=j*dim+i;
         var a=idx, b=idx+1, c=idx+dim+1, d=idx+dim;
@@ -171,7 +197,7 @@
 
     // thin moire ring at the lens edge — static-style stroke, recolored only
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.strokeStyle = C.ring;
     ctx.beginPath();
     ctx.arc(CX,CY,LR,0,Math.PI*2);
     ctx.stroke();
@@ -192,6 +218,7 @@
 
   function init(){
     resize();
+    syncTheme();
     if(reduce){ drawFrame(1400); return; }   // one settled, legible frame
     start();
   }

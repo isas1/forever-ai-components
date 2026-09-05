@@ -8,23 +8,46 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
+    --bg:#0d0f16; --glow-a:rgba(169,210,45,0.16);
     --bg-700:#12141d;
     --bg-surface:#1c2030;
     --text-1:#c7ccdb;
     --text-2:#8a91a8;
     --border-soft:rgba(255,255,255,0.07);
     --border-glow:rgba(169,210,45,0.45);
+    --scrim:rgba(8,9,13,0.5);
+    --item-bg:rgba(255,255,255,0.03);
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
     --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
     --dur-fast:160ms;--dur-base:280ms;
+    --cap:#fff; --cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow-a:rgba(95,118,25,0.10);
+    --bg-700:#eef1f6;
+    --bg-surface:#ffffff;
+    --text-1:#2c3242;
+    --text-2:#5b6178;
+    --border-soft:rgba(0,0,0,0.08);
+    --border-glow:rgba(95,118,25,0.55);
+    --scrim:rgba(10,10,14,0.32);
+    --item-bg:rgba(0,0,0,0.04);
+    --cap:#1c2410; --cap-o:.5;
   }
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden}
   body{
-    background:#0d0f16;
-    background-image:radial-gradient(60vw 40vw at 15% -10%,rgba(169,210,45,0.16),transparent 60%);
+    background:var(--bg);
+    background-image:radial-gradient(60vw 40vw at 15% -10%,var(--glow-a),transparent 60%);
     display:grid;place-items:center;padding:16px;
   }
   .c05-drawer{
@@ -46,7 +69,7 @@
   .c05-drawer--open .c05-drawer__hb span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
   .c05-drawer__title{font-family:"Space Grotesk",system-ui,sans-serif;font-size:13px;color:var(--text-2);font-weight:500}
   .c05-drawer__scrim{
-    position:absolute;inset:0;background:rgba(8,9,13,0.5);
+    position:absolute;inset:0;background:var(--scrim);
     opacity:0;pointer-events:none;transition:opacity var(--dur-base) var(--ease-out-soft);
   }
   .c05-drawer--open .c05-drawer__scrim{opacity:1;pointer-events:auto}
@@ -60,7 +83,7 @@
   .c05-drawer--open .c05-drawer__panel{transform:translateX(0)}
   .c05-drawer__item{
     font-size:13px;color:var(--text-1);padding:7px 10px;border-radius:8px;
-    background:rgba(255,255,255,0.03);opacity:0;transform:translateX(-12px);
+    background:var(--item-bg);opacity:0;transform:translateX(-12px);
     font-family:system-ui,sans-serif;
   }
   .c05-drawer--open .c05-drawer__item{animation:c05-drawer-in var(--dur-base) var(--ease-out-soft) forwards}
@@ -69,7 +92,7 @@
   .c05-drawer--open .c05-drawer__item:nth-child(3){animation-delay:220ms}
   .c05-drawer--open .c05-drawer__item:nth-child(4){animation-delay:290ms}
   @keyframes c05-drawer-in{to{opacity:1;transform:translateX(0)}}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;font-family:system-ui,sans-serif}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:system-ui,sans-serif}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -79,19 +102,21 @@
  "description": "Hamburger icon morphs to an X while a side panel slides in over a dark scrim, revealing four nav items with staggered fade-in animations.",
  "useWhen": "Mobile-style nav demos, workspace sidebars, or any UI needing a collapsible navigation drawer pattern.",
  "avoidWhen": "Contexts where persistent navigation is required — the auto-cycle loop must be removed and the drawer wired to real routing before shipping.",
- "agentPrompt": "Change the nav items to ['Home', 'Analytics', 'Team', 'Billing'], set the panel accent border to rgba(192,180,89,0.45), and increase animation delay step to 100ms.",
+ "agentPrompt": "Change the nav items to ['Home', 'Analytics', 'Team', 'Billing'], set the panel accent border to rgba(192,180,89,0.45), and increase animation delay step to 100ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "nav item labels (.c05-drawer__item text)",
   "panel width (width:64%)",
   "stagger delay step (80/150/220/290ms)",
   "border glow color (--border-glow)",
-  "auto-cycle interval (2400ms)"
+  "auto-cycle interval (2400ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (@media + JS matchMedia check)",
   "visibilitychange pause (stop on hidden)",
-  "scrim click-to-close handler"
+  "scrim click-to-close handler",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles every 2.4s by default — remove loop() call before production use",
@@ -105,7 +130,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "drawer",
@@ -143,6 +169,13 @@
   var hb=document.getElementById('c05-hb');
   var scrim=document.getElementById('c05-scrim');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
   function toggle(){drawer.classList.toggle('c05-drawer--open');}
   function close(){drawer.classList.remove('c05-drawer--open');}
   hb.addEventListener('click',toggle);

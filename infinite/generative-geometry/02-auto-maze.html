@@ -5,11 +5,26 @@
 <meta name="description" content="Neon green depth-first maze that draws itself wall by wall on a dark grid, then resets with a new hue.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Auto Maze</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#101013}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The wall/head numbers feed the JS hsl(). */
+  :root{
+    --gg02-bg:#101013; --gg02-cap:#6affc0; --gg02-cap-o:.45;
+    --gg02-wall-s:70; --gg02-wall-l:52; --gg02-wall-l2:60; --gg02-head-s:90; --gg02-head-l:70;
+  }
+  :root[data-theme="light"]{
+    --gg02-bg:#f2f3f5; --gg02-cap:#007f4a; --gg02-cap-o:.8;
+    --gg02-wall-s:62; --gg02-wall-l:42; --gg02-wall-l2:34; --gg02-head-s:78; --gg02-head-l:34;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--gg02-bg)}
   #c{display:block;width:100%;height:100%}
   #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
-       color:#6affc0;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+       color:var(--gg02-cap);opacity:var(--gg02-cap-o);letter-spacing:.5px;pointer-events:none;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +33,21 @@
  "description": "Depth-first maze carves itself wall by wall on a dark grid with shifting hue; a bright dot marks the active cell. Resets with a new color on completion.",
  "useWhen": "Generative art backgrounds, loading screens, or algorithm visualization demos that benefit from a hypnotic self-drawing pattern.",
  "avoidWhen": "Contexts requiring legible text overlays or low-end mobile — continuous rAF loop with full redraw each frame consumes moderate CPU.",
- "agentPrompt": "Change cell size by setting the divisor from 16 to 12 in `cell=Math.max(10,Math.round(s/16))`, and shift starting hue to purple via `hue=270`.",
+ "agentPrompt": "Change cell size by setting the divisor from 16 to 12 in `cell=Math.max(10,Math.round(s/16))`, and shift starting hue to purple via `hue=270`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "cell size divisor (s/16)",
   "starting hue (hue=150)",
   "hue rotation on reset (hue+47)",
   "carve step interval (stepT=28)",
-  "pause after completion (doneT>1400)"
+  "pause after completion (doneT>1400)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static full-maze fallback)",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Grid is always square — non-square viewports leave margins on the longer axis",
@@ -43,7 +60,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "maze",
@@ -65,6 +83,23 @@
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   let W,H,DPR,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   let cols,rows,cell,grid,stack,cur,ox,oy,done,doneT=0,hue=150;
+  // theme: every canvas colour is read from the CSS tokens, once at start and once per switch
+  const root=document.documentElement;
+  const C={bg:'#101013',wallS:70,wallL:52,wallL2:60,headS:90,headL:70};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--gg02-bg').trim()||C.bg;
+    C.wallS=parseFloat(cs.getPropertyValue('--gg02-wall-s'))||70;
+    C.wallL=parseFloat(cs.getPropertyValue('--gg02-wall-l'))||52;
+    C.wallL2=parseFloat(cs.getPropertyValue('--gg02-wall-l2'))||60;
+    C.headS=parseFloat(cs.getPropertyValue('--gg02-head-s'))||90;
+    C.headL=parseFloat(cs.getPropertyValue('--gg02-head-l'))||70;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce&&grid)draw();}
+  });
+  syncTheme();
   function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);build();}
   function idx(x,y){return (x<0||y<0||x>=cols||y>=rows)?-1:y*cols+x}
@@ -88,12 +123,12 @@
     } else if(stack.length){cur=stack.pop();} else {done=true;doneT=0;}
   }
   function draw(){
-    ctx.fillStyle='#101013';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     ctx.lineWidth=Math.max(1.5,cell*0.13);ctx.lineCap='round';
     for(const c of grid){
       if(!c.v)continue;
       const X=ox+c.x*cell,Y=oy+c.y*cell;
-      ctx.strokeStyle='hsl('+((hue+c.x*3+c.y*3)%360)+',70%,'+(done?60:52)+'%)';
+      ctx.strokeStyle='hsl('+((hue+c.x*3+c.y*3)%360)+','+C.wallS+'%,'+(done?C.wallL2:C.wallL)+'%)';
       ctx.beginPath();
       if(c.w[0]){ctx.moveTo(X,Y);ctx.lineTo(X+cell,Y);}
       if(c.w[1]){ctx.moveTo(X+cell,Y);ctx.lineTo(X+cell,Y+cell);}
@@ -101,7 +136,7 @@
       if(c.w[3]){ctx.moveTo(X,Y);ctx.lineTo(X,Y+cell);}
       ctx.stroke();
     }
-    if(!done){ctx.fillStyle='hsl('+hue+',90%,70%)';
+    if(!done){ctx.fillStyle='hsl('+hue+','+C.headS+'%,'+C.headL+'%)';
       ctx.fillRect(ox+cur.x*cell+cell*0.3,oy+cur.y*cell+cell*0.3,cell*0.4,cell*0.4);}
   }
   let raf,acc=0,last=0;

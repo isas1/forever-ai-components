@@ -2,28 +2,33 @@
 <meta name="description" content="A vertical list of numbered color-barred rows reorders with spring FLIP physics as cards are dragged and lifted into new slots.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FLIP Reorder</title>
+<script>
+/* theme hook: ?theme=light|dark or postMessage flips data-theme. Runs pre-paint — no dark flash. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root{--dr01-bg:#0c0e13;--dr01-acc:#507E95;--dr01-ink:#e7eef2;--dr01-mut:#5b6573}
+  :root{--dr01-bg:#0c0e13;--dr01-acc:#507E95;--dr01-ink:#e7eef2;--dr01-mut:#5b6573;--dr01-row-bg:#11151d;--dr01-row-border:#1b2230;--dr01-bar-t:#2b3545;--dr01-bar-s:#1d2433;--dr01-shadow:rgba(0,0,0,.7);--dr01-focus-glow:rgba(80,126,149,.18);--cap:#fff;--cap-o:.42}
+  :root[data-theme="light"]{--dr01-bg:#eef1f6;--dr01-acc:#497388;--dr01-ink:#1b2230;--dr01-mut:#5b6573;--dr01-row-bg:#ffffff;--dr01-row-border:#d7dde6;--dr01-bar-t:#cdd6e2;--dr01-bar-s:#e3e8f0;--dr01-shadow:rgba(73,115,136,.25);--dr01-focus-glow:rgba(73,115,136,.18);--cap:#1b2230;--cap-o:.5}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
   body{background:var(--dr01-bg);overflow:hidden;font-family:ui-monospace,"SF Mono",Menlo,monospace}
   #dr01-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
   #dr01-list{position:relative;width:min(74%,360px);outline:none}
   .dr01-row{position:relative;display:flex;align-items:center;gap:0;height:13.4%;min-height:34px;margin:5px 0;
-    border:1px solid #1b2230;background:#11151d;border-radius:7px;overflow:hidden;
+    border:1px solid var(--dr01-row-border);background:var(--dr01-row-bg);border-radius:7px;overflow:hidden;
     will-change:transform;transform:translate3d(0,0,0);cursor:grab;user-select:none}
   .dr01-row.dr01-grab{cursor:grabbing;z-index:5}
   .dr01-bar{width:9px;align-self:stretch;flex:0 0 9px}
   .dr01-num{flex:0 0 auto;width:34px;text-align:center;font:700 13px/1 ui-monospace,monospace;color:var(--dr01-bg);
     background:var(--dr01-acc);align-self:stretch;display:flex;align-items:center;justify-content:center;letter-spacing:.02em}
   .dr01-body{flex:1 1 auto;padding:0 12px;display:flex;flex-direction:column;gap:5px;min-width:0}
-  .dr01-t{height:7px;border-radius:3px;background:#2b3545}
-  .dr01-s{height:5px;border-radius:3px;background:#1d2433}
+  .dr01-t{height:7px;border-radius:3px;background:var(--dr01-bar-t)}
+  .dr01-s{height:5px;border-radius:3px;background:var(--dr01-bar-s)}
   .dr01-dot{flex:0 0 auto;width:26px;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;padding-right:10px}
   .dr01-dot i{width:3px;height:3px;border-radius:50%;background:var(--dr01-mut);display:block}
-  .dr01-lift{box-shadow:0 14px 30px -8px rgba(0,0,0,.7),0 0 0 1px var(--dr01-acc)}
-  #dr01-list:focus-visible{box-shadow:0 0 0 2px var(--dr01-acc),0 0 0 6px rgba(80,126,149,.18);border-radius:11px}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .dr01-lift{box-shadow:0 14px 30px -8px var(--dr01-shadow),0 0 0 1px var(--dr01-acc)}
+  #dr01-list:focus-visible{box-shadow:0 0 0 2px var(--dr01-acc),0 0 0 6px var(--dr01-focus-glow);border-radius:11px}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}.dr01-row{transition:none!important}}
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -32,19 +37,20 @@
  "description": "7-row list reorders via FLIP spring physics on drag or arrow-key input; lifted card gains glow outline while others spring to new slots. Auto-demos when idle.",
  "useWhen": "Drag-to-reorder UI demos, settings panels, task lists, or any sortable list needing tactile spring feedback.",
  "avoidWhen": "Lists longer than ~12 items (fixed N); contexts requiring persistent state — order resets on reload.",
- "agentPrompt": "Change spring stiffness by setting k=0.28 and damp=0.65 for a snappier feel, and increase N to 9 rows with matching hues entries.",
+ "agentPrompt": "Change spring stiffness by setting k=0.28 and damp=0.65 for a snappier feel, and increase N to 9 rows with matching hues entries. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "row count (N=7)",
   "spring constants (k=0.16, damp=0.78)",
   "color palette (hues array)",
-  "demo interval (DEMO_GAP=150 frames)",
-  "idle timeout before demo resumes (IDLE_BACK=240 frames)"
+  "idle demo (DEMO_FIRST=28 / DEMO_GAP=132 / IDLE_BACK=216 frames @60fps; same FLIP path as a drop)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause / resume",
-  "typed Float32Array physics buffers (cy, vy, ty)"
+  "typed Float32Array physics buffers (cy, vy, ty)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Row count N is hardcoded — adding rows requires updating both N and the hues array",
@@ -58,7 +64,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "drag",
@@ -97,9 +104,8 @@
     list.appendChild(r);rows.push(r);order.push(i);
   }
   // Geometry cache (recomputed only on resize / layout shifts).
-  var slotH=0, gap=0, sel=0, running=true, demoT=0, idle=0;
-  var DEMO_GAP=150;            // frames between auto-moves (~2.5s)
-  var IDLE_BACK=240;           // frames idle before demo resumes (~4s)
+  var slotH=0, gap=0, sel=0, running=true, idle=1e5;   // idle starts cold: the demo owns an untouched tile
+  var DEMO_GAP=132, DEMO_FIRST=28, IDLE_BACK=216, demoT=DEMO_GAP-DEMO_FIRST;  // frames @60fps: auto-move every ~2.2s, first at ~0.47s, demo back ~3.6s after the last touch
   var k=0.16, damp=0.78;       // spring constants
   // per-row physics: current y, velocity, target y (typed arrays, no per-frame alloc)
   var cy=new Float32Array(N), vy=new Float32Array(N), ty=new Float32Array(N);
@@ -192,12 +198,12 @@
 
   // ---- self-demo: synthesized reorder on a gentle timer ----
   function userActive(){return dragIdx>=0 || document.activeElement===list || idle<IDLE_BACK;}
+  // fixed choreography (rank, delta): every entry is a real reorder and none undoes the one before
+  // it — a random pair can cancel out and read as "nothing moved".
+  var SEQ=[[6,-3],[1,2],[4,-2],[0,3],[5,-4],[2,2]], seqI=0;
   function autoMove(){
-    // pick the lifted-into-place choreography: lift a card and carry it a few slots.
-    var from=Math.floor(Math.random()*N);
-    var delta=(Math.random()<.5?-1:1)*(1+Math.floor(Math.random()*2));
-    var to=Math.max(0,Math.min(N-1,from+delta));
-    sel=from; move(from,to);
+    var s=SEQ[seqI++%SEQ.length], from=s[0], to=Math.max(0,Math.min(N-1,from+s[1]));
+    sel=from; move(from,to);   // same FLIP path a real drop / arrow key ends in
   }
 
   // ---- single rAF loop, allocation-free ----
@@ -225,6 +231,9 @@
     else if(reduce){/* stay static */}else{if(!running)start();}
   });
   window.addEventListener("resize",function(){measure();},{passive:true});
+  addEventListener("message",function(e){ // live re-theme via {type:'forever:theme', theme:'light'|'dark'}
+    var d=e.data; if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);
+  });
 
   // boot
   requestAnimationFrame(function(){

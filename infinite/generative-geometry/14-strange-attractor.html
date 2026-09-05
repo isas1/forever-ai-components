@@ -5,11 +5,28 @@
 <meta name="description" content="De Jong strange attractor rendering smoky pink density clouds that drift and reshape on a deep purple field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Strange Attractor</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#11001f;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme lives in the one [data-theme="light"] block. The density ramp runs
+     --dej-base (empty field, = --dej-bg as rgb: keep in sync) -> --dej-acc -> --dej-hot
+     (densest core). Light inverts it: the smoke darkens instead of glowing. */
+  :root{
+    --dej-bg:#11001f; --dej-base:17,0,31; --dej-acc:255,93,143; --dej-hot:255,225,238;
+    --dej-cap:#ff5d8f; --dej-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --dej-bg:#f5f0f8; --dej-base:245,240,248; --dej-acc:186,0,72; --dej-hot:86,0,40;
+    --dej-cap:#c00040; --dej-cap-o:.75;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--dej-bg);}
   #dejong-c{display:block;width:100%;height:100%;}
   .dejong-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.14em;color:#ff5d8f;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--dej-cap);opacity:var(--dej-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +36,22 @@
  "description": "De Jong strange attractor rendered as a smoky pink density cloud on deep purple; coefficients drift via sine clocks so the shape continuously morphs.",
  "useWhen": "Dark-mode hero backgrounds, generative art displays, screensavers, or anywhere a continuously evolving mathematical form adds depth.",
  "avoidWhen": "Light backgrounds (hardcoded dark purple). Low-end devices — 90k iterations per frame with pixel-level tone mapping is CPU-intensive.",
- "agentPrompt": "Change accent color from pink (#ff5d8f) to electric cyan (#00eaff) by updating the rgb values in the r/g/bl tone-map lines (target 0,234,255), and slow the drift by reducing t += 0.0032 to t += 0.0015.",
+ "agentPrompt": "Change accent color from pink (#ff5d8f) to electric cyan (#00eaff) by updating the rgb values in the r/g/bl tone-map lines (target 0,234,255), and slow the drift by reducing t += 0.0032 to t += 0.0015. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ITER iteration count (90000)",
   "drift speed (t += 0.0032)",
   "clock amplitude (0.85)",
   "accent color in tone-map r/g/bl lines",
   "smoke fade factor (v * 0.90)",
-  "scale factor (0.24)"
+  "scale factor (0.24)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static single frame)",
   "visibilitychange stop/start",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "90k iterations per frame is CPU-bound — heavy on low-end mobile",
@@ -44,7 +63,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "attractor",
@@ -76,7 +96,21 @@
     ox=cv.width/2;oy=cv.height/2;
   }
   addEventListener('resize',size);size();
-  // accent #ff5d8f -> rgb(255,93,143). highlight toward warm white.
+  // theme: the three ramp anchors come from the CSS tokens, pre-differenced so the
+  // per-pixel loop stays two multiply-adds per channel. Re-read once per theme flip.
+  const root=document.documentElement;
+  const C={b:[17,0,31],da:[238,93,112],dh:[0,132,95]};
+  function syncTheme(){
+    const cs=getComputedStyle(root),
+          arr=(n,f)=>{const v=cs.getPropertyValue(n).trim();return v?v.split(',').map(Number):f;};
+    const b=arr('--dej-base',[17,0,31]),a=arr('--dej-acc',[255,93,143]),h=arr('--dej-hot',[255,225,238]);
+    C.b=b;C.da=[a[0]-b[0],a[1]-b[1],a[2]-b[2]];C.dh=[h[0]-a[0],h[1]-a[1],h[2]-a[2]];
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce)render();}
+  });
+  syncTheme();
   let t=0,nudge=0,px=0.1,py=0.1;
   cv.addEventListener('pointermove',()=>{nudge=1;});
   cv.addEventListener('click',()=>{nudge=1.6;t+=37;});
@@ -102,20 +136,20 @@
     }
     px=x;py=y;
     nudge*=0.9;
-    const data=img.data;
+    const data=img.data,B=C.b,DA=C.da,DH=C.dh;
     for(let p=0,j=0;p<buf.length;p++,j+=4){
       let v=buf[p];
       if(v>0){
         const dn=Math.log(1+v)*0.42; // tone-map density
         const k=dn>1?1:dn;
-        // base bg 17,0,31 -> accent 255,93,143 -> hot 255,225,238
+        // base (empty field) -> accent -> hot core, all three from the theme tokens
         const hot=k>0.6?(k-0.6)/0.4:0;
-        const r=17+(255-17)*k;
-        const g=0+(93)*k+(225-93)*hot;
-        const bl=31+(143-31)*k+(238-143)*hot;
+        const r=B[0]+DA[0]*k+DH[0]*hot;
+        const g=B[1]+DA[1]*k+DH[1]*hot;
+        const bl=B[2]+DA[2]*k+DH[2]*hot;
         data[j]=r;data[j+1]=g;data[j+2]=bl;data[j+3]=255;
         if(!reduce)buf[p]=v*0.90; // smoke fade, folded into this single pass
-      }else{data[j]=17;data[j+1]=0;data[j+2]=31;data[j+3]=255;}
+      }else{data[j]=B[0];data[j+1]=B[1];data[j+2]=B[2];data[j+3]=255;}
     }
     ctx.putImageData(img,0,0);
     raf=reduce?0:requestAnimationFrame(render);

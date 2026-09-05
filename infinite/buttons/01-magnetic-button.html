@@ -8,8 +8,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
+    --bg:#08090d; --glow-a:rgba(43,171,107,0.16); --glow-b:rgba(192,132,89,0.14); --cap:#fff; --cap-o:.28;
     --bg-surface:#1c2030; --text-0:#f4f6fb;
     --border-mid:rgba(255,255,255,0.12); --border-glow:rgba(43,171,107,0.45);
     --grad-iris-cyan:linear-gradient(120deg,#2BAB6B,#C08459);
@@ -19,9 +27,15 @@
     --font-display:"Space Grotesk",system-ui,sans-serif;
     --dur-fast:160ms; --dur-base:280ms;
   }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow-a:rgba(43,171,107,0.18); --glow-b:rgba(192,132,89,0.16); --cap:#1b2130; --cap-o:.5;
+    --bg-surface:#ffffff; --text-0:#1b2130;
+    --border-mid:rgba(0,0,0,0.12); --border-glow:rgba(32,126,79,0.55);
+    --glow-iris:0 0 0 1px var(--border-glow),0 8px 40px -8px rgba(32,126,79,0.3);
+  }
   html,body{margin:0;height:100%;overflow:hidden}
-  body{background:#08090d;display:grid;place-items:center;
-    background-image:radial-gradient(60vw 40vw at 20% -10%,rgba(43,171,107,0.16),transparent 60%),radial-gradient(50vw 40vw at 90% 0%,rgba(192,132,89,0.14),transparent 55%);}
+  body{background:var(--bg);display:grid;place-items:center;
+    background-image:radial-gradient(60vw 40vw at 20% -10%,var(--glow-a),transparent 60%),radial-gradient(50vw 40vw at 90% 0%,var(--glow-b),transparent 55%);}
   #stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c01-mag{
@@ -35,7 +49,7 @@
   .c01-mag:hover{border-color:var(--border-glow);box-shadow:var(--glow-iris);}
   .c01-mag__label{display:inline-block;transition:transform var(--dur-base) var(--ease-out-soft);will-change:transform;}
 
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;font-family:var(--font-display)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c01-mag,.c01-mag__label{transition-duration:.001ms}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -45,19 +59,21 @@
  "description": "Dark pill button drifts in an idle orbital float; cursor proximity pulls it magnetically with a label inner-parallax and emerald-to-copper glow on hover.",
  "useWhen": "CTA buttons on dark hero sections or landing pages where tactile interactivity signals quality.",
  "avoidWhen": "Dense form layouts or light backgrounds — glow and drift assume a dark surface and open space around the button.",
- "agentPrompt": "Change the idle drift amplitude from 14/9 to 6/4 for a subtler float, and set accent color to #ff6b6b by replacing #2BAB6B throughout.",
+ "agentPrompt": "Change the idle drift amplitude from 14/9 to 6/4 for a subtler float, and set accent color to #ff6b6b by replacing #2BAB6B throughout. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "magnetic pull strength (strength = 0.4)",
   "idle orbit amplitude (cos/sin multipliers 14, 9, 5, 3)",
   "orbit speed (e*0.9, e*0.7, e*0.37, e*1.3)",
   "gradient accent colors (--grad-iris-cyan)",
-  "button label text ('Hover me')"
+  "button label text ('Hover me')",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce check before apply)",
   "visibilitychange stop/start loop",
-  "label inner-parallax (separate transform on .c01-mag__label)"
+  "label inner-parallax (separate transform on .c01-mag__label)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CSS transition on transform fights the rAF loop when exiting hover — works fine visually but two systems control transform simultaneously",
@@ -70,7 +86,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "button",
@@ -126,6 +143,10 @@
   function start(){ if(reduce) return; if(!raf){ t0=null; raf=requestAnimationFrame(loop);} }
   function stop(){ if(raf){ cancelAnimationFrame(raf); raf=null; } reset(); }
   document.addEventListener("visibilitychange", function(){ document.hidden?stop():start(); });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message", function(e){
+    var d=e.data; if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);
+  });
   start();
 })();
 </script>

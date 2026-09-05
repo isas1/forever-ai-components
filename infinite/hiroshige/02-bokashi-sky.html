@@ -5,11 +5,35 @@
 <meta name="description" content="Bokashi Sky — Ukiyo-e Weather &amp; Road. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bokashi Sky</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#2a3550;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The four bokashi phases,
+     the ink, the star flecks and the hill mix ratio are all re-read in syncTheme(). */
+  :root{
+    --hir02-bg:#2a3550; --hir02-cap:#ffffff; --hir02-cap-o:.5; --hir02-ink:#16202b;
+    --hir02-dawn-top:#2a3f63;  --hir02-dawn-bot:#d98a5a;  --hir02-dawn-sun:#f2c27a;
+    --hir02-day-top:#3f6f9f;   --hir02-day-bot:#cfe6ee;   --hir02-day-sun:#fdf6e3;
+    --hir02-dusk-top:#3a3360;  --hir02-dusk-bot:#c4663f;  --hir02-dusk-sun:#e8934a;
+    --hir02-night-top:#101a2e; --hir02-night-bot:#22324b; --hir02-night-sun:#e8edf2;
+    --hir02-star:rgba(242,240,232,1); --hir02-halo-0:rgba(255,255,255,0); --hir02-hill-k:0.30;
+  }
+  :root[data-theme="light"]{
+    --hir02-bg:#eef1f7; --hir02-cap:#16202b; --hir02-cap-o:.55; --hir02-ink:#2a2118;
+    --hir02-dawn-top:#b9c4e0;  --hir02-dawn-bot:#f7ddc4;  --hir02-dawn-sun:#af5226;
+    --hir02-day-top:#a8c8e4;   --hir02-day-bot:#f4f1e6;   --hir02-day-sun:#bb4525;
+    --hir02-dusk-top:#cbbcd8;  --hir02-dusk-bot:#f0c8ab;  --hir02-dusk-sun:#b04226;
+    --hir02-night-top:#9fb0cc; --hir02-night-bot:#dfe4ec; --hir02-night-sun:#3d4c73;
+    --hir02-star:rgba(70,92,132,.55); --hir02-hill-k:0.45;
+  }
+  html,body{margin:0;height:100%;background:var(--hir02-bg);overflow:hidden}
   #hir02-stage{position:fixed;inset:0;width:100%;height:100%}
   #hir02-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .hir02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .hir02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--hir02-cap);opacity:var(--hir02-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +42,21 @@
  "description": "Canvas sky cycles dawn→day→dusk→night with bokashi gradients; sun/moon arcs overhead, stars appear at night, a bird drifts across, hills anchor the base.",
  "useWhen": "Ambient backgrounds for art or nature-themed pages. Hero sections needing a slow, meditative day-cycle scene.",
  "avoidWhen": "Contexts needing legible text overlays — shifting sky colors reduce contrast unpredictably. Low-end devices that can't sustain a rAF loop.",
- "agentPrompt": "Slow the full day cycle to 36 seconds by changing PERIOD from 18 to 36, and add a second bird with offset phase (bu=(t*0.04+0.5)%1).",
+ "agentPrompt": "Slow the full day cycle to 36 seconds by changing PERIOD from 18 to 36, and add a second bird with offset phase (bu=(t*0.04+0.5)%1). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "day cycle duration (PERIOD=18)",
   "sky phase colors (PHASES array top/bot/sun)",
   "sun/moon radius (rad=18/14)",
   "bird speed (t*0.06)",
-  "hill curve control points"
+  "hill curve control points",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED)",
   "visibilitychange stop/start",
-  "DPR-aware fitCanvas"
+  "DPR-aware fitCanvas",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Stars use fixed pseudo-random positions — no true scatter on resize",
@@ -43,7 +69,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "woodblock",
@@ -74,18 +101,31 @@
     const ctx=c.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
     return {ctx,w,h,dpr};
   }
-  const INK='#16202b';
+  let INK='#16202b', STAR='', HALO0='', HILLK=0.30;
   function mixRgb(a,b,k){return [Math.round(a[0]+(b[0]-a[0])*k),Math.round(a[1]+(b[1]-a[1])*k),Math.round(a[2]+(b[2]-a[2])*k)];}
   function hx(a){return [parseInt(a.slice(1,3),16),parseInt(a.slice(3,5),16),parseInt(a.slice(5,7),16)];}
   function rgb(c){return 'rgb('+c[0]+','+c[1]+','+c[2]+')';}
   function lerpHex(a,b,k){return mixRgb(hx(a),hx(b),k);}
   function mixInk(c,k){return rgb(mixRgb(c,hx(INK),k));}
   const PHASES=[
-    {top:'#2a3f63', bot:'#d98a5a', sun:'#f2c27a', name:'dawn'},
-    {top:'#3f6f9f', bot:'#cfe6ee', sun:'#fdf6e3', name:'day'},
-    {top:'#3a3360', bot:'#c4663f', sun:'#e8934a', name:'dusk'},
-    {top:'#101a2e', bot:'#22324b', sun:'#e8edf2', name:'night'}
+    {top:'', bot:'', sun:'', name:'dawn'},
+    {top:'', bot:'', sun:'', name:'day'},
+    {top:'', bot:'', sun:'', name:'dusk'},
+    {top:'', bot:'', sun:'', name:'night'}
   ];
+  const root=document.documentElement;
+  function syncTheme(){                        // bokashi stops are CSS-owned; re-read per theme
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue('--hir02-'+n).trim();
+    INK=g('ink'); STAR=g('star'); HALO0=g('halo-0'); HILLK=parseFloat(g('hill-k'))||0.30;
+    for(const p of PHASES){ p.top=g(p.name+'-top'); p.bot=g(p.name+'-bot'); p.sun=g(p.name+'-sun'); }
+  }
+  addEventListener('message',function(e){       // live re-theme from the canvas
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(REDUCED) draw(performance.now());
+    }
+  });
+  syncTheme();
   let S=fitCanvas(cv), t=0, last=performance.now();
   const PERIOD=18;
   function draw(now){
@@ -110,7 +150,7 @@
     ctx.save();
     const rad=isNight?14:18;
     const grd=ctx.createRadialGradient(sx,arcY,2,sx,arcY,rad*2.6);
-    grd.addColorStop(0,rgb(sun));grd.addColorStop(1,'rgba(255,255,255,0)');
+    grd.addColorStop(0,rgb(sun));grd.addColorStop(1,HALO0);
     ctx.fillStyle=grd;ctx.beginPath();ctx.arc(sx,arcY,rad*2.6,0,7);ctx.fill();
     ctx.fillStyle=rgb(sun);ctx.beginPath();ctx.arc(sx,arcY,rad,0,7);ctx.fill();
     ctx.restore();
@@ -120,12 +160,12 @@
         const sxx=((s*97.3)%W), syy=((s*53.7)%(H*0.5));
         const tw=0.5+0.5*Math.sin(t*2+s);
         ctx.globalAlpha=nightAmt*tw*0.9;
-        ctx.fillStyle='rgba(242,240,232,1)';
+        ctx.fillStyle=STAR;
         ctx.fillRect(sxx,syy,1.4,1.4);
       }
       ctx.globalAlpha=1;
     }
-    ctx.fillStyle=mixInk(bot,0.30);
+    ctx.fillStyle=mixInk(bot,HILLK);
     ctx.beginPath();ctx.moveTo(0,H*0.80);
     ctx.quadraticCurveTo(W*0.25,H*0.70,W*0.5,H*0.78);
     ctx.quadraticCurveTo(W*0.78,H*0.86,W,H*0.74);

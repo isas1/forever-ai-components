@@ -5,15 +5,30 @@
 <meta name="description" content="Two stacked words trade sharpness in a cinematic rack-focus breath, the defocused one blooming into a soft cyan halo with vignette.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rack Focus</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#101418;}
+  /* theme tokens — dark values are the defaults; light re-theme = the [data-theme="light"] block.
+     --rf-halo-rgb feeds the JS text-shadow (same colour as --rf-halo, comma triple for rgba()). */
+  :root{
+    --rf-bg:#101418; --rf-ink:#e9f6f9; --rf-halo:#56cfe1; --rf-halo-rgb:86,207,225;
+    --rf-vignette:rgba(0,0,0,.55); --cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --rf-bg:#eef4f7; --rf-ink:#16232a; --rf-halo:#187886; --rf-halo-rgb:24,120,134;
+    --rf-vignette:rgba(16,24,28,.14); --cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--rf-bg);}
   body{display:flex;align-items:center;justify-content:center;
        font-family:ui-sans-serif,system-ui,"Helvetica Neue",Arial,sans-serif;}
   .rf-stage{position:relative;width:100%;height:100%;display:flex;
        flex-direction:column;align-items:center;justify-content:center;
        gap:clamp(4px,2.4vh,22px);}
   .rf-word{
-    color:#e9f6f9;
+    color:var(--rf-ink);
     font-size:clamp(34px,15.5vw,128px);
     font-weight:800;
     line-height:.92;
@@ -27,14 +42,14 @@
   .rf-word::before{
     content:attr(data-w);
     position:absolute;inset:0;
-    color:#56cfe1;
+    color:var(--rf-halo);
     will-change:filter,opacity;
     pointer-events:none;
   }
   .rf-grain{position:absolute;inset:0;pointer-events:none;
-       background:radial-gradient(120% 75% at 50% 50%,transparent 55%,rgba(0,0,0,.55) 100%);}
+       background:radial-gradient(120% 75% at 50% 50%,transparent 55%,var(--rf-vignette) 100%);}
   .cap{position:fixed;right:10px;bottom:8px;font-size:11px;letter-spacing:.16em;
-       color:#56cfe1;opacity:.34;text-transform:uppercase;font-family:monospace;
+       color:var(--rf-halo);opacity:var(--cap-o);text-transform:uppercase;font-family:monospace;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -44,19 +59,21 @@
  "description": "Two stacked words trade sharpness in a cinematic rack-focus breath: the defocused word blooms into a soft cyan halo while the focused one snaps razor-sharp.",
  "useWhen": "Hero sections, loading screens, or film/photography brand contexts needing cinematic ambient motion with minimal distraction.",
  "avoidWhen": "Contexts where users need to read both words simultaneously, or on low-end devices sensitive to repeated CSS filter repaints.",
- "agentPrompt": "Change the two words to 'FOCUS' and 'SHIFT', slow the breath cycle to 8000ms by setting PERIOD=8000, and change the bloom halo color from #56cfe1 to #ff6b6b.",
+ "agentPrompt": "Change the two words to 'FOCUS' and 'SHIFT', slow the breath cycle to 8000ms by setting PERIOD=8000, and change the bloom halo color from #56cfe1 to #ff6b6b. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (data-w attribute and text node)",
   "cycle period (PERIOD=5200)",
   "max blur radius (14px in paint())",
   "bloom halo color (#56cfe1 in CSS)",
-  "pointer nudge strength (±60ms t0 shift)"
+  "pointer nudge strength (±60ms t0 shift)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "quantized blur step logic (0.5px rounding for perf)",
   "prefers-reduced-motion static fallback",
   "visibilitychange pause/start",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CSS filter:blur() triggers repaint every frame — quantized to 0.5px steps to reduce cost but still heavier than transform-only animations",
@@ -70,7 +87,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -101,6 +119,15 @@
   // smoothstep eased triangle wave 0..1..0
   function ease(x){ return x*x*(3-2*x); }
 
+  // JS-drawn colour: the text-shadow rgba() is built from --rf-halo-rgb so it
+  // stays in sync with the CSS halo colour across themes.
+  var root=document.documentElement;
+  var C={haloRgb:'86,207,225'};
+  function syncTheme(){
+    C.haloRgb = (getComputedStyle(root).getPropertyValue('--rf-halo-rgb')||'86,207,225').trim();
+    st.A.sh=undefined; st.B.sh=undefined; // force text-shadow rewrite on next frame
+  }
+
   // apply a focus value f in [0,1] to a word: 1 = razor sharp, 0 = full bloom
   // blur/filter is the expensive repaint; quantize it to ~0.5px steps so the
   // filter string only changes in discrete jumps instead of every frame.
@@ -114,8 +141,8 @@
     el.style.opacity = (0.30 + f*0.70).toFixed(3);
     el.style.transform = 'scale('+scale.toFixed(4)+')';
     var sh=Math.round((2+f*10)*2)/2;
-    if(sh!==s.sh){ el.style.textShadow = '0 0 '+sh.toFixed(1)+'px rgba(86,207,225,'+(f*0.35).toFixed(3)+')'; s.sh=sh; }
-    // bloom halo layer (the cyan ::before glow that swells as the word defocuses)
+    if(sh!==s.sh){ el.style.textShadow = '0 0 '+sh.toFixed(1)+'px rgba('+C.haloRgb+','+(f*0.35).toFixed(3)+')'; s.sh=sh; }
+    // bloom halo layer (the accent ::before glow that swells as the word defocuses)
     var bb=Math.round((4+bloom*30)*2)/2;
     if(bb!==s.bb){ el.style.setProperty('--bb', bb.toFixed(1)+'px'); s.bb=bb; }
     el.style.setProperty('--bo', (bloom*0.85).toFixed(3));
@@ -149,6 +176,16 @@
     var up = e.clientY < midY;
     t0 -= up?60:-60;
   });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d = e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme);
+      syncTheme();
+      if(reduce){ paint(A,1,'A'); paint(B,0.12,'B'); }
+    }
+  });
+  syncTheme();
 
   if(reduce){
     // single resting frame: top word sharp, bottom in bloom

@@ -5,72 +5,85 @@
 <meta name="description" content="A curtain of red, blue, yellow and black bars parts left/right to reveal a primary-red circle with gold ring on a dark stage, looping.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stage Reveal</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme in [data-theme="light"].
+     --bh11-bar is the curtain's neutral bar: it sits a hair off the stage colour in both themes. */
+  :root{--bh11-bg:#101012;--bh11-red:#e63329;--bh11-blu:#1f4ea8;--bh11-yel:#f4c20d;--bh11-bar:#0e0e10;--bh11-edge:#1d1d20;--bh11-cap:#fff;--bh11-cap-o:.42}
+  :root[data-theme="light"]{--bh11-bg:#f6f2ea;--bh11-red:#cc2b1f;--bh11-blu:#1f4ea8;--bh11-yel:#ad7f08;--bh11-bar:#f2ece0;--bh11-edge:#ded6c6;--bh11-cap:#1b1b20;--bh11-cap-o:.5}
   *{margin:0;padding:0;box-sizing:border-box}
-  html,body{width:100%;height:100%;background:#101012;overflow:hidden}
-  #bh11-stage{position:fixed;inset:0;width:100%;height:100%;background:#101012}
+  html,body{width:100%;height:100%;background:var(--bh11-bg);overflow:hidden}
+  #bh11-stage{position:fixed;inset:0;width:100%;height:100%;background:var(--bh11-bg)}
   .bh11-svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 
+  /* one 4.6s stage cycle: part (8-40%), hold open (40-56%), close (56-88%), hold shut.
+     animation-name lives on the same id-scoped rules as transform-origin so the shorthand
+     above can't outrank it; the negative delays on each bar start the wall mid-reveal. */
   #bh11-curtain rect{
     transform-box:fill-box;transform-origin:center;
-    animation:bh11-part 4.6s cubic-bezier(.76,0,.24,1) infinite;
+    animation-duration:4.6s;animation-timing-function:cubic-bezier(.76,0,.24,1);
+    animation-iteration-count:infinite;animation-fill-mode:both;
   }
-  #bh11-curtain g.bh11-L rect{transform-origin:left center}
-  #bh11-curtain g.bh11-R rect{transform-origin:right center}
-
-  .bh11-L rect{animation-name:bh11-partL}
-  .bh11-R rect{animation-name:bh11-partR}
+  #bh11-curtain g.bh11-L rect{transform-origin:left center;animation-name:bh11-partL}
+  #bh11-curtain g.bh11-R rect{transform-origin:right center;animation-name:bh11-partR}
 
   @keyframes bh11-partL{
-    0%,16%{transform:translateX(0)}
-    52%,80%{transform:translateX(-118%)}
-    96%,100%{transform:translateX(0)}
+    0%,8%{transform:translateX(0)}
+    40%,56%{transform:translateX(-118%)}
+    88%,100%{transform:translateX(0)}
   }
   @keyframes bh11-partR{
-    0%,16%{transform:translateX(0)}
-    52%,80%{transform:translateX(118%)}
-    96%,100%{transform:translateX(0)}
+    0%,8%{transform:translateX(0)}
+    40%,56%{transform:translateX(118%)}
+    88%,100%{transform:translateX(0)}
   }
 
   #bh11-circle{
     transform-box:fill-box;transform-origin:center;
-    animation:bh11-rise 4.6s cubic-bezier(.34,1.4,.5,1) infinite;
+    animation:bh11-rise 4.6s -1.51s cubic-bezier(.34,1.4,.5,1) infinite both;
   }
   @keyframes bh11-rise{
-    0%,30%{transform:scale(.18);opacity:0}
-    54%,78%{transform:scale(1);opacity:1}
-    92%,100%{transform:scale(.18);opacity:0}
+    0%,18%{transform:scale(.18);opacity:0}
+    40%,56%{transform:scale(1);opacity:1}
+    78%,100%{transform:scale(.18);opacity:0}
   }
   #bh11-ring{
     transform-box:fill-box;transform-origin:center;
-    animation:bh11-ring 4.6s cubic-bezier(.34,1.3,.5,1) infinite;
+    animation:bh11-ring 4.6s -1.51s cubic-bezier(.34,1.3,.5,1) infinite both;
   }
   @keyframes bh11-ring{
-    0%,32%{transform:scale(.4);opacity:0}
-    56%{transform:scale(1);opacity:.9}
-    78%{transform:scale(1);opacity:.9}
-    90%,100%{transform:scale(1.5);opacity:0}
+    0%,20%{transform:scale(.4);opacity:0}
+    42%{transform:scale(1);opacity:.9}
+    58%{transform:scale(1.16);opacity:.5}
+    72%,100%{transform:scale(1.5);opacity:0}
   }
+  /* the two cue triangles never stop — they turn right through the closed half of the cycle */
   .bh11-tri{
     transform-box:fill-box;transform-origin:center;
-    animation:bh11-cue 4.6s cubic-bezier(.5,0,.2,1) infinite;
+    animation:bh11-cue 4.6s -1.51s linear infinite both;
   }
-  @keyframes bh11-cue{
-    0%,40%{transform:translateY(0) rotate(0deg);opacity:.9}
-    58%{transform:translateY(0) rotate(0deg);opacity:.9}
-    82%{transform:translateY(0) rotate(180deg);opacity:.9}
-    100%{transform:translateY(0) rotate(180deg);opacity:.9}
+  @keyframes bh11-cue{ from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+  /* wing markers ride up and down the side rails, one against the other */
+  .bh11-mark{
+    transform-box:fill-box;transform-origin:center;
+    animation:bh11-mark 4.6s -1.51s ease-in-out infinite both;
   }
+  @keyframes bh11-mark{0%,100%{transform:translateY(-30px)}50%{transform:translateY(30px)}}
 
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--bh11-cap);opacity:var(--bh11-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 
   @media (prefers-reduced-motion:reduce){
-    *{animation-duration:.001ms!important;animation-iteration-count:1!important}
+    *{animation:none!important}
     #bh11-curtain .bh11-L rect{transform:translateX(-118%)}
     #bh11-curtain .bh11-R rect{transform:translateX(118%)}
     #bh11-circle{transform:scale(1);opacity:1}
     #bh11-ring{opacity:0}
     .bh11-tri{transform:rotate(180deg)}
+    .bh11-mark{transform:none}
   }
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -80,19 +93,23 @@
  "description": "Eight colored bars split left/right like a stage curtain to reveal a primary-red circle with a gold ring, then close again in a 4.6s loop.",
  "useWhen": "Hero sections needing dramatic geometric reveals, Bauhaus/constructivist aesthetic pages, loading or intro animations.",
  "avoidWhen": "Contexts requiring immediate content visibility — curtain obscures center for first 50% of each cycle. Avoid on slow connections where CSS animation may stutter.",
- "agentPrompt": "Change the revealed circle color to #1f4ea8 (Bauhaus blue) and slow the cycle to 6s by updating animation-duration from 4.6s to 6s on all animation rules.",
+ "agentPrompt": "Change the revealed circle color to #1f4ea8 (Bauhaus blue) and slow the cycle to 6s by updating animation-duration from 4.6s to 6s on all animation rules. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "curtain bar colors (fill attributes on rect elements)",
   "animation duration (4.6s on all keyframe rules)",
   "circle fill color (#e63329)",
   "ring color (#f4c20d stroke)",
-  "curtain slide distance (118% in keyframes)"
+  "curtain slide distance (118% in keyframes)",
+  "stage cycle pacing (curtain/actor timing in the loop — re-paced so the stage moves within the first 3 s)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "bh11-L / bh11-R transform-origin split (left center / right center)",
   "prefers-reduced-motion static fallback block",
   "visibilitychange pause handler",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "continuous stage loop (paused on visibilitychange)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "All animations share a single 4.6s duration — changing speed requires updating every animation-duration declaration",
@@ -105,7 +122,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bauhaus",
@@ -124,45 +142,45 @@
   <svg class="bh11-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <radialGradient id="bh11-glow" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#e63329" stop-opacity=".55"/>
-        <stop offset="60%" stop-color="#e63329" stop-opacity=".12"/>
-        <stop offset="100%" stop-color="#e63329" stop-opacity="0"/>
+        <stop offset="0%" stop-color="var(--bh11-red)" stop-opacity=".55"/>
+        <stop offset="60%" stop-color="var(--bh11-red)" stop-opacity=".12"/>
+        <stop offset="100%" stop-color="var(--bh11-red)" stop-opacity="0"/>
       </radialGradient>
     </defs>
 
-    <rect x="0" y="0" width="400" height="400" fill="#101012"/>
-    <rect x="34" y="34" width="332" height="332" fill="none" stroke="#1d1d20" stroke-width="2"/>
+    <rect x="0" y="0" width="400" height="400" fill="var(--bh11-bg)"/>
+    <rect x="34" y="34" width="332" height="332" fill="none" stroke="var(--bh11-edge)" stroke-width="2"/>
 
     <circle cx="200" cy="200" r="150" fill="url(#bh11-glow)"/>
 
     <g id="bh11-ring">
-      <circle cx="200" cy="200" r="92" fill="none" stroke="#f4c20d" stroke-width="6"/>
+      <circle cx="200" cy="200" r="92" fill="none" stroke="var(--bh11-yel)" stroke-width="6"/>
     </g>
 
     <g id="bh11-circle">
-      <circle cx="200" cy="200" r="74" fill="#e63329"/>
-      <circle cx="200" cy="200" r="74" fill="none" stroke="#101012" stroke-width="3"/>
+      <circle cx="200" cy="200" r="74" fill="var(--bh11-red)"/>
+      <circle cx="200" cy="200" r="74" fill="none" stroke="var(--bh11-bg)" stroke-width="3"/>
     </g>
 
     <g id="bh11-curtain">
       <g class="bh11-L">
-        <rect x="0"   y="0"   width="50" height="400" fill="#1f4ea8" style="animation-delay:0s"/>
-        <rect x="50"  y="0"   width="50" height="400" fill="#0e0e10" style="animation-delay:.05s"/>
-        <rect x="100" y="0"   width="50" height="400" fill="#f4c20d" style="animation-delay:.1s"/>
-        <rect x="150" y="0"   width="50" height="400" fill="#0e0e10" style="animation-delay:.15s"/>
+        <rect x="0"   y="0"   width="50" height="400" fill="var(--bh11-blu)" style="animation-delay:-1.51s"/>
+        <rect x="50"  y="0"   width="50" height="400" fill="var(--bh11-bar)" style="animation-delay:-1.46s"/>
+        <rect x="100" y="0"   width="50" height="400" fill="var(--bh11-yel)" style="animation-delay:-1.41s"/>
+        <rect x="150" y="0"   width="50" height="400" fill="var(--bh11-bar)" style="animation-delay:-1.36s"/>
       </g>
       <g class="bh11-R">
-        <rect x="200" y="0"   width="50" height="400" fill="#0e0e10" style="animation-delay:.15s"/>
-        <rect x="250" y="0"   width="50" height="400" fill="#e63329" style="animation-delay:.1s"/>
-        <rect x="300" y="0"   width="50" height="400" fill="#0e0e10" style="animation-delay:.05s"/>
-        <rect x="350" y="0"   width="50" height="400" fill="#1f4ea8" style="animation-delay:0s"/>
+        <rect x="200" y="0"   width="50" height="400" fill="var(--bh11-bar)" style="animation-delay:-1.36s"/>
+        <rect x="250" y="0"   width="50" height="400" fill="var(--bh11-red)" style="animation-delay:-1.41s"/>
+        <rect x="300" y="0"   width="50" height="400" fill="var(--bh11-bar)" style="animation-delay:-1.46s"/>
+        <rect x="350" y="0"   width="50" height="400" fill="var(--bh11-blu)" style="animation-delay:-1.51s"/>
       </g>
     </g>
 
-    <polygon class="bh11-tri" points="200,40 214,66 186,66" fill="#f4c20d"/>
-    <polygon class="bh11-tri" points="200,360 214,334 186,334" fill="#1f4ea8" style="animation-delay:.08s"/>
-    <rect x="40" y="194" width="20" height="12" fill="#e63329"/>
-    <rect x="340" y="194" width="20" height="12" fill="#f4c20d"/>
+    <polygon class="bh11-tri" points="200,40 214,66 186,66" fill="var(--bh11-yel)"/>
+    <polygon class="bh11-tri" points="200,360 214,334 186,334" fill="var(--bh11-blu)" style="animation-direction:reverse"/>
+    <rect class="bh11-mark" x="40" y="194" width="20" height="12" fill="var(--bh11-red)"/>
+    <rect class="bh11-mark" x="340" y="194" width="20" height="12" fill="var(--bh11-yel)" style="animation-direction:reverse"/>
   </svg>
   <div class="cap">Stage Reveal</div>
 </div>
@@ -173,6 +191,10 @@
   var stage = document.getElementById("bh11-stage");
   if(!stage) return;
   var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} — CSS tokens do the rest
+  addEventListener("message",function(e){ var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme",d.theme);
+  });
   var nodes = stage.querySelectorAll("[style*='animation'],#bh11-curtain rect,#bh11-circle,#bh11-ring,.bh11-tri");
 
   function setState(s){

@@ -5,11 +5,39 @@
 <meta name="description" content="Concentric crinkle-edged lichen colonies in olive and sage greens grow as reaction-front rings over a speckled weathered-stone field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lichen Spread</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1c1d18;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. --lkn-p1..p4 are the four thallus
+     palettes (rim ring first, centre last — the script indexes them unchanged), so the
+     light theme inverts each ramp — pale crust at the advancing rim, olive core, the
+     mirror of the dark tile's pale centre — so the thallus averages close to the stone
+     and never turns into a dark blot on it; --lkn-sp-hi/-lo are the two stone speckles
+     as "r,g,b" and --lkn-front the dark prothallus rim that outlines every colony. */
+  :root{
+    --lkn-bg:#1c1d18; --lkn-cap:#c4d49a; --lkn-cap-o:.34;
+    --lkn-sp-hi:120,122,108; --lkn-sp-lo:40,42,38; --lkn-front:28,30,22;
+    --lkn-p1:#5c6b3e,#8a9a5b,#c4d49a,#e6efc8;
+    --lkn-p2:#6b6f4a,#9aa36e,#cdd9a6,#aebd7e;
+    --lkn-p3:#4f5d3a,#7d8a55,#b6c78a,#d8e3b0;
+    --lkn-p4:#5a6446,#919c66,#c0d094,#9fb074;
+  }
+  :root[data-theme="light"]{
+    --lkn-bg:#eeefe8; --lkn-cap:#657042; --lkn-cap-o:.66;
+    --lkn-sp-hi:168,170,152; --lkn-sp-lo:250,250,244; --lkn-front:56,62,38;
+    --lkn-p1:#d6e0b8,#bccb92,#98a86a,#63723c;
+    --lkn-p2:#dbdfc0,#c3ca9c,#a0a875,#6d7448;
+    --lkn-p3:#d2dcb2,#b6c78a,#93a464,#5d6c38;
+    --lkn-p4:#d4dcbc,#bcc696,#9aa572,#68724a;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--lkn-bg);}
   #lkn-c{display:block;width:100%;height:100%;}
   .lkn-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.16em;color:#c4d49a;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--lkn-cap);opacity:var(--lkn-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +47,22 @@
  "description": "Crinkle-edged lichen colonies grow in concentric rings over a speckled stone field; pointer nudges the nearest colony to pulse.",
  "useWhen": "Nature or science-themed ambient backgrounds, generative art hero sections, or any context needing slow organic growth motion.",
  "avoidWhen": "Layouts requiring legible content overlay — the dense ring pattern competes with text. Avoid on low-end mobile due to per-frame stone blit and speckle loops.",
- "agentPrompt": "Change the dominant palette to rust/terracotta by replacing palettes[0] with ['#7a4a2e','#b06b3e','#d4956a','#edd5b0'], and set n0 to 6 to reduce colony count.",
+ "agentPrompt": "Change the dominant palette to rust/terracotta by replacing palettes[0] with ['#7a4a2e','#b06b3e','#d4956a','#edd5b0'], and set n0 to 6 to reduce colony count. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "colony count (n0, lines 59-60)",
   "palette arrays (palettes[])",
   "growth speed (cl.grow += 0.006)",
   "max colony radius ((0.12+Math.random()*0.22)*S)",
   "crinkle wobble (wob=0.018+(1-base)*0.05)",
-  "breathe amplitude (0.012)"
+  "breathe amplitude (0.012)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "offscreen stoneCv blit pattern (critical for perf)",
   "visibilitychange stop/start guards",
   "prefers-reduced-motion static render branch",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Stone field rebuilt on resize — brief flash on orientation change",
@@ -45,7 +75,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "lichen",
@@ -67,6 +98,23 @@
   const cv=document.getElementById('lkn-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,S;
+  const root=document.documentElement;
+  // every colour the canvas draws with comes from the tokens; PAL holds the four
+  // thallus ramps and the offscreen stone is rebuilt whenever they change
+  const C={bg:'',spHi:'',spLo:'',front:''};
+  let PAL=[];
+  function syncTheme(){
+    const cs=getComputedStyle(root),get=k=>cs.getPropertyValue(k).trim();
+    C.bg=get('--lkn-bg');C.spHi=get('--lkn-sp-hi');C.spLo=get('--lkn-sp-lo');C.front=get('--lkn-front');
+    PAL=['--lkn-p1','--lkn-p2','--lkn-p3','--lkn-p4'].map(k=>get(k).split(',').map(v=>v.trim()));
+    buildStone();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce){stone();paint(8000);}
+    }
+  });
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
@@ -77,14 +125,15 @@
   // weathered stone field — rendered ONCE to an offscreen canvas, then blitted each frame
   let stoneCv=document.createElement('canvas'),stoneCtx=stoneCv.getContext('2d');
   function buildStone(){
+    if(!W)return;                       // tokens can sync before the first size()
     stoneCv.width=Math.max(1,W);stoneCv.height=Math.max(1,H);
     const sc=stoneCtx;
     sc.setTransform(1,0,0,1,0,0);
-    sc.fillStyle='#1c1d18';sc.fillRect(0,0,W,H);
+    sc.fillStyle=C.bg;sc.fillRect(0,0,W,H);
     const cnt=2200*(W*H)/(360*360);
     for(let i=0;i<cnt;i++){
       const x=Math.random()*W,y=Math.random()*H,v=Math.random();
-      sc.fillStyle=`rgba(${v>.5?120:40},${v>.5?122:42},${v>.5?108:38},${0.04+v*0.05})`;
+      sc.fillStyle=`rgba(${v>.5?C.spHi:C.spLo},${0.04+v*0.05})`;
       sc.fillRect(x,y,1.4,1.4);
     }
   }
@@ -96,12 +145,6 @@
   let colonies=[];
   function layout(){
     colonies=[];
-    const palettes=[
-      ['#5c6b3e','#8a9a5b','#c4d49a','#e6efc8'],
-      ['#6b6f4a','#9aa36e','#cdd9a6','#aebd7e'],
-      ['#4f5d3a','#7d8a55','#b6c78a','#d8e3b0'],
-      ['#5a6446','#919c66','#c0d094','#9fb074']
-    ];
     const n0=S<300?5:S<460?7:9;
     for(let i=0;i<n0;i++){
       colonies.push({
@@ -110,14 +153,14 @@
         rings:6+(Math.random()*5|0),
         ph:Math.random()*99,
         seed:Math.random()*999,
-        pal:palettes[Math.random()*palettes.length|0],
+        pi:Math.random()*4|0,          // palette index — resolved through PAL so a re-theme lands
         lobes:7+(Math.random()*9|0),
         grow:0
       });
     }
     colonies.sort((a,b)=>b.rmax-a.rmax);
   }
-  size();buildStone();stone();layout();
+  syncTheme();size();buildStone();stone();layout();
 
   // radial crinkled boundary for a ring at growth phase g
   function ringPath(cl,frac,wob,t){
@@ -148,12 +191,13 @@
   function paint(t){
     colonies.forEach(cl=>{
       const g=cl.grow;
+      const pal=PAL[cl.pi];
       // concentric reaction-front rings, oldest (largest) drawn first
       for(let k=cl.rings;k>=1;k--){
         const base=k/cl.rings;
         const frac=base*g;
         if(frac<=0.02)continue;
-        const tone=cl.pal[Math.min(cl.pal.length-1, Math.floor((1-base)*cl.pal.length))];
+        const tone=pal[Math.min(pal.length-1, Math.floor((1-base)*pal.length))];
         const wob=0.018+(1-base)*0.05;            // outer rim crinkles more
         ringPath(cl,frac,wob,t);
         ctx.globalAlpha=0.9;
@@ -163,7 +207,7 @@
       // mottled apothecia / texture speckle inside the thallus
       const rn=(s)=>{s=Math.sin(s*91.7+cl.seed)*1e4;return s-Math.floor(s);};
       const spots=Math.floor(cl.rmax*cl.rmax*g*0.006);
-      ctx.fillStyle=cl.pal[cl.pal.length-1];
+      ctx.fillStyle=pal[pal.length-1];
       for(let s=0;s<spots;s++){
         const a=rn(s)*6.283, rr=Math.sqrt(rn(s+0.5))*cl.rmax*g*0.92;
         const x=cl.x+Math.cos(a)*rr, y=cl.y+Math.sin(a)*rr;
@@ -173,11 +217,11 @@
       // dark prothallus rim — the advancing reaction front
       ctx.globalAlpha=0.5;
       ctx.lineWidth=Math.max(0.7,S*0.0016);
-      ctx.strokeStyle='rgba(28,30,22,0.85)';
+      ctx.strokeStyle='rgba('+C.front+',0.85)';
       ringPath(cl,Math.min(1,g),0.018+0.05,t);ctx.stroke();
       // pale bright growing margin highlight
       ctx.globalAlpha=0.22;
-      ctx.strokeStyle=cl.pal[cl.pal.length-1];
+      ctx.strokeStyle=pal[pal.length-1];
       ringPath(cl,Math.min(0.995,g)*0.985,0.05,t);ctx.stroke();
     });
     ctx.globalAlpha=1;

@@ -5,11 +5,27 @@
 <meta name="description" content="An L-system fractal plant grows branch by branch in green hues, swaying gently with leaf dots at the tips.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>L-System Plant</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a140d}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. br/leaf numbers feed the JS hsl().
+     -sd/-ld are the per-branch-depth saturation and lightness steps. */
+  :root{
+    --gg05-bg:#0a140d; --gg05-cap:#9bffb0; --gg05-cap-o:.45;
+    --gg05-br-s:60; --gg05-br-sd:4; --gg05-br-l:35; --gg05-br-ld:7; --gg05-leaf-s:80; --gg05-leaf-l:65;
+  }
+  :root[data-theme="light"]{
+    --gg05-bg:#eff5f0; --gg05-cap:#007f1b; --gg05-cap-o:.8;
+    --gg05-br-s:55; --gg05-br-sd:3; --gg05-br-l:20; --gg05-br-ld:5; --gg05-leaf-s:70; --gg05-leaf-l:40;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--gg05-bg)}
   #c{display:block;width:100%;height:100%}
   #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
-       color:#9bffb0;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+       color:var(--gg05-cap);opacity:var(--gg05-cap-o);letter-spacing:.5px;pointer-events:none;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +34,22 @@
  "description": "An L-system fractal plant grows branch by branch from the canvas bottom, swaying gently; clicking triggers a wobble and regrows a randomized plant.",
  "useWhen": "Nature or generative art backgrounds, procedural demo showcases, ambient desktop wallpaper loops.",
  "avoidWhen": "Layouts requiring legible text overlays — the incremental draw loop repaints constantly. Low-end devices with very small viewports may stutter during grow phase.",
- "agentPrompt": "Change hue base to 200 for a blue-teal palette, increase L-system iterations from 4 to 5, and slow growth speed by changing grow+=0.006 to grow+=0.003.",
+ "agentPrompt": "Change hue base to 200 for a blue-teal palette, increase L-system iterations from 4 to 5, and slow growth speed by changing grow+=0.006 to grow+=0.003. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "hue base (hue=90+Math.random()*60)",
   "branch angle range (baseAngle=20+Math.random()*12)",
   "growth speed (grow+=0.006)",
   "segment length (len=s*0.018)",
   "L-system iteration count (i<4)",
-  "leaf dot radius (arc radius 1.6)"
+  "leaf dot radius (arc radius 1.6)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce branch)",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing in resize()"
+  "DPR-aware canvas sizing in resize()",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "L-system string for 4 iterations is long — bumping to 5+ iterations may cause jank during the grow phase",
@@ -45,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "l-system",
@@ -67,6 +86,24 @@
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   let W,H,DPR,seq,baseAngle,grow,hue,sway=0;
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  // theme: every canvas colour is read from the CSS tokens, once at start and once per switch
+  const root=document.documentElement;
+  const C={bg:'#0a140d',brS:60,brSd:4,brL:35,brLd:7,leafS:80,leafL:65};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--gg05-bg').trim()||C.bg;
+    C.brS=parseFloat(cs.getPropertyValue('--gg05-br-s'))||60;
+    C.brSd=parseFloat(cs.getPropertyValue('--gg05-br-sd'))||4;
+    C.brL=parseFloat(cs.getPropertyValue('--gg05-br-l'))||35;
+    C.brLd=parseFloat(cs.getPropertyValue('--gg05-br-ld'))||7;
+    C.leafS=parseFloat(cs.getPropertyValue('--gg05-leaf-s'))||80;
+    C.leafL=parseFloat(cs.getPropertyValue('--gg05-leaf-l'))||65;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce&&seq)draw(0);}
+  });
+  syncTheme();
   function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);regen();}
   function regen(){
@@ -75,7 +112,7 @@
     seq=s;baseAngle=20+Math.random()*12;grow=0;hue=90+Math.random()*60;
   }
   function draw(t){
-    ctx.fillStyle='#0a140d';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const s=Math.min(W,H);
     let len=s*0.018;
     const stack=[];
@@ -89,7 +126,7 @@
       if(ch==='F'){
         const nx=x+Math.cos(ang)*len,ny=y+Math.sin(ang)*len;
         const depth=stack.length;
-        ctx.strokeStyle='hsl('+(hue+depth*8)+','+(60+depth*4)+'%,'+(35+depth*7)+'%)';
+        ctx.strokeStyle='hsl('+(hue+depth*8)+','+(C.brS+depth*C.brSd)+'%,'+(C.brL+depth*C.brLd)+'%)';
         ctx.lineWidth=Math.max(0.8,3-depth*0.4);
         ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(nx,ny);ctx.stroke();
         x=nx;y=ny;
@@ -97,7 +134,7 @@
       else if(ch==='-'){ang-=(baseAngle*Math.PI/180)+wob;}
       else if(ch==='['){stack.push([x,y,ang]);}
       else if(ch===']'){const p=stack.pop();x=p[0];y=p[1];ang=p[2];
-        ctx.fillStyle='hsl('+(hue+40)+',80%,65%)';ctx.beginPath();ctx.arc(x,y,1.6,0,7);ctx.fill();}
+        ctx.fillStyle='hsl('+(hue+40)+','+C.leafS+'%,'+C.leafL+'%)';ctx.beginPath();ctx.arc(x,y,1.6,0,7);ctx.fill();}
     }
   }
   let raf;

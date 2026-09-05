@@ -5,12 +5,29 @@
 <meta name="description" content="Gold and teal charged particles attract and repel via Coulomb forces, forming teal bonds that crystallize and melt as temperature pulses.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Charged Plasma Lattice</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#17181A;}
+  /* theme tokens — dark values are the defaults; light palette in the [data-theme] block.
+     --cpl-pos/-neg stay 6-digit hex (JS appends "55" for the halo stop). */
+  :root{
+    --cpl-bg:#17181A; --cpl-fade:rgba(23,24,26,0.30); --cpl-pos:#C0B459; --cpl-neg:#1DACC9;
+    --cpl-bond:29,172,201; --cpl-bond-a:0.55; --cpl-core:#ffffff; --cpl-core-a:.9;
+    --cpl-blend:lighter; --cpl-halo:rgba(0,0,0,0); --cpl-cap-o:.36;
+  }
+  :root[data-theme="light"]{
+    --cpl-bg:#f1f2f4; --cpl-fade:rgba(241,242,244,0.30); --cpl-pos:#776e2d; --cpl-neg:#14778b;
+    --cpl-bond:20,119,139; --cpl-bond-a:0.5; --cpl-core:#20242a; --cpl-core-a:.7;
+    --cpl-blend:source-over; --cpl-halo:rgba(241,242,244,0); --cpl-cap-o:.62;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--cpl-bg);}
   #cpl-c{display:block;width:100%;height:100%;}
   .cpl-cap{position:fixed;left:9px;bottom:8px;
        font:600 clamp(9px,2.6vw,11px)/1.2 ui-monospace,"SF Mono",Menlo,monospace;
-       letter-spacing:.14em;color:#1DACC9;opacity:.36;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--cpl-neg);opacity:var(--cpl-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -20,20 +37,22 @@
  "description": "Charged particles attract/repel via Coulomb forces; teal bonds crystallize between opposite charges as temperature pulses between order and chaos.",
  "useWhen": "Dark-mode hero backgrounds, science/tech themes, ambient visualizations where dynamic structure formation adds interest.",
  "avoidWhen": "Low-end devices — O(N²) force loop is CPU-heavy. Light backgrounds (hardcoded dark). Contexts needing legible text overlaid.",
- "agentPrompt": "Change positive charge color from '#C0B459' to '#ffaa00' and negative from '#1DACC9' to '#00ffaa', then cap particle count to 40 by editing Math.min(64,...).",
+ "agentPrompt": "Change positive charge color from '#C0B459' to '#ffaa00' and negative from '#1DACC9' to '#00ffaa', then cap particle count to 40 by editing Math.min(64,...). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "particle count range (Math.min(64, Math.max(34, ...)))",
   "charge colors (POS='#C0B459', NEG='#1DACC9')",
   "bond color ('rgba(29,172,201,...)')",
   "temperature pulse speed (t*0.55)",
   "pointer charge strength (9000)",
-  "Coulomb force strength (1400)"
+  "Coulomb force strength (1400)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback",
   "visibilitychange pause/start",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "O(N²) force calculation — CPU-bound on low-end devices at N=64",
@@ -46,7 +65,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "particles",
@@ -68,7 +88,20 @@
   const cv=document.getElementById('cpl-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,scale,P=[],N=0;
-  const POS='#C0B459',NEG='#1DACC9'; // warm + cool charges
+  // charge colours come from the tokens; a theme flip re-reads them once (not per frame)
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    C.pos=g('--cpl-pos');C.neg=g('--cpl-neg');C.bg=g('--cpl-bg');C.fade=g('--cpl-fade');
+    C.bond=g('--cpl-bond');C.bondA=+g('--cpl-bond-a');C.core=g('--cpl-core');C.coreA=+g('--cpl-core-a');
+    C.blend=g('--cpl-blend');C.halo=g('--cpl-halo');
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);draw(0.04);}
+    }});
+  syncTheme();
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
@@ -107,23 +140,23 @@
       if(a.y<6){a.y=6;a.vy*=-.6;}if(a.y>H-6){a.y=H-6;a.vy*=-.6;}}
   }
   function draw(temp){
-    ctx.fillStyle='rgba(23,24,26,0.30)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.fade;ctx.fillRect(0,0,W,H);
     // bonds between nearby opposite charges = lattice
     ctx.lineWidth=Math.max(0.6,0.9*scale);
     for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){
       const a=P[i],b=P[j];const dx=a.x-b.x,dy=a.y-b.y,d=Math.hypot(dx,dy);
       const lim=66*scale;
-      if(d<lim&&a.q!==b.q){const al=(1-d/lim)*0.55*(1-temp*0.6);
-        ctx.strokeStyle='rgba(29,172,201,'+al.toFixed(3)+')';
+      if(d<lim&&a.q!==b.q){const al=(1-d/lim)*C.bondA*(1-temp*0.6);
+        ctx.strokeStyle='rgba('+C.bond+','+al.toFixed(3)+')';
         ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
     }
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=C.blend;
     for(const a of P){
-      const col=a.q>0?POS:NEG,rr=a.r*(1+temp*0.4);
+      const col=a.q>0?C.pos:C.neg,rr=a.r*(1+temp*0.4);
       const g=ctx.createRadialGradient(a.x,a.y,0,a.x,a.y,rr*4);
-      g.addColorStop(0,col);g.addColorStop(.4,col+'55');g.addColorStop(1,'rgba(0,0,0,0)');
+      g.addColorStop(0,col);g.addColorStop(.4,col+'55');g.addColorStop(1,C.halo);
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(a.x,a.y,rr*4,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle='#fff';ctx.globalAlpha=.9;
+      ctx.fillStyle=C.core;ctx.globalAlpha=C.coreA;
       ctx.beginPath();ctx.arc(a.x,a.y,rr*0.5,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
     }
     ctx.globalCompositeOperation='source-over';
@@ -139,7 +172,7 @@
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){ctx.fillStyle='#17181A';ctx.fillRect(0,0,W,H);
+  if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     for(let k=0;k<260;k++)step(0.04);draw(0.04);}else start();
 })();
 </script>

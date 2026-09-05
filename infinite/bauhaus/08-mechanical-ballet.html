@@ -5,10 +5,18 @@
 <meta name="description" content="Interlocking primary-colored discs, square plates and triangle vanes turn like a precise meshing machine linked by black levers.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mechanical Ballet</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme in [data-theme="light"]; JS reads both */
+  :root{--bh08-bg:#101012;--bh08-red:#e63329;--bh08-blu:#1f4ea8;--bh08-yel:#f2c200;--bh08-blk:#0a0a0c;--bh08-off:#ece6d8;--bh08-cap:#fff;--bh08-cap-o:.42}
+  :root[data-theme="light"]{--bh08-bg:#f6f2ea;--bh08-red:#cc2b1f;--bh08-blu:#1f4ea8;--bh08-yel:#ad7f08;--bh08-blk:#1b1b20;--bh08-off:#6f6659;--bh08-cap:#1b1b20;--bh08-cap-o:.5}
+  html,body{margin:0;height:100%;background:var(--bh08-bg);overflow:hidden}
   #bh08-stage{position:fixed;inset:0;display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--bh08-cap);opacity:var(--bh08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -18,20 +26,22 @@
  "description": "Five ratio-linked gear-hubs with rotating disc/square/triangle arms spin autonomously; black levers connect centers like a Bauhaus machine diagram.",
  "useWhen": "Design-themed hero backgrounds, Bauhaus or modernist editorial layouts, motion studies for creative portfolios.",
  "avoidWhen": "Light-background UIs (background hardcoded dark). Contexts requiring legible text overlaid on the canvas.",
- "agentPrompt": "Change the main hub color from red to orange by setting RED=\"#e67e22\", and slow the primary hub from sp:1.0 to sp:0.5 in rig[0].",
+ "agentPrompt": "Change the main hub color from red to orange by setting RED=\"#e67e22\", and slow the primary hub from sp:1.0 to sp:0.5 in rig[0]. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "palette constants (RED, BLUE, YEL, OFF)",
   "hub speeds (rig[n].sp)",
   "arm counts (rig[n].arms)",
   "arm shape types (rig[n].arm: 0=disc 1=square 2=triangle)",
   "hub radii (rig[n].r)",
-  "lever width (lw = S*0.022)"
+  "lever width (lw = S*0.022)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static frame fallback)",
   "visibilitychange stop/start",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Hub positions use normalized coords (x/y fractions) relative to canvas size — repositioning requires editing the rig array",
@@ -44,7 +54,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bauhaus",
@@ -66,8 +77,20 @@
   "use strict";
   var cv=document.getElementById("bh08-stage"),ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
-  // Bauhaus primary palette
-  var RED="#e63329",BLUE="#1f4ea8",YEL="#f2c200",BLK="#0a0a0c",OFF="#ece6d8";
+  // Bauhaus primary palette — the rig stores token KEYS, resolved through C at draw time,
+  // so one refill re-colours every hub, vane and lever on a theme switch.
+  var RED="red",BLUE="blu",YEL="yel",OFF="off";
+  var docEl=document.documentElement;
+  var C={bg:"#101012",red:"#e63329",blu:"#1f4ea8",yel:"#f2c200",blk:"#0a0a0c",off:"#ece6d8"};
+  function syncTheme(){
+    var cs=getComputedStyle(docEl), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    C.bg=g("--bh08-bg"); C.red=g("--bh08-red"); C.blu=g("--bh08-blu");
+    C.yel=g("--bh08-yel"); C.blk=g("--bh08-blk"); C.off=g("--bh08-off");
+    if(reduce && W) frame(0);               // the static frame repaints on a theme switch
+  }
+  addEventListener("message",function(e){ var d=e.data;   // live re-theme broadcast from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ docEl.setAttribute("data-theme",d.theme); syncTheme(); }
+  });
   var W=0,H=0,S=0,cx=0,cy=0,DPR=1;
 
   // Gear/lever rig: each node is a rotating hub carrying primary-shape arms.
@@ -91,13 +114,13 @@
 
   // draw a primary-shape arm of length L, half-width hw, at given color
   function vane(type,L,hw,col){
-    ctx.fillStyle=col;
+    ctx.fillStyle=C[col];
     if(type===0){ // circle terminal on a thin stem
       ctx.fillRect(0,-hw*0.34,L*0.7,hw*0.68);
       ctx.beginPath();ctx.arc(L,0,hw*0.95,0,6.2832);ctx.fill();
     }else if(type===1){ // square plate
       ctx.fillRect(0,-hw*0.5,L,hw);
-      ctx.fillStyle=BLK;
+      ctx.fillStyle=C.blk;
       ctx.fillRect(L-hw*0.9,-hw*0.32,hw*0.64,hw*0.64);
     }else{ // triangle vane
       ctx.beginPath();
@@ -114,10 +137,10 @@
     ctx.translate(px,py);
     // base disc
     ctx.beginPath();ctx.arc(0,0,R,0,6.2832);
-    ctx.fillStyle=n.col;ctx.fill();
+    ctx.fillStyle=C[n.col];ctx.fill();
     // inner cut for mechanical depth
     ctx.beginPath();ctx.arc(0,0,R*0.62,0,6.2832);
-    ctx.fillStyle=BLK;ctx.fill();
+    ctx.fillStyle=C.blk;ctx.fill();
     // rotating arms
     ctx.save();
     ctx.rotate(ang);
@@ -132,12 +155,12 @@
     // center cap (counter-rotating accent square)
     ctx.save();
     ctx.rotate(-ang*0.6);
-    ctx.fillStyle=n.hubc;
+    ctx.fillStyle=C[n.hubc];
     var c=R*0.30;
     ctx.fillRect(-c,-c,c*2,c*2);
     ctx.restore();
     // bolt
-    ctx.beginPath();ctx.arc(0,0,R*0.10,0,6.2832);ctx.fillStyle=BLK;ctx.fill();
+    ctx.beginPath();ctx.arc(0,0,R*0.10,0,6.2832);ctx.fillStyle=C.blk;ctx.fill();
     ctx.restore();
     return {px:px,py:py,R:R,ang:ang};
   }
@@ -148,19 +171,19 @@
     if(d<0.0001)return;
     ctx.save();
     ctx.translate(ax,ay);ctx.rotate(Math.atan2(dy,dx));
-    ctx.fillStyle=col;
+    ctx.fillStyle=C[col];
     ctx.fillRect(0,-w/2,d,w);
-    ctx.fillStyle=BLK;
+    ctx.fillStyle=C.blk;
     ctx.fillRect(d*0.5-w*0.7,-w*0.7,w*1.4,w*1.4);
     ctx.restore();
   }
 
   function frame(t){
-    ctx.fillStyle="#101012";ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     // composition frame band (Bauhaus modular margin)
     var m=S*0.045;
-    ctx.fillStyle=OFF;ctx.fillRect(m,m,W-2*m,S*0.012);
-    ctx.fillStyle=RED;ctx.fillRect(W-m-S*0.10,H-m-S*0.012,S*0.10,S*0.012);
+    ctx.fillStyle=C.off;ctx.fillRect(m,m,W-2*m,S*0.012);
+    ctx.fillStyle=C.red;ctx.fillRect(W-m-S*0.10,H-m-S*0.012,S*0.10,S*0.012);
 
     var lw=S*0.022;
     // levers first (under hubs)
@@ -193,7 +216,7 @@
   });
   window.addEventListener("resize",function(){size();if(reduce)frame(0);});
 
-  size();start();
+  size();syncTheme();start();
 })();
 </script>
 </body>

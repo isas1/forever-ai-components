@@ -62,8 +62,9 @@
 <canvas id="c"></canvas>
 <div class="cap">Lightning Bolt · tap</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
-let W,H,DPR,raf,bolt=null,flash=0,timer=0;
+let W,H,DPR,raf,bolt=null,flash=0,timer=0,glow={x:0,y:0,a:0};
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
@@ -86,7 +87,8 @@ function makeBolt(sx){
   }}
   return {main:segs,branches:br,life:1};
 }
-function strike(sx){bolt=makeBolt(sx==null?W*(0.3+Math.random()*0.4):sx);flash=1;}
+function strike(sx){bolt=makeBolt(sx==null?W*(0.3+Math.random()*0.4):sx);flash=1;
+  const tip=bolt.main[bolt.main.length-1];glow={x:tip.x,y:H*0.6,a:1};}   // lingering afterglow where it struck
 cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();strike(e.clientX-r.left);});
 function path(seg,lw,a,col){
   x.beginPath();x.moveTo(seg[0].x,seg[0].y);
@@ -100,8 +102,15 @@ function frame(){
   g.addColorStop(0,'#201d1a');g.addColorStop(1,'#0a0908');
   x.fillStyle=g;x.fillRect(0,0,W,H);
   if(flash>0){x.fillStyle=`rgba(196,132,110,${flash*0.28})`;x.fillRect(0,0,W,H);flash-=reduce?0.06:0.08;}
-  if(!reduce){timer--;if(timer<=0&&!bolt){if(Math.random()<0.5)strike();timer=40+Math.random()*120;}}
+  // a storm, not a wait: the first bolt lands on the first frame, the next every 0.4–1.2s —
+  // a coin-flip every 0.7–2.7s left the tile an empty dark sky nine frames in ten (audit: flat)
+  if(!reduce){timer--;if(timer<=0&&!bolt){strike();timer=26+Math.random()*44;}}
   else {timer--;if(timer<=0){strike();timer=120;}}
+  if(glow.a>0.02){
+    const rg=x.createRadialGradient(glow.x,glow.y,0,glow.x,glow.y,H*0.75);
+    rg.addColorStop(0,`rgba(196,120,90,${glow.a*0.55})`);rg.addColorStop(0.5,`rgba(174,97,71,${glow.a*0.18})`);rg.addColorStop(1,'rgba(174,97,71,0)');
+    x.fillStyle=rg;x.fillRect(0,0,W,H);glow.a*=reduce?0.9:0.985;   // ~3s afterglow bridges the gap to the next strike
+  }
   if(bolt){
     x.globalCompositeOperation='lighter';
     const a=bolt.life;
@@ -110,7 +119,7 @@ function frame(){
     path(bolt.main,1.2,a,'#ffffff');
     for(const b of bolt.branches)path(b,1.6,a*0.7,'#efe6da');
     x.globalCompositeOperation='source-over';x.globalAlpha=1;
-    bolt.life-=reduce?0.04:0.07;
+    bolt.life-=reduce?0.04:0.045;
     if(bolt.life<=0)bolt=null;
   }
   raf=requestAnimationFrame(frame);
@@ -119,6 +128,7 @@ raf=requestAnimationFrame(frame);
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
 });
+})();
 </script>
 </body>
 </html>

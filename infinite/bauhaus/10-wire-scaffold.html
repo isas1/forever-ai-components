@@ -5,11 +5,19 @@
 <meta name="description" content="A thin-line box lattice of stacked square rings and gable triangles rotates in faux-3D, carrying primary circle, square and triangle solids.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wire Scaffold</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme in [data-theme="light"]; JS reads both */
+  :root{--bh10-bg:#101012;--bh10-red:#e63329;--bh10-blu:#2c4a9a;--bh10-yel:#f0c419;--bh10-ink:#16161a;--bh10-node:#e8e6e0;--bh10-cap:#fff;--bh10-cap-o:.42}
+  :root[data-theme="light"]{--bh10-bg:#f6f2ea;--bh10-red:#cc2b1f;--bh10-blu:#2c4a9a;--bh10-yel:#876c0b;--bh10-ink:#1b1b20;--bh10-node:#fffdf7;--bh10-cap:#1b1b20;--bh10-cap-o:.5}
+  html,body{margin:0;height:100%;background:var(--bh10-bg);overflow:hidden}
   #bh10-stage{position:fixed;inset:0;display:block}
   #bh10-c{position:absolute;inset:0;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--bh10-cap);opacity:var(--bh10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +27,22 @@
  "description": "Faux-3D wire lattice of stacked square rings rotates slowly, carrying Bauhaus red, yellow, and blue flat solids (circle, square, triangle) at its vertices.",
  "useWhen": "Bauhaus or geometric-themed hero sections, design-tool splash screens, architectural concept displays.",
  "avoidWhen": "Contexts requiring legible text overlays or low-end mobile — the continuous canvas redraw may compete with foreground content.",
- "agentPrompt": "Slow the rotation by changing `t += 0.0045` to `t += 0.002`, swap the red circle for white by changing `RED` to `'#ffffff'` in the SH array entry at index 1.",
+ "agentPrompt": "Slow the rotation by changing `t += 0.0045` to `t += 0.002`, swap the red circle for white by changing `RED` to `'#ffffff'` in the SH array entry at index 1. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "rotation speed (t += 0.0045)",
   "palette constants (RED, BLUE, YEL)",
   "pitch oscillation amplitude (Math.sin(t*0.6)*0.16)",
   "solid shapes array (SH — kind, color, size, vertex)",
   "lattice scale (r=0.78)",
-  "perspective field of view (fov=3.0)"
+  "perspective field of view (fov=3.0)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "Float32Array projection scratch buffers (no per-frame alloc)",
   "IIFE wrapper with 'use strict'",
   "visibilitychange pause/resume",
-  "prefers-reduced-motion static fallback"
+  "prefers-reduced-motion static fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Solids drawn after edges in a flat pass — no true depth sorting, so solids can appear in front of nearer edges",
@@ -45,7 +55,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bauhaus",
@@ -72,8 +83,21 @@
   var ctx = cv.getContext('2d');
   var W=0,H=0,DPR=1,S=0,CX=0,CY=0;
 
-  // Palette — Bauhaus primaries + black on dark ground.
-  var RED='#e63329', BLUE='#2c4a9a', YEL='#f0c419', BLK='#0a0a0c', INK='#16161a';
+  // Palette — Bauhaus primaries + black on dark ground (light: on warm off-white).
+  // RED/BLUE/YEL are palette SLOTS; every literal lives in the CSS tokens read by syncTheme.
+  var RED=0, BLUE=1, YEL=2;
+  var COLS=['#e63329','#2c4a9a','#f0c419'];        // cached colour array — refilled on theme switch
+  var C={bg:'#101012',ink:'#16161a',node:'#e8e6e0'};
+  var docEl=document.documentElement;
+  function syncTheme(){
+    var cs=getComputedStyle(docEl), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    COLS[0]=g('--bh10-red'); COLS[1]=g('--bh10-blu'); COLS[2]=g('--bh10-yel');
+    C.bg=g('--bh10-bg'); C.ink=g('--bh10-ink'); C.node=g('--bh10-node');
+    if(reduce && W){ frame(0.7,0.5); solids(); }   // the static frame repaints on a theme switch
+  }
+  addEventListener('message',function(e){ var d=e.data;   // live re-theme broadcast from the canvas
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ docEl.setAttribute('data-theme',d.theme); syncTheme(); }
+  });
 
   // A modular scaffold: vertices of three stacked square rings (a box lattice),
   // plus diagonal bracing. Defined in normalized 3D (-1..1), projected each frame.
@@ -89,7 +113,6 @@
   pushV(0,-1.5,0); pushV(0,1.5,0);
 
   // Edges: [a,b,colorIndex,weight]
-  var COLS=[RED,BLUE,YEL];
   var E=[];
   function edge(a,b,c,w){E.push(a,b,c,w);}
   // ring edges (each of 3 levels)
@@ -149,7 +172,7 @@
 
   function frame(ay,ax){
     project(ax,ay);
-    ctx.fillStyle='#101012'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     // ground gridlines for rhythm (static structure feel) — drawn thin, dim
     var lw=Math.max(1,S*0.004), i,a,b,col,wt,solid;
     // edges
@@ -165,15 +188,15 @@
     // nodes — small black-ringed dots at every vertex
     for(i=0;i<N;i++){
       var nr=Math.max(1.5,S*0.009*PZ[i]);
-      ctx.fillStyle=INK; ctx.beginPath(); ctx.arc(PX[i],PY[i],nr+lw,0,6.2832); ctx.fill();
-      ctx.fillStyle='#e8e6e0'; ctx.beginPath(); ctx.arc(PX[i],PY[i],nr,0,6.2832); ctx.fill();
+      ctx.fillStyle=C.ink; ctx.beginPath(); ctx.arc(PX[i],PY[i],nr+lw,0,6.2832); ctx.fill();
+      ctx.fillStyle=C.node; ctx.beginPath(); ctx.arc(PX[i],PY[i],nr,0,6.2832); ctx.fill();
     }
   }
 
   // draw the riding solids — separate, correct-stride pass
   function solids(){
     for(var i=0;i<SH.length;i+=4){
-      var kind=SH[i], col=SH[i+1], sf=SH[i+2], vi=SH[i+3];
+      var kind=SH[i], col=COLS[SH[i+1]], sf=SH[i+2], vi=SH[i+3];
       var d=PZ[vi];
       ctx.globalAlpha=0.55+d*0.45;
       shape(PX[vi],PY[vi],S*sf*0.16*d, kind, col);
@@ -194,6 +217,7 @@
 
   function init(){
     resize();
+    syncTheme();
     if(reduce){ frame(0.7,0.5); solids(); return; }
     start();
   }

@@ -5,13 +5,21 @@
 <meta name="description" content="A Constructivist black-and-red megaphone emits expanding concentric red and paper shout-rings across a diagonal field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Megaphone</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root{--cv05-bg:#0c0c0d;--cv05-red:#d11f1f;--cv05-ink:#0c0c0d;--cv05-paper:#f2ece0}
+  /* theme tokens: dark defaults + [data-theme="light"] re-theme, re-read by syncTheme(). --ink sits
+     exactly on the dark ground (horn silhouette/stem are negative space) so it stays ground-tied. */
+  :root{--cv05-bg:#0c0c0d;--cv05-red:#d11f1f;--cv05-ink:#0c0c0d;--cv05-paper:#f2ece0;--cv05-cap:#ffffff;--cv05-cap-o:.42}
+  :root[data-theme="light"]{--cv05-bg:#f4efe4;--cv05-red:#d11f1f;--cv05-ink:#f4efe4;--cv05-paper:#1b1a17;--cv05-cap:#1b1a17;--cv05-cap-o:.55}
   html,body{margin:0;height:100%}
   body{background:var(--cv05-bg);overflow:hidden;font-family:"Archivo Black","Helvetica Neue",Arial Narrow,sans-serif}
   #cv05-stage{position:fixed;inset:0;width:100%;height:100%}
   #cv05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--cv05-cap);opacity:var(--cv05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -21,20 +29,22 @@
  "description": "A Constructivist megaphone emits expanding concentric red and paper-white arc rings across a dark field with bold diagonal bars. Runs autonomously.",
  "useWhen": "Dark hero backgrounds evoking Soviet-era propaganda aesthetics, art/design portfolio showcases, bold ambient motion for creative brands.",
  "avoidWhen": "Light-background layouts (background hardcoded dark). Contexts requiring legible text overlays — the expanding rings compete with content.",
- "agentPrompt": "Change the ring accent from red to gold (#c8a000), slow the spawn interval by setting spawnGap to 1.8, and widen the shout cone by increasing spread from 0.78 to 1.1.",
+ "agentPrompt": "Change the ring accent from red to gold (#c8a000), slow the spawn interval by setting spawnGap to 1.8, and widen the shout cone by increasing spread from 0.78 to 1.1. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ring color palette (RED/PAPER constants)",
   "spawn gap interval (spawnGap=1.0)",
   "emission cone half-angle (spread=0.78)",
   "ring pool size (N=7)",
   "speed scalar (S*0.0016)",
-  "megaphone scale (len=S*0.34, mouthR=S*0.20)"
+  "megaphone scale (len=S*0.34, mouthR=S*0.20)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange pause/resume",
   "reduced-motion static single-frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and JS — must change in both places",
@@ -48,7 +58,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "constructivism",
@@ -74,7 +85,12 @@
   var cv=document.getElementById("cv05-c");
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
-  var BG="#0c0c0d",RED="#d11f1f",PAPER="#f2ece0",INK="#0c0c0d";
+  // every canvas colour comes from the tokens; parent broadcasts {type:'forever:theme'} to switch
+  var root=document.documentElement, C={}, KEYS=["bg","red","paper","ink"];
+  function syncTheme(){ var cs=getComputedStyle(root); for(var k=0;k<KEYS.length;k++) C[KEYS[k]]=cs.getPropertyValue("--cv05-"+KEYS[k]).trim(); }
+  addEventListener("message",function(e){ var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce) drawOneFrame(); } });
 
   var W=0,H=0,DPR=1,S=0,cx=0,cy=0;
   // megaphone apex (mouth pivot) in scene coords, ring origin
@@ -111,7 +127,7 @@
     ctx.translate(ox,oy);
     ctx.rotate(ang);
     // handle / stem (black bar going down-left)
-    ctx.fillStyle=INK;
+    ctx.fillStyle=C.ink;
     ctx.fillRect(-len-S*0.18,-throatR*0.5,S*0.20,throatR);
     // cone body (paper edge then red fill then black rim) — opaque layered slabs
     // outer black silhouette
@@ -121,7 +137,7 @@
     ctx.lineTo(-len,throatR);
     ctx.lineTo(-len,-throatR);
     ctx.closePath();
-    ctx.fillStyle=INK; ctx.fill();
+    ctx.fillStyle=C.ink; ctx.fill();
     // red inner cone, inset
     ctx.beginPath();
     ctx.moveTo(-S*0.012,-mouthR*0.86);
@@ -129,15 +145,15 @@
     ctx.lineTo(-len*0.92,throatR*0.7);
     ctx.lineTo(-len*0.92,-throatR*0.7);
     ctx.closePath();
-    ctx.fillStyle=RED; ctx.fill();
+    ctx.fillStyle=C.red; ctx.fill();
     // paper mouth rim ellipse — bold lip
     ctx.beginPath();
     ctx.ellipse(0,0,S*0.018,mouthR,0,0,Math.PI*2);
-    ctx.fillStyle=PAPER; ctx.fill();
+    ctx.fillStyle=C.paper; ctx.fill();
     // dark mouth hole
     ctx.beginPath();
     ctx.ellipse(-S*0.006,0,S*0.011,mouthR*0.78,0,0,Math.PI*2);
-    ctx.fillStyle=BG; ctx.fill();
+    ctx.fillStyle=C.bg; ctx.fill();
     ctx.restore();
   }
 
@@ -146,13 +162,13 @@
     ctx.save();
     ctx.translate(cx,cy);
     ctx.rotate(-0.36);
-    ctx.fillStyle=PAPER;
+    ctx.fillStyle=C.paper;
     ctx.globalAlpha=0.10;
     ctx.fillRect(-W,-S*0.62,W*2.4,S*0.012);
     ctx.fillRect(-W,S*0.50,W*2.4,S*0.012);
     ctx.globalAlpha=1;
     // one bold red wedge bar lower-left
-    ctx.fillStyle=RED;
+    ctx.fillStyle=C.red;
     ctx.fillRect(-W*0.9,S*0.34,W*1.1,S*0.05);
     ctx.restore();
   }
@@ -170,14 +186,14 @@
     ctx.arc(0,0,r,-spread,spread);
     ctx.lineWidth=Math.max(2,S*0.018*(0.5+0.5*(1-t)));
     ctx.globalAlpha=a*0.92;
-    ctx.strokeStyle=(((r/(maxR/N))|0)%2)?PAPER:RED;
+    ctx.strokeStyle=(((r/(maxR/N))|0)%2)?C.paper:C.red;
     ctx.lineCap="butt";
     ctx.stroke();
     ctx.globalAlpha=1;
     ctx.restore();
   }
 
-  function clear(){ ctx.fillStyle=BG; ctx.fillRect(0,0,W,H); }
+  function clear(){ ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H); }
 
   function composeStatic(){
     clear();
@@ -219,6 +235,7 @@
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
   function boot(){
+    syncTheme();
     resize();
     if(reduce){ drawOneFrame(); return; }
     drawFrame();

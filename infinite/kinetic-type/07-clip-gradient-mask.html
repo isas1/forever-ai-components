@@ -5,32 +5,53 @@
 <meta name="description" content="The word REVEAL dark and dim until a diagonal gradient light band sweeps across it, lighting letters in shifting teal-copper hues.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Moving Mask</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0F1A1B;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c07-bg:#0F1A1B; --c07-base:#26404A;   /* base word readable at rest (was #17262A: invisible on the ground) */
+    --c07-g1:#C09C59; --c07-g2:#22AEC3; --c07-g3:#879DA1;
+    --c07-cap:#22AEC3; --c07-cap-o:.45;
+  }
+  :root[data-theme="light"]{
+    --c07-bg:#eef5f5; --c07-base:#d6e3e3;
+    --c07-g1:#896b34; --c07-g2:#177886; --c07-g3:#5c7175;
+    --c07-cap:#12201f; --c07-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c07-bg);}
   body{display:flex;align-items:center;justify-content:center;
        font-family:"Helvetica Neue",Arial,sans-serif;}
   .wrap{position:relative;}
   #base{
     font-size:clamp(40px,18vw,140px);font-weight:900;letter-spacing:-.02em;
-    color:#17262A;
+    color:var(--c07-base);
   }
   #lit{
     position:absolute;inset:0;
     font-size:clamp(40px,18vw,140px);font-weight:900;letter-spacing:-.02em;
-    background:linear-gradient(90deg,#C09C59,#22AEC3,#879DA1,#C09C59);
+    background:linear-gradient(90deg,var(--c07-g1),var(--c07-g2),var(--c07-g3),var(--c07-g1));
     background-size:200% 100%;
     -webkit-background-clip:text;background-clip:text;color:transparent;
     -webkit-text-fill-color:transparent;
-    -webkit-mask-image:linear-gradient(120deg,transparent 35%,#000 45%,#000 55%,transparent 65%);
-    mask-image:linear-gradient(120deg,transparent 35%,#000 45%,#000 55%,transparent 65%);
+    /* wider lit band, faster sweep, and a negative delay so the sweep is mid-word the moment
+       the tile mounts — the old 10%-wide band at 4.5s left the word unreadable most of the
+       time on the wall (audit: flat at 0.7s and 3s) */
+    -webkit-mask-image:linear-gradient(120deg,transparent 22%,#000 38%,#000 62%,transparent 78%);
+    mask-image:linear-gradient(120deg,transparent 22%,#000 38%,#000 62%,transparent 78%);
     -webkit-mask-size:250% 100%;mask-size:250% 100%;
-    animation:sweep 4.5s ease-in-out infinite, hue 8s linear infinite;
+    animation:sweep 3.2s ease-in-out infinite, hue 8s linear infinite;
+    animation-delay:-1.3s,0s;
   }
   @keyframes sweep{0%{-webkit-mask-position:140% 0;mask-position:140% 0;}100%{-webkit-mask-position:-40% 0;mask-position:-40% 0;}}
   @keyframes hue{to{background-position:200% 0;}}
   @media (prefers-reduced-motion: reduce){#lit{animation:none;-webkit-mask-image:none;mask-image:none;}}
   .cap{position:absolute;right:10px;bottom:8px;font-size:11px;letter-spacing:.08em;
-       color:#22AEC3;opacity:.45;text-transform:uppercase;font-weight:600;}
+       color:var(--c07-cap);opacity:var(--c07-cap-o);text-transform:uppercase;font-weight:600;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -39,19 +60,21 @@
  "description": "Diagonal gradient light band sweeps across REVEAL, illuminating letters in shifting teal-copper hues against dark. Pure CSS mask + background-clip animation.",
  "useWhen": "Hero reveals, splash screens, brand name intros needing a premium lighting-sweep effect on dark backgrounds.",
  "avoidWhen": "Light backgrounds (hardcoded dark body), strings longer than ~8 chars, or contexts requiring broad CSS mask-image browser support.",
- "agentPrompt": "Change the word to 'LAUNCH', slow the sweep to 6s, and shift palette to gold: set background to linear-gradient(90deg,#ffb347,#ff6b6b,#ffd700,#ffb347).",
+ "agentPrompt": "Change the word to 'LAUNCH', slow the sweep to 6s, and shift palette to gold: set background to linear-gradient(90deg,#ffb347,#ff6b6b,#ffd700,#ffb347). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (#base and #lit text)",
   "sweep duration (4.5s in animation)",
   "gradient palette (background on #lit)",
   "mask sweep angle (120deg)",
-  "font size clamp range"
+  "font size clamp range",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "dual-layer stacking (#base dim underlay + #lit masked overlay)",
   "CSS mask-image sweep pattern",
   "prefers-reduced-motion guard",
-  "visibilitychange pause in IIFE"
+  "visibilitychange pause in IIFE",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to #0F1A1B — edit CSS body to change theme",
@@ -65,7 +88,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -90,6 +114,13 @@
   var lit=document.getElementById('lit');
   document.addEventListener('visibilitychange',function(){
     lit.style.animationPlayState=document.hidden?'paused':'running';
+  });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d = e.data;
+    if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) {
+      document.documentElement.setAttribute('data-theme', d.theme);
+    }
   });
 })();
 </script>

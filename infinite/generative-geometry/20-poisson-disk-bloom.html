@@ -5,11 +5,29 @@
 <meta name="description" content="Blue-noise Poisson-disk points bloom outward connected by a gold Gabriel graph, each vertex flashing as it settles on dark olive.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Poisson Disk Bloom</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#14110a;}
+  /* theme tokens — dark defaults, light re-theme in the one [data-theme="light"] block.
+     --pdb-blend swaps the additive bloom ('lighter', dark) for normal blending ('source-over',
+     light), where the Gabriel graph draws as dark gold ink at a higher edge alpha instead. */
+  :root{
+    --pdb-bg:#14110a; --pdb-wash:rgba(20,17,10,0.13); --pdb-blend:lighter; --pdb-acc:201,180,88;
+    --pdb-hot:255,240,200; --pdb-hot-a:0.5; --pdb-edge-a:0.16; --pdb-v0:0.45; --pdb-v1:0.55;
+    --pdb-cap:#c9b458; --pdb-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --pdb-bg:#f7f4ea; --pdb-wash:rgba(247,244,234,0.13); --pdb-blend:source-over; --pdb-acc:118,88,10;
+    --pdb-hot:56,36,0; --pdb-hot-a:0.45; --pdb-edge-a:0.32; --pdb-v0:0.5; --pdb-v1:0.5;
+    --pdb-cap:#7a6a20; --pdb-cap-o:.78;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pdb-bg);}
   #pdb-c{display:block;width:100%;height:100%;}
   .pdb-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.16em;color:#c9b458;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--pdb-cap);opacity:var(--pdb-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +37,21 @@
  "description": "Gold Poisson-disk points bloom from center on dark olive, linked by a Gabriel graph. Each vertex flashes on arrival; click re-seeds, pointer plants new nodes.",
  "useWhen": "Ambient generative backgrounds, data-viz aesthetics, creative portfolio heroes where organic graph growth fits the brand.",
  "avoidWhen": "Low-end mobile (CPU-bound edge draw). Contexts needing legible text overlays — additive blend competes with content.",
- "agentPrompt": "Change accent to cyan by setting ACC=[80,220,220], tighten spacing by changing the radius divisor from 13 to 9, and lower the cap from CAP=1100 to CAP=600.",
+ "agentPrompt": "Change accent to cyan by setting ACC=[80,220,220], tighten spacing by changing the radius divisor from 13 to 9, and lower the cap from CAP=1100 to CAP=600. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (ACC array)",
   "spacing radius divisor (Math.min(W,H)/13)",
   "point cap (CAP=1100)",
   "bloom flash duration (age<46)",
-  "auto-reseed interval (t%140)"
+  "auto-reseed interval (t%140)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard + staticFrame fallback",
   "visibilitychange pause/resume",
-  "gabriel() geometry test"
+  "gabriel() geometry test",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound per-frame edge traversal — perf degrades above ~800 points on low-end devices",
@@ -44,7 +64,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "poisson-disk",
@@ -68,6 +89,25 @@
   const ACC=[201,180,88];
   // cap total points so the per-frame edge+vertex draw stays bounded on big tiles
   const CAP=1100;
+  // theme: board colour, the fade wash, the blend mode, the graph ink (ACC) and the
+  // arrival-flash colour all come from the CSS tokens — read once, and again on a theme flip.
+  const root=document.documentElement;
+  const C={bg:'#14110a',wash:'rgba(20,17,10,0.13)',blend:'lighter',
+           hot:'255,240,200',hotA:0.5,edgeA:0.16,v0:0.45,v1:0.55};
+  function syncTheme(){
+    const cs=getComputedStyle(root),s=n=>cs.getPropertyValue(n).trim();
+    C.bg=s('--pdb-bg')||C.bg;C.wash=s('--pdb-wash')||C.wash;C.blend=s('--pdb-blend')||C.blend;
+    const a=s('--pdb-acc');if(a){const p=a.split(',').map(Number);ACC[0]=p[0];ACC[1]=p[1];ACC[2]=p[2];}
+    C.hot=s('--pdb-hot')||C.hot;C.hotA=+(s('--pdb-hot-a')||C.hotA);C.edgeA=+(s('--pdb-edge-a')||C.edgeA);
+    C.v0=+(s('--pdb-v0')||C.v0);C.v1=+(s('--pdb-v1')||C.v1);
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      // the field is a fade-wash buffer — flatten it so no dark frames survive the switch
+      if(W){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);if(reduce)staticFrame();}}
+  });
+  syncTheme();
   let W,H,DPR,cx,cy,R,cell,gw,gh,grid,pts,active,seed,t,raf=0;
 
   function size(){
@@ -140,8 +180,8 @@
   function frame(){
     t++;
     if(!reduce&&pts.length<CAP)grow(active.length>40?5:2);
-    ctx.fillStyle='rgba(20,17,10,0.13)';ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle=C.wash;ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation=C.blend;
     // edges — Gabriel graph
     for(let i=0;i<pts.length;i++){
       const p=pts[i];const ap=Math.min(1,(t-p.born)/26);
@@ -149,7 +189,7 @@
         if(q.born>p.born)continue;
         const aq=Math.min(1,(t-q.born)/26),a=Math.min(ap,aq);
         if(a<=0)continue;
-        ctx.strokeStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+(0.16*a)+')';
+        ctx.strokeStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+(C.edgeA*a)+')';
         ctx.lineWidth=0.7;
         ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
       }
@@ -161,10 +201,10 @@
       const pulse=age<46?(1-age/46)*1.6:0;     // bloom flash on arrival
       const r=1.1+s*1.9+pulse;
       const heat=Math.max(0,1-age/90);
-      ctx.fillStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+(0.45+0.55*s)+')';
+      ctx.fillStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+(C.v0+C.v1*s)+')';
       ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();
       if(heat>0){
-        ctx.fillStyle='rgba(255,240,200,'+(0.5*heat)+')';
+        ctx.fillStyle='rgba('+C.hot+','+(C.hotA*heat)+')';
         ctx.beginPath();ctx.arc(p.x,p.y,r*0.5,0,Math.PI*2);ctx.fill();
       }
     }
@@ -179,10 +219,10 @@
   function staticFrame(){
     grow.length;for(let i=0;i<700&&active.length;i++)grow(active.length);
     t=400;
-    ctx.fillStyle='#14110a';ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation=C.blend;
     for(const p of pts)for(const q of p.nb){if(q.born>p.born)continue;
-      ctx.strokeStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+',0.16)';ctx.lineWidth=0.7;
+      ctx.strokeStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+C.edgeA+')';ctx.lineWidth=0.7;
       ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();}
     for(const p of pts){const d=Math.hypot(p.x-cx,p.y-cy),e=1-Math.min(1,d/(Math.min(W,H)*0.55));
       ctx.fillStyle='rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+(0.5+0.5*e)+')';

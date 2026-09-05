@@ -5,24 +5,46 @@
 <meta name="description" content="A floating mobile bottom bar of line icons with a glowing magenta-to-gold gradient blob that springs beneath the active icon.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Morphing Bottom Nav</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
+    --bg:#0d0f16; --glow-a:rgba(192,180,89,0.14);
     --bg-surface:#1c2030;
     --text-2:#8a91a8;
     --accent-iris:#DA3E8C;
     --accent-cyan:#C0B459;
+    --on-accent:#fff;
     --grad-iris-cyan:linear-gradient(120deg,var(--accent-iris),var(--accent-cyan));
     --border-soft:rgba(255,255,255,0.07);
     --glow-cyan:0 0 32px -6px rgba(192,180,89,0.5);
     --shadow-lift:0 18px 50px -24px rgba(0,0,0,0.9);
     --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
     --dur-base:280ms;
+    --cap:#fff; --cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow-a:rgba(119,110,45,0.10);
+    --bg-surface:#ffffff;
+    --text-2:#5b6178;
+    --accent-iris:#cd277a;
+    --accent-cyan:#776e2d;
+    --on-accent:#fff;
+    --border-soft:rgba(0,0,0,0.08);
+    --glow-cyan:0 0 24px -8px rgba(119,110,45,0.3);
+    --shadow-lift:0 18px 40px -24px rgba(0,0,0,0.18);
+    --cap:#241825; --cap-o:.5;
   }
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden}
   body{
-    background:#0d0f16;
-    background-image:radial-gradient(60vw 40vw at 50% 110%,rgba(192,180,89,0.14),transparent 60%);
+    background:var(--bg);
+    background-image:radial-gradient(60vw 40vw at 50% 110%,var(--glow-a),transparent 60%);
     display:grid;place-items:center;
   }
   .c09-bnav{
@@ -41,8 +63,8 @@
     transition:color var(--dur-base),transform var(--dur-base) var(--ease-spring);
   }
   .c09-bnav__btn svg{width:22px;height:22px}
-  .c09-bnav__btn--active{color:#fff;transform:translateY(-2px)}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;font-family:system-ui,sans-serif}
+  .c09-bnav__btn--active{color:var(--on-accent);transform:translateY(-2px)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:system-ui,sans-serif}
   @media (prefers-reduced-motion:reduce){.c09-bnav__blob,.c09-bnav__btn{transition-duration:.001ms!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -52,19 +74,21 @@
  "description": "A floating mobile bottom nav bar with 4 icon buttons; a glowing magenta-to-gold gradient blob springs beneath the active tab on click.",
  "useWhen": "Mobile app demos, dark-mode UI showcases, bottom navigation pattern references.",
  "avoidWhen": "Desktop-only layouts. Auto-cycles by default — remove the loop before shipping as a real nav component.",
- "agentPrompt": "Change the gradient to gold-to-rose by setting --accent-iris:#C0B459 and --accent-cyan:#ec4899, add a 5th button for Notifications, and slow the spring to 700ms.",
+ "agentPrompt": "Change the gradient to gold-to-rose by setting --accent-iris:#C0B459 and --accent-cyan:#ec4899, add a 5th button for Notifications, and slow the spring to 700ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent colors (--accent-iris, --accent-cyan)",
   "spring easing/duration (520ms var(--ease-spring))",
   "idle hop interval (1500ms)",
   "button count and SVG icons",
-  "blob size (width:52px)"
+  "blob size (width:52px)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard in loop()",
   "visibilitychange stop/start",
-  "blob translateX positioning via offsetLeft"
+  "blob translateX positioning via offsetLeft",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles between tabs — must remove loop() call before production use",
@@ -77,7 +101,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "navigation",
@@ -115,6 +140,13 @@
   var blob=document.getElementById('c09-blob');
   var btns=Array.prototype.slice.call(nav.querySelectorAll('.c09-bnav__btn'));
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
   function move(btn){
     btns.forEach(function(x){x.classList.remove('c09-bnav__btn--active');});
     btn.classList.add('c09-bnav__btn--active');

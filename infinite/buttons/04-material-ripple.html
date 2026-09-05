@@ -7,18 +7,31 @@
 <title>Material Ripple</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
+    --bg:#08090d; --glow-a:rgba(34,174,195,0.14); --ink-a:rgba(34,174,195,0.55); --ink-b:rgba(34,174,195,0.05); --cap:#fff; --cap-o:.28;
     --bg-surface:#1c2030; --text-0:#f4f6fb;
     --border-mid:rgba(255,255,255,0.12); --border-glow:rgba(34,174,195,0.45);
     --r-md:14px;
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
-    --dur-fast:160ms; --dur-slow:520ms;
+    --dur-fast:160ms; --dur-slow:900ms;   /* ink spread — slow enough to read at tile size */
     --font-display:"Space Grotesk",system-ui,sans-serif;
   }
+  :root[data-theme="light"]{
+    --bg:#f1f6f8; --glow-a:rgba(34,174,195,0.16); --ink-a:rgba(23,120,134,0.45); --ink-b:rgba(23,120,134,0.04); --cap:#16202a; --cap-o:.5;
+    --bg-surface:#ffffff; --text-0:#16202a;
+    --border-mid:rgba(0,0,0,0.12); --border-glow:rgba(23,120,134,0.55);
+  }
   html,body{margin:0;height:100%;overflow:hidden}
-  body{background:#08090d;display:grid;place-items:center;
-    background-image:radial-gradient(60vw 40vw at 20% -10%,rgba(34,174,195,0.14),transparent 60%);}
+  body{background:var(--bg);display:grid;place-items:center;
+    background-image:radial-gradient(60vw 40vw at 20% -10%,var(--glow-a),transparent 60%);}
   #stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c04-rip{position:relative;overflow:hidden;border:0;cursor:pointer;padding:17px 36px;
@@ -27,12 +40,14 @@
     transition:border-color var(--dur-fast) var(--ease-out-soft);-webkit-tap-highlight-color:transparent;}
   .c04-rip:hover{border-color:var(--border-glow);}
   .c04-rip__ink{position:absolute;border-radius:50%;
-    background:radial-gradient(circle,rgba(34,174,195,0.55),rgba(34,174,195,0.05));
+    background:radial-gradient(circle,var(--ink-a),var(--ink-b));
     transform:translate(-50%,-50%) scale(0);pointer-events:none;
     animation:c04-rip-spread var(--dur-slow) var(--ease-out-soft) forwards;}
-  @keyframes c04-rip-spread{ to{ transform:translate(-50%,-50%) scale(1);opacity:0; } }
+  /* ink holds its density through the first half of the spread, then fades — at 264px a
+     straight fade-out is gone before the eye lands on it */
+  @keyframes c04-rip-spread{ 0%{opacity:1} 45%{opacity:.9} to{ transform:translate(-50%,-50%) scale(1);opacity:0; } }
 
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;font-family:var(--font-display)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c04-rip__ink{animation-duration:.001ms}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -42,23 +57,27 @@
  "description": "Dark rounded button that spawns an expanding ink ripple from the tap point; idles by firing ripples from random positions every 1.5 s.",
  "useWhen": "CTA buttons, action triggers, any click surface needing tactile feedback with a material-design feel.",
  "avoidWhen": "Auto-cycling demo ripple must be removed before production use; not suitable where motion is distracting or backgrounds are light.",
- "agentPrompt": "Change the ripple color from teal/cyan to gold by editing the radial-gradient in .c04-rip__ink background to rgba(255,180,0,0.55), rgba(255,220,80,0.15), and slow the spread to 800ms via --dur-slow.",
+ "agentPrompt": "Change the ripple color from teal/cyan to gold by editing the radial-gradient in .c04-rip__ink background to rgba(255,180,0,0.55), rgba(255,220,80,0.15), and slow the spread to 800ms via --dur-slow. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ripple color (radial-gradient in .c04-rip__ink)",
   "ripple spread duration (--dur-slow: 520ms)",
   "ripple size multiplier (2.2 in JS)",
   "idle loop interval (1500ms in setTimeout)",
-  "button padding and border-radius (--r-md)"
+  "button padding and border-radius (--r-md)",
+  "idle demo cadence (LEAD=400 / DEMO_EVERY=2500 / IDLE_RESUME=3600 ms, TICK=100)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "overflow:hidden on .c04-rip (clips ripple)",
   "IIFE wrapper",
   "reduced-motion guard (animation-duration:.001ms + early return in loop)",
-  "visibilitychange pause"
+  "visibilitychange pause",
+  "idle demo ripple (the same ripple() a tap runs; real input takes over)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycling idle loop must be removed or stopped before shipping in production",
-  "Ripple color is hardcoded in CSS — not a CSS variable, requires two-place edit"
+  "Ripple colour lives in the --ink-a/--ink-b tokens (dark in :root, light in [data-theme=light]) — edit both blocks to restyle"
  ],
  "tier": "curated",
  "labels": [
@@ -67,7 +86,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "button",
@@ -106,20 +126,35 @@
   }
   btn.addEventListener("pointerdown", function(e){
     var r = btn.getBoundingClientRect();
+    takeover();
     ripple(e.clientX-r.left, e.clientY-r.top);
   });
+  btn.addEventListener("focus", takeover);
 
-  // autonomous idle: ripple from random points on a loop
-  var timer=null;
-  function loop(){
-    if(reduce) return;
-    var r = btn.getBoundingClientRect();
-    ripple(r.width*(0.25+Math.random()*0.5), r.height*(0.3+Math.random()*0.4));
-    timer=setTimeout(loop, 1500);
+  // idle demo: nothing on the wall ever taps a button, so the tile runs the very same ripple()
+  // a real pointerdown runs — first ink LEAD ms after mount, then one every DEMO_EVERY ms,
+  // walking a fixed ring of origins so each spread starts from a different point. A real tap
+  // takes over (demo stops); the demo resumes after IDLE_RESUME ms of quiet.
+  var TICK=100, DEMO_EVERY=2500, IDLE_RESUME=3600, LEAD=400;
+  var SPOTS=[[0.30,0.40],[0.72,0.62],[0.52,0.26],[0.24,0.68],[0.68,0.34]];
+  var demo=true, phase=DEMO_EVERY-LEAD, idle=0, spot=0, clock=null;
+  function tick(){
+    if(!demo){ idle+=TICK; if(idle>=IDLE_RESUME){ demo=true; idle=0; phase=DEMO_EVERY-LEAD; } return; }
+    phase+=TICK;
+    if(phase>=DEMO_EVERY){ phase=0;
+      var r=btn.getBoundingClientRect(), s=SPOTS[spot++%SPOTS.length];
+      ripple(r.width*s[0], r.height*s[1]);
+    }
   }
-  function stop(){ clearTimeout(timer); }
-  document.addEventListener("visibilitychange", function(){ document.hidden?stop():loop(); });
-  setTimeout(loop, 700);
+  function takeover(){ demo=false; idle=0; }   // a real tap ends the idle demo
+  function start(){ if(!clock && !reduce) clock=setInterval(tick, TICK); }
+  function stop(){ clearInterval(clock); clock=null; }
+  document.addEventListener("visibilitychange", function(){ document.hidden?stop():start(); });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message", function(e){
+    var d=e.data; if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);
+  });
+  start();                                     // reduced motion: start() is a no-op, no ink fires
 })();
 </script>
 </body>

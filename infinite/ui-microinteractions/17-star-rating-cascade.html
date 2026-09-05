@@ -5,11 +5,26 @@
 <meta name="description" content="Five gold stars fill left-to-right in a staggered cascade with squash-pop scaling and sparkle flicks, then drain and repeat.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Star Rating Cascade</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#241A07;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Feed the canvas JS below. */
+  :root{
+    --src-bg:#241A07; --src-gold:#FBBF24; --src-empty:#5C4A22; --src-spark:#FFF4D2;
+    --src-cap:#FBBF24; --src-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --src-bg:#f8f5f0; --src-gold:#8e6703; --src-empty:#8a7442; --src-spark:#b45309;
+    --src-cap:#372c15; --src-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--src-bg);}
   #src-c{display:block;width:100%;height:100%;cursor:pointer;}
   .src-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
-       letter-spacing:.12em;color:#FBBF24;opacity:.34;text-transform:uppercase;
+       letter-spacing:.12em;color:var(--src-cap);opacity:var(--src-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,23 +34,25 @@
  "description": "Five gold stars fill left-to-right in a staggered cascade with squash-pop scaling and sparkle flicks off each tip, then drain in reverse and repeat.",
  "useWhen": "Rating confirmations, review submission feedback, onboarding success moments on dark backgrounds.",
  "avoidWhen": "Light-background UIs (background hardcoded dark amber). Interactive rating pickers — this is display-only; click only restarts the loop.",
- "agentPrompt": "Change star count to 3, increase STAGGER to 18 for a slower cascade, and set GOLD to '#FF6B6B' for a red-heart rating variant.",
+ "agentPrompt": "Change star count to 3, increase STAGGER to 18 for a slower cascade, and set GOLD to '#FF6B6B' for a red-heart rating variant. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "star count (stars array length + loop bounds)",
   "cascade speed (STAGGER=12, FILL=26)",
   "hold duration (HOLD=130)",
   "gold color (GOLD='#FBBF24')",
   "star radius (R=gap*0.40)",
-  "squash/stretch amounts (0.18, 0.26 sin coefficients)"
+  "squash/stretch amounts (0.18, 0.26 sin coefficients)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "IIFE wrapper",
   "visibilitychange pause/resume",
-  "prefers-reduced-motion static fallback (all stars filled)"
+  "prefers-reduced-motion static fallback (all stars filled)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded dark amber — must edit BG and CSS background to change",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Click resets the cascade but does not support interactive per-star selection",
   "No reduced-motion fallback animation — shows static filled state only"
  ],
@@ -46,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "stars",
@@ -67,7 +85,22 @@
 (function(){
   const cv=document.getElementById('src-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const GOLD='#FBBF24',EMPTY='#5C4A22',BG='#241A07';
+  const root=document.documentElement;
+  let GOLD='#FBBF24',EMPTY='#5C4A22',BG='#241A07',SPARK='#FFF4D2';
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    GOLD=(cs.getPropertyValue('--src-gold')||GOLD).trim();
+    EMPTY=(cs.getPropertyValue('--src-empty')||EMPTY).trim();
+    BG=(cs.getPropertyValue('--src-bg')||BG).trim();
+    SPARK=(cs.getPropertyValue('--src-spark')||SPARK).trim();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   let W,H,DPR,gap,R;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -158,7 +191,7 @@
         ctx.save();
         ctx.translate(cx,topY);
         ctx.globalAlpha=sp;
-        ctx.strokeStyle='#FFF4D2';ctx.lineWidth=Math.max(1.2,R*0.05);
+        ctx.strokeStyle=SPARK;ctx.lineWidth=Math.max(1.2,R*0.05);
         ctx.lineCap='round';
         for(let a=0;a<4;a++){
           const ang=-Math.PI/2 + (a-1.5)*0.5;
@@ -166,7 +199,7 @@
           ctx.lineTo(Math.cos(ang)*len,Math.sin(ang)*len-R*0.2);
           ctx.stroke();
         }
-        ctx.fillStyle='#FFF4D2';
+        ctx.fillStyle=SPARK;
         ctx.beginPath();ctx.arc(0,-R*0.1,R*0.10*sp+1,0,Math.PI*2);ctx.fill();
         ctx.restore();
       }

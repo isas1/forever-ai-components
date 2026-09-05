@@ -5,12 +5,27 @@
 <meta name="description" content="Teal gooey SVG toggle whose knob slides with trailing liquid droplets while the track fades between off and on colors.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Liquid Toggle</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  :root{
+    --c01-bg:#0d1117; --c01-cap:#3fe0c5; --c01-cap-o:.4;
+    --c01-track-off:#1d2a33; --c01-track-on:#0e8f7a;
+    --c01-knob-a:#eafff9; --c01-knob-b:#7df0db;
+  }
+  :root[data-theme="light"]{
+    --c01-bg:#f2f4f8; --c01-cap:#147c6b; --c01-cap-o:.5;
+    --c01-track-off:#dde3e6; --c01-track-on:#0c7a68;
+    --c01-knob-a:#ffffff; --c01-knob-b:#5fe0c4;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c01-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   .wrap{height:100%;display:flex;align-items:center;justify-content:center}
   .stage{width:min(62vmin,300px);aspect-ratio:1/1;display:flex;align-items:center;justify-content:center}
   svg{width:100%;height:auto}
-  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#3fe0c5;opacity:.4;text-transform:uppercase}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c01-cap);opacity:var(--c01-cap-o);text-transform:uppercase}
   .track{transition:fill .5s}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -20,17 +35,19 @@
  "description": "SVG toggle with a goo filter — the knob slides with trailing liquid droplets; track color fades between off and on states.",
  "useWhen": "Settings pages, dark-mode switches, any boolean UI control that benefits from tactile feel.",
  "avoidWhen": "Forms requiring immediate user input — it auto-cycles; wire a click handler and stop the loop for production.",
- "agentPrompt": "Change accent to purple (#a855f7), slow the knob travel (phase step 0.008), add a click handler to stop auto-cycling.",
+ "agentPrompt": "Change accent to purple (#a855f7), slow the knob travel (phase step 0.008), add a click handler to stop auto-cycling. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent/knob color",
   "phase step speed (0.012)",
   "track off/on colors",
-  "droplet lag amount (0.18 / 0.30)"
+  "droplet lag amount (0.18 / 0.30)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "SVG goo filter (feGaussianBlur + feColorMatrix)",
   "IIFE wrapper",
-  "reduced-motion guard"
+  "reduced-motion guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — wire click handler to control on/off state in production"
@@ -41,7 +58,8 @@
   "easy-to-modify",
   "mobile-ready",
   "accessible",
-  "copy-paste-safe"
+  "copy-paste-safe",
+  "light-ready"
  ],
  "tags": [
   "toggle",
@@ -61,9 +79,9 @@
     <filter id="goo"><feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/>
       <feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 24 -11" result="g"/>
       <feBlend in="SourceGraphic" in2="g"/></filter>
-    <radialGradient id="knob" cx="40%" cy="35%"><stop offset="0" stop-color="#eafff9"/><stop offset="1" stop-color="#7df0db"/></radialGradient>
+    <radialGradient id="knob" cx="40%" cy="35%"><stop offset="0" style="stop-color:var(--c01-knob-a)"/><stop offset="1" style="stop-color:var(--c01-knob-b)"/></radialGradient>
   </defs>
-  <rect class="track" x="6" y="22" width="188" height="66" rx="33" fill="#1d2a33"/>
+  <rect class="track" x="6" y="22" width="188" height="66" rx="33" fill="var(--c01-track-off)"/>
   <g filter="url(#goo)" fill="url(#knob)">
     <circle id="main" cx="55" cy="55" r="26"/>
     <circle id="d1" cx="55" cy="55" r="13"/>
@@ -76,9 +94,18 @@
 (function(){
   const main=document.getElementById('main'),d1=document.getElementById('d1'),d2=document.getElementById('d2'),track=document.querySelector('.track');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const root=document.documentElement;
   let t=0,on=false,phase=0,running=true;
   const L=55,R=145;
   function ease(x){return x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;}
+  function hex2rgb(h){h=h.trim().replace('#','');return [0,2,4].map(i=>parseInt(h.slice(i,i+2),16));}
+  let offRGB=[29,42,51],onRGB=[14,143,122];
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    offRGB=hex2rgb(cs.getPropertyValue('--c01-track-off'));
+    onRGB=hex2rgb(cs.getPropertyValue('--c01-track-on'));
+    track.setAttribute('fill', blend(on?1:0));
+  }
   function frame(){
     if(!running)return;
     phase+=0.012;
@@ -97,14 +124,21 @@
     requestAnimationFrame(frame);
   }
   function blend(p){
-    // off #1d2a33 -> on #0e8f7a
-    const a=[29,42,51],b=[14,143,122];
-    const c=a.map((v,i)=>Math.round(v+(b[i]-v)*p));
+    // off <-> on, read from theme tokens (see syncTheme)
+    const c=offRGB.map((v,i)=>Math.round(v+(onRGB[i]-v)*p));
     return 'rgb('+c.join(',')+')';
   }
   function toggleNow(){phase=0;on=!on;}
   document.body.addEventListener('pointerdown',toggleNow);
   document.addEventListener('visibilitychange',()=>{running=!document.hidden; if(running&&!reduce)requestAnimationFrame(frame);});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   if(reduce){on=true;main.setAttribute('cx',L);track.setAttribute('fill',blend(1));}
   else requestAnimationFrame(frame);
 })();

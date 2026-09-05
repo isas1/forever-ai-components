@@ -5,21 +5,39 @@
 <meta name="description" content="A slow escape-time Mandelbrot zoom into a filigree boundary seam in smooth red-to-gold bands on near-black, with static vignette.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mandelbrot Zoom</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root{--fr01-bg:#06070b;--fr01-accent:#C43131}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the one [data-theme="light"] block. --fr01-s0..s6 are the escape-time
+     palette ramp the JS LUT interpolates: dark runs near-black -> red -> gold, light
+     runs paper -> deep ochre ink (same hues, ramp direction inverted). */
+  :root{--fr01-bg:#06070b;--fr01-accent:#C43131;
+    --fr01-glow:rgba(196,49,49,.16);--fr01-vig:rgba(6,7,11,.78);--fr01-blend:screen;
+    --fr01-frame:rgba(196,49,49,.10);--fr01-cap:#fff;--fr01-cap-o:.42;--fr01-sat:1.04;
+    --fr01-s0:#1a1a18;--fr01-s1:#5a2828;--fr01-s2:#c43131;--fr01-s3:#d06e50;
+    --fr01-s4:#e0b496;--fr01-s5:#ffe0aa;--fr01-s6:#78481e}
+  :root[data-theme="light"]{--fr01-bg:#f5f1ed;--fr01-accent:#c43131;
+    --fr01-glow:rgba(196,49,49,.12);--fr01-vig:rgba(120,72,30,.30);--fr01-blend:multiply;
+    --fr01-frame:rgba(196,49,49,.20);--fr01-cap:#3a2118;--fr01-cap-o:.62;--fr01-sat:1;
+    --fr01-s0:#dfdfdd;--fr01-s1:#e8cbcb;--fr01-s2:#e9a8a8;--fr01-s3:#dc937d;
+    --fr01-s4:#ba6c37;--fr01-s5:#774b00;--fr01-s6:#e5bc98}
   html,body{margin:0;height:100%;background:var(--fr01-bg)}
   .fr01-stage{position:fixed;inset:0;overflow:hidden;background:var(--fr01-bg)}
-  #fr01-c{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:auto;filter:saturate(1.04)}
+  #fr01-c{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:auto;filter:saturate(var(--fr01-sat))}
   /* STATIC glow + vignette — painted once, never animated */
   .fr01-glow{position:absolute;inset:0;pointer-events:none;
     background:
-      radial-gradient(120% 90% at 38% 44%,rgba(196,49,49,.16),transparent 58%),
-      radial-gradient(140% 120% at 50% 50%,transparent 52%,rgba(6,7,11,.78) 100%);
-    mix-blend-mode:screen}
+      radial-gradient(120% 90% at 38% 44%,var(--fr01-glow),transparent 58%),
+      radial-gradient(140% 120% at 50% 50%,transparent 52%,var(--fr01-vig) 100%);
+    mix-blend-mode:var(--fr01-blend)}
   .fr01-frame{position:absolute;inset:0;pointer-events:none;
-    box-shadow:inset 0 0 0 1px rgba(196,49,49,.10)}
+    box-shadow:inset 0 0 0 1px var(--fr01-frame)}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
+    color:var(--fr01-cap);opacity:var(--fr01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -29,19 +47,21 @@
  "description": "Escape-time Mandelbrot set zooms slowly into a filigree boundary seam, rendered in smooth red-to-gold color bands on a near-black background.",
  "useWhen": "Dark-mode hero backgrounds, math/science themed pages, ambient screensaver-style displays needing visual depth.",
  "avoidWhen": "Light backgrounds (hardcoded dark palette). Low-end CPUs — pixel-loop is throttled but still heavy. Contexts requiring legible text overlays.",
- "agentPrompt": "Change the zoom target to a different boundary point by setting TX=-0.7269 and TY=0.1889, and shift palette stops toward deeper crimson and warm ochre tones.",
+ "agentPrompt": "Change the zoom target to a different boundary point by setting TX=-0.7269 and TY=0.1889, and shift palette stops toward deeper crimson and warm ochre tones. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "zoom target coordinates (TX, TY)",
   "palette color stops (stops array)",
   "iteration cap (MAXIT=220)",
   "pixel budget (MAXPIX=96000)",
-  "zoom speed multiplier (span*=0.9885)"
+  "zoom speed multiplier (span*=0.9885)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "low-res offscreen buffer pattern (MAXPIX pixel budget)",
   "visibilitychange pause/resume",
   "reduced-motion static frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound pixel loop — can stutter on very low-end devices despite throttling",
@@ -54,7 +74,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "mandelbrot",
@@ -98,11 +119,22 @@
   var W=0,H=0,img=null,pix=null;
   var LUT_R=new Uint8Array(2048),LUT_G=new Uint8Array(2048),LUT_B=new Uint8Array(2048);
 
-  // Palette LUT: near-black -> deep red -> accent red -> warm tan -> gold (Bauhaus Primary, #C43131 on #1A1A18).
-  (function(){
+  // Palette LUT + interior colour, both rebuilt from the CSS tokens on every theme
+  // switch. Dark: near-black -> deep red -> accent -> tan -> gold. Light: the same
+  // hues with the ramp inverted, paper -> deep ochre ink.
+  var root=document.documentElement, INTERIOR=0xff000000;
+  function hex2rgb(h){
+    h=(h||'').trim().replace('#','');
+    if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    var v=parseInt(h,16);
+    return h.length===6&&isFinite(v)?[(v>>16)&255,(v>>8)&255,v&255]:[0,0,0];
+  }
+  function buildLUT(){
+    var cs=getComputedStyle(root);
     function lerp(a,b,t){return a+(b-a)*t;}
-    var stops=[[26,26,24],[90,40,40],[196,49,49],[208,110,80],[224,180,150],[255,224,170],[120,72,30]];
-    for(var i=0;i<2048;i++){
+    var stops=[],i;
+    for(i=0;i<7;i++) stops.push(hex2rgb(cs.getPropertyValue('--fr01-s'+i)));
+    for(i=0;i<2048;i++){
       var t=i/2047, f=t*(stops.length-1), k=f|0, fr=f-k;
       if(k>=stops.length-1){k=stops.length-2;fr=1;}
       var a=stops[k],b=stops[k+1];
@@ -110,7 +142,16 @@
       LUT_G[i]=lerp(a[1],b[1],fr)|0;
       LUT_B[i]=lerp(a[2],b[2],fr)|0;
     }
-  })();
+    var bg=hex2rgb(cs.getPropertyValue('--fr01-bg'));   // set interior = page bg (ABGR)
+    INTERIOR=(0xff000000|(bg[2]<<16)|(bg[1]<<8)|bg[0])>>>0;
+  }
+  function syncTheme(){ buildLUT(); if(img) render(span); }  // static/reduced frames repaint at once
+  addEventListener('message',function(ev){
+    var d=ev.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
 
   function resize(){
     // Fixed low-res buffer sized to the stage's aspect under a hard pixel budget.
@@ -146,7 +187,7 @@
         }
         var col;
         if(it>=maxit){
-          col=0xff000000|(11<<16)|(7<<8)|6; // interior = bg (ABGR)
+          col=INTERIOR;                     // interior = page bg (ABGR, from token)
         }else{
           // smooth (continuous) iteration count
           var nu=it+1-Math.log(Math.log(zr2+zi2)*0.5)/LOG2;
@@ -187,8 +228,9 @@
     if(reduce)render(span);
   },{passive:true});
 
+  syncTheme();
   resize();
-  if(reduce){ render(BASE*0.13); return; } // one static, deep, legible frame
+  if(reduce){ span=BASE*0.13; render(span); return; } // one static, deep, legible frame
   start();
 })();
 </script>

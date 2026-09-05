@@ -5,11 +5,26 @@
 <meta name="description" content="A vertical battery breathes from amber to lime-mint as a wobbling liquid level rises past segment ticks with bubbles and a pulsing bolt.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Battery Charge Fill</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#06140C;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Feed the canvas JS below. */
+  :root{
+    --bcf-bg:#06140C; --bcf-amber:#F59E0B; --bcf-lime:#22C55E; --bcf-mint:#6EE7B7;
+    --bcf-bolt:#ffffff; --bcf-cap:#22C55E; --bcf-cap-o:.35;
+  }
+  :root[data-theme="light"]{
+    --bcf-bg:#f4f8f6; --bcf-amber:#9e6506; --bcf-lime:#167f3d; --bcf-mint:#157f55;
+    --bcf-bolt:#162d1f; --bcf-cap:#162d1f; --bcf-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bcf-bg);}
   #bcf-c{display:block;width:100%;height:100%;}
   .bcf-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:#22C55E;opacity:.35;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--bcf-cap);opacity:var(--bcf-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +34,22 @@
  "description": "Battery cycles amber-to-mint as a wobbling liquid level rises; segment ticks light in sequence, bubbles rise inside, and a bolt pulses at center.",
  "useWhen": "Status indicators for charging progress, IoT dashboards, energy/health app hero widgets.",
  "avoidWhen": "Contexts where a real battery percentage must be displayed — the charge is animated/simulated, not data-driven.",
- "agentPrompt": "Change palette to red/orange by updating AMBER=[239,68,68], LIME=[234,179,8], MINT=[251,191,36], and increase TICKS to 8.",
+ "agentPrompt": "Change palette to red/orange by updating AMBER=[239,68,68], LIME=[234,179,8], MINT=[251,191,36], and increase TICKS to 8. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (AMBER, LIME, MINT arrays)",
   "tick count (TICKS=6)",
   "wave amplitude (1.6+charge*1.4)",
   "phase speed (0.0042)",
   "bubble count (i<5)",
-  "battery size (58*u wide, 92*u tall)"
+  "battery size (58*u wide, 92*u tall)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce variable)",
   "visibilitychange stop/start pattern",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Charge is purely animated (sine cycle) — no API to bind a real percentage",
@@ -45,7 +62,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "battery",
@@ -66,7 +84,26 @@
 (function(){
   const cv=document.getElementById('bcf-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const BG='#06140C';
+  const root=document.documentElement;
+  let BG='#06140C', BOLT_RGB='255,255,255';
+  let AMBER=[245,158,11],LIME=[34,197,94],MINT=[110,231,183];
+  function hexToArr(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');
+    const n=parseInt(h,16);return [n>>16&255,n>>8&255,n&255];}
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    BG=(cs.getPropertyValue('--bcf-bg')||BG).trim();
+    AMBER=hexToArr((cs.getPropertyValue('--bcf-amber')||'#F59E0B').trim());
+    LIME=hexToArr((cs.getPropertyValue('--bcf-lime')||'#22C55E').trim());
+    MINT=hexToArr((cs.getPropertyValue('--bcf-mint')||'#6EE7B7').trim());
+    BOLT_RGB=hexToArr((cs.getPropertyValue('--bcf-bolt')||'#ffffff').trim()).join(',');
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   let W,H,DPR,cx,cy,u; // u = unit scale
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -88,7 +125,6 @@
 
   function lerp(a,b,k){return a+(b-a)*k;}
   function mix(c1,c2,k){return [lerp(c1[0],c2[0],k),lerp(c1[1],c2[1],k),lerp(c1[2],c2[2],k)];}
-  const AMBER=[245,158,11],LIME=[34,197,94],MINT=[110,231,183];
 
   function draw(){
     ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
@@ -190,13 +226,13 @@
     // soft pulsing glow behind the bolt (radial gradient instead of per-frame shadowBlur)
     const boltR=24*u;
     const bg=ctx.createRadialGradient(lx,ly,2*u,lx,ly,boltR);
-    bg.addColorStop(0,`rgba(255,255,255,${0.32*pulse})`);
-    bg.addColorStop(1,'rgba(255,255,255,0)');
+    bg.addColorStop(0,`rgba(${BOLT_RGB},${0.32*pulse})`);
+    bg.addColorStop(1,`rgba(${BOLT_RGB},0)`);
     ctx.fillStyle=bg;ctx.beginPath();ctx.arc(lx,ly,boltR,0,Math.PI*2);ctx.fill();
     ctx.beginPath();
     pts.forEach((p,i)=>{const X=lx+p[0]*sc,Y=ly+p[1]*sc;i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);});
     ctx.closePath();
-    ctx.fillStyle=`rgba(255,255,255,${0.55+0.4*pulse})`;
+    ctx.fillStyle=`rgba(${BOLT_RGB},${0.55+0.4*pulse})`;
     ctx.fill();
 
     if(!reduce)raf=requestAnimationFrame(draw);

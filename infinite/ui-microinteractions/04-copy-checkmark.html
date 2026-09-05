@@ -5,21 +5,38 @@
 <meta name="description" content="Monospace code snippet with a copy button that morphs to a checkmark with a drawn stroke and 'Copied!' toast on click.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Copy Confirm</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0c1412;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c04-bg:#0c1412; --c04-card-bg:#11201c; --c04-border:#1e3a32; --c04-shadow:rgba(0,0,0,.4);
+    --c04-code:#7fffd0; --c04-btn-bg:#16322a; --c04-btn-done-bg:#1f8f5f; --c04-check:#eafff5;
+    --c04-toast-bg:#1f8f5f; --c04-cap:#fff; --c04-cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --c04-bg:#eef6f2; --c04-card-bg:#ffffff; --c04-border:#cfe3da; --c04-shadow:rgba(20,50,40,.14);
+    --c04-code:#007f51; --c04-btn-bg:#e3f2ea; --c04-btn-done-bg:#1d8759; --c04-check:#eafff5;
+    --c04-toast-bg:#1d8759; --c04-cap:#123028; --c04-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c04-bg);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   #wrap{position:fixed;inset:0;display:grid;place-items:center;cursor:pointer}
-  #card{display:flex;align-items:center;gap:10px;background:#11201c;border:1px solid #1e3a32;border-radius:12px;padding:11px 14px;box-shadow:0 10px 30px rgba(0,0,0,.4)}
-  #code{color:#7fffd0;font-size:clamp(11px,3.4vw,15px);letter-spacing:.02em;white-space:nowrap}
-  #btn{position:relative;width:30px;height:30px;flex:none;display:grid;place-items:center;border-radius:8px;background:#16322a;transition:background .2s}
-  #btn.done{background:#1f8f5f}
-  svg{position:absolute;width:17px;height:17px;fill:none;stroke:#7fffd0;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:opacity .2s,transform .2s}
+  #card{display:flex;align-items:center;gap:10px;background:var(--c04-card-bg);border:1px solid var(--c04-border);border-radius:12px;padding:11px 14px;box-shadow:0 10px 30px var(--c04-shadow)}
+  #code{color:var(--c04-code);font-size:clamp(11px,3.4vw,15px);letter-spacing:.02em;white-space:nowrap}
+  #btn{position:relative;width:30px;height:30px;flex:none;display:grid;place-items:center;border-radius:8px;background:var(--c04-btn-bg);transition:background .2s}
+  #btn.done{background:var(--c04-btn-done-bg)}
+  #btn svg{position:absolute;width:17px;height:17px;fill:none;stroke:var(--c04-code);stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:opacity .2s,transform .2s}
   #copy.hide{opacity:0;transform:scale(.6)}
-  #check{stroke:#eafff5;opacity:0;transform:scale(.6)}
+  #check{stroke:var(--c04-check);opacity:0;transform:scale(.6)}
   #check.show{opacity:1;transform:scale(1)}
   #check path{stroke-dasharray:24;stroke-dashoffset:24}
   #check.show path{transition:stroke-dashoffset .35s ease .05s;stroke-dashoffset:0}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
-  .toast{position:fixed;left:50%;bottom:18%;transform:translateX(-50%) translateY(8px);background:#1f8f5f;color:#eafff5;font-size:10px;padding:4px 9px;border-radius:6px;opacity:0;transition:opacity .25s,transform .25s;font-family:system-ui}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--c04-cap);opacity:var(--c04-cap-o);text-transform:uppercase}
+  .toast{position:fixed;left:50%;bottom:18%;transform:translateX(-50%) translateY(8px);background:var(--c04-toast-bg);color:var(--c04-check);font-size:10px;padding:4px 9px;border-radius:6px;opacity:0;transition:opacity .25s,transform .25s;font-family:system-ui}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -29,23 +46,24 @@
  "description": "Copy icon morphs to a drawn-stroke checkmark with a green button flash and a \"Copied!\" toast on click; auto-cycles as a demo loop.",
  "useWhen": "Code blocks, CLI command snippets, any copy-to-clipboard button needing clear confirmation feedback.",
  "avoidWhen": "Production use without wiring real clipboard API — auto-cycle loop must be removed and navigator.clipboard.writeText added before shipping.",
- "agentPrompt": "Change the code snippet text from 'npm i microfx' to 'npx create-next-app', update the accent color from #1f8f5f to #2563eb, and extend the reset delay from 1400 to 2000ms.",
+ "agentPrompt": "Change the code snippet text from 'npm i microfx' to 'npx create-next-app', update the accent color from #1f8f5f to #2563eb, and extend the reset delay from 1400 to 2000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "code snippet text (#code content)",
   "accent/done color (#btn.done background, #1f8f5f)",
-  "reset delay (1400ms in setTimeout)",
-  "auto-cycle interval (2600ms)",
-  "button press scale (.85 in animate call)"
+  "button press scale (.85 in animate call)",
+  "idle demo cadence (FIRST=450 / DEMO_EVERY=3000 / IDLE_BACK=3600 ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "busy flag guard (prevents double-fire)",
   "stroke-dasharray/dashoffset checkmark draw animation",
   "visibilitychange pause/resume",
-  "reduced-motion guard (loop early-return)"
+  "reduced-motion guard (no demo interval under reduce)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No actual clipboard write — navigator.clipboard.writeText must be added for production use",
-  "Auto-cycles by default; remove loop() call before shipping",
+  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
   "Toast position (bottom 18%) may overlap content on very short viewports"
  ],
  "tier": "curated",
@@ -55,7 +73,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "copy",
@@ -82,6 +101,7 @@
 <div class="toast" id="toast">Copied!</div>
 <div class="cap">Copy confirm</div>
 <script>
+(()=>{
 const wrap=document.getElementById('wrap'),btn=document.getElementById('btn'),copy=document.getElementById('copy'),check=document.getElementById('check'),toast=document.getElementById('toast');
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;let busy=false;
 function fire(){
@@ -90,11 +110,26 @@ function fire(){
   btn.animate([{transform:'scale(1)'},{transform:'scale(.85)'},{transform:'scale(1)'}],{duration:260});
   setTimeout(()=>{btn.classList.remove('done');copy.classList.remove('hide');check.classList.remove('show');toast.classList.remove('show');busy=false;},1400);
 }
-wrap.addEventListener('click',fire);
-let timer;
-function loop(){if(reduce)return;timer=setTimeout(()=>{fire();loop();},2600);}
-document.addEventListener('visibilitychange',()=>{document.hidden?clearTimeout(timer):loop();});
-loop();
+/* Idle demo: a copy button nobody clicks never shows its best moment, so it copies itself —
+   first cycle ~FIRST ms after mount, then one every DEMO_EVERY ms (copy → check + toast →
+   revert), through the same fire() a real click runs. No clipboard call: the demo only plays
+   the visual state. A real click takes over; the demo returns after IDLE_BACK ms of quiet. */
+const TICK=100,FIRST=450,DEMO_EVERY=3000,IDLE_BACK=3600;
+let demo=true,t=0,idle=0,timer=0,firstRun=true;
+function takeover(){demo=false;idle=0;}
+wrap.addEventListener('click',()=>{takeover();fire();});
+function tick(){
+  if(!demo){idle+=TICK;if(idle>=IDLE_BACK){demo=true;t=0;firstRun=true;}return;}
+  t+=TICK;if(t<(firstRun?FIRST:DEMO_EVERY))return;
+  t=0;firstRun=false;fire();
+}
+function start(){if(!timer&&!reduce)timer=setInterval(tick,TICK);}
+function stop(){clearInterval(timer);timer=0;}
+document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',(e)=>{const d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))document.documentElement.setAttribute('data-theme',d.theme);});
+if(!reduce)start();   // reduced motion: no demo cycle — the button rests in its copy state
+})();
 </script>
 </body>
 </html>

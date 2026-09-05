@@ -2,14 +2,31 @@
 <meta name="description" content="Animated Sankey diagram on dark teal canvas: ribbons grow stage-by-stage between origins, hubs and outcome bands, pulsing softly to show flo">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sankey Flow</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0d12;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --ch01-c* feed the JS palette. */
+  :root{
+    --ch01-bg:#0a0d12; --ch01-glow:rgba(90,209,160,.10); --ch01-cap:#fff; --ch01-cap-o:.42;
+    --ch01-c0:#5ad1a0; --ch01-c1:#3aa6c9; --ch01-c2:#d8b24a; --ch01-c3:#d8623a; --ch01-c4:#8a7ad8;
+    --ch01-hub:#5ad1a0; --ch01-rib-a:.14; --ch01-rib-r:.30;
+  }
+  :root[data-theme="light"]{
+    --ch01-bg:#f1f4f8; --ch01-glow:rgba(35,126,89,.10); --ch01-cap:#1b2130; --ch01-cap-o:.5;
+    --ch01-c0:#237e59; --ch01-c1:#27768f; --ch01-c2:#866a1d; --ch01-c3:#ba4b25; --ch01-c4:#715dd0;
+    --ch01-hub:#237e59; --ch01-rib-a:.36; --ch01-rib-r:.52;
+  }
+  html,body{margin:0;height:100%;background:var(--ch01-bg);overflow:hidden}
   #ch01-wrap{position:fixed;inset:0;display:block}
   #ch01-c{position:absolute;inset:0;width:100%;height:100%;
     /* static glow, never repaints */
-    box-shadow:inset 0 0 140px rgba(90,209,160,.10)}
+    box-shadow:inset 0 0 140px var(--ch01-glow)}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
+    color:var(--ch01-cap);opacity:var(--ch01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +35,21 @@
  "description": "Three-stage Sankey diagram on dark canvas: bezier ribbons grow stage-by-stage from origins to hubs to outcomes, pulsing softly in opacity to show flow volume.",
  "useWhen": "Data visualization contexts needing animated flow diagrams — traffic splits, funnel analysis, budget allocation, network routing dashboards.",
  "avoidWhen": "Light-color UIs (background hardcoded dark navy). Contexts needing real data binding — values are synthetic constants in the A/B matrices.",
- "agentPrompt": "Change the flow data by editing matrix A to [[8,2,1],[1,7,2],[2,1,9]] and matrix B to [[5,4,1,1],[1,6,2,2],[1,1,5,5]], then update COL[0] to '#ff6b6b' for a warm accent.",
+ "agentPrompt": "Change the flow data by editing matrix A to [[8,2,1],[1,7,2],[2,1,9]] and matrix B to [[5,4,1,1],[1,6,2,2],[1,1,5,5]], then update COL[0] to '#ff6b6b' for a warm accent. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "flow value matrices A and B",
   "color palette (COL array)",
   "stage reveal timing (t%9 period, /3.6 divisor)",
   "pulse opacity range (0.16 + 0.12 amplitude)",
-  "node bar width (6px in fillRect)"
+  "node bar width (6px in fillRect)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce variable)",
   "visibilitychange stop/start",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Flow data is hardcoded — no external data binding without refactor",
@@ -44,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "sankey",
@@ -68,9 +88,28 @@
   "use strict";
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var cv=document.getElementById('ch01-c'), ctx=cv.getContext('2d');
-  // Constructivist / data-viz palette around the teal accent
+  // Constructivist / data-viz palette around the teal accent — filled from tokens in syncTheme
   var COL=['#5ad1a0','#3aa6c9','#d8b24a','#d8623a','#8a7ad8'];
-  var BG='#0a0d12';
+  var BG='#0a0d12', HUB='#5ad1a0', RIBA=0.14, RIBR=0.30;   // RIBR = flat alpha under reduced motion
+
+  // ---- theme: every colour the canvas draws with comes from a CSS token ----
+  var root=document.documentElement;
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    BG=cs.getPropertyValue('--ch01-bg').trim();
+    HUB=cs.getPropertyValue('--ch01-hub').trim();
+    RIBA=parseFloat(cs.getPropertyValue('--ch01-rib-a'))||0.14;
+    RIBR=parseFloat(cs.getPropertyValue('--ch01-rib-r'))||0.30;
+    for(var i=0;i<COL.length;i++) COL[i]=cs.getPropertyValue('--ch01-c'+i).trim();
+    if(nodes){ layout(); if(reduce) draw(2600); }   // node/ribbon colours are baked at layout time
+  }
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
+  syncTheme();
 
   // ---- synthetic three-stage flow graph (origins -> hubs -> outcomes) ----
   // value matrix A[origin][hub] and B[hub][outcome]
@@ -104,7 +143,7 @@
   function layout(){
     colX=[W*0.13,W*0.50,W*0.87];
     var O=nodeColumn(oV,0.13,0.045,function(i){return COL[i];});
-    var Hn=nodeColumn(hV,0.50,0.05,function(){return '#5ad1a0';});
+    var Hn=nodeColumn(hV,0.50,0.05,function(){return HUB;});
     var C=nodeColumn(cV,0.87,0.04,function(i){return COL[(i+1)%COL.length];});
     nodes={O:O,H:Hn,C:C};
     // build ribbons: stage1 (O->H) then stage2 (H->C)
@@ -156,7 +195,7 @@
     ctx.bezierCurveTo(mx,yb1,mx,r.yb0,x0,r.yb0);
     ctx.closePath();
     var pulse=0.16+0.12*Math.sin(t*1.6+r.ph*6.283);
-    ctx.fillStyle=hex2rgba(r.col, reduce?0.30:pulse+0.14);
+    ctx.fillStyle=hex2rgba(r.col, reduce?RIBR:(pulse+RIBA));
     ctx.fill();
   }
 

@@ -5,13 +5,18 @@
 <meta name="description" content="Interlocking gold and ink chevron bands march in alternating directions with a gold diamond convoy down a central seam on black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Chevron March</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0b08;overflow:hidden}
+  :root{--ad04-bg:#0c0b08;--ad04-gold:#d4af37;--ad04-gold-hi:#f3dd92;--ad04-gold-lo:#8a6d1f;--ad04-line:#f3dd92;--ad04-ink-a:#14110a;--ad04-ink-b:#070603;--ad04-vignette:rgba(0,0,0,.72);--ad04-cap:#fff;--ad04-cap-o:.42}  /* theme tokens — dark defaults (solid-dark-bg contract); JS paints with these, see syncTheme() */
+  :root[data-theme="light"]{--ad04-bg:#f7f1e4;--ad04-gold:#87681a;--ad04-gold-hi:#b08a2a;--ad04-gold-lo:#5f4a12;--ad04-line:#6b4f12;--ad04-ink-a:#efe7d5;--ad04-ink-b:#e4d9c0;--ad04-vignette:rgba(120,92,30,.16);--ad04-cap:#2a2110;--ad04-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--ad04-bg);overflow:hidden}
   #ad04-stage{position:fixed;inset:0;display:block}
-  #ad04-c{position:absolute;inset:0;width:100%;height:100%;
-    box-shadow:inset 0 0 90px 18px rgba(0,0,0,.72)}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  #ad04-c{position:absolute;inset:0;width:100%;height:100%;box-shadow:inset 0 0 90px 18px var(--ad04-vignette)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ad04-cap);opacity:var(--ad04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -21,19 +26,21 @@
  "description": "Interlocking gold and ink chevron bands march in alternating directions across a black canvas; a convoy of gold diamonds glides down a central seam.",
  "useWhen": "Art deco hero backgrounds, luxury brand splashes, ornamental loading screens with a black-and-gold palette.",
  "avoidWhen": "Light-background UIs — background is hardcoded near-black. Contexts requiring legible text overlays due to constant band motion.",
- "agentPrompt": "Change GOLD to '#c9a84c' and GOLDHI to '#ffe066', increase baseSpeed multiplier from 0.10 to 0.18 for a faster march, and raise diamond count dn from 7 to 12.",
+ "agentPrompt": "Change GOLD to '#c9a84c' and GOLDHI to '#ffe066', increase baseSpeed multiplier from 0.10 to 0.18 for a faster march, and raise diamond count dn from 7 to 12. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gold palette (GOLD, GOLDHI, GOLDLO constants)",
   "march speed (baseSpeed = W*0.10)",
   "band height ratio (H/9)",
   "diamond count (dn=7) and size (bandH*0.30)",
-  "chevron amplitude (bandH*0.85)"
+  "chevron amplitude (bandH*0.85)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange stop/start lifecycle",
   "prefers-reduced-motion static-frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and BG constant — must change both to alter background",
@@ -47,7 +54,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-deco",
@@ -73,8 +81,11 @@
   var cv = document.getElementById('ad04-c');
   var ctx = cv.getContext('2d');
 
-  // Palette
-  var BG='#0c0b08', GOLD='#d4af37', GOLDHI='#f3dd92', GOLDLO='#8a6d1f', INK='#08070500';
+  var root=document.documentElement, BG,GOLD,GOLDHI,GOLDLO,LINE,INKA,INKB;   // palette: CSS tokens, read at start + on each theme flip, never per frame
+  function syncTheme(){ var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    BG=v('--ad04-bg');GOLD=v('--ad04-gold');GOLDHI=v('--ad04-gold-hi');GOLDLO=v('--ad04-gold-lo');LINE=v('--ad04-line');INKA=v('--ad04-ink-a');INKB=v('--ad04-ink-b');
+    if(bandH){ buildGrads(); if(reduce) draw(2.2); } }        // cached gradients still hold the old palette
+  addEventListener('message',function(e){ var d=e.data; if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
 
   var W=0,H=0,DPR=1, cx=0, bandH=0, rows=0, period=0;
   function size(){
@@ -135,8 +146,8 @@
     goldGrad.addColorStop(0.45, GOLD);
     goldGrad.addColorStop(1, GOLDLO);
     inkGrad = ctx.createLinearGradient(0,0,0,bandH*1.6);
-    inkGrad.addColorStop(0, '#14110a');
-    inkGrad.addColorStop(1, '#070603');
+    inkGrad.addColorStop(0, INKA);
+    inkGrad.addColorStop(1, INKB);
   }
 
   var t0=0;
@@ -174,7 +185,7 @@
     }
 
     // central vertical symmetry seam: fine gold double-line
-    ctx.strokeStyle = GOLDHI;
+    ctx.strokeStyle = LINE;
     ctx.globalAlpha = 0.18;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -196,7 +207,7 @@
       ctx.lineTo(cx, dy+dsz);
       ctx.lineTo(cx-dsz*0.62, dy);
       ctx.closePath();
-      ctx.fillStyle = GOLDHI;
+      ctx.fillStyle = LINE;
       ctx.globalAlpha = 0.9;
       ctx.fill();
       ctx.globalAlpha = 1;
@@ -215,7 +226,7 @@
     if(raf) cancelAnimationFrame(raf), raf=0;
   }
   function init(){
-    size(); buildGrads();
+    syncTheme(); size(); buildGrads();
   }
 
   window.addEventListener('resize', function(){

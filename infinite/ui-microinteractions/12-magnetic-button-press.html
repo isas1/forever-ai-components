@@ -5,11 +5,20 @@
 <meta name="description" content="Glowing teal PRESS pill that squashes on press with white ripples while its label is magnetically pulled toward an orbiting cursor dot.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Magnetic Button Press</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0F1A1B;}
+  /* theme tokens — dark defaults; light re-theme in [data-theme="light"]. --c12-accent/-accent2
+     feed the canvas rgba() strings; --c12-ink is the button-label colour. */
+  :root{ --c12-bg:#0F1A1B; --c12-accent:#22AEC3; --c12-accent2:#44CADE; --c12-ink:#0F1A1B; --c12-cap-o:.34; }
+  :root[data-theme="light"]{ --c12-bg:#eef6f7; --c12-accent:#177886; --c12-accent2:#35b6c9; --c12-ink:#EAFBFF; --c12-cap-o:.6; }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c12-bg);}
   #mbp-c{display:block;width:100%;height:100%;}
   .mbp-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
-       letter-spacing:.12em;color:#22AEC3;opacity:.34;text-transform:uppercase;
+       letter-spacing:.12em;color:var(--c12-accent);opacity:var(--c12-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +28,21 @@
  "description": "Glowing teal pill auto-cycles a press: squash/bulge, white ripple burst, and label that drifts magnetically toward an orbiting cursor dot.",
  "useWhen": "CTA button demos, interactive UI showcases, onboarding flows where you want to suggest tappability without requiring real user input.",
  "avoidWhen": "Production buttons requiring real click handling — the press is auto-cycled; wire a real click event and remove the loop before shipping.",
- "agentPrompt": "Change the button label from 'PRESS' to 'BUY NOW', set ACC to '#34D399' for a green accent, and slow the cycle by changing PERIOD from 190 to 280.",
+ "agentPrompt": "Change the button label from 'PRESS' to 'BUY NOW', set ACC to '#34D399' for a green accent, and slow the cycle by changing PERIOD from 190 to 280. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (ACC='#22AEC3')",
   "label text (label='PRESS')",
   "cycle length (PERIOD=190)",
   "squash intensity (press*0.06)",
-  "magnetic pull strength (pullStr=0.10)"
+  "magnetic pull strength (pullStr=0.10)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion guard",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Press cycle is auto-driven — not wired to real pointer clicks; replace with a click listener for production use",
@@ -44,7 +55,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "button",
@@ -65,7 +77,15 @@
 (function(){
   const cv=document.getElementById('mbp-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ACC='#22AEC3', BG='#0F1A1B';
+  const root=document.documentElement;
+  function hexToRgb(hex){hex=hex.replace('#','');if(hex.length===3)hex=hex.split('').map(c=>c+c).join('');const n=parseInt(hex,16);return ((n>>16)&255)+','+((n>>8)&255)+','+(n&255);}
+  const C={};                         // colours the canvas draws with — read from tokens
+  function syncTheme(){const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--c12-bg').trim();
+    C.accentRGB=hexToRgb(cs.getPropertyValue('--c12-accent').trim());
+    C.accent2RGB=hexToRgb(cs.getPropertyValue('--c12-accent2').trim());
+    C.inkRGB=hexToRgb(cs.getPropertyValue('--c12-ink').trim());}
+  syncTheme();
   let W,H,DPR,cx,cy,U;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -74,17 +94,14 @@
     cx=W/2;cy=H/2;U=Math.min(W,H)/100; // unit
   }
   addEventListener('resize',size);size();
-
   // cycle: 0 approach .35 | depress .50 | hold .58 | release .72 | settle 1
   const PERIOD=190; let t=0, ripples=[], pointer=null;
   function ease(x){return x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;}
   function spring(x){return 1-Math.cos(x*Math.PI*3.2)*Math.exp(-x*3.6);}
-
   cv.addEventListener('pointermove',e=>{
     const r=cv.getBoundingClientRect();
     pointer={x:e.clientX-r.left,y:e.clientY-r.top,life:1};
   });
-
   function fields(p){
     // p: 0..1 phase progress. returns {press,squash,labelPull}
     let press=0;
@@ -102,47 +119,39 @@
     else base=0;
     return base;
   }
-
   let lastPress=0;
   function frame(){
     t=(t+1)%PERIOD;
     const p=t/PERIOD;
-
-    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
-
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     // button geometry
     const bw=Math.min(W*0.62,H*1.5), bh=Math.min(H*0.32,bw*0.42);
     const rad=bh/2;
-
     // magnetic source: orbiting dot, or live pointer
     let mx,my;
     const orbR=bw*0.62, oa=p*Math.PI*2 - Math.PI*0.5;
     const odx=cx+Math.cos(oa)*orbR, ody=cy+Math.sin(oa)*orbR*0.55;
     if(pointer&&pointer.life>0){ mx=pointer.x; my=pointer.y; pointer.life-=0.012; }
     else { mx=odx; my=ody; }
-
     const press=fields(p); // 0..1
     // fire ripple on the depress edge
     if(press>0.55 && lastPress<=0.55 && !reduce){
       ripples.push({x:cx+(mx-cx)*0.18,y:cy,r0:rad*0.2,t:0});
     }
     lastPress=press;
-
     const squash=1-press*0.06;       // vertical squash 6%
     const widen=1+press*0.045;       // bulge sideways
     const sink=press*bh*0.10;        // pushes down slightly
     const by=cy+sink;
-
     // soft shadow that tightens on press
     ctx.save();
     ctx.translate(cx,by+bh*0.55+press*bh*0.12);
     ctx.scale(widen*(1-press*0.18),0.3);
     const sg=ctx.createRadialGradient(0,0,0,0,0,bw*0.55);
-    sg.addColorStop(0,'rgba(34,174,195,'+(0.30-press*0.10)+')');
-    sg.addColorStop(1,'rgba(34,174,195,0)');
+    sg.addColorStop(0,'rgba('+C.accentRGB+','+(0.30-press*0.10)+')');
+    sg.addColorStop(1,'rgba('+C.accentRGB+',0)');
     ctx.fillStyle=sg;ctx.beginPath();ctx.arc(0,0,bw*0.55,0,Math.PI*2);ctx.fill();
     ctx.restore();
-
     // button body
     ctx.save();
     ctx.translate(cx,by);
@@ -157,25 +166,23 @@
       ctx.closePath();}
     const grd=ctx.createLinearGradient(0,-h/2,0,h/2);
     const lift=1-press*0.35;
-    grd.addColorStop(0,'rgba(34,174,195,'+(0.98*lift)+')');
-    grd.addColorStop(1,'rgba(68,202,222,'+(0.95*lift)+')');
+    grd.addColorStop(0,'rgba('+C.accentRGB+','+(0.98*lift)+')');
+    grd.addColorStop(1,'rgba('+C.accent2RGB+','+(0.95*lift)+')');
     // outer glow (soft radial gradient instead of per-frame shadowBlur)
     const glowA=(0.55-press*0.25);
     const glowR=Math.max(w,h)*0.85;
     const gGlow=ctx.createRadialGradient(0,0,h*0.3,0,0,glowR);
-    gGlow.addColorStop(0,'rgba(34,174,195,'+(glowA*0.6)+')');
-    gGlow.addColorStop(0.5,'rgba(34,174,195,'+(glowA*0.32)+')');
-    gGlow.addColorStop(1,'rgba(34,174,195,0)');
+    gGlow.addColorStop(0,'rgba('+C.accentRGB+','+(glowA*0.6)+')');
+    gGlow.addColorStop(0.5,'rgba('+C.accentRGB+','+(glowA*0.32)+')');
+    gGlow.addColorStop(1,'rgba('+C.accentRGB+',0)');
     ctx.fillStyle=gGlow;ctx.fillRect(-glowR,-glowR,glowR*2,glowR*2);
     ctx.fillStyle=grd;
     pill(0,0,w,h,rad);ctx.fill();
-
     // top sheen
     const sh=ctx.createLinearGradient(0,-h/2,0,0);
     sh.addColorStop(0,'rgba(255,255,255,'+(0.22*lift)+')');
     sh.addColorStop(1,'rgba(255,255,255,0)');
     ctx.fillStyle=sh;pill(0,-h*0.02,w*0.96,h*0.92,rad*0.9);ctx.fill();
-
     // clip for ripples
     ctx.save();
     pill(0,0,w,h,rad);ctx.clip();
@@ -191,7 +198,6 @@
     }
     ctx.restore();
     ctx.restore(); // body transform
-
     // ---- LABEL: pulled toward magnetic dot ----
     const label='PRESS';
     const fs=bh*0.40;
@@ -207,32 +213,34 @@
     ctx.save();
     ctx.translate(lx,ly);
     ctx.scale(widen,squash*(1-press*0.04));
-    ctx.fillStyle='rgba(15,26,27,'+(0.92)+')';
+    ctx.fillStyle='rgba('+C.inkRGB+',0.92)';
     ctx.fillText(label,0,fs*0.04);
     ctx.restore();
-
     // magnetic cursor dot + connecting filament
     if(!reduce){
-      ctx.strokeStyle='rgba(34,174,195,'+(0.18*(press<0.3?1:0.4))+')';
+      ctx.strokeStyle='rgba('+C.accentRGB+','+(0.18*(press<0.3?1:0.4))+')';
       ctx.lineWidth=1.2;
       ctx.setLineDash([2,4]);
       ctx.beginPath();ctx.moveTo(lx,ly);ctx.lineTo(mx,my);ctx.stroke();
       ctx.setLineDash([]);
       const dotR=U*0.9+press*U*0.4;
       const dg=ctx.createRadialGradient(mx,my,0,mx,my,dotR*3);
-      dg.addColorStop(0,'rgba(34,174,195,0.9)');
-      dg.addColorStop(1,'rgba(34,174,195,0)');
+      dg.addColorStop(0,'rgba('+C.accentRGB+',0.9)');
+      dg.addColorStop(1,'rgba('+C.accentRGB+',0)');
       ctx.fillStyle=dg;ctx.beginPath();ctx.arc(mx,my,dotR*3,0,Math.PI*2);ctx.fill();
       ctx.fillStyle='#EAFBFF';ctx.beginPath();ctx.arc(mx,my,dotR,0,Math.PI*2);ctx.fill();
     }
-
     raf=requestAnimationFrame(frame);
   }
-
   let raf=0;
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme(); if(reduce) frame();
+    }});
   if(reduce){ t=0; ripples=[]; frame(); } else start();
 })();
 </script>

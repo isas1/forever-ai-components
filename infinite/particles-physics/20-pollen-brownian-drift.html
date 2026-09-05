@@ -5,11 +5,26 @@
 <meta name="description" content="Soft warm and grey motes drift sideways on a cream paper field with random Brownian jitter, leaving faint fading trails; cursor stirs gusts.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pollen Brownian Drift</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#f2efe6;}
+  /* theme tokens — the tile's own (paper) palette is the default; the light re-theme is a
+     cleaner sheet with deeper motes. --pbd-warm/-cool are the mote rgb ends. */
+  :root{
+    --pbd-bg:#f2efe6; --pbd-wash:rgba(242,239,230,0.14); --pbd-accent:#c0563c; --pbd-cap-o:.36;
+    --pbd-warm:192,86,60; --pbd-cool:150,148,138;
+  }
+  :root[data-theme="light"]{
+    --pbd-bg:#faf7f0; --pbd-wash:rgba(250,247,240,0.14); --pbd-accent:#a8482f; --pbd-cap-o:.5;
+    --pbd-warm:176,72,48; --pbd-cool:128,126,116;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pbd-bg);}
   #pbd-c{display:block;width:100%;height:100%;}
   .pbd-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.14em;color:#c0563c;opacity:.36;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--pbd-accent);opacity:var(--pbd-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +34,21 @@
  "description": "Up to 260 warm and grey motes drift sideways on a cream field with random Brownian jitter, leaving faint fading trails; pointer and click stir gusts.",
  "useWhen": "Organic/nature-themed backgrounds, editorial hero sections with a soft paper aesthetic, ambient loading screens.",
  "avoidWhen": "Dark-background designs (background hardcoded cream). Content-heavy layouts where floating particles distract from text.",
- "agentPrompt": "Change the particle palette to cool blue-grey tones by setting the warm accent RGB (192,86,60) to (80,130,200), reduce mote count cap to 160, and slow drift by setting the drift base to 0.10.",
+ "agentPrompt": "Change the particle palette to cool blue-grey tones by setting the warm accent RGB (192,86,60) to (80,130,200), reduce mote count cap to 160, and slow drift by setting the drift base to 0.10. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "particle count cap (N=260)",
   "laminar drift speed (drift formula, +0.18 base)",
   "mote radius range (0.7–3.1 * S)",
   "accent color RGB (192,86,60 warm)",
-  "background/trail wash color (#f2efe6 / rgba 0.14 alpha)"
+  "background/trail wash color (#f2efe6 / rgba 0.14 alpha)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "IIFE wrapper",
   "reduced-motion static fallback (rest())",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background hardcoded cream (#f2efe6) in both CSS and canvas fill — must change both to retheme",
@@ -43,7 +60,8 @@
   "accessible",
   "mobile-ready",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "particles",
@@ -65,6 +83,19 @@
   const cv=document.getElementById('pbd-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,S,N,parts,drift;
+  // paper + mote colours come from the tokens; a theme flip re-reads them and repaints the sheet
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    C.bg=g('--pbd-bg');C.wash=g('--pbd-wash');
+    C.warm=g('--pbd-warm').split(',').map(Number);C.cool=g('--pbd-cool').split(',').map(Number);
+    if(W){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);if(reduce)rest();}   // old sheet would linger
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }});
+  syncTheme();
   function rnd(){return Math.random()*2-1;}
   function seed(p,fresh){
     p.x=fresh?Math.random()*W:p.x; p.y=Math.random()*H;
@@ -82,7 +113,7 @@
     drift=Math.min(W,H)*0.0006+0.18;       // slow laminar sideways pull
     N=Math.min(260,Math.round(Math.min(W,H)*0.55)+70);
     parts=[];for(let i=0;i<N;i++){const p={};seed(p,true);parts.push(p);}
-    ctx.fillStyle='#f2efe6';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
   }
   addEventListener('resize',size);size();
   let gust=0;
@@ -90,7 +121,7 @@
   cv.addEventListener('click',()=>{gust=Math.min(gust+1.6,4);});
   function frame(){
     // faint diffusion smear: translucent wash leaves fading trails
-    ctx.fillStyle='rgba(242,239,230,0.14)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.wash;ctx.fillRect(0,0,W,H);
     gust*=0.95;
     const dx=(drift+gust*0.6);
     for(let i=0;i<N;i++){
@@ -103,19 +134,19 @@
       else if(p.x<-4){p.x=W+4;}
       if(p.y>H+4){p.y=-4;} else if(p.y<-4){p.y=H+4;}
       const warm=p.h/28;                    // 0..~1 toward accent
-      const R=Math.round(192*warm+150*(1-warm));
-      const G=Math.round(86*warm+148*(1-warm));
-      const B=Math.round(60*warm+138*(1-warm));
+      const R=Math.round(C.warm[0]*warm+C.cool[0]*(1-warm));
+      const G=Math.round(C.warm[1]*warm+C.cool[1]*(1-warm));
+      const B=Math.round(C.warm[2]*warm+C.cool[2]*(1-warm));
       ctx.fillStyle='rgba('+R+','+G+','+B+','+p.a+')';
       ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.2832);ctx.fill();
     }
     raf=requestAnimationFrame(frame);
   }
   function rest(){
-    ctx.fillStyle='#f2efe6';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     for(let i=0;i<N;i++){const p=parts[i];
       const warm=p.h/28;
-      const R=Math.round(192*warm+150*(1-warm)),G=Math.round(86*warm+148*(1-warm)),B=Math.round(60*warm+138*(1-warm));
+      const R=Math.round(C.warm[0]*warm+C.cool[0]*(1-warm)),G=Math.round(C.warm[1]*warm+C.cool[1]*(1-warm)),B=Math.round(C.warm[2]*warm+C.cool[2]*(1-warm));
       ctx.fillStyle='rgba('+R+','+G+','+B+','+p.a+')';
       ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.2832);ctx.fill();}
   }

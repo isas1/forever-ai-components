@@ -5,11 +5,28 @@
 <meta name="description" content="Aperiodic Wang-tile mosaic of four-wedge tiles that domino-flip into place in a cascade with seam-matching glow on warm earth tones.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wang Tiles</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1B1E1A;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme lives in the one [data-theme="light"] block. --wt-p0..--wt-p3 are the
+     four edge colours of the tile alphabet; in light they deepen a step so the mosaic still
+     separates from the pale ground (the centre stud is always the ground colour). */
+  :root{
+    --wt-bg:#1B1E1A; --wt-p0:#B1CCA4; --wt-p1:#D8B297; --wt-p2:#AFBCA9; --wt-p3:#7C8F73;
+    --wt-cap:#B1CCA4; --wt-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --wt-bg:#f4f6f1; --wt-p0:#8FA97F; --wt-p1:#C89A73; --wt-p2:#A3AE9B; --wt-p3:#5F7355;
+    --wt-cap:#4b6b3c; --wt-cap-o:.78;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--wt-bg);}
   #wt-c{display:block;width:100%;height:100%;}
   .wt-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
-       letter-spacing:.14em;color:#B1CCA4;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--wt-cap);opacity:var(--wt-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +36,21 @@
  "description": "Aperiodic Wang-tile mosaic of four-wedge tiles that domino-flip in a diagonal cascade with matched-seam glow on warm earth tones.",
  "useWhen": "Generative art backgrounds, loading screens, or any context needing mathematically structured infinite pattern variety.",
  "avoidWhen": "Layouts requiring legible text overlays or low-end devices where per-frame grid iteration may drop frames.",
- "agentPrompt": "Change PAL to cool blues and greens (e.g. ['#D8B297','#5B8FA8','#AFBCA9','#10b981']), increase tile size by setting S=Math.max(48, Math.round(m/5)), and slow the cascade by changing t+=0.012.",
+ "agentPrompt": "Change PAL to cool blues and greens (e.g. ['#D8B297','#5B8FA8','#AFBCA9','#10b981']), increase tile size by setting S=Math.max(48, Math.round(m/5)), and slow the cascade by changing t+=0.012. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "edge color palette (PAL array, 4 colors)",
   "tile size floor (Math.max(34, ...))",
   "cascade speed (t += 0.022)",
   "pointer nudge strength (nudge+0.4)",
-  "seam glow fade duration (1.0 offset)"
+  "seam glow fade duration (1.0 offset)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "Wang tile constraint logic (findTile top/left matching)",
   "IIFE wrapper",
   "prefers-reduced-motion guard + static fallback",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and canvas fillRect — must change both to retheme",
@@ -45,7 +64,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "wang-tiles",
@@ -81,6 +101,20 @@
     // unconstrained first row/col -> random; otherwise the unique match
     return cand[(Math.random()*cand.length)|0];
   }
+  // theme: the four wedge colours and the board colour come from the CSS tokens.
+  // The rAF loop repaints every frame, so a flip needs no manual redraw.
+  const root=document.documentElement;
+  const C={bg:'#1B1E1A'};
+  function syncTheme(){
+    const cs=getComputedStyle(root),s=n=>cs.getPropertyValue(n).trim();
+    C.bg=s('--wt-bg')||C.bg;
+    for(let i=0;i<K;i++){const v=s('--wt-p'+i);if(v)PAL[i]=v;}
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();}
+  });
+  syncTheme();
   let W,H,DPR,cols,rows,S,ox,oy,grid;
   function build(){
     grid=[];
@@ -118,7 +152,7 @@
 
   function frame(){
     t+=reduce?0:(0.022+nudge*0.01);nudge*=0.92;
-    ctx.fillStyle='#1B1E1A';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const wave=t*1.0; // cascade front sweeps across the grid
     for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
       const cell=grid[r][c];
@@ -137,7 +171,7 @@
       for(let ci=0;ci<4;ci++) wedge(x+gap,y+gap,S-gap*2,ci,SET[cell.t][ci]);
       // centre stud
       ctx.globalAlpha=alpha*0.9;
-      ctx.fillStyle='#1B1E1A';
+      ctx.fillStyle=C.bg;
       ctx.beginPath();ctx.arc(x+S/2,y+S/2,S*0.07,0,Math.PI*2);ctx.fill();
       ctx.restore();
       // seam glow: when a tile has just landed, light the matching edges it shares

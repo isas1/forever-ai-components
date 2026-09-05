@@ -5,15 +5,31 @@
 <meta name="description" content="An endless flight through receding rainbow-hued neon rings rushing toward the viewer in a rotating perspective tunnel.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Perspective Tunnel</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#05060f;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block.
+     --c09-ring is the "S% L%" pair of the JS hue cycle: neon on dark, inked-in on light. */
+  :root{
+    --c09-bg:#05060f; --c09-ring:90% 62%; --c09-glow:rgba(106,208,255,.45); --c09-fade:.15;
+    --c09-cap:#6ad0ff; --c09-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --c09-bg:#f2f4fb; --c09-ring:72% 34%; --c09-glow:rgba(30,60,120,.16); --c09-fade:.34;
+    --c09-cap:#14203a; --c09-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c09-bg);
     font-family:system-ui,-apple-system,sans-serif;}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:420px;perspective-origin:50% 50%;}
   #tunnel{position:relative;width:62vmin;height:62vmin;transform-style:preserve-3d;}
   .ring{position:absolute;inset:0;border:2px solid;border-radius:10px;
-    box-shadow:0 0 12px rgba(106,208,255,.45);}
-  .cap{position:fixed;left:10px;bottom:8px;color:#6ad0ff;opacity:.34;
+    box-shadow:0 0 12px var(--c09-glow);}
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--c09-cap);opacity:var(--c09-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -23,20 +39,22 @@
  "description": "18 neon rings recede through a CSS 3D perspective tunnel, cycling rainbow hues and rotating as they rush toward the viewer. Pointer X-axis steers the spin rate.",
  "useWhen": "Dark-mode hero backgrounds, sci-fi or cyberpunk themes, immersive loading screens or intros needing strong depth illusion.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy), motion-sensitive audiences (no static fallback beyond pause), or contexts where legible text must overlay the animation.",
- "agentPrompt": "Change ring count to 24, set base spin to 0.5, and shift the hue formula to start at blue tones by replacing `o.z*0.12` with `o.z*0.08+180`.",
+ "agentPrompt": "Change ring count to 24, set base spin to 0.5, and shift the hue formula to start at blue tones by replacing `o.z*0.12` with `o.z*0.08+180`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ring count (N=18)",
   "base spin speed (spin=0.25)",
   "perspective depth (SPAN=1800)",
   "hue shift formula (o.z*0.12+roll*2)",
   "ring border-radius (10px)",
-  "pointer influence range (1.6 multiplier)"
+  "pointer influence range (1.6 multiplier)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange stop/start guard",
   "prefers-reduced-motion check",
   "IIFE-style scoped constants",
-  "SPAN-based z wrapping (o.z -= SPAN)"
+  "SPAN-based z wrapping (o.z -= SPAN)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No reduced-motion static fallback — animation is fully stopped but no still frame is shown",
@@ -50,7 +68,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "tunnel",
@@ -68,6 +87,7 @@
 <div id="stage"><div id="tunnel"></div></div>
 <div class="cap">Perspective Tunnel</div>
 <script>
+(function(){
   const tunnel=document.getElementById('tunnel');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const N=18,SPAN=1800,rings=[];
@@ -77,6 +97,21 @@
     rings.push({el:r,z:-(i/N)*SPAN});
   }
   let raf,roll=0,interacted=false,spin=0.25;
+  // ring colour is JS-drawn: read its saturation/lightness pair once here, once per switch
+  const docEl=document.documentElement;
+  let ringSL='90% 62%',fade=0.15;   // fade = opacity of the farthest ring
+  function syncTheme(){
+    const cs=getComputedStyle(docEl);
+    ringSL=cs.getPropertyValue('--c09-ring').trim()||'90% 62%';
+    fade=parseFloat(cs.getPropertyValue('--c09-fade'))||0.15;
+    // repaint from each ring's last hue so a switch shows even when the loop is paused
+    rings.forEach(o=>{if(o.hue!=null)o.el.style.color=`hsl(${o.hue} ${ringSL})`;});
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      docEl.setAttribute('data-theme',d.theme);syncTheme();}});
+  syncTheme();
   function loop(){
     roll+=spin;
     rings.forEach(o=>{
@@ -84,8 +119,9 @@
       if(o.z>200)o.z-=SPAN;
       const depth=(o.z+SPAN)/SPAN;            // 0 far .. ~1 near
       const hue=(o.z*0.12+roll*2)%360;
-      o.el.style.color=`hsl(${(hue+360)%360} 90% 62%)`;
-      o.el.style.opacity=(0.15+depth*0.85).toFixed(2);
+      o.hue=(hue+360)%360;
+      o.el.style.color=`hsl(${o.hue} ${ringSL})`;
+      o.el.style.opacity=(fade+depth*(1-fade)).toFixed(2);
       const sc=0.2+depth*0.9;
       o.el.style.transform=`translateZ(${o.z}px) rotateZ(${roll+o.z*0.05}deg) scale(${sc})`;
     });
@@ -97,6 +133,7 @@
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
   if(reduce){loop();cancelAnimationFrame(raf);raf=0;}else start();
+})();
 </script>
 </body>
 </html>

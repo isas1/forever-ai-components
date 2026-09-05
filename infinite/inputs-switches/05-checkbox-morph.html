@@ -5,14 +5,27 @@
 <meta name="description" content="Row of three amber rounded checkboxes that fill and draw an animated checkmark stroke as they toggle on and off.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Checkbox Morph</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1a1206;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  :root{
+    --c05-bg:#1a1206; --c05-box-off:#5a4520; --c05-box-on:#ffb02e; --c05-check:#1a1206;
+    --c05-cap:#ffb02e; --c05-cap-o:.45;
+  }
+  :root[data-theme="light"]{
+    --c05-bg:#f6f2ea; --c05-box-off:#5a4520; --c05-box-on:#995f00; --c05-check:#f6f2ea;
+    --c05-cap:#995f00; --c05-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c05-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   .wrap{height:100%;display:flex;align-items:center;justify-content:center;gap:18px}
   svg{width:min(20vmin,86px);height:auto;cursor:pointer}
-  .box{fill:none;stroke:#5a4520;stroke-width:7;transition:fill .35s,stroke .35s}
-  .box.on{fill:#ffb02e;stroke:#ffb02e}
-  .check{fill:none;stroke:#1a1206;stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
-  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#ffb02e;opacity:.45;text-transform:uppercase}
+  .box{fill:none;stroke:var(--c05-box-off);stroke-width:7;transition:fill .35s,stroke .35s}
+  .box.on{fill:var(--c05-box-on);stroke:var(--c05-box-on)}
+  .check{fill:none;stroke:var(--c05-check);stroke-width:9;stroke-linecap:round;stroke-linejoin:round}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c05-cap);opacity:var(--c05-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -21,18 +34,20 @@
  "description": "Three amber rounded checkboxes auto-cycle and respond to clicks; the box fills and a checkmark strokes in via animated dashoffset.",
  "useWhen": "Settings panels, form demos, or any UI showcase needing a tactile checkbox feel with ambient motion.",
  "avoidWhen": "Production forms requiring immediate user control — remove the auto-cycle clock loop before shipping.",
- "agentPrompt": "Change accent from amber to teal (#2dd4bf), increase checkbox count from 3 to 5, and slow the checkmark stroke to 0.10 lerp factor.",
+ "agentPrompt": "Change accent from amber to teal (#2dd4bf), increase checkbox count from 3 to 5, and slow the checkmark stroke to 0.10 lerp factor. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (#ffb02e)",
   "checkbox count (loop 0..3)",
   "auto-cycle interval (clock%150)",
   "checkmark lerp speed (0.18)",
-  "corner radius (rx=20)"
+  "corner radius (rx=20)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static checked fallback",
-  "visibilitychange pause"
+  "visibilitychange pause",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — remove the frame loop for production use",
@@ -45,7 +60,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "checkbox",
@@ -96,6 +112,11 @@
     requestAnimationFrame(frame);
   }
   document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
   if(reduce){boxes.forEach(o=>{o.on=true;render(o);o.p.style.strokeDashoffset=0;});}
   else requestAnimationFrame(frame);
 })();

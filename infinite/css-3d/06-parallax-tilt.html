@@ -5,8 +5,30 @@
 <meta name="description" content="A glowing orange sun with orbiting colored dots in layered 3D depth that tilts and parallaxes toward the pointer.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Parallax Depth</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1D1917;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block.
+     --c06-dots is the JS dot palette (4 comma-separated hexes), read in syncTheme(). */
+  :root{
+    --c06-bg:#1D1917;
+    --c06-sun:radial-gradient(circle at 38% 35%,#ffe39a,#ff7a45 70%);
+    --c06-sun-glow:0 0 40px #ff9a4d;
+    --c06-dots:#7ec8ff,#BCAFA9,#8effc4,#ffd86b;
+    --c06-cap:#EEBAA0; --c06-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --c06-bg:#f7f2ee;
+    --c06-sun:radial-gradient(circle at 38% 35%,#ffcf6b,#cc3a00 70%);
+    --c06-sun-glow:0 0 40px rgba(204,58,0,.28);
+    --c06-dots:#006fc2,#7e6b62,#007f3d,#8f6900;
+    --c06-cap:#2c211c; --c06-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c06-bg);
     font-family:system-ui,-apple-system,sans-serif;}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:700px;}
@@ -14,10 +36,10 @@
   .layer{position:absolute;inset:0;}
   .sun{position:absolute;left:50%;top:50%;width:24vmin;height:24vmin;border-radius:50%;
     transform:translate(-50%,-50%);
-    background:radial-gradient(circle at 38% 35%,#ffe39a,#ff7a45 70%);
-    box-shadow:0 0 40px #ff9a4d;}
+    background:var(--c06-sun);
+    box-shadow:var(--c06-sun-glow);}
   .dot{position:absolute;left:50%;top:50%;border-radius:50%;}
-  .cap{position:fixed;left:10px;bottom:8px;color:#EEBAA0;opacity:.34;
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--c06-cap);opacity:var(--c06-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -27,20 +49,22 @@
  "description": "A glowing sun with colored orbiting dots on layered CSS 3D planes that tilt and parallax toward the pointer; auto-orbits until interaction.",
  "useWhen": "Hero backgrounds, product showcases, or landing pages needing ambient 3D depth without canvas overhead.",
  "avoidWhen": "Contexts requiring legible text overlays — tilt motion competes with reading. Avoid on pages where pointer events are consumed by other UI.",
- "agentPrompt": "Change the sun color to warm gold-white (#fff4d6 to #D8D097 gradient), increase dot count in the near layer from 6 to 10, and slow orbit speed by halving all `sp` values.",
+ "agentPrompt": "Change the sun color to warm gold-white (#fff4d6 to #D8D097 gradient), increase dot count in the near layer from 6 to 10, and slow orbit speed by halving all `sp` values. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "sun gradient colors (#ffe39a, #ff7a45)",
   "dot color palette (colors array)",
   "orbit dot counts (spawn calls: 8 mid, 6 near)",
   "tilt intensity (tx*0.18 / ty*0.18 multipliers)",
   "perspective depth (700px on #stage)",
-  "auto-orbit idle speed (auto+=0.02)"
+  "auto-orbit idle speed (auto+=0.02)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "transform-style:preserve-3d on #card",
   "visibilitychange pause/resume",
   "prefers-reduced-motion guard (reduce var)",
-  "layer depth cache outside rAF loop"
+  "layer depth cache outside rAF loop",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No reduced-motion static fallback — tile simply freezes on first frame rather than showing a non-animated state",
@@ -54,7 +78,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "parallax",
@@ -79,26 +104,38 @@
 </div>
 <div class="cap">Parallax Depth</div>
 <script>
+(function(){
   const card=document.getElementById('card');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   // cache layer depth once (dataset parse out of the frame loop)
   const layers=[...card.querySelectorAll('.layer')].map(el=>({el,d:+el.dataset.d}));
-  const colors=['#7ec8ff','#BCAFA9','#8effc4','#ffd86b'];
   const dots=[];
   function spawn(host,depth,n){
     for(let i=0;i<n;i++){
       const s=depth>80?(2.4+Math.random()*2.4):(1.4+Math.random()*1.6);
-      const c=colors[(Math.random()*4)|0];
+      const ci=(Math.random()*4)|0;                 // palette slot; colour comes from the theme token
       const d=document.createElement('div');d.className='dot';
-      d.style.cssText=`width:${s}vmin;height:${s}vmin;background:${c};box-shadow:0 0 10px ${c}`;
+      d.style.cssText=`width:${s}vmin;height:${s}vmin`;
       host.appendChild(d);
       // r stored in vmin (orbit % of the 60vmin card → *0.6)
-      dots.push({el:d,r:(24+Math.random()*22)*0.6,a:Math.random()*6.28,
+      dots.push({el:d,ci,r:(24+Math.random()*22)*0.6,a:Math.random()*6.28,
         sp:(0.003+Math.random()*0.008)*(Math.random()<.5?-1:1)});
     }
   }
   spawn(document.getElementById('mid'),40,8);
   spawn(document.getElementById('near'),110,6);
+  // dot colours are JS-drawn: read them from --c06-dots once here and once per theme switch
+  const docEl=document.documentElement;
+  function syncTheme(){
+    const cols=getComputedStyle(docEl).getPropertyValue('--c06-dots').split(',').map(c=>c.trim());
+    dots.forEach(o=>{const c=cols[o.ci%cols.length];
+      o.el.style.background=c;o.el.style.boxShadow=`0 0 10px ${c}`;});
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      docEl.setAttribute('data-theme',d.theme);syncTheme();}});
+  syncTheme();
   let tx=0,ty=0,auto=0,interacted=false,raf;
   addEventListener('pointermove',e=>{interacted=true;
     tx=(e.clientX/innerWidth-.5)*60;ty=(e.clientY/innerHeight-.5)*46;});
@@ -115,6 +152,7 @@
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
   if(reduce){loop();cancelAnimationFrame(raf);raf=0;}else start();
+})();
 </script>
 </body>
 </html>

@@ -5,21 +5,24 @@
 <meta name="description" content="The word WARP in bold serif rippling and bulging over swirling gold-amber lava blobs in Fillmore-poster gradient hues.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Warp Type</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  /* theme tokens — dark defaults; light = deepened poster inks on cream. --ps03-p1..p6 is the JS blob+lettering palette (6-digit hex: JS parses it). */
+  :root{--ps03-bg:#0a0612;--ps03-stage1:#2a1c08;--ps03-halo:rgba(178,146,52,.16);--ps03-halo-blend:screen;--ps03-blend:screen;--ps03-outline:rgba(10,6,18,0.9);--ps03-p1:#B29234;--ps03-p2:#ff7a1a;--ps03-p3:#ffd23f;--ps03-p4:#A19A87;--ps03-p5:#C08459;--ps03-p6:#B29234;--ps03-cap:#fff;--ps03-cap-o:.42}
+  :root[data-theme="light"]{--ps03-bg:#f7f2e6;--ps03-stage1:#f0e2bc;--ps03-halo:rgba(150,116,20,.16);--ps03-halo-blend:multiply;--ps03-blend:multiply;--ps03-outline:rgba(247,242,230,0.9);--ps03-p1:#82640f;--ps03-p2:#c0490a;--ps03-p3:#b8860b;--ps03-p4:#6d6752;--ps03-p5:#8a5730;--ps03-p6:#82640f;--ps03-cap:#2b2210;--ps03-cap-o:.62}
+  html,body{margin:0;height:100%;background:var(--ps03-bg);overflow:hidden}
   #ps03-stage{position:fixed;inset:0;display:block;width:100%;height:100%;
-    background:
-      radial-gradient(120% 90% at 50% 42%, #2a1c08 0%, #0a0612 70%),
-      #0a0612;}
-  #ps03-c{position:absolute;inset:0;width:100%;height:100%;
-    /* static glow, never repainted */
-    filter:none;}
+    background:radial-gradient(120% 90% at 50% 42%, var(--ps03-stage1) 0%, var(--ps03-bg) 70%),var(--ps03-bg);}
+  #ps03-c{position:absolute;inset:0;width:100%;height:100%;filter:none;/* static glow, never repainted */}
   /* glow lives as a fixed pseudo-layer, not animated */
   #ps03-stage::after{content:"";position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(60% 45% at 50% 46%, rgba(178,146,52,.16), transparent 70%);
-    mix-blend-mode:screen;}
+    background:radial-gradient(60% 45% at 50% 46%, var(--ps03-halo), transparent 70%);mix-blend-mode:var(--ps03-halo-blend);}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
+    color:var(--ps03-cap);opacity:var(--ps03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -29,20 +32,22 @@
  "description": "Bold serif \"WARP\" sliced into vertical columns that ripple and bulge over swirling gold-amber lava blobs rendered with additive screen blending.",
  "useWhen": "Psychedelic or retro-poster hero sections, music/festival visuals, full-bleed ambient backgrounds needing dramatic motion.",
  "avoidWhen": "Low-end mobile (per-frame offscreen drawImage slicing is CPU-bound). Layouts requiring legible, stable text.",
- "agentPrompt": "Change the word to 'FLUX', set slice width to 4 for smoother warp, and shift the blob palette to warm amber tones by replacing palette[0] and palette[2].",
+ "agentPrompt": "Change the word to 'FLUX', set slice width to 4 for smoother warp, and shift the blob palette to warm amber tones by replacing palette[0] and palette[2]. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (word='WARP')",
   "slice column width (slice=6)",
   "blob count (NB=6)",
   "warp amplitude multipliers (dh*0.085, dh*0.05)",
   "Fillmore palette array (palette[])",
-  "font size scale (S*0.30)"
+  "font size scale (S*0.30)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "offscreen text cache (off canvas rebuilt on resize)",
   "blob gradient transform pattern (setTransform scale trick)",
   "visibilitychange pause",
-  "reduced-motion static frame fallback"
+  "reduced-motion static frame fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Per-column drawImage slicing is CPU-bound — slice=6 means ~100+ draw calls per frame at full width",
@@ -55,7 +60,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -77,13 +83,15 @@
 <script>
 (function(){
   "use strict";
+  var root=document.documentElement;
   var stage=document.getElementById("ps03-stage");
   var cv=document.getElementById("ps03-c");
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  // Fillmore-poster palette, swirled complementary hues
+  // Fillmore-poster palette, swirled complementary hues — filled from --ps03-p1..p6
   var palette=[ "#B29234","#ff7a1a","#ffd23f","#A19A87","#C08459","#B29234" ];
+  var OUTLINE="rgba(10,6,18,0.9)", BLEND="screen";
 
   // cached layout
   var W=0,H=0,DPR=1,S=0,cx=0,cy=0;
@@ -131,7 +139,7 @@
 
   function blobLayer(t){
     // slow lava-lamp blobs as additive radial fills (drawn, not filter-animated)
-    ctx.globalCompositeOperation="screen";
+    ctx.globalCompositeOperation=BLEND;   // additive on black / ink build-up on cream
     ctx.globalAlpha=0.42;
     for(var i=0;i<NB;i++){
       var px=cx + Math.sin(t*bsp[i]+bph[i])*S*0.20 + (bx[i]-0.5)*W*0.7;
@@ -166,16 +174,22 @@
     octx.textBaseline="middle"; octx.textAlign="center";
     // gradient fill across the word, complementary sweep
     var grad=octx.createLinearGradient(0,0,offW,0);
-    grad.addColorStop(0,"#ffd23f"); grad.addColorStop(0.4,"#B29234");
-    grad.addColorStop(0.7,"#C08459"); grad.addColorStop(1,"#A19A87");
+    grad.addColorStop(0,palette[2]); grad.addColorStop(0.4,palette[0]);
+    grad.addColorStop(0.7,palette[4]); grad.addColorStop(1,palette[3]);
     octx.fillStyle=grad;
     octx.lineJoin="round";
-    octx.strokeStyle="rgba(10,6,18,0.9)"; octx.lineWidth=fsz*0.045;
+    octx.strokeStyle=OUTLINE; octx.lineWidth=fsz*0.045;
     octx.strokeText(word,offW/2,offH/2);
     octx.fillText(word,offW/2,offH/2);
   }
-  buildText();
-  buildBlobs();
+  // JS-drawn colours read the tokens at start + on each switch; the cached blob gradients and word bitmap rebuild here
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){return cs.getPropertyValue(n).trim();};
+    for(var i=0;i<6;i++) palette[i]=g("--ps03-p"+(i+1));
+    OUTLINE=g("--ps03-outline"); BLEND=g("--ps03-blend"); buildText(); buildBlobs(); }
+  addEventListener("message",function(e){ var d=e.data; if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+    root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce) frame(2.2); }});
+  syncTheme();
 
   function drawWarp(t){
     // place word centered; slice it into vertical columns and warp each
@@ -219,15 +233,11 @@
   function startLoop(){ if(!raf){ start=0; raf=requestAnimationFrame(loop);} }
   function stopLoop(){ running=false; if(raf){cancelAnimationFrame(raf);raf=0;} }
 
-  window.addEventListener("resize",function(){
-    resize(); buildText(); buildBlobs();
-    if(reduce){ frame(2.2); }
-  });
+  window.addEventListener("resize",function(){ resize(); buildText(); buildBlobs(); if(reduce){ frame(2.2); } });
 
   document.addEventListener("visibilitychange",function(){
     if(reduce) return;
-    if(document.hidden){ running=false; if(raf){cancelAnimationFrame(raf);raf=0;} }
-    else { running=true; startLoop(); }
+    if(document.hidden){ running=false; if(raf){cancelAnimationFrame(raf);raf=0;} } else { running=true; startLoop(); }
   });
 
   if(reduce){

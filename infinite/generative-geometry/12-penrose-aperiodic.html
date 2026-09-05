@@ -5,11 +5,30 @@
 <meta name="description" content="Penrose rhombus tiling with a fivefold center, recoloured by a wave radiating outward in gold, rose and plum hues.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Penrose Aperiodic</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1a1423;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme lives in the one [data-theme="light"] block.
+     --pen-base is --pen-bg as an rgb triple (the ramp starts from the page colour):
+     keep the two in sync. In light the wave inverts — crests go dark amber on a pale field. */
+  :root{
+    --pen-bg:#1a1423; --pen-base:26,20,35; --pen-acc:212,175,106;
+    --pen-deep:58,40,82; --pen-rose:150,78,96; --pen-edge:233,221,201;
+    --pen-glow:212,175,106; --pen-glow-a:0.30; --pen-edge-k:1; --pen-cap:#d4af6a; --pen-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --pen-bg:#f6f1f7; --pen-base:246,241,247; --pen-acc:138,94,26;
+    --pen-deep:176,158,200; --pen-rose:208,152,164; --pen-edge:72,56,92;
+    --pen-glow:138,94,26; --pen-glow-a:0.20; --pen-edge-k:2; --pen-cap:#8a5e1a; --pen-cap-o:.8;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pen-bg);}
   #pen-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
-       letter-spacing:.14em;color:#d4af6a;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--pen-cap);opacity:var(--pen-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +38,21 @@
  "description": "Penrose rhombus tiling via recursive deflation, recoloured by a sine wave radiating outward in gold, rose, and plum. Pointer nudges wave; click pulses.",
  "useWhen": "Generative art hero sections, math/science landing pages, ambient dark-background displays where geometric complexity is the centrepiece.",
  "avoidWhen": "Contexts requiring text legibility on top — the dense tiling and shifting colours compete with overlaid content. Low-end devices may stutter at depth 6.",
- "agentPrompt": "Change the accent colour from gold to electric cyan by replacing C_ACC=[212,175,106] with C_ACC=[0,220,210] and C_PALE=[233,221,201] with C_PALE=[180,255,255].",
+ "agentPrompt": "Change the accent colour from gold to electric cyan by replacing C_ACC=[212,175,106] with C_ACC=[0,220,210] and C_PALE=[233,221,201] with C_PALE=[180,255,255]. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "deflation depth (depth 5 or 6 based on viewport size)",
   "colour palette constants (C_BG, C_ACC, C_DEEP, C_ROSE, C_PALE)",
   "wave frequency and speed (nd*7.0, tt*2.2)",
   "tile scale radius (R = max(W,H)*0.62)",
-  "pulse decay rate (pulse *= 0.95)"
+  "pulse decay rate (pulse *= 0.95)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static frame at t=40)",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Depth-6 deflation generates thousands of triangles — may drop frames on low-end mobile",
@@ -44,7 +65,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "penrose",
@@ -130,8 +152,25 @@
 
   // colour ramps anchored on bg #1a1423 + accent #d4af6a
   function mix(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];}
-  const C_BG=[26,20,35], C_ACC=[212,175,106], C_DEEP=[58,40,82], C_ROSE=[150,78,96], C_PALE=[233,221,201];
+  let C_BG=[26,20,35], C_ACC=[212,175,106], C_DEEP=[58,40,82], C_ROSE=[150,78,96], C_PALE=[233,221,201];
+  let BG_HEX='#1a1423', GLOW='212,175,106', GLOW_A='0.30', EK=1;
   function rgb(c){return 'rgb('+(c[0]|0)+','+(c[1]|0)+','+(c[2]|0)+')';}
+  // theme: every ramp anchor above is re-read from the CSS tokens on load and on a flip
+  const root=document.documentElement;
+  function syncTheme(){
+    const cs=getComputedStyle(root),s=n=>cs.getPropertyValue(n).trim(),
+          arr=n=>{const v=s(n);return v?v.split(',').map(Number):null;};
+    BG_HEX=s('--pen-bg')||BG_HEX;
+    C_BG=arr('--pen-base')||C_BG;C_ACC=arr('--pen-acc')||C_ACC;
+    C_DEEP=arr('--pen-deep')||C_DEEP;C_ROSE=arr('--pen-rose')||C_ROSE;
+    C_PALE=arr('--pen-edge')||C_PALE;
+    GLOW=s('--pen-glow')||GLOW;GLOW_A=s('--pen-glow-a')||GLOW_A;EK=+(s('--pen-edge-k')||EK);
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce)draw();}
+  });
+  syncTheme();
 
   let t=0,pulse=0,pmx=0,pmy=0;
   cv.addEventListener('pointermove',e=>{
@@ -141,7 +180,7 @@
   cv.addEventListener('click',()=>{pulse=1.6;});
 
   function draw(){
-    ctx.fillStyle='#1a1423';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=BG_HEX;ctx.fillRect(0,0,W,H);
     const tt=t*0.012;
     pulse*=0.95;
     // extra wave centre nudged toward pointer
@@ -162,11 +201,11 @@
       if(tr.tp===0){ // fat
         if(m<0.5) base=mix(C_BG,C_DEEP,m*2);
         else      base=mix(C_DEEP,C_ACC,(m-0.5)*2);
-        edge=mix(base,C_PALE,0.25+m*0.25);
+        edge=mix(base,C_PALE,(0.25+m*0.25)*EK);
       }else{ // thin
         if(m<0.5) base=mix(C_BG,C_ROSE,m*2);
         else      base=mix(C_ROSE,C_ACC,(m-0.5)*2);
-        edge=mix(base,C_PALE,0.15+m*0.3);
+        edge=mix(base,C_PALE,(0.15+m*0.3)*EK);
       }
       const sc=R/Math.max(maxR,1);
       const ax=cx+tr.a.x*sc, ay=cy+tr.a.y*sc;
@@ -184,8 +223,8 @@
     }
     // central glow at the fivefold point
     const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*0.16);
-    g.addColorStop(0,'rgba(212,175,106,0.30)');
-    g.addColorStop(1,'rgba(212,175,106,0)');
+    g.addColorStop(0,'rgba('+GLOW+','+GLOW_A+')');
+    g.addColorStop(1,'rgba('+GLOW+',0)');
     ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
   }
 

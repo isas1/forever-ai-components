@@ -5,6 +5,11 @@
 <meta name="description" content="Public service status page - six services each with an Operational state pill and a 90-day uptime strip; on a loop one service briefly goes degraded (amber) then recovers, while the header shows 'All systems operational'.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Status Page</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
     --pro-bg:#0d1117;
@@ -20,6 +25,7 @@
     --stpg-ok:color-mix(in srgb,var(--pro-accent) 80%,var(--pro-surface));
     --stpg-track:color-mix(in srgb,var(--pro-text) 8%,var(--pro-surface));
   }
+  :root[data-theme="light"]{--pro-bg:#f6f8fa;--pro-surface:#fff;--pro-border:rgba(0,0,0,.08);--pro-text:#1f2328;--pro-muted:#59636e;--pro-accent:#2c8037;--pro-warn:#906917;--pro-err:#e21309}
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
   .stpg-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:2.4vmin;
@@ -90,6 +96,9 @@
   </div>
   <div class="cap" aria-hidden="true">Status Page</div>
   <script>(function(){"use strict";
+    var root=document.documentElement;
+    addEventListener("message",function(e){var d=e.data;
+      if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))root.setAttribute("data-theme",d.theme);});
     var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
     // Invented services + realistic 90-day uptime and past-incident marks (day 0..89, sev warn/err).
     var services=[
@@ -160,12 +169,13 @@
  "description": "A public service status page: six services, each with an Operational state pill and a compact 90-day uptime strip carrying past-incident marks; on a loop one service briefly goes degraded (amber) and recovers, while the header banner tracks 'All systems operational'.",
  "useWhen": "Status/health pages, uptime dashboards, incident summaries, DevOps or SRE overview panels, trust/status marketing sections.",
  "avoidWhen": "When you need real-time data wired to a monitoring backend, per-minute granularity, or a full incident timeline with post-mortems — the states and 90-day history here are simulated.",
- "agentPrompt": "Edit the services array (name, up, inc incident marks with day 0-89 and severity warn/err) to set your own services and history; adjust the loop timings (degrade 2600ms, gap 3600ms) for the auto incident cycle. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent, --pro-warn, --pro-err), and update the catalog bg field to match.",
+ "agentPrompt": "Edit the services array (name, up, inc incident marks with day 0-89 and severity warn/err) to set your own services and history; adjust the loop timings (degrade 2600ms, gap 3600ms) for the auto incident cycle. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent, --pro-warn, --pro-err), and update the catalog bg field to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
   "service data (services array: name, up percentage, inc incident marks {day 0-89, severity warn/err})",
   "incident cycle timing (setTimeout: 2600ms degraded, 3600ms gap, 2800ms initial delay)",
-  "uptime bar look (--stpg-ok / --stpg-track tokens, .stpg-bar height and 90-bar background-size)"
+  "uptime bar look (--stpg-ok / --stpg-track tokens, .stpg-bar height and 90-bar background-size)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   ":root --pro-* token block (renaming breaks the shared pro theming API)",
@@ -173,7 +183,8 @@
   "IIFE wrapper",
   "prefers-reduced-motion early return to the populated all-operational state",
   "visibilitychange pause (running flag + .paused class on stage)",
-  "the 90-day bar as a tiled linear-gradient (background-size:calc(100%/90)) rather than 90 DOM divs per row"
+  "the 90-day bar as a tiled linear-gradient (background-size:calc(100%/90)) rather than 90 DOM divs per row",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
@@ -188,7 +199,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "themeable"
+  "themeable",
+  "light-ready"
  ],
  "tags": [
   "status-page",

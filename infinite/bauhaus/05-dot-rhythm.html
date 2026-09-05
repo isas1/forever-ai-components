@@ -5,11 +5,19 @@
 <meta name="description" content="An 8x8 modular grid of red, blue, yellow and white dots pulsing in travelling diagonal waves on a near-black field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dot Rhythm</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
-  #bh05-stage{position:fixed;inset:0;display:block;background:#101012}
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme in [data-theme="light"]; JS reads both */
+  :root{--bh05-bg:#101012;--bh05-red:#e63329;--bh05-blu:#1f4ed8;--bh05-yel:#f2c11e;--bh05-acc:#f4f2ec;--bh05-cap:#fff;--bh05-cap-o:.42}
+  :root[data-theme="light"]{--bh05-bg:#f6f2ea;--bh05-red:#cc2b1f;--bh05-blu:#1f4ed8;--bh05-yel:#ad7f08;--bh05-acc:#1b1b20;--bh05-cap:#1b1b20;--bh05-cap-o:.5}
+  html,body{margin:0;height:100%;background:var(--bh05-bg);overflow:hidden}
+  #bh05-stage{position:fixed;inset:0;display:block;background:var(--bh05-bg)}
   #bh05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--bh05-cap);opacity:var(--bh05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +27,21 @@
  "description": "8x8 grid of red, blue, yellow, and white dots pulsing in diagonal travelling waves; two interfering sines modulate scale and opacity for a rhythmic beat.",
  "useWhen": "Bauhaus or geometric-themed hero backgrounds, ambient loading screens, design-system showcase tiles.",
  "avoidWhen": "Contexts needing text legibility over the canvas or where the dark background conflicts with a light UI theme.",
- "agentPrompt": "Change the grid to 10x10 by setting COLS=10 and ROWS=10, shift the red to coral (#FF6B6B), and slow the primary wave to t*1.2.",
+ "agentPrompt": "Change the grid to 10x10 by setting COLS=10 and ROWS=10, shift the red to coral (#FF6B6B), and slow the primary wave to t*1.2. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid size (COLS=8, ROWS=8)",
   "Bauhaus palette (PAL array)",
   "wave frequencies (t*1.7 and t*0.9)",
   "dot base radius (cell*0.30)",
-  "grid span fraction (0.86 of min dimension)"
+  "grid span fraction (0.86 of min dimension)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static frame fallback",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "White accent dots render as squares by design — intentional Bauhaus geometry, not a bug",
@@ -44,7 +54,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bauhaus",
@@ -71,8 +82,19 @@
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  // Bauhaus palette: primary red / blue / yellow + white on off-dark.
-  var PAL=["#e63329","#1f4ed8","#f2c11e","#f4f2ec"];
+  // Bauhaus palette: primary red / blue / yellow + a fourth accent, on off-dark
+  // (light: on warm off-white, the accent flips to ink). Colours come from the CSS tokens.
+  var docEl=document.documentElement;
+  var PAL=["#e63329","#1f4ed8","#f2c11e","#f4f2ec"];   // cached colour array — refilled on theme switch
+  var BG="#101012";
+  function syncTheme(){
+    var cs=getComputedStyle(docEl), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    BG=g("--bh05-bg"); PAL[0]=g("--bh05-red"); PAL[1]=g("--bh05-blu"); PAL[2]=g("--bh05-yel"); PAL[3]=g("--bh05-acc");
+    if(reduce && W) paint(2.0);             // the static frame repaints on a theme switch
+  }
+  addEventListener("message",function(e){ var d=e.data;   // live re-theme broadcast from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ docEl.setAttribute("data-theme",d.theme); syncTheme(); }
+  });
   // Modular grid: fixed cell count (<<110 dots), recomputed geometry on resize only.
   var COLS=8, ROWS=8, N=COLS*ROWS;
   // Cached per-dot state (typed arrays, allocation-free loop).
@@ -107,7 +129,7 @@
 
   function paint(t){
     ctx.clearRect(0,0,W,H);
-    ctx.fillStyle="#101012";
+    ctx.fillStyle=BG;
     ctx.fillRect(0,0,W,H);
     var TAU=6.2831853;
     for(var k=0;k<N;k++){
@@ -125,7 +147,7 @@
       if(c===3){
         // White accent renders as a small square ring on strong beats — pure geometry.
         var sq=r*1.4;
-        ctx.fillStyle="#f4f2ec";
+        ctx.fillStyle=PAL[3];
         ctx.fillRect(px[k]-sq/2,py[k]-sq/2,sq,sq);
       }else{
         ctx.fillStyle=PAL[c];
@@ -153,6 +175,7 @@
   });
 
   layout();
+  syncTheme();
   if(reduce){ paint(2.0); return; }   // one static, balanced frame; no loop.
   start();
 })();

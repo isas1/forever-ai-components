@@ -5,12 +5,21 @@
 <meta name="description" content="Colour Staircase — Playful Geometric Notation. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Colour Staircase</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   This tile's default palette is already light, so both themes render the same; the hook keeps it
+   on the canvas's light wall and lets it answer the forever:theme protocol. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   html,body{margin:0;height:100%;background:#efe7d6;overflow:hidden}
   #kle07-stage{position:fixed;inset:0;width:100%;height:100%}
   .kle07-stair{position:absolute;inset:0;display:flex;align-items:flex-end;gap:0;padding:14px;}
-  .kle07-step{flex:1;display:flex;flex-direction:column;justify-content:flex-end;}
-  .kle07-block{width:100%;border:1px solid rgba(42,38,32,.4);border-bottom:none;border-radius:3px 3px 0 0;will-change:height,filter;}
+  .kle07-step{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;}  /* height:100% — the blocks' % heights resolve against it; without it every block was 0 and the tile painted blank */
+  .kle07-block{width:100%;border:1px solid rgba(42,38,32,.4);border-bottom:none;border-radius:3px 3px 0 0;will-change:height,filter;
+    animation:kle07-breathe var(--bd,4s) ease-in-out var(--bdel,0s) infinite, kle07-march var(--md,5s) ease-in-out var(--mdel,0s) infinite;}
+  .kle07-paused .kle07-block{animation-play-state:paused}
+  .kle07-still .kle07-block{animation:none}
   @keyframes kle07-breathe{0%,100%{height:var(--lo);}50%{height:var(--hi);}}
   @keyframes kle07-march{0%,100%{filter:hue-rotate(0deg) brightness(1);}50%{filter:hue-rotate(20deg) brightness(1.08);}}
   .kle07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2620;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
@@ -23,21 +32,24 @@
  "description": "9 color-graduated bars ascend like a staircase, each breathing in height and marching hue in staggered CSS keyframe loops. Warm parchment background.",
  "useWhen": "Art-themed dashboards, Bauhaus or Bauhaus visual contexts, ambient looping backgrounds with a structured color palette feel.",
  "avoidWhen": "Contexts requiring legible text overlays — the rising bars occupy full height. Avoid when a static, non-animated background is needed.",
- "agentPrompt": "Change the ribbon palette to cool blues by replacing ribbon with ['#1a3a5c','#2a5f8f','#3a8fc4','#6ab8d4','#a0d8ef'], and increase step count N from 9 to 12.",
+ "agentPrompt": "Change the ribbon palette to cool blues by replacing ribbon with ['#1a3a5c','#2a5f8f','#3a8fc4','#6ab8d4','#a0d8ef'], and increase step count N from 9 to 12. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color ribbon array (ribbon)",
   "step count (N=9)",
   "height range (base=24+t*52, ±4/+16)",
-  "breathe duration range (3.2–4.8s)",
-  "hue-rotate amount (20deg) in kle07-march"
+  "breathe/march timing (--bd/--bdel/--md/--mdel per block, 3.2–4.8 s / 4–7 s)",
+  "hue-rotate amount (20deg) in kle07-march",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
-  "prefers-reduced-motion guard (REDUCED check + @media animation:none)",
-  "role=img + aria-label on stage div"
+  ".kle07-step height:100% (the blocks' % heights resolve against it; without it the tile paints blank)",
+  "visibilitychange pause (kle07-paused class)",
+  "prefers-reduced-motion guard (kle07-still class + @media animation:none)",
+  "role=img + aria-label on stage div",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Heights are CSS custom properties set via JS — changing N requires recalculating base height range manually",
   "Staggered negative animation-delay means first few bars start mid-cycle on load"
  ],
  "tier": "curated",
@@ -47,7 +59,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "color",
@@ -86,14 +99,15 @@
     block.style.setProperty('--lo',(base-4)+'%');
     block.style.setProperty('--hi',(base+16)+'%');
     block.style.height=base+'%';
-    if(!REDUCED){
-      const bd=(3.2+Math.random()*1.6).toFixed(2), bdel=(-i*0.5).toFixed(2);
-      const md=(4+Math.random()*3).toFixed(1);
-      block.style.animation=`kle07-breathe ${bd}s ease-in-out ${bdel}s infinite, kle07-march ${md}s ease-in-out ${(-i*0.4).toFixed(1)}s infinite`;
-    }
+    // per-block breathe/march timing feeds the CSS animation through custom properties
+    block.style.setProperty('--bd',(3.2+Math.random()*1.6).toFixed(2)+'s'); block.style.setProperty('--bdel',(-i*0.5).toFixed(2)+'s');
+    block.style.setProperty('--md',(4+Math.random()*3).toFixed(1)+'s'); block.style.setProperty('--mdel',(-i*0.4).toFixed(1)+'s');
     step.appendChild(block);stair.appendChild(step);
   }
+  if(REDUCED) stair.classList.add('kle07-still');
+  document.addEventListener('visibilitychange',()=>stair.classList.toggle('kle07-paused',document.hidden));
 })();
 </script>
+<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>

@@ -5,11 +5,22 @@
 <meta name="description" content="Colored stippled dots fall as rain and splash into expanding ripple rings on a glowing amber puddle over deep blue.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pointillist Rain</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
-  #po09-stage{position:fixed;inset:0;background:#0d0f14}
+  /* theme tokens — dark defaults, light re-theme in the one [data-theme="light"] block; the sky/drop/puddle palettes feed the JS. */
+  :root{--po09-bg:#0d0f14;--po09-cap:#fff;--po09-cap-o:.42;--po09-acc:#f0a830;--po09-sky:#1a2438 #22304a #2b3a52 #3a4a66;
+    --po09-drop:#f0a830 #f6c25a #7fb0d8 #b9d0e6 #e8b96a #9ec4dd;--po09-pud:#f0a830 #e8943a #6f9fc8 #8fb6d6 #caa050 #3a5274}
+  :root[data-theme="light"]{ /* canvas-linen ground; sky, drops and puddle deepened to pigment */
+    --po09-bg:#f4efe3;--po09-cap:#2b2418;--po09-cap-o:.55;--po09-acc:#96620b;--po09-sky:#9aa9c2 #8698b6 #7386a8 #61759a;
+    --po09-drop:#b0730a #a67c14 #2f6a99 #4d7ea6 #a07a28 #3d7b9e;--po09-pud:#b0730a #a35f18 #3a6f9c #5183a8 #8f7328 #2c3f5e}
+  html,body{margin:0;height:100%;background:var(--po09-bg);overflow:hidden}
+  #po09-stage{position:fixed;inset:0;background:var(--po09-bg)}
   #po09-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--po09-cap);opacity:var(--po09-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +30,22 @@
  "description": "104 stippled dots fall as rain, splashing into elliptical ripple rings on an amber puddle against a divisionist dark sky.",
  "useWhen": "Ambient dark-mode backgrounds, seasonal/weather-themed hero sections, generative art displays.",
  "avoidWhen": "Light backgrounds (sky hardcoded dark navy). Low-end devices where many canvas draws per frame may stutter.",
- "agentPrompt": "Change DROP palette to cool blues only, increase rain count N from 104 to 160, and slow fall speed by changing rv upper bound from H*0.026 to H*0.016.",
+ "agentPrompt": "Change DROP palette to cool blues only, increase rain count N from 104 to 160, and slow fall speed by changing rv upper bound from H*0.026 to H*0.016. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "rain count (N=104)",
   "fall speed range (H*0.012..H*0.026)",
   "drop color palette (DROP array)",
   "puddle color palette (PUD array)",
   "horizon split (horizon=H*0.62)",
-  "ripple ring count (RN=10)"
+  "ripple ring count (RN=10)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "offscreen bg canvas (buildBg) — critical for perf",
   "IIFE wrapper",
   "reduced-motion static fallback (drawStatic)",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color and sky palette hardcoded — changing theme requires editing multiple arrays",
@@ -45,7 +58,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "rain",
@@ -71,10 +85,9 @@
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var W=0,H=0,DPR=1,horizon=0,running=false,raf=0;
 
-  // Divisionist palette: warm accent against cool complements (optical mix)
-  var SKY=["#1a2438","#22304a","#2b3a52","#3a4a66"];
-  var DROP=["#f0a830","#f6c25a","#7fb0d8","#b9d0e6","#e8b96a","#9ec4dd"];
-  var PUD=["#f0a830","#e8943a","#6f9fc8","#8fb6d6","#caa050","#3a5274"];
+  // Divisionist palette: warm accent against cool complements (optical mix), all
+  // from the CSS tokens — syncTheme() reads them back out.
+  var root=document.documentElement, BG="#0d0f14", ACC="#f0a830", SKY=[], DROP=[], PUD=[];
 
   // Rain agents (capped). Typed arrays, allocation-free.
   var N=104;
@@ -84,54 +97,44 @@
   function rnd(a,b){return a+Math.random()*(b-a);}
 
   function seed(i){
-    rx[i]=Math.random()*W;
-    ry[i]=-rnd(0,H*0.6);
-    rv[i]=rnd(H*0.012,H*0.026);
-    rl[i]=rnd(8,20)*DPR;
-    rc[i]=(Math.random()*DROP.length)|0;
+    rx[i]=Math.random()*W; ry[i]=-rnd(0,H*0.6); rv[i]=rnd(H*0.012,H*0.026);
+    rl[i]=rnd(8,20)*DPR; rc[i]=(Math.random()*DROP.length)|0;
   }
 
   function size(){
     DPR=Math.min(2,window.devicePixelRatio||1);
-    W=Math.max(1,(cv.clientWidth*DPR)|0);
-    H=Math.max(1,(cv.clientHeight*DPR)|0);
-    cv.width=W; cv.height=H;
-    horizon=H*0.62;
+    W=Math.max(1,(cv.clientWidth*DPR)|0); H=Math.max(1,(cv.clientHeight*DPR)|0);
+    cv.width=W; cv.height=H; horizon=H*0.62;
     for(var i=0;i<N;i++) seed(i);
   }
 
   // A pointillist dot: stippled core so color mixes optically, never a flat disc.
   function dot(x,y,r,col,alpha){
-    ctx.globalAlpha=alpha;
-    ctx.fillStyle=col;
+    ctx.globalAlpha=alpha; ctx.fillStyle=col;
     ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill();
   }
 
-  // Pre-rendered static backdrop: divisionist sky of fixed dots + puddle band.
-  // Drawn once per resize to an offscreen canvas (no per-frame repaint of bg).
+  // Pre-rendered static backdrop (sky stipple + puddle band), drawn once per resize
+  // to an offscreen canvas. It caches the palette, so a theme flip must rebuild it.
   var bg=document.createElement("canvas"), bx=bg.getContext("2d");
   function buildBg(){
     bg.width=W; bg.height=H;
-    bx.fillStyle="#0d0f14"; bx.fillRect(0,0,W,H);
+    bx.fillStyle=BG; bx.fillRect(0,0,W,H);
     var i,x,y,r,t;
     // sky stipple
     var sn=Math.min(2600,(W*horizon)/(190));
     for(i=0;i<sn;i++){
-      x=Math.random()*W; y=Math.random()*horizon;
-      t=y/horizon;
-      bx.globalAlpha=0.10+0.16*t;
-      bx.fillStyle=SKY[(Math.random()*SKY.length)|0];
+      x=Math.random()*W; y=Math.random()*horizon; t=y/horizon;
+      bx.globalAlpha=0.10+0.16*t; bx.fillStyle=SKY[(Math.random()*SKY.length)|0];
       r=(0.9+Math.random()*1.5)*DPR;
       bx.beginPath(); bx.arc(x,y,r,0,6.2832); bx.fill();
     }
     // puddle base band: reflected accent glow as STATIC stipple gradient
     var pn=Math.min(2200,(W*(H-horizon))/(150));
     for(i=0;i<pn;i++){
-      x=Math.random()*W; y=horizon+Math.random()*(H-horizon);
-      t=(y-horizon)/(H-horizon);
+      x=Math.random()*W; y=horizon+Math.random()*(H-horizon); t=(y-horizon)/(H-horizon);
       bx.globalAlpha=0.05+0.20*(1-t);
-      // accent concentrated near center, cool toward edges
-      var cx=Math.abs(x-W/2)/(W/2);
+      var cx=Math.abs(x-W/2)/(W/2);   // accent near centre, cool toward the edges
       bx.fillStyle = cx<0.45 ? PUD[(Math.random()*3)|0] : PUD[3+((Math.random()*3)|0)];
       r=(1.0+Math.random()*2.0)*DPR;
       bx.beginPath(); bx.arc(x,y,r,0,6.2832); bx.fill();
@@ -141,9 +144,7 @@
 
   // Ripple ring buffer for puddle impacts (capped, no allocation in loop).
   var RN=10, kx=new Float32Array(RN), kr=new Float32Array(RN), kc=new Int8Array(RN), kk=0;
-  function splash(x,c){
-    kx[kk]=x; kr[kk]=1; kc[kk]=c; kk=(kk+1)%RN;
-  }
+  function splash(x,c){ kx[kk]=x; kr[kk]=1; kc[kk]=c; kk=(kk+1)%RN; }
 
   function frame(){
     if(!running) return;
@@ -159,9 +160,7 @@
       var seg=4, sy;
       for(var s=0;s<seg;s++){
         sy=ry[i]-s*(rl[i]/seg);
-        if(sy<horizon && sy>-10){
-          dot(rx[i], sy, (1.1+ (seg-s)*0.32)*DPR, DROP[rc[i]], 0.82-0.16*s);
-        }
+        if(sy<horizon && sy>-10) dot(rx[i], sy, (1.1+ (seg-s)*0.32)*DPR, DROP[rc[i]], 0.82-0.16*s);
       }
       if(ry[i]>=horizon){
         splash(rx[i], rc[i]);
@@ -176,11 +175,8 @@
         var yb=horizon + rr*0.22; // shallow elliptical
         for(var a=0;a<n;a++){
           var ang=(a/n)*6.2832;
-          var px=kx[i]+Math.cos(ang)*rr;
-          var py=yb+Math.sin(ang)*rr*0.34;
-          if(py>horizon && py<H){
-            dot(px,py,1.3*DPR,col, 0.5*(1-kr[i]/(H*0.16)));
-          }
+          var px=kx[i]+Math.cos(ang)*rr, py=yb+Math.sin(ang)*rr*0.34;
+          if(py>horizon && py<H) dot(px,py,1.3*DPR,col, 0.5*(1-kr[i]/(H*0.16)));
         }
         kr[i]+=H*0.0045;
       } else kr[i]=0;
@@ -188,9 +184,8 @@
 
     // accent surface shimmer: a few bright reflected dots near center waterline
     for(i=0;i<14;i++){
-      var sxp=W*0.5 + (Math.random()-0.5)*W*0.5;
-      var syp=horizon + Math.random()*(H-horizon)*0.5;
-      dot(sxp,syp,(0.9+Math.random())*DPR,"#f0a830",0.06);
+      var sxp=W*0.5 + (Math.random()-0.5)*W*0.5, syp=horizon + Math.random()*(H-horizon)*0.5;
+      dot(sxp,syp,(0.9+Math.random())*DPR,ACC,0.06);
     }
 
     raf=requestAnimationFrame(frame);
@@ -202,16 +197,14 @@
     var i;
     for(i=0;i<N;i++){
       var x=Math.random()*W, y=Math.random()*horizon, t=y/horizon;
-      for(var s=0;s<4;s++){
-        var sy=y - s*3.4*DPR;
+      for(var s=0;s<4;s++){ var sy=y - s*3.4*DPR;
         if(sy>0) dot(x,sy,(1.1+(4-s)*0.3)*DPR,DROP[(Math.random()*DROP.length)|0],(0.7-0.14*s)*(0.4+0.6*t));
       }
     }
     // a single dominant reflection on the puddle
     for(i=0;i<260;i++){
-      var px=W*0.5+(Math.random()-0.5)*W*0.4;
-      var py=horizon+Math.random()*(H-horizon)*0.7;
-      dot(px,py,(1.0+Math.random()*1.6)*DPR,"#f0a830",0.04+Math.random()*0.05);
+      var px=W*0.5+(Math.random()-0.5)*W*0.4, py=horizon+Math.random()*(H-horizon)*0.7;
+      dot(px,py,(1.0+Math.random()*1.6)*DPR,ACC,0.04+Math.random()*0.05);
     }
     ctx.globalAlpha=1;
   }
@@ -219,8 +212,18 @@
   function start(){ if(running)return; running=true; raf=requestAnimationFrame(frame); }
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
+  // JS-drawn colors read the tokens, so CSS stays the single source of truth.
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    BG=v('--po09-bg'); ACC=v('--po09-acc');
+    SKY=v('--po09-sky').split(/\s+/); DROP=v('--po09-drop').split(/\s+/); PUD=v('--po09-pud').split(/\s+/);
+    if(W){ buildBg(); if(reduce) drawStatic(); }   // the backdrop caches the palette
+  }
+  addEventListener("message",function(e){var d=e.data;   // live re-theme from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme();}});
+
   function init(){
-    size(); buildBg();
+    syncTheme(); size(); buildBg();
     if(reduce){ drawStatic(); return; }
     start();
   }
@@ -229,11 +232,9 @@
   window.addEventListener("resize",function(){
     clearTimeout(rt);
     rt=setTimeout(function(){
-      var was=running; stop();
-      size(); buildBg();
+      var was=running; stop(); size(); buildBg();
       if(reduce){ drawStatic(); return; }
-      ctx.clearRect(0,0,W,H);
-      if(was||true) start();
+      ctx.clearRect(0,0,W,H); if(was||true) start();
     },140);
   });
 

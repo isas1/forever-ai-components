@@ -5,14 +5,31 @@
 <meta name="description" content="Day/Week/Month/Year segmented control with a slate-to-sage gradient pill that springs and stretches as it slides between options.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Segmented Control</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#181D1B;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  :root{
+    --c04-bg:#181D1B; --c04-seg-bg:#1e2420; --c04-inset:rgba(0,0,0,.5);
+    --c04-pill-a:#4B5560; --c04-pill-b:#5A8C73; --c04-pill-shadow:rgba(90,140,115,.5);
+    --c04-opt-ink:#8b9088; --c04-opt-on-ink:#fff;
+    --c04-cap:#5A8C73; --c04-cap-o:.45;
+  }
+  :root[data-theme="light"]{
+    --c04-bg:#f1f4f1; --c04-seg-bg:#e3e8e2; --c04-inset:rgba(24,29,27,.12);
+    --c04-pill-a:#4B5560; --c04-pill-b:#4c7661; --c04-pill-shadow:rgba(76,118,97,.35);
+    --c04-opt-ink:#6c716a; --c04-opt-on-ink:#fff;
+    --c04-cap:#4c7661; --c04-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c04-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   .wrap{height:100%;display:flex;align-items:center;justify-content:center}
-  .seg{position:relative;display:flex;background:#1e2420;border-radius:16px;padding:6px;width:min(80vmin,330px);box-shadow:inset 0 1px 3px rgba(0,0,0,.5)}
-  .pill{position:absolute;top:6px;height:calc(100% - 12px);border-radius:11px;background:linear-gradient(135deg,#4B5560,#5A8C73);box-shadow:0 4px 14px rgba(90,140,115,.5);transition:none;z-index:0}
-  .opt{flex:1;text-align:center;padding:13px 6px;font-size:14px;font-weight:600;color:#8b9088;cursor:pointer;position:relative;z-index:1;transition:color .25s;user-select:none}
-  .opt.on{color:#fff}
-  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#5A8C73;opacity:.45;text-transform:uppercase}
+  .seg{position:relative;display:flex;background:var(--c04-seg-bg);border-radius:16px;padding:6px;width:min(80vmin,330px);box-shadow:inset 0 1px 3px var(--c04-inset)}
+  .pill{position:absolute;top:6px;height:calc(100% - 12px);border-radius:11px;background:linear-gradient(135deg,var(--c04-pill-a),var(--c04-pill-b));box-shadow:0 4px 14px var(--c04-pill-shadow);transition:none;z-index:0}
+  .opt{flex:1;text-align:center;padding:13px 6px;font-size:14px;font-weight:600;color:var(--c04-opt-ink);cursor:pointer;position:relative;z-index:1;transition:color .25s;user-select:none}
+  .opt.on{color:var(--c04-opt-on-ink)}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c04-cap);opacity:var(--c04-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -21,23 +38,25 @@
  "description": "Slate-to-sage gradient pill slides between Day/Week/Month/Year segments with elastic spring stretch. Auto-cycles; click pauses briefly.",
  "useWhen": "Date-range pickers, tab bars, filter controls in dark-themed dashboards or app UIs.",
  "avoidWhen": "Production use without removing the auto-cycle loop. Light-background UIs where the hardcoded dark background clashes.",
- "agentPrompt": "Change options to ['S','M','T','W'] in .opt divs, set pill gradient to linear-gradient(135deg,#f97316,#ec4899), slow spring by changing k from 0.18 to 0.10.",
+ "agentPrompt": "Change options to ['S','M','T','W'] in .opt divs, set pill gradient to linear-gradient(135deg,#f97316,#ec4899), slow spring by changing k from 0.18 to 0.10. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "option labels (Day/Week/Month/Year in .opt divs)",
   "pill gradient colors (#4B5560, #5A8C73)",
   "spring stiffness (k=0.18) and damping (damp=0.65)",
   "auto-cycle interval (auto>75)",
-  "pill stretch multiplier (vel*40)"
+  "pill stretch multiplier (vel*40)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "geometry cache (geoms array, measure() on resize only)",
   "visibilitychange pause guard",
   "IIFE wrapper",
-  "prefers-reduced-motion check"
+  "prefers-reduced-motion check",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — remove before shipping in production",
-  "Background hardcoded #0a0f1c — incompatible with light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "No aria-selected or role=tablist — add for full accessibility"
  ],
  "tier": "curated",
@@ -47,7 +66,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "segmented-control",
@@ -88,7 +108,9 @@
     auto++;
     if(manual>0)manual--; else if(auto>75){auto=0;select((idx+1)%opts.length);}
     const k=0.18,damp=0.65,f=(idx-cur)*k;vel=(vel+f)*damp;cur+=vel;
-    const a=geom(Math.floor(cur)),bi=Math.min(opts.length-1,Math.floor(cur)+1),b=geom(bi),fr=cur-Math.floor(cur);
+    // the spring overshoots past both ends (wrapping Year -> Day dips cur below 0): read the
+    // geometry from the nearest real pair and let fr run outside 0..1 so the pill still bounces
+    const i0=Math.max(0,Math.min(opts.length-2,Math.floor(cur))),a=geom(i0),b=geom(i0+1),fr=cur-i0;
     const x=a.x+(b.x-a.x)*fr, w=a.w+(b.w-a.w)*fr;
     // stretch pill while moving
     const stretch=Math.abs(vel)*40;
@@ -98,6 +120,11 @@
   function init(){measure();const g=geom(0);pill.style.left=g.x+'px';pill.style.width=g.w+'px';}
   addEventListener('resize',measure);
   document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
   requestAnimationFrame(()=>{init();if(!reduce)requestAnimationFrame(frame);});
 })();
 </script>

@@ -5,11 +5,33 @@
 <meta name="description" content="Stepped gold ziggurat skyscraper silhouettes rise and settle with damped bob against a radial sunburst on deep black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ziggurat Rise</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0b08;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme (deep gold on ivory) is the [data-theme="light"] block.
+     The canvas paints its own background, so JS reads every colour from here. */
+  :root{
+    --ad02-bg:#0c0b08; --ad02-gold:#d4af37; --ad02-gold-2:#f0d98a;
+    --ad02-deep:#0a1f1b; --ad02-emerald:#0e3b30; --ad02-line:#8a6d1f;
+    --ad02-ray-a:rgba(212,175,55,0.045); --ad02-ray-b:rgba(212,175,55,0.012);
+    --ad02-facet:rgba(8,28,24,0.34); --ad02-flute:rgba(240,217,138,0.16);
+    --ad02-ground:rgba(212,175,55,0.22); --ad02-cap:#fff; --ad02-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --ad02-bg:#f7f1e4; --ad02-gold:#87681a; --ad02-gold-2:#b08a2a;
+    --ad02-deep:#cfded6; --ad02-emerald:#2f5b4d; --ad02-line:#5f4a12;
+    --ad02-ray-a:rgba(135,104,26,0.08); --ad02-ray-b:rgba(135,104,26,0.025);
+    --ad02-facet:rgba(47,91,77,0.20); --ad02-flute:rgba(247,241,228,0.34);
+    --ad02-ground:rgba(135,104,26,0.35); --ad02-cap:#2a2110; --ad02-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--ad02-bg);overflow:hidden}
   #ad02-stage{position:fixed;inset:0;display:block}
   #ad02-c{position:absolute;inset:0;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ad02-cap);opacity:var(--ad02-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +41,22 @@
  "description": "Three stepped gold ziggurat skyscrapers rise and settle with a damped bob against a radial sunburst on deep black — staggered entrance, then looping.",
  "useWhen": "Dark art-deco hero backgrounds, luxury brand intros, architectural or city-themed ambient displays.",
  "avoidWhen": "Light backgrounds (hardcoded dark bg). Contexts needing text overlays — towers occupy center of canvas.",
- "agentPrompt": "Change GOLD to '#c9a227', increase the center tower tier count by adding a tier [0.18, 0.7] at the top of its tiers array, and slow the rise cycle by changing the 0.4 speed multiplier to 0.25.",
+ "agentPrompt": "Change GOLD to '#c9a227', increase the center tower tier count by adding a tier [0.18, 0.7] at the top of its tiers array, and slow the rise cycle by changing the 0.4 speed multiplier to 0.25. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gold palette (GOLD, GOLD2, LINE constants)",
   "tower tier dimensions (TOWERS array widths/heights)",
   "rise speed multiplier (el*0.4)",
   "stagger offsets (startMul array)",
   "unit scale (Math.min(W,H)/22)",
-  "sunburst ray count (n=24)"
+  "sunburst ray count (n=24)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and JS — must change both BG constant and CSS to retheme",
@@ -46,7 +70,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-deco",
@@ -70,7 +95,24 @@
   "use strict";
   var cv=document.getElementById("ad02-c"),ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
-  var BG="#0c0b08",GOLD="#d4af37",GOLD2="#f0d98a",DK="#0a1f1b",EM="#0e3b30",LINE="#8a6d1f";
+  // every colour this canvas paints with is read from the CSS tokens — once at start,
+  // once per theme flip; never per frame.
+  var root=document.documentElement;
+  var BG,GOLD,GOLD2,DK,EM,LINE,RAYA,RAYB,FACET,FLUTE,GROUND;
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    BG=v("--ad02-bg"); GOLD=v("--ad02-gold"); GOLD2=v("--ad02-gold-2"); DK=v("--ad02-deep");
+    EM=v("--ad02-emerald"); LINE=v("--ad02-line"); RAYA=v("--ad02-ray-a"); RAYB=v("--ad02-ray-b");
+    FACET=v("--ad02-facet"); FLUTE=v("--ad02-flute"); GROUND=v("--ad02-ground");
+    if(reduce&&W) staticFrame();          // no loop is running to repaint the static frame
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   var W=0,H=0,DPR=1,cx=0,top=0,unit=1;
 
   // Six towers, mirrored about center. Each: x offset (in units), base width, tier specs.
@@ -104,7 +146,7 @@
       ctx.lineTo(Math.cos(a0)*R,Math.sin(a0)*R);
       ctx.lineTo(Math.cos(a1)*R,Math.sin(a1)*R);
       ctx.closePath();
-      ctx.fillStyle=(i%2)?"rgba(212,175,55,0.045)":"rgba(212,175,55,0.012)";
+      ctx.fillStyle=(i%2)?RAYA:RAYB;
       ctx.fill();
     }
     ctx.restore();
@@ -128,14 +170,14 @@
       ctx.fillStyle=grad;
       ctx.fillRect(bx-w/2,y-h,w,h);
       // emerald inset shadow facet (static, right half)
-      ctx.fillStyle="rgba(8,28,24,0.34)";
+      ctx.fillStyle=FACET;
       ctx.fillRect(bx,y-h,w/2,h);
       // gold setback line at each step
       ctx.fillStyle=LINE;
       ctx.fillRect(bx-w/2,y-h,w,Math.max(1,unit*0.06));
       // thin vertical fluting
       var fl=Math.max(2,Math.round(w/(unit*0.55)));
-      ctx.fillStyle="rgba(240,217,138,0.16)";
+      ctx.fillStyle=FLUTE;
       for(var f=1;f<fl;f++){var fx=bx-w/2+ (w/fl)*f;ctx.fillRect(fx,y-h+unit*0.08,Math.max(1,unit*0.04),h-unit*0.12);}
       y-=h;
     }
@@ -152,7 +194,7 @@
     ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
     rays();
     // fountain ground line
-    ctx.fillStyle="rgba(212,175,55,0.22)";
+    ctx.fillStyle=GROUND;
     ctx.fillRect(0,H*0.955,W,Math.max(1,unit*0.05));
     // draw back towers first (outer), then center on top
     for(var i=TOWERS.length-1;i>=0;i--){

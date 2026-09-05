@@ -5,13 +5,27 @@
 <meta name="description" content="SVG baseline grid with a red metronome bar ticking pendulum-style across the active baseline as 'tempo' and 'measure' alternate.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Baseline Tick</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme (Swiss paper stock, black ink, deeper vermilion) is the
+     [data-theme="light"] block */
   :root{
     --sw04-bg:#0f0f10;
     --sw04-ink:#f2f1ee;
     --sw04-mute:#5a5a5e;
     --sw04-line:#2a2a2d;
     --sw04-red:#e8482b;
+    --sw04-cap:#fff; --sw04-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --sw04-bg:#f4f3ef; --sw04-ink:#141416; --sw04-mute:#5f5f66;
+    --sw04-line:#cdcbc2; --sw04-red:#cf3316;
+    --sw04-cap:#141416; --sw04-cap-o:.55;
   }
   *{margin:0;box-sizing:border-box}
   html,body{height:100%}
@@ -39,7 +53,7 @@
   .sw04-ph{ opacity:0; animation:sw04-pulse 2.2s steps(1) infinite }
   @keyframes sw04-pulse{ 0%,49%{opacity:0} 50%,100%{opacity:.9} }
   .sw04-ph.b{ animation-delay:1.1s }
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--sw04-cap);opacity:var(--sw04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
     #sw04-tick{transform:translateX(calc(var(--sw04-span)*.5))}
@@ -54,19 +68,21 @@
  "description": "Red vertical bar sweeps pendulum-style across a Swiss baseline grid at 120 BPM; \"tempo\" and \"measure\" flash in sync with each beat.",
  "useWhen": "Music, editorial, or typographic hero sections where measured rhythm and graphic precision set the mood. Good ambient background for design portfolios.",
  "avoidWhen": "Contexts requiring legible text overlays on the active baseline, or where motion distracts from reading tasks.",
- "agentPrompt": "Change tempo to 1.4s (85 BPM), update the BPM label to \"85 BPM\", and set accent to electric blue by changing --sw04-red to #0af.",
+ "agentPrompt": "Change tempo to 1.4s (85 BPM), update the BPM label to \"85 BPM\", and set accent to electric blue by changing --sw04-red to #0af. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "sweep duration (2.2s in animation)",
   "SPAN constant (132, controls sweep width in viewBox units)",
   "accent color (--sw04-red: #e8482b)",
   "alternating words (tempo / measure text content)",
-  "baseline grid line y positions"
+  "baseline grid line y positions",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (CSS @media + JS matchMedia)",
   "visibilitychange pause handler",
-  "svg.style.setProperty for --sw04-span"
+  "svg.style.setProperty for --sw04-span",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "SPAN constant is in viewBox units (not pixels) — rescaling layout requires adjusting grid line coordinates too",
@@ -79,7 +95,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "swiss",
@@ -155,6 +172,12 @@
   <script>
   (function(){
     "use strict";
+    // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+    addEventListener("message",function(e){
+      var d=e.data;
+      if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))
+        document.documentElement.setAttribute("data-theme",d.theme);
+    });
     var svg = document.getElementById('sw04-svg');
     var tick = document.getElementById('sw04-tick');
     if(!svg || !tick) return;

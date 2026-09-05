@@ -5,6 +5,12 @@
 <meta name="description" content="Tree of Knowledge — Symbolic Pastel Abstraction. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tree of Knowledge</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   This tile's default palette is already light, so both themes render the same; the hook keeps it
+   on the canvas's light wall and lets it answer the forever:theme protocol. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   html,body{margin:0;height:100%;background:#ece4d4;overflow:hidden}
   #afk07-stage{position:fixed;inset:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
@@ -23,18 +29,21 @@
  "description": "Symmetric binary tree of pastel circles and inked branches grows upward via stroke-draw and pop-in animations, then redraws on a 9-second loop.",
  "useWhen": "Ambient hero backgrounds, spiritual/botanical themes, data-tree concepts, or any context evoking growth and symmetry.",
  "avoidWhen": "Contexts requiring interactivity or user-driven state — tree is fully autonomous with no input hooks.",
- "agentPrompt": "Change PASTELS array to warm terracotta tones and slow the redraw interval from 9000 to 14000ms.",
+ "agentPrompt": "Change PASTELS array to warm terracotta tones and slow the redraw interval from 9000 to 14000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "PASTELS color array (5 entries)",
   "branch spread angle (0.42 - depth*0.03)",
   "root branch length (140)",
   "redraw interval (9000ms)",
-  "depth limit (depth >= 4)"
+  "draw-in pacing (0.22 s per depth; whole tree by ~1.5 s)",
+  "depth limit (depth >= 4)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED constant + CSS @media rule)",
-  "visibilitychange pause/resume pattern"
+  "visibilitychange pause/resume pattern",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Tree structure is fixed at compile time — no variation between redraw cycles",
@@ -47,7 +56,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "svg",
@@ -98,16 +108,16 @@
       ln.setAttribute('x1',e.x1);ln.setAttribute('y1',e.y1);
       ln.setAttribute('x2',e.x2);ln.setAttribute('y2',e.y2);
       ln.setAttribute('stroke',rgba(PAL.ink,0.55));
-      ln.setAttribute('stroke-width',(3.2-e.depth*0.5).toFixed(1));
+      ln.setAttribute('stroke-width',(3.8-e.depth*0.5).toFixed(1));
       ln.setAttribute('stroke-linecap','round');
       const len=Math.hypot(e.x2-e.x1,e.y2-e.y1);
       ln.setAttribute('stroke-dasharray',len);
       ln.setAttribute('stroke-dashoffset',REDUCED?0:len);
-      if(!REDUCED){ ln.style.animation='afk07-draw .7s ease forwards'; ln.style.animationDelay=(0.15+e.depth*0.5)+'s'; }
+      if(!REDUCED){ ln.style.animation='afk07-draw .5s ease forwards'; ln.style.animationDelay=(0.05+e.depth*0.22).toFixed(2)+'s'; }   // whole tree drawn by ~1.5 s (was ~3 s)
       svg.appendChild(ln);
     });
     nodes.forEach((n)=>{
-      const r=n.root?11:Math.max(3,9-n.depth*1.1);
+      const r=n.root?12:Math.max(3.5,10-n.depth*1.1);
       const c=document.createElementNS(NS,'circle');
       c.setAttribute('class','node');
       c.setAttribute('cx',n.x);c.setAttribute('cy',n.y);c.setAttribute('r',r);
@@ -115,7 +125,7 @@
       c.setAttribute('stroke',rgba(PAL.ink,0.45));c.setAttribute('stroke-width','1');
       if(!REDUCED){
         c.style.animation=`afk07-grow .5s cubic-bezier(.2,1.4,.4,1) forwards, afk07-breathe ${(3+Math.random()*2).toFixed(1)}s ease-in-out infinite`;
-        c.style.animationDelay=`${(0.3+(n.root?0:n.depth)*0.5)}s, ${(1.2+Math.random()).toFixed(2)}s`;
+        c.style.animationDelay=`${(0.15+(n.root?0:n.depth)*0.22).toFixed(2)}s, ${(1.2+Math.random()).toFixed(2)}s`;
         c.style.transform='scale(0)';
       }
       svg.appendChild(c);
@@ -131,5 +141,6 @@
   }
 })();
 </script>
+<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>

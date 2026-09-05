@@ -5,12 +5,29 @@
 <meta name="description" content="Semicircular gauge on dark amber bg with green-yellow-red arc segments, glowing white needle sweeping and a live 0-100 percentage readout.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Radial Gauge Needle</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1a1410;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --c05-s0..s2 are the arc zones. */
+  :root{
+    --c05-bg:#1a1410; --c05-cap:#ffb347; --c05-cap-o:.4;
+    --c05-s0:#3ee08f; --c05-s1:#ffd24d; --c05-s2:#ff5d5d;
+    --c05-tick:#ffffff55; --c05-needle:#ffffff; --c05-accent:#ffb347; --c05-ink:#ffffff; --c05-blur:10;
+  }
+  :root[data-theme="light"]{
+    --c05-bg:#f7f1e8; --c05-cap:#9e5d00; --c05-cap-o:.62;
+    --c05-s0:#147b48; --c05-s1:#8a6700; --c05-s2:#db0000;
+    --c05-tick:#1a141066; --c05-needle:#241a12; --c05-accent:#9e5d00; --c05-ink:#241a12; --c05-blur:6;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c05-bg);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
-    color:#ffb347;opacity:.4;text-transform:uppercase}
+    color:var(--c05-cap);opacity:var(--c05-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -19,19 +36,21 @@
  "description": "Semicircular gauge on dark amber background with green-yellow-red arc segments; a glowing white needle sweeps smoothly via sine wave with a live 0–100 readout.",
  "useWhen": "Dashboard widgets, metric displays, loading/progress indicators with a data-viz aesthetic.",
  "avoidWhen": "Real-time data inputs — needle auto-cycles via sine wave; wire to actual data and remove the phase loop before production use.",
- "agentPrompt": "Change the accent glow color from #ffb347 to #00eaff, narrow the red zone to start at 0.9 instead of 0.8, and slow the sweep by changing phase += 0.02 to phase += 0.01.",
+ "agentPrompt": "Change the accent glow color from #ffb347 to #00eaff, narrow the red zone to start at 0.9 instead of 0.8, and slow the sweep by changing phase += 0.02 to phase += 0.01. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "arc segment thresholds (segs array: 0.5, 0.8, 1.0)",
   "needle glow color (shadowColor '#ffb347')",
   "sweep speed (phase += 0.02)",
   "gauge radius (Math.min(W,H)*0.36)",
-  "segment colors ('#3ee08f', '#ffd24d', '#ff5d5d')"
+  "segment colors ('#3ee08f', '#ffd24d', '#ff5d5d')",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing (cv.width = W*DPR)",
   "visibilitychange pause guard",
   "prefers-reduced-motion branch (cur = tgt static)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Needle auto-cycles via sine wave — must replace phase/tgt logic to bind real data",
@@ -44,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "gauge",
@@ -65,9 +85,22 @@
 (function(){
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const root=document.documentElement;
   let W,H,DPR;
   const A0=Math.PI*0.78, A1=Math.PI*2.22; // sweep
+  const C={s0:'',s1:'',s2:'',tick:'',needle:'',accent:'',ink:'',blur:10};
   let cur=reduce?0.68:0.3,tgt=0.68,phase=0;
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    for(const k of ['s0','s1','s2','tick','needle','accent','ink'])C[k]=cs.getPropertyValue('--c05-'+k).trim();
+    C.blur=parseFloat(cs.getPropertyValue('--c05-blur'))||0;   // segs array is rebuilt from C each frame
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
   function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
   let last=0;
@@ -83,27 +116,27 @@
     ctx.clearRect(0,0,W,H);
     const cx=W/2,cy=H*0.6, R=Math.min(W,H)*0.36, lw=R*0.16;
     // colored arc segments
-    const segs=[['#3ee08f',0,0.5],['#ffd24d',0.5,0.8],['#ff5d5d',0.8,1]];
+    const segs=[[C.s0,0,0.5],[C.s1,0.5,0.8],[C.s2,0.8,1]];
     ctx.lineWidth=lw;ctx.lineCap='butt';
     for(const[c,a,b] of segs){
       ctx.strokeStyle=c+'cc';ctx.beginPath();
       ctx.arc(cx,cy,R,A0+(A1-A0)*a,A0+(A1-A0)*b);ctx.stroke();
     }
     // ticks
-    ctx.strokeStyle='#ffffff55';ctx.lineWidth=1.5;
+    ctx.strokeStyle=C.tick;ctx.lineWidth=1.5;
     for(let i=0;i<=10;i++){const a=A0+(A1-A0)*i/10;
       ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*(R+lw*0.6),cy+Math.sin(a)*(R+lw*0.6));
       ctx.lineTo(cx+Math.cos(a)*(R+lw*0.95),cy+Math.sin(a)*(R+lw*0.95));ctx.stroke();}
     // needle
     const na=A0+(A1-A0)*cur;
-    ctx.strokeStyle='#fff';ctx.lineWidth=Math.max(2,R*0.05);ctx.lineCap='round';
-    ctx.shadowColor='#ffb347';ctx.shadowBlur=10;
+    ctx.strokeStyle=C.needle;ctx.lineWidth=Math.max(2,R*0.05);ctx.lineCap='round';
+    ctx.shadowColor=C.accent;ctx.shadowBlur=C.blur;
     ctx.beginPath();ctx.moveTo(cx-Math.cos(na)*R*0.18,cy-Math.sin(na)*R*0.18);
     ctx.lineTo(cx+Math.cos(na)*R*0.92,cy+Math.sin(na)*R*0.92);ctx.stroke();ctx.shadowBlur=0;
-    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(cx,cy,R*0.1,0,7);ctx.fill();
-    ctx.fillStyle='#ffb347';ctx.beginPath();ctx.arc(cx,cy,R*0.05,0,7);ctx.fill();
+    ctx.fillStyle=C.needle;ctx.beginPath();ctx.arc(cx,cy,R*0.1,0,7);ctx.fill();
+    ctx.fillStyle=C.accent;ctx.beginPath();ctx.arc(cx,cy,R*0.05,0,7);ctx.fill();
     // value
-    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=C.ink;ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.font='700 '+(R*0.34)+'px ui-monospace,monospace';
     ctx.fillText(Math.round(cur*100),cx,cy+R*0.5);
     raf();
@@ -111,7 +144,7 @@
   function raf(){requestAnimationFrame(draw)}
   addEventListener('resize',resize);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
-  resize();raf();
+  syncTheme();resize();raf();
 })();
 </script>
 </body>

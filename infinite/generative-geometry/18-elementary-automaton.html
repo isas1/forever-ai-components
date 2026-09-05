@@ -5,11 +5,25 @@
 <meta name="description" content="Monochrome 1D elementary cellular automaton scrolling downward, cycling rules like 90/30/110 with a Sierpinski-style descent and rule label.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Cellular Automaton</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#000000;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme lives in the one [data-theme="light"] block. The tile is monochrome:
+     light simply swaps the pair, printing the rule as dark cells on paper. */
+  :root{
+    --eca-bg:#000000; --eca-ink:#f2f2f2; --eca-cap:#f2f2f2; --eca-cap-o:.32;
+  }
+  :root[data-theme="light"]{
+    --eca-bg:#f7f7f5; --eca-ink:#16181a; --eca-cap:#16181a; --eca-cap-o:.6;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--eca-bg);}
   #eca-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
-       letter-spacing:.14em;color:#f2f2f2;opacity:.32;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--eca-cap);opacity:var(--eca-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +33,21 @@
  "description": "1D elementary cellular automaton scrolls downward row-by-row, cycling through rules 30/90/110 and more; oldest rows fade, newest glow at the wavefront.",
  "useWhen": "Dark ambient backgrounds, generative/algorithmic art displays, screensaver-style loops, math or science visualizations.",
  "avoidWhen": "Light-background layouts (black hardcoded). Contexts needing legible text overlays — the constant vertical motion competes with reading.",
- "agentPrompt": "Change the rule cycle to show only Rule 30 and Rule 110 by setting RULES=[30,110], and slow the scroll to every 5 frames by changing acc%3 to acc%5.",
+ "agentPrompt": "Change the rule cycle to show only Rule 30 and Rule 110 by setting RULES=[30,110], and slow the scroll to every 5 frames by changing acc%3 to acc%5. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "rule list (RULES array)",
   "scroll speed (acc%3 frame divisor)",
   "cell pixel size (cell = min(W,H)/120)",
   "fade range (0.16+age*0.84)",
-  "background and cell color (#000000 / #f2f2f2)"
+  "background and cell color (#000000 / #f2f2f2)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange pause/start",
   "prefers-reduced-motion static render branch",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background hardcoded to black — must edit CSS and ctx.fillStyle to change theme",
@@ -45,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "cellular-automaton",
@@ -68,6 +85,18 @@
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   // rules curated for visual interest: 30 chaos, 90 Sierpinski, 110 universal, 150, 54, 60, 18, 22
   const RULES=[90,30,110,150,54,60,182,18,22,73];
+  // theme: the field colour and the cell/label ink come from the CSS tokens
+  const root=document.documentElement;
+  const C={bg:'#000000',ink:'#f2f2f2'};
+  function syncTheme(){
+    const cs=getComputedStyle(root),s=n=>cs.getPropertyValue(n).trim();
+    C.bg=s('--eca-bg')||C.bg;C.ink=s('--eca-ink')||C.ink;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce&&grid)draw();}
+  });
+  syncTheme();
   let W,H,DPR,cell,COLS,ROWS,grid,rule,ri,head,acc,caption;
 
   function pickRule(idx){
@@ -114,7 +143,7 @@
   }
 
   function draw(){
-    ctx.fillStyle='#000000';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const n=grid.length;
     // newest rows at bottom; oldest fade toward top
     for(let row=0;row<n;row++){
@@ -125,7 +154,7 @@
       const a=0.16+age*0.84;
       for(let i=0;i<COLS;i++){
         if(!g[i]) continue;
-        ctx.fillStyle='#f2f2f2';
+        ctx.fillStyle=C.ink;
         ctx.globalAlpha=a;
         ctx.fillRect(i*cell,y,cell-(cell>3?1:0),cell-(cell>3?1:0));
       }
@@ -135,7 +164,7 @@
     const last=grid[n-1],ly=Math.round((ROWS-1)*cell);
     for(let i=0;i<COLS;i++){
       if(!last[i])continue;
-      ctx.fillStyle='#f2f2f2';ctx.globalAlpha=1;
+      ctx.fillStyle=C.ink;ctx.globalAlpha=1;
       ctx.fillRect(i*cell,ly,cell-(cell>3?1:0),cell-(cell>3?1:0));
     }
     ctx.globalAlpha=1;
@@ -143,7 +172,7 @@
     const fs=Math.max(9,Math.round(Math.min(W,H)/34));
     ctx.font='600 '+fs+'px ui-monospace,Menlo,monospace';
     ctx.textAlign='right';ctx.textBaseline='top';
-    ctx.globalAlpha=0.85;ctx.fillStyle='#f2f2f2';
+    ctx.globalAlpha=0.85;ctx.fillStyle=C.ink;
     ctx.fillText(caption,W-10,10);
     ctx.globalAlpha=0.4;
     ctx.font='600 '+Math.round(fs*0.62)+'px ui-monospace,Menlo,monospace';

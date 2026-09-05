@@ -5,36 +5,50 @@
 <meta name="description" content="Two color-coded panes split by a draggable cyan divider with a grip and percent readout, auto-sweeping in a gentle spring motion.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Split Pane</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root{--bg:#0c0e13;--ac:#22d3ee;--l:#f2b705;--r:#e0457b}
+  :root{--bg:#0c0e13;--ac:#22d3ee;--l:#f2b705;--r:#e0457b;
+    --dr10-frame-bg:#11141b;--dr10-frame-ring:rgba(255,255,255,.06);
+    --dr10-l-hatch:rgba(242,183,5,.07);--dr10-l-wash1:rgba(242,183,5,.16);--dr10-l-wash2:rgba(242,183,5,.04);--dr10-l-mark2:rgba(242,183,5,.4);
+    --dr10-r-hatch:rgba(224,69,123,.07);--dr10-r-wash1:rgba(224,69,123,.16);--dr10-r-wash2:rgba(224,69,123,.04);--dr10-r-mark2:rgba(224,69,123,.4);
+    --dr10-bline-ring:rgba(34,211,238,.25);--dr10-grip-focus:rgba(34,211,238,.5);--cap:#fff;--cap-o:.42}
+  :root[data-theme="light"]{--bg:#eef1f6;--ac:#0a7686;--l:#ac8204;--r:#e0457b;
+    --dr10-frame-bg:#ffffff;--dr10-frame-ring:rgba(27,34,48,.08);
+    --dr10-l-hatch:rgba(172,130,4,.09);--dr10-l-wash1:rgba(172,130,4,.2);--dr10-l-wash2:rgba(172,130,4,.05);--dr10-l-mark2:rgba(172,130,4,.42);
+    --dr10-r-hatch:rgba(224,69,123,.09);--dr10-r-wash1:rgba(224,69,123,.2);--dr10-r-wash2:rgba(224,69,123,.05);--dr10-r-mark2:rgba(224,69,123,.42);
+    --dr10-bline-ring:rgba(10,118,134,.25);--dr10-grip-focus:rgba(10,118,134,.45);--cap:#1b2230;--cap-o:.5}
   *{margin:0;box-sizing:border-box}
   html,body{height:100%}
   body{background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
   #dr10-stage{position:absolute;inset:0;display:grid;place-items:center}
   #dr10-frame{position:relative;width:78%;height:64%;max-width:560px;border-radius:10px;overflow:hidden;
-    background:#11141b;box-shadow:0 0 0 1px rgba(255,255,255,.06),0 0 60px -28px var(--ac)}
+    background:var(--dr10-frame-bg);box-shadow:0 0 0 1px var(--dr10-frame-ring),0 0 60px -28px var(--ac)}
   .dr10-pane{position:absolute;top:0;height:100%;will-change:transform;transform-origin:left center}
   #dr10-pL{left:0;width:50%;background:
-    repeating-linear-gradient(90deg,rgba(242,183,5,.07) 0 1px,transparent 1px 22px),
-    linear-gradient(135deg,rgba(242,183,5,.16),rgba(242,183,5,.04))}
+    repeating-linear-gradient(90deg,var(--dr10-l-hatch) 0 1px,transparent 1px 22px),
+    linear-gradient(135deg,var(--dr10-l-wash1),var(--dr10-l-wash2))}
   #dr10-pR{right:0;width:50%;transform-origin:right center;background:
-    repeating-linear-gradient(0deg,rgba(224,69,123,.07) 0 1px,transparent 1px 22px),
-    linear-gradient(315deg,rgba(224,69,123,.16),rgba(224,69,123,.04))}
+    repeating-linear-gradient(0deg,var(--dr10-r-hatch) 0 1px,transparent 1px 22px),
+    linear-gradient(315deg,var(--dr10-r-wash1),var(--dr10-r-wash2))}
   .dr10-mark{position:absolute;border-radius:3px;will-change:transform}
   #dr10-mL{left:14px;top:16px;width:34%;height:14px;background:var(--l);opacity:.85}
-  #dr10-mL2{left:14px;top:40px;width:54%;height:8px;background:rgba(242,183,5,.4)}
+  #dr10-mL2{left:14px;top:40px;width:54%;height:8px;background:var(--dr10-l-mark2)}
   #dr10-mR{right:14px;top:16px;width:34%;height:14px;background:var(--r);opacity:.85}
-  #dr10-mR2{right:14px;top:40px;width:54%;height:8px;background:rgba(224,69,123,.4)}
+  #dr10-mR2{right:14px;top:40px;width:54%;height:8px;background:var(--dr10-r-mark2)}
   #dr10-bar{position:absolute;top:0;height:100%;width:14px;margin-left:-7px;left:50%;
     cursor:ew-resize;display:grid;place-items:center;will-change:transform;z-index:3;outline:none;touch-action:none}
-  #dr10-bline{width:2px;height:100%;background:var(--ac);box-shadow:0 0 0 1px rgba(34,211,238,.25)}
+  #dr10-bline{width:2px;height:100%;background:var(--ac);box-shadow:0 0 0 1px var(--dr10-bline-ring)}
   #dr10-grip{position:absolute;width:24px;height:46px;border-radius:7px;background:var(--bg);
     border:2px solid var(--ac);display:grid;grid-auto-flow:column;gap:3px;place-content:center;will-change:transform}
   #dr10-grip i{width:2px;height:16px;background:var(--ac);border-radius:2px}
-  #dr10-bar:focus-visible #dr10-grip{box-shadow:0 0 0 3px rgba(34,211,238,.5)}
+  #dr10-bar:focus-visible #dr10-grip{box-shadow:0 0 0 3px var(--dr10-grip-focus)}
   #dr10-read{position:absolute;left:50%;top:-2px;transform:translateX(-50%);font:600 9px/1 ui-monospace,monospace;
     color:var(--ac);background:var(--bg);padding:3px 5px;border-radius:0 0 5px 5px;letter-spacing:.06em;z-index:4;will-change:transform}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--cap);opacity:var(--cap-o);
     letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
@@ -45,19 +59,21 @@
  "description": "Two color-coded panes (amber/pink) split by a draggable cyan divider; the divider springs to position with grip squash, auto-sweeping gently when idle.",
  "useWhen": "Code editors, comparison views, side-by-side content layouts, or any UI demo needing a resizable split panel.",
  "avoidWhen": "Contexts where the auto-sweep demo loop is distracting — remove the phase loop and set demo=false for production use.",
- "agentPrompt": "Change accent color from cyan (#22d3ee) to purple (#a855f7) by updating --ac in :root, and slow the demo sweep by changing phase+=0.012 to phase+=0.006.",
+ "agentPrompt": "Change accent color from cyan (#22d3ee) to purple (#a855f7) by updating --ac in :root, and slow the demo sweep by changing phase+=0.012 to phase+=0.006. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--ac CSS variable)",
   "spring constants (K=0.16, D=0.78)",
   "demo sweep speed (phase+=0.012)",
   "min/max split limits (MIN=14, MAX=86)",
-  "pane colors (--l and --r CSS variables)"
+  "pane colors (--l and --r CSS variables)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause/resume",
-  "pointer capture on bar for smooth drag"
+  "pointer capture on bar for smooth drag",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — set demo=false and remove the phase block for production",
@@ -70,7 +86,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "split-pane",
@@ -112,6 +129,7 @@
   function measure(){W=frame.clientWidth||1;}
   measure();
   addEventListener("resize",measure,{passive:true});
+  addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});
 
   // FLIP-style: panes always 50% wide; scaleX maps to split fraction. Crisp, transform-only.
   function paint(p){

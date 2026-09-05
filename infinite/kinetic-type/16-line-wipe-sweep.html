@@ -5,11 +5,26 @@
 <meta name="description" content="A bright gold scan bar sweeps down outlined letters, developing them into solid glowing fill with a hot edge, like a darkroom print emerging">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Line Wipe Sweep</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#12060c;}
+  /* theme tokens — dark values are the defaults; light re-theme = the [data-theme="light"] block.
+     canvas paints its own bg every frame, so JS reads these via syncTheme(), not CSS. */
+  :root{
+    --lws-bg:#12060c; --lws-accent:#ffd166; --lws-accent-rgb:255,209,102;
+    --lws-hot:#fff7e0; --lws-spark:#fff3cf; --cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --lws-bg:#f7f0f3; --lws-accent:#8f6400; --lws-accent-rgb:143,100,0;
+    --lws-hot:#664c00; --lws-spark:#664c00; --cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--lws-bg);}
   #lws-c{display:block;width:100%;height:100%;}
   .lws-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
-       letter-spacing:.14em;color:#ffd166;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--lws-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +34,21 @@
  "description": "A gold scan bar sweeps down outlined letters, filling them with glowing solid color as it passes — like a darkroom print developing. Cycles through four words.",
  "useWhen": "Hero text reveals, loading screens, or brand moments where a dramatic develop/reveal effect fits. Dark backgrounds only.",
  "avoidWhen": "Light backgrounds (BG is hardcoded dark maroon). Contexts where auto-cycling word changes would distract from surrounding content.",
- "agentPrompt": "Change the words array to [\"LAUNCH\",\"BUILD\",\"SHIP\",\"GROW\"], set ACC to '#00eaff' for a cyan glow, and slow the sweep speed by changing 0.012 to 0.007.",
+ "agentPrompt": "Change the words array to [\"LAUNCH\",\"BUILD\",\"SHIP\",\"GROW\"], set ACC to '#00eaff' for a cyan glow, and slow the sweep speed by changing 0.012 to 0.007. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "words array (words=[...])",
   "accent color (ACC='#ffd166')",
   "sweep speed (0.012 base speed)",
   "hold pause duration (hold>70)",
-  "font size scale (H*0.42)"
+  "font size scale (H*0.42)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause/stop",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and JS — must change both BG constant and CSS to recolor",
@@ -45,7 +62,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -66,8 +84,19 @@
 (function(){
   const cv=document.getElementById('lws-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const BG='#12060c',ACC='#ffd166';
   const words=["DEVELOP","REVEAL","IMPRINT","EXPOSE"];
+  // JS-drawn colours — read from tokens so the canvas repaints correctly on theme switch
+  const htmlEl=document.documentElement;
+  const C={bg:'#12060c',accent:'#ffd166',accentRgb:'255,209,102',hot:'#fff7e0',spark:'#fff3cf'};
+  function syncTheme(){
+    const cs=getComputedStyle(htmlEl);
+    C.bg=(cs.getPropertyValue('--lws-bg')||'#12060c').trim();
+    C.accent=(cs.getPropertyValue('--lws-accent')||'#ffd166').trim();
+    C.accentRgb=(cs.getPropertyValue('--lws-accent-rgb')||'255,209,102').trim();
+    C.hot=(cs.getPropertyValue('--lws-hot')||'#fff7e0').trim();
+    C.spark=(cs.getPropertyValue('--lws-spark')||'#fff3cf').trim();
+  }
+  syncTheme();
   let W,H,DPR,word=words[0],wi=0,fs,baseY,top,bot;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -91,7 +120,7 @@
     const cx=W/2, txt=word;
     // 1) outline (un-developed) of full word
     ctx.lineWidth=Math.max(1.2,fs*0.018);
-    ctx.strokeStyle='rgba(255,209,102,0.30)';
+    ctx.strokeStyle='rgba('+C.accentRgb+',0.30)';
     ctx.lineJoin='round';
     ctx.strokeText(txt,cx,baseY);
     // 2) solid fill, clipped to area ABOVE the sweep line (already developed)
@@ -99,8 +128,8 @@
     ctx.beginPath();
     ctx.rect(0,0,W,Math.max(0,sweepY));
     ctx.clip();
-    ctx.fillStyle=ACC;
-    ctx.shadowColor='rgba(255,209,102,0.55)';
+    ctx.fillStyle=C.accent;
+    ctx.shadowColor='rgba('+C.accentRgb+',0.55)';
     ctx.shadowBlur=fs*0.10;
     ctx.fillText(txt,cx,baseY);
     ctx.restore();
@@ -111,8 +140,8 @@
       ctx.beginPath();
       ctx.rect(0,sweepY-fs*0.06,W,fs*0.12);
       ctx.clip();
-      ctx.fillStyle='#fff7e0';
-      ctx.shadowColor=ACC; ctx.shadowBlur=fs*0.18;
+      ctx.fillStyle=C.hot;
+      ctx.shadowColor=C.accent; ctx.shadowBlur=fs*0.18;
       ctx.fillText(txt,cx,baseY);
       ctx.restore();
       ctx.shadowBlur=0;
@@ -120,7 +149,7 @@
   }
 
   function frame(){
-    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     // active band for the scan bar
     const start=top-fs*0.5, end=bot+fs*0.5;
     drawWord(y);
@@ -128,15 +157,15 @@
     const cx=W/2, halfW=Math.min(W*0.42, word.length*fs*0.34);
     if(y>start-4 && y<end+4){
       const g=ctx.createLinearGradient(cx-halfW,0,cx+halfW,0);
-      g.addColorStop(0,'rgba(255,209,102,0)');
-      g.addColorStop(.5,'#fff3cf');
-      g.addColorStop(1,'rgba(255,209,102,0)');
+      g.addColorStop(0,'rgba('+C.accentRgb+',0)');
+      g.addColorStop(.5,C.spark);
+      g.addColorStop(1,'rgba('+C.accentRgb+',0)');
       ctx.strokeStyle=g; ctx.lineWidth=Math.max(2,fs*0.03);
-      ctx.shadowColor=ACC; ctx.shadowBlur=fs*0.4;
+      ctx.shadowColor=C.accent; ctx.shadowBlur=fs*0.4;
       ctx.beginPath(); ctx.moveTo(cx-halfW,y); ctx.lineTo(cx+halfW,y); ctx.stroke();
       ctx.shadowBlur=0;
       // faint scan ticks above/below the bar
-      ctx.strokeStyle='rgba(255,209,102,0.12)'; ctx.lineWidth=1;
+      ctx.strokeStyle='rgba('+C.accentRgb+',0.12)'; ctx.lineWidth=1;
       ctx.beginPath();
       ctx.moveTo(cx-halfW,y-fs*0.07); ctx.lineTo(cx+halfW,y-fs*0.07);
       ctx.stroke();
@@ -151,13 +180,23 @@
   }
   function start(){ if(!raf && !reduce) raf=requestAnimationFrame(frame); }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
-  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
-  reset();
-  if(reduce){
+  function paintReduced(){
     // static resting frame: word fully developed
-    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     y=bot+fs; drawWord(y);
-  } else { start(); }
+  }
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      htmlEl.setAttribute('data-theme', d.theme);
+      syncTheme();
+      if(reduce) paintReduced();
+    }
+  });
+  reset();
+  if(reduce){ paintReduced(); } else { start(); }
 })();
 </script>
 </body>

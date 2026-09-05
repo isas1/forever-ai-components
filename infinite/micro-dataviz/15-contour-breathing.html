@@ -5,11 +5,26 @@
 <meta name="description" content="Teal marching-squares contour map of drifting gaussian hills that pulse and breathe like a living topographic elevation field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Contour Breathing</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#101820;}
+  /* theme tokens — dark values are the defaults; --cb-rgb feeds the JS contour alphas,
+     --cb-trail is the per-frame wash and --cb-am lifts faint lines on a light ground */
+  :root{
+    --cb-bg:#101820; --cb-accent:#7fe0d4; --cb-rgb:127,224,212;
+    --cb-trail:rgba(16,24,32,0.42); --cb-am:1; --cb-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --cb-bg:#eef3f7; --cb-accent:#1e7b70; --cb-rgb:30,123,112;
+    --cb-trail:rgba(238,243,247,0.42); --cb-am:1.3; --cb-cap-o:.62;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--cb-bg);}
   #cb-c{display:block;width:100%;height:100%;}
   .cb-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:#7fe0d4;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--cb-accent);opacity:var(--cb-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +34,22 @@
  "description": "11 teal contour lines trace a living topographic map of 5 drifting gaussian hills; lines pulse and breathe as hills orbit and a ripple wave shifts the field.",
  "useWhen": "Dark-mode hero backgrounds, data-art installations, ambient screensavers with a scientific or terrain aesthetic.",
  "avoidWhen": "Light-background UIs (background hardcoded dark navy #101820). Contexts needing legible text overlays — contour lines fill the entire canvas.",
- "agentPrompt": "Change contour color from teal to amber by replacing 'rgba(127,224,212,' with 'rgba(255,180,60,', increase hill count from 5 to 7, and slow the animation by changing t+=0.0125 to t+=0.007.",
+ "agentPrompt": "Change contour color from teal to amber by replacing 'rgba(127,224,212,' with 'rgba(255,180,60,', increase hill count from 5 to 7, and slow the animation by changing t+=0.0125 to t+=0.007. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "hill count (loop to 5)",
   "animation speed (t += 0.0125)",
   "contour line count (LINES=11)",
   "contour color (rgba(127,224,212,...))",
   "pointer boost strength (pBoost+0.5 / +1.2)",
-  "breathing ripple amplitude (0.12)"
+  "breathing ripple amplitude (0.12)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback",
   "visibilitychange pause/start guards",
-  "DPR-aware canvas sizing and transform"
+  "DPR-aware canvas sizing and transform",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Marching-squares loop runs over entire GW*GH grid each frame — heavy on large viewports or high-DPR screens",
@@ -45,7 +62,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "contour",
@@ -155,7 +173,7 @@
     buildField(t);
     pBoost*=0.95;
     // soft trail so emerging/dying lines feel like breathing
-    ctx.fillStyle='rgba(16,24,32,0.42)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.trail;ctx.fillRect(0,0,W,H);
     // dynamic field range -> evenly spaced thresholds
     let mn=Infinity,mx=-Infinity;
     for(let k=0;k<field.length;k++){const f=field[k];if(f<mn)mn=f;if(f>mx)mx=f;}
@@ -164,7 +182,7 @@
       const fr=(n+0.5)/LINES, th=mn+fr*span;
       // peaks brighter; tighter spacing reads as steeper elevation
       const a=0.16+0.74*fr*fr;
-      ctx.strokeStyle='rgba(127,224,212,'+a.toFixed(3)+')';
+      ctx.strokeStyle='rgba('+C.rgb+','+(a*C.am).toFixed(3)+')';
       ctx.lineWidth=fr>0.82?1.5:1;
       contour(th);
     }
@@ -179,12 +197,32 @@
   });
   cv.addEventListener('pointerdown',()=>{pBoost=Math.min(2,pBoost+1.2);});
 
-  if(reduce){ctx.fillStyle='#101820';ctx.fillRect(0,0,W,H);buildField(2.2);
+  function staticDraw(){
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);buildField(2.2);
     let mn=Infinity,mx=-Infinity;for(let k=0;k<field.length;k++){const f=field[k];if(f<mn)mn=f;if(f>mx)mx=f;}
     const span=Math.max(0.001,mx-mn),L=11;
-    for(let n=0;n<L;n++){const fr=(n+0.5)/L;ctx.strokeStyle='rgba(127,224,212,'+(0.16+0.74*fr*fr).toFixed(3)+')';
+    for(let n=0;n<L;n++){const fr=(n+0.5)/L;ctx.strokeStyle='rgba('+C.rgb+','+((0.16+0.74*fr*fr)*C.am).toFixed(3)+')';
       ctx.lineWidth=fr>0.82?1.5:1;contour(mn+fr*span);}
-  }else start();
+  }
+  // theme: every colour the canvas draws with is read from the tokens, once per switch
+  const root=document.documentElement, C={};
+  let ready=0;
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--cb-bg').trim();
+    C.rgb=cs.getPropertyValue('--cb-rgb').trim();
+    C.trail=cs.getPropertyValue('--cb-trail').trim();
+    C.am=parseFloat(cs.getPropertyValue('--cb-am'));
+    if(reduce&&ready)staticDraw();              // running loop repaints itself
+  }
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
+  syncTheme();ready=1;
+  if(reduce){staticDraw();}else start();
 })();
 </script>
 </body>

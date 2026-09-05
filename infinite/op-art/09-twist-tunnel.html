@@ -5,20 +5,41 @@
 <meta name="description" content="Concentric black-and-white squares rotate and shrink into a deep central vanishing point with shimmering moire depth bands.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Twist Tunnel</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
-  #op09-stage{position:fixed;inset:0;background:#0a0a0a;display:block}
+  /* theme tokens — dark values are the defaults; light inverts the ground/ink pair
+     (ink squares on white paper) and fades the vignette toward paper. The v0/v1
+     pair is the grey ramp the JS maps its per-ring lightness through:
+     v = v0 + light*(v1-v0), so dark stays rgb(255*light) exactly. */
+  :root{
+    --op09-bg:#0a0a0a; --op09-v0:0; --op09-v1:255;
+    --op09-glow:rgba(255,255,255,.10); --op09-glow-t:rgba(255,255,255,0);
+    --op09-vig-t:rgba(10,10,10,0); --op09-vig:rgba(10,10,10,.72);
+    --op09-cap:#fff; --op09-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --op09-bg:#f4f4f2; --op09-v0:250; --op09-v1:18;
+    --op09-glow:rgba(20,20,20,.06); --op09-glow-t:rgba(20,20,20,0);
+    --op09-vig-t:rgba(244,244,242,0); --op09-vig:rgba(244,244,242,.72);
+    --op09-cap:#141414; --op09-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--op09-bg);overflow:hidden}
+  #op09-stage{position:fixed;inset:0;background:var(--op09-bg);display:block}
   #op09-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* static radial vignette + center glow — never repaints */
   #op09-stage::after{
     content:"";position:absolute;inset:0;pointer-events:none;
     background:radial-gradient(circle at 50% 50%,
-      rgba(255,255,255,.10) 0%,
-      rgba(255,255,255,0) 22%,
-      rgba(10,10,10,0) 60%,
-      rgba(10,10,10,.72) 100%);
+      var(--op09-glow) 0%,
+      var(--op09-glow-t) 22%,
+      var(--op09-vig-t) 60%,
+      var(--op09-vig) 100%);
   }
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op09-cap);opacity:var(--op09-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -28,19 +49,21 @@
  "description": "26 concentric squares shrink and twist into a vanishing point with alternating brightness bands producing moire shimmer and endless-depth illusion.",
  "useWhen": "Dark-mode hero backgrounds, loading screens, or any context needing a hypnotic geometric loop with high visual impact.",
  "avoidWhen": "Light backgrounds (hardcoded near-black canvas). Contexts where sustained motion causes vestibular discomfort — no reduced-motion animation fallback, only a static frame.",
- "agentPrompt": "Change RINGS to 18, set BASE_TWIST to 0.35, and swap stroke colors to alternate between deep purple and white by replacing the rgb(v,v,v) strokeStyle with hsl values.",
+ "agentPrompt": "Change RINGS to 18, set BASE_TWIST to 0.35, and swap stroke colors to alternate between deep purple and white by replacing the rgb(v,v,v) strokeStyle with hsl values. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ring count (RINGS=26)",
   "shrink ratio per ring (SCALE=0.86)",
   "twist per ring (BASE_TWIST=0.20)",
   "global twist oscillation amplitude (0.35)",
-  "drift speed (t*0.06)"
+  "drift speed (t*0.06)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "Float64Array corner reuse (allocation-free draw loop)",
   "IIFE wrapper",
   "visibility pause / stop",
-  "reduced-motion static frame guard"
+  "reduced-motion static frame guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to near-black — must edit both CSS and fillStyle to change",
@@ -54,7 +77,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "op-art",
@@ -80,6 +104,23 @@
   var cv=document.getElementById("op09-c");
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var root=document.documentElement;
+
+  // colours the canvas draws with — read once from the tokens, once per switch
+  var C={bg:"#0a0a0a",v0:0,v1:255};
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue("--op09-bg").trim();
+    C.v0=parseFloat(cs.getPropertyValue("--op09-v0"))||0;
+    C.v1=parseFloat(cs.getPropertyValue("--op09-v1"))||255;
+    if(W&&!running)drawFrame(reducePhase);   // static fallback must repaint on a live switch
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme();
+    }
+  });
 
   // --- sizing (cached; recomputed only on resize) ---
   var W=0,H=0,DPR=1,cx=0,cy=0,unit=0;
@@ -121,13 +162,13 @@
     ctx.closePath();
     ctx.lineWidth=lw;
     // alternate value for moire/depth banding, fade with depth
-    var v=Math.round(255*light);
+    var v=Math.round(C.v0+light*(C.v1-C.v0));
     ctx.strokeStyle="rgb("+v+","+v+","+v+")";
     ctx.stroke();
   }
 
   function drawFrame(t){
-    ctx.fillStyle="#0a0a0a";
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
     // breathing depth: rings drift inward, cycling so the tunnel feels endless
     var drift=(t*0.06)% 1; // 0..1 fractional ring offset
@@ -174,6 +215,7 @@
     else if(!reduce)play();
   });
 
+  syncTheme();
   resize();
   if(reduce){
     drawFrame(reducePhase); // one calm static frame, no loop

@@ -5,11 +5,22 @@
 <meta name="description" content="A glowing orange sun setting over dotted water, with shimmering reflections rendered as optically mixing colored points.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pointillist Sunset</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  /* theme tokens — dark defaults, light in [data-theme="light"]. --po03-pal:
+     sky-hi/sky-lo/sun/sun-rim/water-warm/water-cool/water-teal/deep */
+  :root{--po03-bg:#0d0f14;--po03-cap:#fff;--po03-cap-o:.42;
+    --po03-pal:240 168 48/122 72 128/255 224 120/242 120 70/232 150 64/44 86 128/86 150 150/30 40 70}
+  :root[data-theme="light"]{--po03-bg:#f4efe3;--po03-cap:#2b2418;--po03-cap-o:.55;
+    --po03-pal:206 140 44/150 124 168/200 116 20/168 56 24/196 118 36/46 78 124/52 112 116/56 62 92}
+  html,body{margin:0;height:100%;background:var(--po03-bg);overflow:hidden}
   #po03-stage{position:fixed;inset:0;display:block}
   #po03-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--po03-cap);opacity:var(--po03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +30,21 @@
  "description": "A glowing sun sets over shimmering water rendered as colored dot lattices. Sky baked once offscreen; water dots animate with sinusoidal shimmer and sparkle.",
  "useWhen": "Dark-mode hero backgrounds, art or gallery themes, ambient screensavers where a painterly aesthetic fits.",
  "avoidWhen": "Light-background layouts (background hardcoded dark). Contexts needing full reduced-motion stop — only one static frame renders.",
- "agentPrompt": "Change the sun palette to cooler pink tones by setting SUN to [255,200,200] and SUN_R to [200,80,120], then shift WATER_W to [180,120,200] to tint reflections lavender.",
+ "agentPrompt": "Change the sun palette to cooler pink tones by setting SUN to [255,200,200] and SUN_R to [200,80,120], then shift WATER_W to [180,120,200] to tint reflections lavender. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "sun/sky color palette (SKY_HI, SKY_LO, SUN, SUN_R)",
   "water colors (WATER_W, WATER_C, WATER_T)",
   "dot step size (Math.min(W,H)/46)",
   "shimmer wave speed (phase*1.6 coefficient)",
-  "horizon split (H*0.46)"
+  "horizon split (H*0.46)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "offscreen sky canvas baked once and blitted (critical for perf)",
   "typed-array pixel buffer via stampDot (critical for perf)",
   "visibilitychange pause",
-  "reduced-motion static fallback"
+  "reduced-motion static fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to dark navy (#0d0f14) in CSS",
@@ -44,7 +57,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "pointillism",
@@ -71,45 +85,29 @@
   var ctx = cv.getContext('2d');
   var stage = document.getElementById('po03-stage');
 
-  // Divisionist palette: warm sun touches + cool complementary water dots.
-  // Each "patch" of the scene mixes 3-4 hues optically. Stored as RGB triples.
-  var SKY_HI = [240,168,48];   // accent #f0a830
-  var SKY_LO = [122,72,128];   // violet dusk
-  var SUN    = [255,224,120];
-  var SUN_R  = [242,120,70];
-  var WATER_W= [232,150,64];   // warm reflection
-  var WATER_C= [44,86,128];    // cool deep
-  var WATER_T= [86,150,150];   // teal break
+  // Divisionist palette (--po03-pal): warm sun over cool water.
+  var root=document.documentElement, BG='#0d0f14';
+  var SKY_HI,SKY_LO,SUN,SUN_R,WATER_W,WATER_C,WATER_T,DEEP;
 
   var W=0,H=0,DPR=1, horizon=0, cx=0, sunY=0, sunR=0;
   var t=0, running=true, raf=0;
 
-  // ---- Static sky layer, rendered once per resize to an offscreen canvas. ----
-  // The sky never changes (it has no phase dependency), so we paint its dot
-  // lattice exactly once and blit it each frame with a single drawImage.
+  // Static sky: painted once per resize offscreen, blitted with one drawImage.
   var sky = document.createElement('canvas');
   var sctx = sky.getContext('2d');
 
-  // ---- Water shimmer layer. We rasterise the animated water dots straight
-  // into a reusable typed-array pixel buffer (single putImageData per frame),
-  // instead of thousands of per-dot ctx.arc fills. Geometry is precomputed
-  // once on resize; per frame we only recolour each dot in place. ----
+  // Water shimmer: dots rasterised into a reusable typed-array pixel buffer (one
+  // putImageData/frame, no ctx.arc fills). Geometry fixed on resize; recolour only.
   var water = document.createElement('canvas');   // offscreen so we can alpha-composite
   var wctx = water.getContext('2d');
-  var wImg=null, wBuf=null, wW=0, wH=0;   // ImageData + its Uint8ClampedArray
-  var wb={r:0,g:0,b:0};                    // scratch base colour (no per-frame alloc)
-  var wc={r:0,g:0,b:0};                    // scratch final colour
-  // Per-dot precomputed geometry/state (parallel typed arrays = no objects).
-  var dN=0;                                 // water dot count
-  var dPx=null,dPy=null,dR=null;            // device-px centre + radius
-  var dBaseR=null,dBaseG=null,dBaseB=null;  // static base water colour
-  var dRefl=null;                           // reflection weight 0..1
-  var dSp=null;                             // deterministic sparkle seed 0..1
-  var dWxK=null;                            // wx*0.04 wave phase constant
-  var dYK=null;                             // y2*0.09 wave constant
+  var wImg=null, wBuf=null, wW=0, wH=0;  // ImageData + its Uint8ClampedArray
+  var wb={r:0,g:0,b:0}, wc={r:0,g:0,b:0}; // scratch colours (no per-frame alloc)
+  // Per-dot state as parallel typed arrays: centre+radius, base colour, reflection
+  // weight, sparkle seed, wave constants.
+  var dN=0, dPx=null,dPy=null,dR=null, dBaseR=null,dBaseG=null,dBaseB=null;
+  var dRefl=null, dSp=null, dWxK=null, dYK=null;
 
-  // small deterministic jitter
-  function rnd(s){ s=Math.sin(s)*43758.5453; return s-Math.floor(s); }
+  function rnd(s){ s=Math.sin(s)*43758.5453; return s-Math.floor(s); }  // deterministic jitter
 
   function resize(){
     DPR = Math.min(2, window.devicePixelRatio||1);
@@ -132,12 +130,11 @@
     out.b = a[2]+(b[2]-a[2])*k;
   }
 
-  // Paint the unchanging sky dot lattice once (device pixels).
-  function buildSky(){
+  function buildSky(){   // paint the sky lattice once, in device pixels
     sky.width = cv.width; sky.height = cv.height;
     sctx.setTransform(DPR,0,0,DPR,0,0);
     sctx.clearRect(0,0,W,H);
-    sctx.fillStyle = '#0d0f14';
+    sctx.fillStyle = BG;
     sctx.fillRect(0,0,W,H);
 
     var step = Math.max(7, Math.round(Math.min(W,H)/46));
@@ -173,8 +170,7 @@
     }
   }
 
-  // Precompute water dot geometry + static fields once. The shimmer/sparkle
-  // colour is recomputed per frame, but positions/radii/base never change.
+  // Precompute geometry + base colour once; only shimmer/sparkle vary per frame.
   function buildWater(){
     wW = cv.width; wH = cv.height;
     water.width = wW; water.height = wH;
@@ -184,7 +180,7 @@
     var step = Math.max(7, Math.round(Math.min(W,H)/46));
     var r = step*0.42;
 
-    // First pass: count dots so we can size the typed arrays exactly.
+    // count first, so the typed arrays are sized exactly
     var count=0, y2, x2, row2;
     for(y2=horizon; y2<H+step; y2+=step){
       for(x2=-step; x2<W+step; x2+=step) count++;
@@ -212,7 +208,7 @@
         dR[i]  = (r*(0.8 + rnd(col2*1.7+row2)*0.45))*DPR;
         dBaseR[i]=c.r; dBaseG[i]=c.g; dBaseB[i]=c.b;
         dRefl[i]=refl;
-        dSp[i]=rnd(col2*4.17+row2*9.31);   // base sparkle seed (frame-stable part)
+        dSp[i]=rnd(col2*4.17+row2*9.31);  // sparkle seed (frame-stable part)
         dWxK[i]=wx*0.04;
         dYK[i]=y2*0.09;
         i++;
@@ -220,8 +216,7 @@
     }
   }
 
-  // Stamp a filled disc of colour (cr,cg,cb) at device-px centre (px,py)
-  // radius rad straight into the reusable pixel buffer. No allocation, no path.
+  // Stamp a filled disc into the reusable pixel buffer. No allocation, no path.
   function stampDot(px,py,rad,cr,cg,cb){
     var x0 = px-rad, x1 = px+rad, y0 = py-rad, y1 = py+rad;
     var ix0 = x0<0?0:(x0|0), ix1 = x1>=wW?wW-1:(x1|0);
@@ -238,35 +233,29 @@
           wBuf[idx]   = R;
           wBuf[idx+1] = G;
           wBuf[idx+2] = B;
-          wBuf[idx+3] = 240;   // ~0.94 alpha, matching the original dot opacity
+          wBuf[idx+3] = 240;  // ~0.94 alpha, matching the dot opacity
         }
       }
     }
   }
 
   function draw(phase){
-    // Static sky: one blit.
     ctx.setTransform(1,0,0,1,0,0);
     ctx.clearRect(0,0,cv.width,cv.height);
     ctx.drawImage(sky,0,0);
 
-    // Animated water: recolour every dot in place, stamp into the pixel
-    // buffer, then composite the buffer over the sky via one drawImage
-    // (putImageData would overwrite alpha and erase the sky beneath).
+    // Composite over the sky with drawImage — putImageData would erase it.
     wBuf.fill(0);
     var sparkOff = Math.floor(phase*2);
     for(var i=0;i<dN;i++){
-      // shimmer waves: sinusoidal bands drifting with phase
       var wave = Math.sin(dYK[i] - phase*1.6 + Math.sin(dWxK[i]+phase)*1.3);
       var refl = dRefl[i];
       var shimmer = refl * (0.5+0.5*wave);
-      // base water colour (precomputed) -> warm reflection by shimmer
-      var br=dBaseR[i], bg=dBaseG[i], bb=dBaseB[i];
-      var k = shimmer*0.7;            // (0.95-depth*0.3) folded into refl weighting
+      var br=dBaseR[i], bg=dBaseG[i], bb=dBaseB[i];   // precomputed base colour
+      var k = shimmer*0.7;   // (0.95-depth*0.3) folded into the refl weighting
       var cr = br+(WATER_W[0]-br)*k;
       var cg = bg+(WATER_W[1]-bg)*k;
       var cb = bb+(WATER_W[2]-bb)*k;
-      // frame-dependent sparkle seed
       var sp = dSp[i] + sparkOff*0.001; sp = sp-(sp|0);
       if(refl>0.25 && wave>0.7 && sp>0.6){
         cr += (SUN[0]-cr)*0.6; cg += (SUN[1]-cg)*0.6; cb += (SUN[2]-cb)*0.6;
@@ -274,13 +263,25 @@
       if(dSp[i]>0.86){
         cr += (SKY_HI[0]-cr)*0.3; cg += (SKY_HI[1]-cg)*0.3; cb += (SKY_HI[2]-cb)*0.3;
       } else if(dSp[i]<0.1){
-        cr += (30-cr)*0.4; cg += (40-cg)*0.4; cb += (70-cb)*0.4;
+        cr += (DEEP[0]-cr)*0.4; cg += (DEEP[1]-cg)*0.4; cb += (DEEP[2]-cb)*0.4;
       }
       stampDot(dPx[i], dPy[i], dR[i], cr, cg, cb);
     }
     wctx.putImageData(wImg,0,0);
     ctx.drawImage(water,0,0);
   }
+
+  // JS-drawn colours read the tokens; both offscreen layers cache them, so a
+  // flip re-bakes the sky lattice and the water base colours.
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    BG=cs.getPropertyValue('--po03-bg').trim();
+    var P=cs.getPropertyValue('--po03-pal').trim().split('/').map(function(q){return q.trim().split(/\s+/).map(Number);});
+    SKY_HI=P[0];SKY_LO=P[1];SUN=P[2];SUN_R=P[3];WATER_W=P[4];WATER_C=P[5];WATER_T=P[6];DEEP=P[7];
+    if(W){ buildSky(); buildWater(); draw(t); }
+  }
+  addEventListener('message', function(e){var d=e.data;   // live re-theme from the canvas
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
 
   function loop(){
     if(!running) return;
@@ -310,6 +311,7 @@
     }, 120);
   });
 
+  syncTheme();
   resize();
   start();
 })();

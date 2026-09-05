@@ -5,12 +5,25 @@
 <meta name="description" content="Five gold stars that light up in sequence with a pop scale bounce on the active star as the rating sweeps up and down.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Star Rating</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1c1500;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  :root{
+    --c07-bg:#1c1500; --c07-back:#3a3000; --c07-back-stroke:#5a4a10; --c07-fill:#ffd23f;
+    --c07-cap:#ffd23f; --c07-cap-o:.45;
+  }
+  :root[data-theme="light"]{
+    --c07-bg:#f8f4e8; --c07-back:#e9dfbf; --c07-back-stroke:#c9b877; --c07-fill:#8a6900;
+    --c07-cap:#8a6900; --c07-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c07-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   .wrap{height:100%;display:flex;align-items:center;justify-content:center}
   .stage{width:min(86vmin,360px)}
   svg{width:100%;height:auto;overflow:visible}
-  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#ffd23f;opacity:.45;text-transform:uppercase}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c07-cap);opacity:var(--c07-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -19,19 +32,21 @@
  "description": "Five gold stars auto-sweep ratings up and down; the active star pops with a scale bounce. Pointer sets the hover rating instantly.",
  "useWhen": "Review forms, product cards, feedback widgets — anywhere a star rating input needs a lively, self-demonstrating idle state.",
  "avoidWhen": "Production forms requiring a fixed, committed rating — the auto-cycle must be removed and a click-to-set handler added before shipping.",
- "agentPrompt": "Change star count to 10 by setting N=10 and adjusting the viewBox to \"0 0 640 80\", update spacing from 62 to 62, and change gold color from #ffd23f to #f59e0b.",
+ "agentPrompt": "Change star count to 10 by setting N=10 and adjusting the viewBox to \"0 0 640 80\", update spacing from 62 to 62, and change gold color from #ffd23f to #f59e0b. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "star count (N=5)",
   "star color (#ffd23f)",
   "auto-sweep speed (clock%18)",
   "pop scale amount (1.25)",
-  "star spacing (i*62)"
+  "star spacing (i*62)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback",
   "visibilitychange pause",
-  "SVG role/aria-label"
+  "SVG role/aria-label",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — remove dir sweep and add click handler for real input use",
@@ -44,7 +59,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "star-rating",
@@ -67,17 +83,34 @@
 (function(){
   const svg=document.getElementById('svg');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const root=document.documentElement;
   const NS='http://www.w3.org/2000/svg';
-  const N=5,stars=[];
+  const N=5,stars=[],backs=[];
   const path='M0 -22 L6.5 -7 L23 -7 L9.5 3 L15 19 L0 9 L-15 19 L-9.5 3 L-23 -7 L-6.5 -7 Z';
   for(let i=0;i<N;i++){
     const g=document.createElementNS(NS,'g');g.setAttribute('transform','translate('+(36+i*62)+',40)');
-    const back=document.createElementNS(NS,'path');back.setAttribute('d',path);back.setAttribute('fill','#3a3000');back.setAttribute('stroke','#5a4a10');back.setAttribute('stroke-width',2);
-    const fill=document.createElementNS(NS,'path');fill.setAttribute('d',path);fill.setAttribute('fill','#ffd23f');
+    const back=document.createElementNS(NS,'path');back.setAttribute('d',path);back.setAttribute('stroke-width',2);
+    const fill=document.createElementNS(NS,'path');fill.setAttribute('d',path);
     g.appendChild(back);g.appendChild(fill);svg.appendChild(g);
     stars.push({g,fill,lit:0,scale:1});
+    backs.push(back);
     g.addEventListener('pointerenter',()=>setTarget(i+1));
   }
+  function syncTheme(){          // star fill/back colors are JS-set attributes, not CSS — re-read + re-apply on flip
+    const cs=getComputedStyle(root);
+    const back=cs.getPropertyValue('--c07-back').trim();
+    const backStroke=cs.getPropertyValue('--c07-back-stroke').trim();
+    const litColor=cs.getPropertyValue('--c07-fill').trim();
+    backs.forEach(b=>{b.setAttribute('fill',back);b.setAttribute('stroke',backStroke);});
+    stars.forEach(s=>s.fill.setAttribute('fill',litColor));
+  }
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   let target=0,running=true,clock=0,dir=1;
   function setTarget(n){target=n;}
   function frame(){

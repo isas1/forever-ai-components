@@ -2,12 +2,15 @@
 <meta name="description" content="An open Bauhaus vessel sits empty while mint motes drift, scatter on poke, and spring back to settle above it.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Empty State</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  html,body{margin:0;height:100%;background:#0b0d12;overflow:hidden}
+  :root{--fb06-bg:#0b0d12;--fb06-acc:#34d399;--fb06-ink:#5b6678;--fb06-dim:#222836;--fb06-void:#10131a;--fb06-ground:#1b212d;--fb06-focus:#34d399aa;--fb06-cap:#fff;--fb06-cap-o:.42}
+  :root[data-theme="light"]{--fb06-bg:#f2f4f8;--fb06-acc:#1b7c59;--fb06-dim:#c9ced8;--fb06-void:#e4e8ef;--fb06-ground:#dde3ea;--fb06-focus:#1b7c59aa;--fb06-cap:#182029;--fb06-cap-o:.5}
+  html,body{margin:0;height:100%;background:var(--fb06-bg);overflow:hidden}
   #fb06-stage{position:absolute;inset:0;display:grid;place-items:center;outline:none}
   #fb06-c{display:block;width:100%;height:100%}
-  #fb06-stage:focus-visible{box-shadow:inset 0 0 0 2px #34d399aa}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  #fb06-stage:focus-visible{box-shadow:inset 0 0 0 2px var(--fb06-focus)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--fb06-cap);opacity:var(--fb06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -16,23 +19,25 @@
  "description": "A Bauhaus open vessel sits empty while 26 mint motes drift in a slow orbital cloud above it; poking scatters them and they spring back to settle.",
  "useWhen": "Empty list pages, zero-data dashboards, or onboarding states that need a polished illustrated placeholder with subtle ambient life.",
  "avoidWhen": "Contexts where motion competes with a call-to-action or form fields; background is hardcoded dark navy so it clashes with light UIs.",
- "agentPrompt": "Change the mote color from mint to amber by setting ACC to '#f59e0b', increase mote count N to 36, and slow the orbital wobble by changing t*0.0009 to t*0.0005.",
+ "agentPrompt": "Change the mote color from mint to amber by setting ACC to '#f59e0b', increase mote count N to 36, and slow the orbital wobble by changing t*0.0009 to t*0.0005. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "mote count (N=26)",
   "accent color (ACC='#34d399')",
   "orbital drift speed (t*0.0009)",
   "vessel scale (rw=64*u, rh=20*u)",
   "scatter power in userPoke (3.2)",
-  "auto-demo interval (3200–4600ms)"
+  "auto-demo interval (3200–4600ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback + early return",
   "visibilitychange pause/resume guard",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded to dark navy — must edit CSS to use on light backgrounds",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Auto-demo scatter fires on an interval even without user interaction; disable autodemo() call for purely passive use"
  ],
  "tier": "curated",
@@ -42,7 +47,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "empty-state",
@@ -67,11 +73,12 @@
   "use strict";
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var stage=document.getElementById("fb06-stage");
-  var cv=document.getElementById("fb06-c");
-  var ctx=cv.getContext("2d");
-  var ACC="#34d399", INK="#5b6678", DIM="#222836";
+  var cv=document.getElementById("fb06-c"), ctx=cv.getContext("2d");
+  var root=document.documentElement, ACC,INK,DIM,VOID,GROUND, TK=["acc","ink","dim","void","ground"];
+  function syncTheme(){ var cs=getComputedStyle(root),v=TK.map(function(k){return cs.getPropertyValue("--fb06-"+k).trim();}); ACC=v[0];INK=v[1];DIM=v[2];VOID=v[3];GROUND=v[4]; }
+  addEventListener("message",function(e){ var d=e.data; if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce){drawScene(0,1);drawMotes(0,1);} } });
+  syncTheme();
   var W=0,H=0,DPR=1,cx=0,cy=0,S=1;
-
   // ---- motes: cap 26, typed arrays, allocation-free loop ----
   var N=26;
   var px=new Float32Array(N),py=new Float32Array(N),
@@ -121,7 +128,7 @@
     ctx.strokeStyle=DIM; ctx.lineWidth=2*u;
     ctx.beginPath(); ctx.ellipse(0,0,rw,rh,0,0,Math.PI*2); ctx.stroke();
     // interior void shading
-    ctx.fillStyle="#10131a";
+    ctx.fillStyle=VOID;
     ctx.beginPath(); ctx.ellipse(0,0,rw*0.92,rh*0.84,0,0,Math.PI*2); ctx.fill();
     // walls
     ctx.strokeStyle=INK; ctx.lineWidth=2.4*u;
@@ -135,7 +142,7 @@
     ctx.globalAlpha=1;
 
     // a single dashed "nothing here" ground line below
-    ctx.strokeStyle="#1b212d"; ctx.lineWidth=1.4*u;
+    ctx.strokeStyle=GROUND; ctx.lineWidth=1.4*u;
     ctx.setLineDash([4*u,7*u]);
     ctx.beginPath(); ctx.moveTo(-rw*1.4,depth+12*u); ctx.lineTo(rw*1.4,depth+12*u); ctx.stroke();
     ctx.setLineDash([]);

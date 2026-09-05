@@ -5,11 +5,32 @@
 <meta name="description" content="Rising additive-blended embers form a flickering orange flame with a hot glowing base on near-black; cursor fans the fire sideways.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Flickering Fire</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#160a06}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. --ff-c0/-c1/-c2 are the ember gradient
+     stops as "r,g,b" (alpha stays per-particle); --ff-blend swaps additive glow on black
+     for normal blending in light, where embers paint as saturated flame over cream. */
+  :root{
+    --ff-bg:#160a06; --ff-cap:#ffc78a; --ff-cap-o:.34;
+    --ff-blend:lighter; --ff-fade:rgba(22,10,6,0.28);
+    --ff-c0:255,250,210; --ff-c1:255,160,40; --ff-c2:200,40,10; --ff-a:0.5;
+    --ff-glow:255,120,30; --ff-glow-a:0.25;
+  }
+  :root[data-theme="light"]{
+    --ff-bg:#f9f0e6; --ff-cap:#9e5e00; --ff-cap-o:.62;
+    --ff-blend:source-over; --ff-fade:rgba(249,240,230,0.28);
+    --ff-c0:245,150,25; --ff-c1:196,58,10; --ff-c2:140,30,6; --ff-a:0.34;
+    --ff-glow:196,88,20; --ff-glow-a:0.18;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--ff-bg)}
   #c{display:block;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
-       letter-spacing:.08em;text-transform:uppercase;color:#ffc78a;opacity:.34;user-select:none}
+       letter-spacing:.08em;text-transform:uppercase;color:var(--ff-cap);opacity:var(--ff-cap-o);user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +39,21 @@
  "description": "Additive-blended ember particles rise from a glowing orange base, flickering like a real flame; cursor pans left/right to fan the fire sideways.",
  "useWhen": "Dark-background hero sections, loading screens, atmospheric effects in creative or gaming contexts.",
  "avoidWhen": "Light backgrounds (hardcoded near-black bg). Content-heavy layouts where constant high-motion competes with readability.",
- "agentPrompt": "Change the flame color to blue/purple by editing the gradient stops: replace rgba(255,160,40,...) with rgba(80,120,255,...) and rgba(200,40,10,0) with rgba(120,0,200,0), and update the base glow to rgba(60,40,255,0.25).",
+ "agentPrompt": "Change the flame color to blue/purple by editing the gradient stops: replace rgba(255,160,40,...) with rgba(80,120,255,...) and rgba(200,40,10,0) with rgba(120,0,200,0), and update the base glow to rgba(60,40,255,0.25). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "particle spawn rate (cnt=5 per frame)",
   "particle size range (sz: 8+random*14)",
   "fan sensitivity (fanX*1.2)",
   "base glow radius (W*0.25)",
   "ember gradient color stops",
-  "max particle cap (120)"
+  "max particle cap (120)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "globalCompositeOperation='lighter' for additive blending",
   "visibilitychange pause/resume",
-  "prefers-reduced-motion branch (static particle cap)"
+  "prefers-reduced-motion branch (static particle cap)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color is hardcoded in CSS (#160a06) — must edit to work on non-dark backgrounds",
@@ -42,7 +65,8 @@
   "mobile-ready",
   "accessible",
   "animation-heavy",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "fire",
@@ -60,9 +84,31 @@
 <canvas id="c"></canvas>
 <div class="cap">Flickering Fire</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
 let W,H,DPR,t=0,raf,P=[];
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const root=document.documentElement;
+const C={blend:'lighter',fade:'',c0:'',c1:'',c2:'',a:0.5,glow:'',glowA:'0'};
+function syncTheme(){            // every colour the canvas draws with comes from the tokens
+  const cs=getComputedStyle(root);
+  C.blend=cs.getPropertyValue('--ff-blend').trim();  // additive on black -> normal on cream
+  C.fade=cs.getPropertyValue('--ff-fade').trim();    // per-frame trail wash = the paper colour
+  C.c0=cs.getPropertyValue('--ff-c0').trim();        // ember gradients are rebuilt every frame
+  C.c1=cs.getPropertyValue('--ff-c1').trim();
+  C.c2=cs.getPropertyValue('--ff-c2').trim();
+  C.a=parseFloat(cs.getPropertyValue('--ff-a'));    // embers stack additively on black, so
+                                                    // light mode paints them softer instead
+  C.glow=cs.getPropertyValue('--ff-glow').trim();
+  C.glowA=cs.getPropertyValue('--ff-glow-a').trim();
+}
+addEventListener('message',function(e){
+  const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme);syncTheme();
+  }
+});
+syncTheme();
 function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
 addEventListener('resize',size);size();
@@ -81,10 +127,10 @@ function frame(){
   reset();
   t+=0.02;
   x.globalCompositeOperation='source-over';
-  x.fillStyle='rgba(22,10,6,0.28)';x.fillRect(0,0,W,H);
+  x.fillStyle=C.fade;x.fillRect(0,0,W,H);
   if(!reduce){const cnt=W<260?3:5;for(let i=0;i<cnt;i++)spawn();}
   else if(P.length<30){spawn();}
-  x.globalCompositeOperation='lighter';
+  x.globalCompositeOperation=C.blend;
   for(let i=P.length-1;i>=0;i--){
     const p=P[i];
     if(!reduce){
@@ -97,17 +143,17 @@ function frame(){
     const r=p.sz*(0.4+l*0.9);
     const g=x.createRadialGradient(p.x,p.y,0,p.x,p.y,r);
     // hot core to ember
-    const a=l*0.5;
-    g.addColorStop(0,`rgba(255,250,210,${a})`);
-    g.addColorStop(0.4,`rgba(255,160,40,${a*0.8})`);
-    g.addColorStop(1,`rgba(200,40,10,0)`);
+    const a=l*C.a;
+    g.addColorStop(0,`rgba(${C.c0},${a})`);
+    g.addColorStop(0.4,`rgba(${C.c1},${a*0.8})`);
+    g.addColorStop(1,`rgba(${C.c2},0)`);
     x.fillStyle=g;x.beginPath();x.arc(p.x,p.y,r,0,7);x.fill();
   }
   if(P.length>120)P.splice(0,P.length-120);
   // glow base
-  x.globalCompositeOperation='lighter';
+  x.globalCompositeOperation=C.blend;
   const bg=x.createRadialGradient(baseX,baseY,0,baseX,baseY,W*0.25);
-  bg.addColorStop(0,'rgba(255,120,30,0.25)');bg.addColorStop(1,'rgba(255,120,30,0)');
+  bg.addColorStop(0,`rgba(${C.glow},${C.glowA})`);bg.addColorStop(1,`rgba(${C.glow},0)`);
   x.fillStyle=bg;x.fillRect(0,0,W,H);
   x.globalCompositeOperation='source-over';
   raf=requestAnimationFrame(frame);
@@ -116,6 +162,7 @@ raf=requestAnimationFrame(frame);
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
 });
+})();
 </script>
 </body>
 </html>

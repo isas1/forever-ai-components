@@ -5,12 +5,27 @@
 <meta name="description" content="Six-digit mechanical odometer with rolling number reels counting up to a random REQUESTS/SEC value in mint-green mono type.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Odometer Count-Up</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0d0f14;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --c08-slot/-digit feed the reels. */
+  :root{
+    --c08-bg:#0d0f14; --c08-cap:#7af0c0; --c08-cap-o:.4;
+    --c08-accent:#7af0c0; --c08-slot:#161b22; --c08-slot-b:#2a323d; --c08-digit:#e8fff5;
+  }
+  :root[data-theme="light"]{
+    --c08-bg:#f0f3f6; --c08-cap:#0e7c4f; --c08-cap-o:.62;
+    --c08-accent:#0e7c4f; --c08-slot:#ffffff; --c08-slot-b:#ced7de; --c08-digit:#16211d;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c08-bg);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
-    color:#7af0c0;opacity:.4;text-transform:uppercase}
+    color:var(--c08-cap);opacity:var(--c08-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -19,24 +34,26 @@
  "description": "Six-digit mechanical odometer with rolling digit reels easing toward a random REQUESTS/SEC target; tap/click to randomize a new target value.",
  "useWhen": "Dashboards, live metric displays, or hero stats counters needing a tactile mechanical feel.",
  "avoidWhen": "Contexts requiring exact real-time data binding — target is random; wire tgt externally before shipping.",
- "agentPrompt": "Change the label to 'USERS ONLINE', set the accent color COL to '#ff9f43', and slow the easing by changing 0.045 to 0.02.",
+ "agentPrompt": "Change the label to 'USERS ONLINE', set the accent color COL to '#ff9f43', and slow the easing by changing 0.045 to 0.02. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (COL='#7af0c0')",
   "digit count (DIG=6)",
   "easing speed (0.045)",
   "label text ('REQUESTS / SEC')",
   "target range (Math.random()*1000000)",
-  "hold idle delay (hold>80)"
+  "hold idle delay (hold>80)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce=...matches)",
   "visibilitychange pause",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Target value is random — must replace tgt assignment with external data source for real metrics",
-  "Background color hardcoded in CSS (#0d0f14); must edit to use on light backgrounds"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -45,7 +62,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "odometer",
@@ -66,8 +84,23 @@
 (function(){
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  let W,H,DPR; const COL='#7af0c0';
+  const root=document.documentElement;
+  let W,H,DPR; let COL='#7af0c0';
+  const C={slot:'',border:'',digit:''};
   const DIG=6;
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    COL=cs.getPropertyValue('--c08-accent').trim();   // label + sheen (COL+'33') rebuild from COL
+    C.slot=cs.getPropertyValue('--c08-slot').trim();
+    C.border=cs.getPropertyValue('--c08-slot-b').trim();
+    C.digit=cs.getPropertyValue('--c08-digit').trim();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
   let cur=0, tgt=Math.floor(Math.random()*900000), hold=0;
   function resize(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
@@ -90,15 +123,15 @@
     for(let d=0;d<DIG;d++){
       const x=x0+d*(cellW+cellW*0.12);
       // slot bg
-      ctx.fillStyle='#161b22';rr(x,y0,cellW,cellH,cellW*0.16);ctx.fill();
-      ctx.strokeStyle='#2a323d';ctx.lineWidth=1;ctx.stroke();
+      ctx.fillStyle=C.slot;rr(x,y0,cellW,cellH,cellW*0.16);ctx.fill();
+      ctx.strokeStyle=C.border;ctx.lineWidth=1;ctx.stroke();
       // continuous reel position for this place
       const reel=(value/place[d]); // fractional
       const frac=reel - Math.floor(reel);
       const top=Math.floor(reel)%10;
       ctx.save();
       ctx.beginPath();rr(x,y0,cellW,cellH,cellW*0.16);ctx.clip();
-      ctx.fillStyle='#e8fff5';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillStyle=C.digit;ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.font='700 '+(cellH*0.62)+'px ui-monospace,monospace';
       const cy=y0+cellH/2;
       for(let k=-1;k<=1;k++){
@@ -121,7 +154,7 @@
   addEventListener('resize',resize);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
   cv.addEventListener('pointerdown',()=>{tgt=Math.floor(Math.random()*1000000)});
-  resize();raf();
+  syncTheme();resize();raf();
 })();
 </script>
 </body>

@@ -5,11 +5,26 @@
 <meta name="description" content="Stained Ribbon — Art Nouveau Ornamental Panels. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stained Ribbon</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#231a12;overflow:hidden}
-  #muc06-stage{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 40%,#2f2418,#231a12)}
+  /* theme tokens — dark values are the defaults; the light parchment palette is the one
+     [data-theme="light"] block. Every colour the canvas draws is read from here. */
+  :root{
+    --muc06-bg:#231a12;--muc06-bg2:#2f2418;--muc06-cream:#f4ecd8;--muc06-sage:#8a9a5b;
+    --muc06-peach:#e7b98f;--muc06-gold:#c4a14e;--muc06-teal-deep:#1d4248;--muc06-cap:#f4ecd8;--muc06-cap-o:.46;
+  }
+  :root[data-theme="light"]{
+    --muc06-bg:#f4ecd8;--muc06-bg2:#fdf8ec;--muc06-cream:#fdf7e8;--muc06-sage:#657042;
+    --muc06-peach:#9b5c21;--muc06-gold:#81672b;--muc06-teal-deep:#1d4248;--muc06-cap:#5b4632;--muc06-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--muc06-bg);overflow:hidden}
+  #muc06-stage{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 40%,var(--muc06-bg2),var(--muc06-bg))}
   #muc06-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .muc06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f4ecd8;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .muc06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--muc06-cap);opacity:var(--muc06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,23 +33,25 @@
  "description": "Three layered ribbons in teal, sage, and peach undulate across a dark ground in a stacked sine-wave motion, edged in gold with glinting enamel bead accents.",
  "useWhen": "Art Nouveau hero sections, decorative banners, ambient background overlays in dark-theme UIs.",
  "avoidWhen": "Light backgrounds (dark ground is hardcoded). Contexts needing text legibility across the ribbon band.",
- "agentPrompt": "Change ribbon colors to dusty rose, lavender, and ochre by updating PAL.tealDeep, PAL.sage, and PAL.peach, then slow the wave by reducing t*1.2 to t*0.7.",
+ "agentPrompt": "Change ribbon colors to dusty rose, lavender, and ochre by updating PAL.tealDeep, PAL.sage, and PAL.peach, then slow the wave by reducing t*1.2 to t*0.7. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ribbon colors (PAL object)",
   "wave speed multiplier (t*1.2)",
   "amplitude (amp=H*0.18)",
   "band thickness (band=H*0.16)",
   "bead spacing (x+=64)",
-  "layer opacity values (L.a)"
+  "layer opacity values (L.a)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing in fitCanvas()",
   "visibilitychange stop/start guard",
   "prefers-reduced-motion static draw fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color is hardcoded dark brown — must edit CSS and paintBg() to change",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "No pointer interactivity — purely passive",
   "Step size of 6px in path loop may show slight faceting at very large viewport widths"
  ],
@@ -45,7 +62,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-nouveau",
@@ -67,7 +85,19 @@
 (function(){
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const PAL={cream:'#f4ecd8',sage:'#8a9a5b',peach:'#e7b98f',gold:'#c4a14e',tealDeep:'#1d4248'};
+  const root=document.documentElement;
+  const PAL={};                       // colours the canvas draws with — read from the CSS tokens
+  let BG0='',BG1='',ready=false;      // the ribbon gradients are rebuilt per frame from PAL
+  function syncTheme(){               // re-read tokens once per switch, then repaint
+    const cs=getComputedStyle(root), v=n=>cs.getPropertyValue(n).trim();
+    PAL.cream=v('--muc06-cream');PAL.sage=v('--muc06-sage');PAL.peach=v('--muc06-peach');
+    PAL.gold=v('--muc06-gold');PAL.tealDeep=v('--muc06-teal-deep');
+    BG0=v('--muc06-bg2');BG1=v('--muc06-bg');
+    if(ready) draw(performance.now());
+  }
+  addEventListener('message',function(e){const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}
+  });
   const cv=document.getElementById('muc06-cv'); if(!cv) return;
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
@@ -86,7 +116,7 @@
   }
   let S=fitCanvas(cv);
   let t=0,last=performance.now();
-  function paintBg(){const g=S.ctx.createRadialGradient(S.w/2,S.h*0.4,0,S.w/2,S.h*0.4,Math.max(S.w,S.h));g.addColorStop(0,'#2f2418');g.addColorStop(1,'#231a12');S.ctx.fillStyle=g;S.ctx.fillRect(0,0,S.w,S.h);}
+  function paintBg(){const g=S.ctx.createRadialGradient(S.w/2,S.h*0.4,0,S.w/2,S.h*0.4,Math.max(S.w,S.h));g.addColorStop(0,BG0);g.addColorStop(1,BG1);S.ctx.fillStyle=g;S.ctx.fillRect(0,0,S.w,S.h);}
   function ribbonY(x,W,off){
     return Math.sin(x/W*Math.PI*3+off)*0.5+Math.sin(x/W*Math.PI*5+off*1.3)*0.18;
   }
@@ -138,6 +168,7 @@
   function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
   function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
   function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  syncTheme(); ready=true;
   paintBg();
   let _rt;
   window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED) draw(performance.now());},150);},{passive:true});

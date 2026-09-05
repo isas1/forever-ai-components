@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Org chart with a slide-in info panel - an eight-person engineering tree over three levels; the selection walks the org on a loop, lighting the reporting line from the root down while a detail card slides up with the selected person's role, manager and stats.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Org Tree Reveal</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#507E95;
+    --pro-radius:10px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --otr-line:color-mix(in srgb,var(--pro-text) 15%,transparent);
+    --otr-shadow:rgba(0,0,0,.5);
+  }
+  :root[data-theme="light"]{--pro-bg:#f6f8fa;--pro-surface:#fff;--pro-border:rgba(0,0,0,.08);--pro-text:#1f2328;--pro-muted:#59636e;--pro-accent:#3a6172;--otr-shadow:rgba(15,25,40,.13);--otr-line:color-mix(in srgb,var(--pro-text) 26%,transparent)}
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .otr-stage{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;
+    padding:3.4vmin 3.4vmin clamp(17px,3.2vmin,24px);font-family:var(--pro-font);color:var(--pro-text)}
+  .otr-head{display:flex;align-items:baseline;gap:1.6vmin;flex:none;min-width:0}
+  .otr-title{font-size:clamp(10px,2.4vmin,14px);font-weight:700;letter-spacing:.01em;white-space:nowrap}
+  .otr-sub{margin-left:auto;font-size:clamp(7px,1.6vmin,10px);color:var(--pro-muted);
+    font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+  /* chart takes the space the docked card leaves, so no node is ever covered */
+  .otr-chart{position:relative;flex:1;min-height:0;margin-top:1.6vmin}
+  .otr-links{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .otr-links path{fill:none;stroke:var(--otr-line);stroke-width:1.2;opacity:.8;
+    vector-effect:non-scaling-stroke;transition:stroke .35s,stroke-width .35s,opacity .35s}
+  .otr-links path.on{stroke:var(--pro-accent);stroke-width:1.8;opacity:1}
+  .otr-node{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;
+    align-items:center;gap:clamp(2px,.7vmin,5px);padding:clamp(3px,1.2vmin,9px) clamp(5px,1.4vmin,11px);
+    min-width:12vmin;cursor:pointer;opacity:.5;
+    background:var(--pro-surface);border:1px solid var(--pro-border);border-radius:var(--pro-radius);
+    transition:border-color .3s,opacity .3s}
+  .otr-node.lit{opacity:1}
+  .otr-node.sel{border-color:var(--pro-accent);box-shadow:0 0 0 1px var(--pro-accent)}
+  .otr-av{width:clamp(15px,4.4vmin,26px);height:clamp(15px,4.4vmin,26px);border-radius:50%;
+    display:grid;place-items:center;font-size:clamp(6px,1.5vmin,10px);font-weight:700;
+    background:color-mix(in srgb,var(--pro-accent) 20%,transparent);color:var(--pro-accent);
+    transition:background .3s,color .3s}
+  .otr-node.sel .otr-av{background:var(--pro-accent);color:var(--pro-bg)}
+  .otr-nm{font-size:clamp(6.5px,1.6vmin,10px);font-weight:600;white-space:nowrap;line-height:1}
+  .otr-rl{font-size:clamp(6px,1.3vmin,9px);color:var(--pro-muted);white-space:nowrap;
+    line-height:1;font-weight:600}
+  /* the reveal: a docked detail card that slides up out of its own strip */
+  .otr-dock{position:relative;flex:none;overflow:hidden;padding-top:clamp(4px,1.4vmin,10px)}
+  .otr-sheet{background:var(--pro-surface);border:1px solid var(--pro-border);border-radius:11px;
+    padding:clamp(6px,1.8vmin,13px) clamp(8px,2.1vmin,15px);
+    display:flex;flex-direction:column;gap:clamp(5px,1.5vmin,11px);
+    box-shadow:0 1vmin 3vmin var(--otr-shadow);
+    transform:translateY(calc(100% + 12px));transition:transform .42s cubic-bezier(.22,1,.36,1)}
+  .otr-sheet.open{transform:none}
+  .otr-srow{display:flex;align-items:center;gap:clamp(6px,1.7vmin,13px);min-width:0}
+  .otr-sav{width:clamp(19px,5.6vmin,33px);height:clamp(19px,5.6vmin,33px);border-radius:50%;flex:none;
+    display:grid;place-items:center;font-size:clamp(7px,1.9vmin,12px);font-weight:700;
+    background:var(--pro-accent);color:var(--pro-bg)}
+  .otr-sid{display:flex;flex-direction:column;gap:clamp(1px,.5vmin,4px);min-width:0}
+  .otr-sname{font-size:clamp(9px,2.2vmin,13px);font-weight:700;line-height:1.15;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .otr-srole{font-size:clamp(7px,1.6vmin,10px);line-height:1.15;color:var(--pro-accent);
+    font-weight:600;white-space:nowrap}
+  .otr-sto{margin-left:auto;flex:none;font-size:clamp(6.5px,1.5vmin,9px);color:var(--pro-muted);
+    font-weight:600;text-align:right;white-space:nowrap}
+  .otr-stats{display:flex;gap:clamp(4px,1.3vmin,10px)}
+  .otr-stat{flex:1;min-width:0;display:flex;flex-direction:column;gap:clamp(1px,.4vmin,3px);
+    background:color-mix(in srgb,var(--pro-text) 5%,transparent);border:1px solid var(--pro-border);
+    border-radius:7px;padding:clamp(3px,1.1vmin,8px) clamp(4px,1.3vmin,10px)}
+  .otr-sk{font-size:clamp(6px,1.3vmin,8px);line-height:1.15;color:var(--pro-muted);font-weight:700;
+    letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .otr-sv{font-size:clamp(8px,1.9vmin,12px);line-height:1.2;font-weight:700;
+    font-variant-numeric:tabular-nums;white-space:nowrap}
+  .cap{position:fixed;left:8px;bottom:6px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.45;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @media (max-width:320px){ .otr-rl{display:none} }
+  @media (prefers-reduced-motion:reduce){
+    .otr-sheet,.otr-node,.otr-av,.otr-links path{transition:none!important}
+  }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/hierarchy-trees/01-org-tree-reveal.html",
+ "title": "Org Tree Reveal",
+ "description": "A three-level engineering org chart of eight people drawn with elbow connectors; the selection walks the org, lighting the whole reporting line from the root down while a docked detail card slides up with that person's role, manager and three stats.",
+ "useWhen": "Org charts, team and people directories, HR or admin dashboards — any hierarchy where a node needs more detail than fits in its box; the slide-up card is that detail surface.",
+ "avoidWhen": "Trees whose shape is unknown at build time — positions are authored percentages, not an auto-layout; and very deep or wide orgs (beyond ~10 nodes over 3 levels) that would crowd a small tile.",
+ "agentPrompt": "Edit the people array (id, in initials, n name, r role, p parent id, x/y percent of the chart box, st the three [label,value] stats) to model your own org — connectors, the lit reporting path and the card all derive from it. Change the walk beat with setInterval(advance,2400), or drop the interval and keep the pointerenter/click handlers for a hover-only chart. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "theme tokens (:root --pro-* dark defaults + the :root[data-theme=\"light\"] overrides)",
+  "the org itself (people array: id, initials, name, role, parent, x/y percent, three stats)",
+  "auto-walk beat (setInterval(advance,2400) — short enough that the mount audit sees the wall tile move) and the card swap delay (300ms)",
+  "card slide easing/duration (.otr-sheet transition, .42s cubic-bezier)",
+  "node size and dimming (.otr-node min-width, opacity .5 vs .lit)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .otr-stage",
+  "IIFE wrapper",
+  "prefers-reduced-motion early return to a populated state (one person selected, card up)",
+  "visibilitychange pause (halt/play on the interval)",
+  ".otr-dock reserving the card's strip — it is what stops the card covering the bottom row of nodes",
+  "vector-effect:non-scaling-stroke on the connectors (the SVG is stretched with preserveAspectRatio=none)",
+  "theme hook (?theme= pre-paint bootstrap + forever:theme message listener + the two-palette token block)"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Node positions are authored percentages — no auto-layout, so a new sibling needs its x/y picked by hand",
+  "Elbow corners are square by design; rounded joins would distort under the stretched viewBox",
+  "Eight nodes over three levels is about the ceiling before labels crowd at a 180-240px tile"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "org-chart",
+  "hierarchy",
+  "tree",
+  "people",
+  "reveal",
+  "detail-panel",
+  "dashboard",
+  "elbow-connectors"
+ ]
+}
+</script>
+</head>
+<body>
+  <div class="otr-stage" role="img"
+       aria-label="Engineering org chart over three levels: a VP, three leads for Platform, Product and Quality, and four engineers beneath them. The selection walks the tree, lighting the reporting line from the top down while a detail card slides up with the selected person's role, manager and stats.">
+    <div class="otr-head">
+      <span class="otr-title">Engineering</span>
+      <span class="otr-sub">8 people · 3 levels</span>
+    </div>
+    <div class="otr-chart" id="otrChart">
+      <svg class="otr-links" id="otrLinks" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+    </div>
+    <div class="otr-dock">
+      <div class="otr-sheet" id="otrSheet" aria-hidden="true">
+        <div class="otr-srow">
+          <span class="otr-sav" id="otrSav">DR</span>
+          <span class="otr-sid">
+            <span class="otr-sname" id="otrSname">Dana R.</span>
+            <span class="otr-srole" id="otrSrole">VP Engineering</span>
+          </span>
+          <span class="otr-sto" id="otrSto">Reports to Board</span>
+        </div>
+        <div class="otr-stats" id="otrStats"></div>
+      </div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Org Tree Reveal</div>
+  <script>(function(){"use strict";
+    var root=document.documentElement;
+    addEventListener("message",function(e){var d=e.data;
+      if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))root.setAttribute("data-theme",d.theme);});
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // The whole component is this array: p = parent id, x/y = percent of the chart box,
+    // st = the three stats the card reveals. Invented people, plausible numbers.
+    var people=[
+      {id:"vp",  in:"DR", n:"Dana R.", r:"VP Engineering", p:null, x:50, y:10,
+       st:[["Org size","8"],["Open roles","2"],["Tenure","4y 2m"]]},
+      {id:"plat",in:"IM", n:"Iris M.", r:"Platform Lead",  p:"vp", x:17, y:48,
+       st:[["Reports","2"],["Services","14"],["On-call","1 wk / 6"]]},
+      {id:"prod",in:"KA", n:"Kofi A.", r:"Product Lead",   p:"vp", x:50, y:48,
+       st:[["Reports","1"],["Ship rate","12 / mo"],["Squads","2"]]},
+      {id:"qa",  in:"NS", n:"Noor S.", r:"Quality Lead",   p:"vp", x:83, y:48,
+       st:[["Reports","1"],["Coverage","87%"],["Escapes","3 / qtr"]]},
+      {id:"e1",  in:"AP", n:"Ana P.",  r:"Backend",        p:"plat", x:9,  y:86,
+       st:[["Level","Senior"],["Reviews","41 / mo"],["Tenure","2y 7m"]]},
+      {id:"e2",  in:"BT", n:"Bo T.",   r:"Infrastructure", p:"plat", x:25, y:86,
+       st:[["Level","Staff"],["Uptime","99.98%"],["Tenure","3y 1m"]]},
+      {id:"e3",  in:"WL", n:"Wei L.",  r:"Web",            p:"prod", x:50, y:86,
+       st:[["Level","Senior"],["PRs merged","28 / mo"],["Tenure","1y 9m"]]},
+      {id:"e4",  in:"SH", n:"Sam H.",  r:"Mobile QA",      p:"qa",   x:83, y:86,
+       st:[["Level","Mid"],["Suites","62"],["Tenure","11 mo"]]}
+    ];
+    var chart=document.getElementById("otrChart"),svg=document.getElementById("otrLinks"),
+        sheet=document.getElementById("otrSheet"),stats=document.getElementById("otrStats");
+    if(!chart||!svg)return;
+    var by={},edges=[],onHit=null;
+    function hit(id){ if(onHit)onHit(id); }
+    people.forEach(function(o){ by[o.id]=o; });
+    // elbow connector: down out of the parent, across at the midpoint, down into the child
+    people.forEach(function(o){
+      if(!o.p)return;
+      var a=by[o.p],m=((a.y+o.y)/2).toFixed(2);
+      var d=document.createElementNS("http://www.w3.org/2000/svg","path");
+      d.setAttribute("d","M"+a.x+" "+(a.y+6)+"V"+m+"H"+o.x+"V"+(o.y-6));
+      svg.appendChild(d); edges.push({el:d,to:o.id});
+    });
+    people.forEach(function(o){
+      var el=document.createElement("div");
+      el.className="otr-node";
+      el.style.left=o.x+"%"; el.style.top=o.y+"%";
+      el.innerHTML='<span class="otr-av">'+o.in+'</span>'+
+                   '<span class="otr-nm">'+o.n+'</span>'+
+                   (o.p?'':'<span class="otr-rl">'+o.r+'</span>');
+      chart.appendChild(el); o.el=el;
+      el.addEventListener("pointerenter",function(){ hit(o.id); });
+      el.addEventListener("click",function(){ hit(o.id); });
+    });
+
+    // the lit path = the selected person plus every manager above them
+    function chain(id){ var out=[]; while(id){ out.push(id); id=by[id].p; } return out; }
+    function paint(id){
+      var lit=chain(id);
+      people.forEach(function(o){
+        o.el.classList.toggle("lit",lit.indexOf(o.id)>-1);
+        o.el.classList.toggle("sel",o.id===id);
+      });
+      edges.forEach(function(e){ e.el.classList.toggle("on",lit.indexOf(e.to)>-1); });
+    }
+    function fill(o){
+      document.getElementById("otrSav").textContent=o.in;
+      document.getElementById("otrSname").textContent=o.n;
+      document.getElementById("otrSrole").textContent=o.r;
+      document.getElementById("otrSto").textContent=o.p?"Reports to "+by[o.p].n:"Reports to Board";
+      stats.innerHTML=o.st.map(function(s){
+        return '<span class="otr-stat"><span class="otr-sk">'+s[0]+'</span>'+
+               '<span class="otr-sv">'+s[1]+'</span></span>';
+      }).join("");
+    }
+    var cur=null,swap=0;
+    function pick(id){
+      if(id===cur)return;
+      cur=id; paint(id);
+      clearTimeout(swap);
+      if(reduce||!sheet.classList.contains("open")){ fill(by[id]); sheet.classList.add("open"); return; }
+      sheet.classList.remove("open");               // slide out, swap the person, slide back in
+      swap=setTimeout(function(){ fill(by[id]); sheet.classList.add("open"); },300);
+    }
+
+    if(reduce){ pick("e2"); return; }               // static: one person selected, card up
+
+    var i=0,timer=null;
+    function advance(){ pick(people[i].id); i=(i+1)%people.length; }
+    function play(){ if(!timer) timer=setInterval(advance,2400); }
+    function halt(){ clearInterval(timer); timer=null; }
+    onHit=function(id){ pick(id); halt(); play(); };  // a manual pick gets a full beat
+    document.addEventListener("visibilitychange",function(){ document.hidden?halt():play(); });
+    advance(); play();
+  })();
+  </script>
+</body>
+</html>

@@ -5,16 +5,38 @@
 <meta name="description" content="Canvas spinner of 18 glowing iris, cyan and magenta particles orbiting a white core on elliptical trailing paths.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Particle Orbit</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-html,body{margin:0;height:100%;overflow:hidden;background:#08090d}
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block. JS reads --c06-* via
+   getComputedStyle so the canvas particles and trail stay in sync. */
+:root{
+  --c06-bg:#08090d;
+  --c06-glow-a:rgba(124,92,255,.16); --c06-glow-b:rgba(34,211,238,.16);
+  --c06-p1:#7c5cff; --c06-p2:#22d3ee; --c06-p3:#ff5ca8;
+  --c06-core:#f4f6fb; --c06-trail:rgba(8,9,13,0.28);
+  --cap:#22d3ee; --cap-o:.45;
+}
+:root[data-theme="light"]{
+  --c06-bg:#f2f4f8;
+  --c06-glow-a:rgba(124,92,255,.18); --c06-glow-b:rgba(34,211,238,.18);
+  --c06-p1:#5b33ff; --c06-p2:#0b7a8b; --c06-p3:#db0066;
+  --c06-core:#1b2130; --c06-trail:rgba(242,244,248,0.34);
+  --cap:#1b2130; --cap-o:.5;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--c06-bg)}
 body{
   background-image:
-    radial-gradient(60vw 40vw at 15% -10%,rgba(124,92,255,.16),transparent 60%),
-    radial-gradient(50vw 40vw at 90% 0%,rgba(34,211,238,.16),transparent 55%);
+    radial-gradient(60vw 40vw at 15% -10%,var(--c06-glow-a),transparent 60%),
+    radial-gradient(50vw 40vw at 90% 0%,var(--c06-glow-b),transparent 55%);
 }
 #c06{display:block;width:100%;height:100%}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -23,20 +45,22 @@ body{
  "description": "18 glowing iris, cyan, and magenta particles orbit a white core on wobbling elliptical paths; trailing fill creates a comet-like motion blur effect.",
  "useWhen": "Loading screens, async operation indicators, dark-mode splash screens needing ambient energy.",
  "avoidWhen": "Light backgrounds (hardcoded dark fill). Contexts where spinner must stop on completion — no external stop API exposed.",
- "agentPrompt": "Change particle colors to gold and teal by setting COLORS=['#f59e0b','#14b8a6','#fb7185'], reduce particle count to N=12, and slow orbit speed by changing base speed to 0.008.",
+ "agentPrompt": "Change particle colors to gold and teal by setting COLORS=['#f59e0b','#14b8a6','#fb7185'], reduce particle count to N=12, and slow orbit speed by changing base speed to 0.008. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "particle colors (COLORS array)",
   "particle count (N=18)",
   "orbit speed (0.012 + step)",
   "ellipse squish ratio (r*0.62)",
   "wobble amplitude (base*0.05)",
-  "core dot size (base*0.04)"
+  "core dot size (base*0.04)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "pre-rendered sprite cache (makeSprite) — critical for perf",
   "DPR-aware canvas sizing",
   "visibilitychange pause/play",
-  "reduced-motion static fallback"
+  "reduced-motion static fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and canvas fill — must edit both to change",
@@ -49,7 +73,8 @@ body{
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "loader",
@@ -71,15 +96,17 @@ body{
   var canvas=document.getElementById('c06'), ctx=canvas.getContext('2d');
   if(!ctx) return;
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root=document.documentElement;
   var DPR,W,H,cx,cy,base;
-  var COLORS=['#7c5cff','#22d3ee','#ff5ca8'], N=18, parts=[];
+  var N=18, parts=[];
   for(var i=0;i<N;i++){
     parts.push({ang:(i/N)*Math.PI*2,radiusF:.34+(i%3)*.15,speed:.012+(i%3)*.006,
-      sizeF:.018+(i%4)*.006,color:COLORS[i%COLORS.length]});
+      sizeF:.018+(i%4)*.006,colorIdx:i%3});
   }
   // Pre-render a soft glow sprite per colour once, instead of paying for
   // ctx.shadowBlur (a gaussian blur) on every particle every frame.
   var sprites={};
+  var C={colors:[]};              // colours JS draws with — read from tokens
   function makeSprite(color,rad){
     var pad=rad+12, d=pad*2, c=document.createElement('canvas');
     c.width=c.height=Math.ceil(d);
@@ -91,39 +118,60 @@ body{
     g.globalAlpha=1;g.fillStyle=grd;g.beginPath();g.arc(pad,pad,pad,0,Math.PI*2);g.fill();
     return {c:c,pad:pad};
   }
+  function buildSprites(){
+    // sprite bitmaps bake in colour, so a theme switch must rebuild them
+    sprites={};
+    for(var c=0;c<C.colors.length;c++){
+      for(var m=0;m<4;m++){
+        var rad=Math.max(2,base*(.018+m*.006));
+        sprites[C.colors[c]+'|'+m]=makeSprite(C.colors[c],rad);
+      }
+    }
+  }
   function size(){
     DPR=Math.min(2,devicePixelRatio||1);
     W=canvas.clientWidth;H=canvas.clientHeight;
     canvas.width=W*DPR;canvas.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     cx=W/2;cy=H/2;base=Math.min(W,H)*0.5;
-    // rebuild sprites sized to the current geometry
-    sprites={};
-    for(var c=0;c<COLORS.length;c++){
-      for(var m=0;m<4;m++){
-        var rad=Math.max(2,base*(.018+m*.006));
-        sprites[COLORS[c]+'|'+m]=makeSprite(COLORS[c],rad);
-      }
-    }
+    buildSprites();
   }
-  addEventListener('resize',size);size();
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.colors=[cs.getPropertyValue('--c06-p1').trim(),cs.getPropertyValue('--c06-p2').trim(),cs.getPropertyValue('--c06-p3').trim()];
+    C.core=cs.getPropertyValue('--c06-core').trim();
+    C.trail=cs.getPropertyValue('--c06-trail').trim();
+    C.bg=cs.getPropertyValue('--c06-bg').trim();
+    if(base) buildSprites();      // geometry already known — rebuild sprite cache now
+  }
+  addEventListener('resize',size);
+  syncTheme();size();
   function draw(){
-    ctx.fillStyle='rgba(8,9,13,0.28)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.trail;ctx.fillRect(0,0,W,H);
     for(var k=0;k<parts.length;k++){
       var p=parts[k];p.ang+=p.speed;
       var wobble=Math.sin(p.ang*3)*(base*0.05);
       var r=base*p.radiusF+wobble;
       var x=cx+Math.cos(p.ang)*r, y=cy+Math.sin(p.ang)*(r*0.62);
-      var sp=sprites[p.color+'|'+(k%4)];
+      var color=C.colors[p.colorIdx];
+      var sp=sprites[color+'|'+(k%4)];
       ctx.drawImage(sp.c,x-sp.pad,y-sp.pad,sp.pad*2,sp.pad*2);
     }
     ctx.beginPath();ctx.arc(cx,cy,Math.max(4,base*0.04),0,Math.PI*2);
-    ctx.fillStyle='#f4f6fb';ctx.fill();
+    ctx.fillStyle=C.core;ctx.fill();
   }
   var raf;
   function loop(){draw();raf=requestAnimationFrame(loop);}
-  function play(){if(!raf&&!document.hidden){if(reduce){ctx.fillStyle='#08090d';ctx.fillRect(0,0,W,H);draw();return;}loop();}}
+  function play(){if(!raf&&!document.hidden){if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);draw();return;}loop();}}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',function(){document.hidden?stop():play();});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);draw();}
+    }
+  });
   play();
 })();
 </script>

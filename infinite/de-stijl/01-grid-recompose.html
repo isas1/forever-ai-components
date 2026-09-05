@@ -5,11 +5,22 @@
 <meta name="description" content="neoplastic-style black grid lines slide to continuously repartition red, blue and yellow rectangles in shifting equilibrium.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Grid Recompose</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0e0e10}
-  #ds01-stage{position:fixed;inset:0;overflow:hidden;background:#0e0e10}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block: the neoplastic plane goes true white
+     and the near-black surround becomes a warm gallery wall. Black bars stay black. */
+  :root{--ds01-bg:#0e0e10;--ds01-paint:#f4f1e9;--ds01-line:#101012;
+    --ds01-red:#c8261d;--ds01-blue:#1b5fc4;--ds01-yel:#e8b714;--ds01-cap:#fff;--ds01-cap-o:.42}
+  :root[data-theme="light"]{--ds01-bg:#f2f0ea;--ds01-paint:#ffffff;--ds01-cap:#14141a;--ds01-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--ds01-bg)}
+  #ds01-stage{position:fixed;inset:0;overflow:hidden;background:var(--ds01-bg)}
   #ds01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ds01-cap);opacity:var(--ds01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +30,22 @@
  "description": "Black grid lines slide between asymmetric positions with cubic easing, repartitioning red, blue, yellow, and off-white rectangles in neoplastic style.",
  "useWhen": "Art/design portfolio heroes, generative art showcases, or any context calling for calm geometric abstraction with a classical reference.",
  "avoidWhen": "Contexts requiring legible text overlay — moving grid lines compete with content. Low-end devices running many canvas tiles simultaneously.",
- "agentPrompt": "Change YEL to '#e84f17' for a second red tone, increase line weight multiplier from 0.022 to 0.030, and add a fifth slot at 0.88 in VSLOTS.",
+ "agentPrompt": "Change YEL to '#e84f17' for a second red tone, increase line weight multiplier from 0.022 to 0.030, and add a fifth slot at 0.88 in VSLOTS. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "primary color palette (RED, BLUE, YEL, PAINT constants)",
   "slot positions (VSLOTS / HSLOTS arrays)",
   "line weight multiplier (S*0.022)",
   "cell color layout (base array in buildCells)",
   "slide duration range (rnd(1.6,2.6))",
-  "cycle period (cycle=6.2 seconds)"
+  "cycle period (cycle=6.2 seconds)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper and 'use strict'",
   "prefers-reduced-motion static-frame branch",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing and ctx.setTransform"
+  "DPR-aware canvas sizing and ctx.setTransform",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Cell color layout is hardcoded in buildCells — primary placement does not react to line positions dynamically",
@@ -45,7 +58,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "grid",
@@ -71,13 +85,29 @@
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 
-  // Neoplastic palette around the brief accent #1b5fc4
-  var PAINT='#f4f1e9';            // off-white plane
-  var LINE ='#101012';            // black grid lines (against #0e0e10 bg)
-  var RED  ='#c8261d';
-  var BLUE ='#1b5fc4';            // brief accent
-  var YEL  ='#e8b714';
-  var COLS=[null,RED,BLUE,YEL,PAINT,PAINT];  // weighted toward plane
+  // Neoplastic palette around the brief accent #1b5fc4 — every colour the canvas
+  // paints with is read from the CSS tokens, so a theme switch needs no draw edits.
+  var root=document.documentElement;
+  var BG='',PAINT='',LINE='',RED='',BLUE='',YEL='';
+  var COLS=[null,'','','','',''];            // cached palette, weighted toward plane
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    BG   =cs.getPropertyValue('--ds01-bg').trim();
+    PAINT=cs.getPropertyValue('--ds01-paint').trim();
+    LINE =cs.getPropertyValue('--ds01-line').trim();
+    RED  =cs.getPropertyValue('--ds01-red').trim();
+    BLUE =cs.getPropertyValue('--ds01-blue').trim();
+    YEL  =cs.getPropertyValue('--ds01-yel').trim();
+    COLS[1]=RED; COLS[2]=BLUE; COLS[3]=YEL; COLS[4]=COLS[5]=PAINT;  // invalidate colour cache
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme(); if(reduce)draw();
+    }
+  });
+  syncTheme();
 
   var W=0,H=0,DPR=1,S=0,OX=0,OY=0;            // S=square side, OX/OY=letterbox offset
   // Grid: 3 vertical + 3 horizontal interior lines. Each animates between two normalized positions.
@@ -175,7 +205,7 @@
     boundaries();
     var x0=OX, y0=OY;
     // base plane
-    ctx.fillStyle='#0e0e10';
+    ctx.fillStyle=BG;
     ctx.fillRect(0,0,W,H);
     ctx.fillStyle=PAINT;
     ctx.fillRect(x0,y0,S,S);

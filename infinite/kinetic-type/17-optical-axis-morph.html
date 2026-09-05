@@ -5,11 +5,26 @@
 <meta name="description" content="The word MORPH on dark umber morphs its variable-font axes (weight, width, slant) with a copper-to-vermillion glow, breathing wide and italic.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Optical Axis Morph</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1A1614;}
+  /* theme tokens — dark values are the defaults; light re-theme = the [data-theme="light"] block.
+     canvas paints its own bg (trail fade) every frame, so JS reads these via syncTheme(), not CSS. */
+  :root{
+    --oam-bg:#1A1614; --oam-bg-rgb:26,22,20; --oam-accent:#E04729; --oam-accent-rgb:224,71,41;
+    --oam-cool-rgb:160,194,138; --cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --oam-bg:#f5f0e8; --oam-bg-rgb:245,240,232; --oam-accent:#c8391d; --oam-accent-rgb:200,57,29;
+    --oam-cool-rgb:83,117,61; --cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--oam-bg);}
   #oam-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
-       letter-spacing:.14em;color:#E04729;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--oam-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +34,22 @@
  "description": "The word MORPH breathes between narrow-upright and wide-italic states via canvas-drawn stroke segments; copper-to-vermillion glow pulses with each axis cycle.",
  "useWhen": "Dark-mode hero sections, loading screens, or brand moments where typographic motion signals transformation.",
  "avoidWhen": "Light backgrounds (hardcoded dark umber). Contexts needing selectable or screen-reader-accessible text.",
- "agentPrompt": "Change the word to 'SHIFT', set the accent base color to golden amber (replace 160+hot*64, 194-hot*123, 138-hot*97 with 200+hot*40, 150+hot*50, 60), and slow the cycle to t += 0.007.",
+ "agentPrompt": "Change the word to 'SHIFT', set the accent base color to golden amber (replace 160+hot*64, 194-hot*123, 138-hot*97 with 200+hot*40, 150+hot*50, 60), and slow the cycle to t += 0.007. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (WORD constant)",
   "cycle speed (t += 0.012)",
   "stem thickness range (weight 0.06..0.26)",
   "width axis range (widthAxis 0.62..1.40)",
   "accent color (hot RGB calculation)",
-  "glow blur range (8+ease*26)"
+  "glow blur range (8+ease*26)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Letters are custom segment lists — only M, O, R, P, H are defined; adding new letters requires authoring segment arrays",
@@ -46,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -68,6 +86,19 @@
   const cv=document.getElementById('oam-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR;
+  // JS-drawn colours — read from tokens so the canvas repaints correctly on theme switch
+  const htmlEl=document.documentElement;
+  const C={bg:'#1A1614',bgRgb:'26,22,20',accent:'#E04729',accentRgb:[224,71,41],coolRgb:[160,194,138]};
+  function parseRgb(s,fallback){ var p=s.split(',').map(Number); return p.length===3&&p.every(n=>!isNaN(n))?p:fallback; }
+  function syncTheme(){
+    const cs=getComputedStyle(htmlEl);
+    C.bg=(cs.getPropertyValue('--oam-bg')||'#1A1614').trim();
+    C.bgRgb=(cs.getPropertyValue('--oam-bg-rgb')||'26,22,20').trim();
+    C.accent=(cs.getPropertyValue('--oam-accent')||'#E04729').trim();
+    C.accentRgb=parseRgb((cs.getPropertyValue('--oam-accent-rgb')||'224,71,41').trim(),[224,71,41]);
+    C.coolRgb=parseRgb((cs.getPropertyValue('--oam-cool-rgb')||'160,194,138').trim(),[160,194,138]);
+  }
+  syncTheme();
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
@@ -104,7 +135,7 @@
 
   function frame(){
     if(!reduce){t+=0.012+boost*0.02;boost*=0.95;}
-    ctx.fillStyle='rgba(26,22,20,0.28)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba('+C.bgRgb+',0.28)';ctx.fillRect(0,0,W,H);
 
     // optical axis phase: 0 = narrow upright, 1 = wide italic display
     const ph=reduce?0.32:(Math.sin(t)*0.5+0.5);
@@ -128,8 +159,9 @@
       const lw=weight*(1+0.18*Math.sin(t*1.3+i*0.9))*unit;
       // accent gradient: cool violet core -> hot magenta edge as it opens
       const hot=ease*0.5+0.5;
-      ctx.fillStyle=`rgba(${Math.round(160+hot*64)},${Math.round(194-hot*123)},${Math.round(138-hot*97)},${0.92})`;
-      ctx.shadowColor='rgba(224,71,41,'+(0.25+ease*0.5)+')';
+      const cr=C.coolRgb, ar=C.accentRgb;
+      ctx.fillStyle=`rgba(${Math.round(cr[0]+hot*(ar[0]-cr[0]))},${Math.round(cr[1]+hot*(ar[1]-cr[1]))},${Math.round(cr[2]+hot*(ar[2]-cr[2]))},${0.92})`;
+      ctx.shadowColor='rgba('+ar.join(',')+','+(0.25+ease*0.5)+')';
       ctx.shadowBlur=(8+ease*26);
       for(const s of glyphs[i]){
         // shear: shift x by slant proportional to height above baseline
@@ -148,7 +180,16 @@
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){ctx.fillStyle='#1A1614';ctx.fillRect(0,0,W,H);frame();}else start();
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      htmlEl.setAttribute('data-theme', d.theme);
+      syncTheme();
+      if(reduce){ ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H); frame(); }
+    }
+  });
+  if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);frame();}else start();
 })();
 </script>
 </body>

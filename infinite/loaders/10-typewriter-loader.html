@@ -8,26 +8,43 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
 :root{
   --bg-900:#08090d; --bg-700:#12141d; --bg-surface:#1c2030;
   --text-0:#f4f6fb; --text-3:#565d73;
   --accent-iris:#2BAB6B; --accent-cyan:#C08459; --accent-magenta:#87A194;
   --border-soft:rgba(255,255,255,0.07);
+  --glow-a:rgba(43,171,107,.16); --glow-b:rgba(192,132,89,.16);
+  --type-shadow:rgba(43,171,107,.6); --cap-o:.45;
   --r-md:14px;
 }
+:root[data-theme="light"]{
+  --bg-900:#f2f4f8; --bg-700:#e2e6ef; --bg-surface:#ffffff;
+  --text-0:#1b2130; --text-3:#565d73;
+  --accent-iris:#207e4f; --accent-cyan:#98613a; --accent-magenta:#769485;
+  --border-soft:rgba(0,0,0,0.10);
+  --glow-a:rgba(43,171,107,.18); --glow-b:rgba(192,132,89,.16);
+  --type-shadow:rgba(32,126,79,.2); --cap-o:.5;
+}
 *,*::before,*::after{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg-900)}
 body{
   background:var(--bg-900);
   background-image:
-    radial-gradient(60vw 40vw at 15% -10%,rgba(43,171,107,.16),transparent 60%),
-    radial-gradient(50vw 40vw at 90% 0%,rgba(192,132,89,.16),transparent 55%);
+    radial-gradient(60vw 40vw at 15% -10%,var(--glow-a),transparent 60%),
+    radial-gradient(50vw 40vw at 90% 0%,var(--glow-b),transparent 55%);
   display:grid;place-items:center;padding:24px;
 }
 .c10-type{width:min(74vmin,260px);font-family:"Space Grotesk",ui-monospace,monospace;
   background:var(--bg-surface);border:1px solid var(--border-soft);border-radius:var(--r-md);
-  padding:18px 18px 16px;box-shadow:inset 0 0 28px -16px rgba(43,171,107,.6)}
+  padding:18px 18px 16px;box-shadow:inset 0 0 28px -16px var(--type-shadow)}
 .c10-type__bar{display:flex;gap:6px;margin-bottom:14px}
 .c10-type__dot{width:9px;height:9px;border-radius:50%;background:var(--bg-700)}
 .c10-type__dot:nth-child(1){background:var(--accent-magenta)}
@@ -41,7 +58,7 @@ body{
   vertical-align:text-bottom;background:var(--accent-iris);animation:c10-type-blink 1s steps(1) infinite}
 @keyframes c10-type-blink{0%,50%{opacity:1}50.01%,100%{opacity:0}}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 "Space Grotesk",ui-monospace,monospace;
-  color:#C08459;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--accent-cyan);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms!important;animation-iteration-count:1!important}
   .c10-type__caret{opacity:1}
@@ -54,18 +71,20 @@ body{
  "description": "Terminal card with traffic-light dots cycles through status phrases typing and erasing character-by-character after a $ prompt with a blinking emerald caret.",
  "useWhen": "Loading screens, build/compile progress indicators, developer-tool or CLI-themed UIs needing ambient status text.",
  "avoidWhen": "Non-technical or consumer-facing contexts where terminal aesthetics feel out of place. Avoid when progress must map to real state.",
- "agentPrompt": "Change the status phrases in the frames array to ['building assets...','minifying...','done!'], set TYPE speed to 40ms, and change accent-cyan to #00ff99.",
+ "agentPrompt": "Change the status phrases in the frames array to ['building assets...','minifying...','done!'], set TYPE speed to 40ms, and change accent-cyan to #00ff99. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "status phrases (frames array)",
   "type/erase speed (TYPE=55, ERASE=30)",
   "hold durations (HOLD_FULL=1100, HOLD_EMPTY=280)",
   "accent colors (--accent-cyan, --accent-iris, --accent-magenta)",
-  "card width (min(74vmin,260px))"
+  "card width (min(74vmin,260px))",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static first frame fallback)",
-  "visibilitychange stop/play handlers"
+  "visibilitychange stop/play handlers",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Purely decorative — not wired to real async state; remove loop and drive fi/ci externally for production use",
@@ -78,7 +97,8 @@ body{
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typewriter",
@@ -127,6 +147,10 @@ body{
     caret.style.animationPlayState='running';}}
   function stop(){cancelAnimationFrame(raf);raf=0;caret.style.animationPlayState='paused';}
   document.addEventListener('visibilitychange',function(){document.hidden?stop():play();});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data; if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
   play();
 })();
 </script>

@@ -5,11 +5,29 @@
 <meta name="description" content="Weightless — Suprematist Geometric Forms. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Weightless</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#111111;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. Every colour the canvas paints with is
+     read from these in syncTheme(), so a switch re-colours the orbiting bodies. */
+  :root{
+    --mal06-bg:#111111; --mal06-ink:#f5f3ee;
+    --mal06-core:rgba(245,243,238,.07); --mal06-edge:rgba(245,243,238,.3);
+    --mal06-red:#d8261c; --mal06-blue:#1746a0; --mal06-yellow:#f2b705; --mal06-mono:#f5f3ee;
+  }
+  :root[data-theme="light"]{
+    --mal06-bg:#f0ece2; --mal06-ink:#111111;
+    --mal06-core:rgba(17,17,17,.07); --mal06-edge:rgba(17,17,17,.3);
+    --mal06-red:#cf241b; --mal06-blue:#1746a0; --mal06-yellow:#a77e03; --mal06-mono:#111111;
+  }
+  html,body{margin:0;height:100%;background:var(--mal06-bg);overflow:hidden}
   #mal06-stage{position:fixed;inset:0;width:100%;height:100%}
   #mal06-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .mal06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f5f3ee;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .mal06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--mal06-ink);opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +36,22 @@
  "description": "7 Suprematist shapes — squares, circles, bars, crosses in red/blue/yellow/white — orbit and self-spin around an invisible centre on a dark field.",
  "useWhen": "Art/gallery hero backgrounds, ambient screensavers, dark-mode sections needing calm geometric motion with a fine-art reference.",
  "avoidWhen": "Light backgrounds (dark canvas hardcoded). Contexts needing legible text overlays — orbiting shapes compete with reading.",
- "agentPrompt": "Add an 8th body with kind='bar', color PAL.white, R=0.55, and selfSpin=1.2 for a fast-spinning outer ring element.",
+ "agentPrompt": "Add an 8th body with kind='bar', color PAL.white, R=0.55, and selfSpin=1.2 for a fast-spinning outer ring element. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "body count (loop i<7)",
   "orbital radii (R: 0.12–0.52 range)",
   "orbit speed range (sp: 0.10–0.45)",
   "palette (PAL red/blue/yellow/white)",
   "ellipse squash factor (0.78 y-axis)",
-  "shape self-spin rate (selfSpin range)"
+  "shape self-spin rate (selfSpin range)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware fitCanvas with setTransform",
   "visibilitychange pause/start guard",
   "IIFE wrapper",
-  "REDUCED static-frame fallback"
+  "REDUCED static-frame fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background hardcoded to #111111 in both CSS and canvas fillRect — change both",
@@ -45,7 +65,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "suprematism",
@@ -67,7 +88,25 @@
 (function(){
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const PAL={red:'#d8261c',blue:'#1746a0',yellow:'#f2b705',white:'#f5f3ee'};
+  const root=document.documentElement;
+  const C={cols:[]};                       // every colour the canvas draws with, read from the tokens
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--mal06-bg').trim();
+    C.core=cs.getPropertyValue('--mal06-core').trim();
+    C.edge=cs.getPropertyValue('--mal06-edge').trim();
+    C.cols=[cs.getPropertyValue('--mal06-red').trim(),cs.getPropertyValue('--mal06-blue').trim(),
+            cs.getPropertyValue('--mal06-yellow').trim(),cs.getPropertyValue('--mal06-mono').trim()];
+  }
+  syncTheme();
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', e=>{
+    const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme();
+      if(REDUCED) draw(performance.now());  // static frame repaints in the new palette
+    }
+  });
   const cv=document.getElementById('mal06-cv'); if(!cv) return;
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
@@ -78,28 +117,27 @@
     return {ctx,w,h,dpr};
   }
   let S=fitCanvas(cv);
-  const cols=[PAL.red,PAL.blue,PAL.yellow,PAL.white];
   const kinds=['sq','circ','bar','cross'];
   const bodies=[];
   for(let i=0;i<7;i++){
     bodies.push({R:0.12+Math.random()*0.40, sp:(0.10+Math.random()*0.35)*(Math.random()<0.5?-1:1),
       ph:Math.random()*Math.PI*2, sz:0.035+Math.random()*0.06, ratio:3+Math.random()*3,
-      c:cols[i%cols.length], kind:kinds[i%kinds.length], selfSpin:(-0.4+Math.random()*0.8)});
+      ci:i%4, kind:kinds[i%kinds.length], selfSpin:(-0.4+Math.random()*0.8)});
   }
   let t=0,last=performance.now();
   function draw(now){
     const dt=Math.min(0.05,(now-last)/1000); last=now;
     if(!REDUCED) t+=dt;
     const ctx=S.ctx,W=S.w,H=S.h,cx=W*0.5,cy=H*0.5,unit=Math.min(W,H);
-    ctx.fillStyle='#111111'; ctx.fillRect(0,0,W,H);
-    ctx.fillStyle='rgba(245,243,238,.07)'; ctx.beginPath(); ctx.arc(cx,cy,unit*0.03,0,7); ctx.fill();
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.core; ctx.beginPath(); ctx.arc(cx,cy,unit*0.03,0,7); ctx.fill();
     for(const b of bodies){
       const a=t*b.sp + b.ph;
       const x=cx+Math.cos(a)*unit*b.R;
       const y=cy+Math.sin(a)*unit*b.R*0.78;
       const z=b.sz*unit;
       ctx.save(); ctx.translate(x,y); ctx.rotate(t*b.selfSpin + b.ph);
-      ctx.fillStyle=b.c; ctx.strokeStyle='rgba(245,243,238,.3)'; ctx.lineWidth=1;
+      ctx.fillStyle=C.cols[b.ci]; ctx.strokeStyle=C.edge; ctx.lineWidth=1;
       if(b.kind==='sq'){ ctx.fillRect(-z*0.7,-z*0.7,z*1.4,z*1.4); }
       else if(b.kind==='circ'){ ctx.beginPath();ctx.arc(0,0,z*0.8,0,7);ctx.fill(); }
       else if(b.kind==='bar'){ const w=z*b.ratio,h=z*0.5; ctx.fillRect(-w/2,-h/2,w,h); }
@@ -111,7 +149,7 @@
   function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
   function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
   function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
-  S.ctx.fillStyle='#111111'; S.ctx.fillRect(0,0,S.w,S.h);
+  S.ctx.fillStyle=C.bg; S.ctx.fillRect(0,0,S.w,S.h);
   let _rt;
   window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
   document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });

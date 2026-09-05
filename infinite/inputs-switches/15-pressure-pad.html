@@ -5,11 +5,26 @@
 <meta name="description" content="Teal concentric-ring pressure pad that dimples inward under press, pulses while held, and shows a live grams-of-force readout.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pressure Pad</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#08131a;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --pp-bg:#08131a; --pp-acc:#34e0d0; --pp-acc-rgb:52,224,208;
+    --pp-cap:#34e0d0; --pp-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --pp-bg:#eef4f7; --pp-acc:#137c73; --pp-acc-rgb:19,124,115;
+    --pp-cap:#1b2130; --pp-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pp-bg);}
   #pp-c{display:block;width:100%;height:100%;cursor:pointer;}
   .pp-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.16em;color:#34e0d0;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--pp-cap);opacity:var(--pp-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +34,21 @@
  "description": "Teal concentric-ring pad dimples inward and pulses while held; releases with a spring rebound. Live grams-of-force readout updates in real time.",
  "useWhen": "Force/pressure input demos, hardware UI mockups, tactile interaction prototypes, or any UI needing a satisfying press-and-hold affordance.",
  "avoidWhen": "Contexts requiring a real pressure sensor — the grams readout is purely simulated. Not suited for light-background UIs (hardcoded dark navy background).",
- "agentPrompt": "Change the accent color from teal to amber by setting AC='#f59e0b', and increase the max simulated force from 840 to 1200 grams by editing the grams calculation on line 99.",
+ "agentPrompt": "Change the accent color from teal to amber by setting AC='#f59e0b', and increase the max simulated force from 840 to 1200 grams by editing the grams calculation on line 99. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (AC='#34e0d0')",
   "max grams readout (depth*840)",
   "ring count (n=7)",
   "press spring speed (0.16 attack / 0.085 release)",
-  "pad size ratio (R=Math.min(W,H)*0.34)"
+  "pad size ratio (R=Math.min(W,H)*0.34)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Grams-of-force is purely simulated — no real pressure API",
@@ -45,7 +62,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "pressure",
@@ -66,7 +84,20 @@
 (function(){
   const cv=document.getElementById('pp-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const AC='#34e0d0', BG='#08131a';
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--pp-bg').trim();
+    C.acc=cs.getPropertyValue('--pp-acc').trim();
+    C.accRgb=cs.getPropertyValue('--pp-acc-rgb').trim();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   let W,H,DPR,cx,cy,R;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -76,8 +107,8 @@
   }
   addEventListener('resize',size);size();
 
-  let t=0, press=0, target=0, hover=0;
-  cv.addEventListener('pointerdown',()=>{target=1;});
+  let t=0, press=0, target=0, hover=0, demo=true, demoT=0;
+  cv.addEventListener('pointerdown',()=>{target=1;demo=false;});   // a real press ends the idle demo
   addEventListener('pointerup',()=>{target=0;});
   cv.addEventListener('pointermove',()=>{hover=1;});
   cv.addEventListener('pointerleave',()=>{hover=0;target=0;});
@@ -91,7 +122,7 @@
       const rr=R*(0.18+sq*0.92);
       const a=(0.10+0.30*(1-base))*(0.5+0.5*depth);
       ctx.beginPath();ctx.arc(cx,cy,rr,0,Math.PI*2);
-      ctx.strokeStyle=AC;ctx.globalAlpha=a;ctx.lineWidth=1+depth*1.4*(1-base);
+      ctx.strokeStyle=C.acc;ctx.globalAlpha=a;ctx.lineWidth=1+depth*1.4*(1-base);
       ctx.stroke();
     }
     ctx.globalAlpha=1;
@@ -99,6 +130,10 @@
 
   function frame(){
     t+=reduce?0:1;
+    // idle demo: nobody presses a pad on the wall, so a synthetic press lands every ~3.3s
+    // (first one at 0.3s) and releases with the same spring — the pad reads instead of sitting
+    // as faint rings until touched (audit: flat). Real input switches it off.
+    if(!reduce&&demo){demoT++;const ph=demoT%200;if(ph===18)target=1;else if(ph===92)target=0;}
     // pulse drive when held, spring + overshoot on release
     if(!reduce){
       const pulse=target>0.5? 0.78+0.22*Math.sin(t*0.10):0;
@@ -109,20 +144,20 @@
     // overshoot: rebound membrane wobble after release
     const wob=(target<0.5 && depth<0.5)? Math.sin(t*0.22)*depth*0.0 : 0;
 
-    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
 
     // pad bezel
     const padR=R*1.18;
     ctx.beginPath();ctx.arc(cx,cy,padR,0,Math.PI*2);
-    ctx.strokeStyle=AC;ctx.globalAlpha=0.16;ctx.lineWidth=1.4;ctx.stroke();
-    ctx.globalAlpha=0.05;ctx.fillStyle=AC;ctx.fill();ctx.globalAlpha=1;
+    ctx.strokeStyle=C.acc;ctx.globalAlpha=0.16;ctx.lineWidth=1.4;ctx.stroke();
+    ctx.globalAlpha=0.05;ctx.fillStyle=C.acc;ctx.fill();ctx.globalAlpha=1;
 
     // dimpled center — radial gradient that deepens with force
     const dim=R*(0.30+depth*0.16);
     const g=ctx.createRadialGradient(cx,cy-depth*4,2,cx,cy,dim);
-    g.addColorStop(0, `rgba(52,224,208,${0.06+depth*0.34})`);
-    g.addColorStop(0.55,`rgba(52,224,208,${0.03+depth*0.12})`);
-    g.addColorStop(1,'rgba(52,224,208,0)');
+    g.addColorStop(0, `rgba(${C.accRgb},${0.06+depth*0.34})`);
+    g.addColorStop(0.55,`rgba(${C.accRgb},${0.03+depth*0.12})`);
+    g.addColorStop(1,`rgba(${C.accRgb},0)`);
     ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,dim,0,Math.PI*2);ctx.fill();
 
     rings(depth);
@@ -130,10 +165,10 @@
     // center node
     const cr=R*(0.10-depth*0.035);
     ctx.beginPath();ctx.arc(cx,cy-depth*3,cr,0,Math.PI*2);
-    ctx.fillStyle=AC;ctx.globalAlpha=0.28+depth*0.6;ctx.fill();ctx.globalAlpha=1;
+    ctx.fillStyle=C.acc;ctx.globalAlpha=0.28+depth*0.6;ctx.fill();ctx.globalAlpha=1;
 
     // crosshair guide
-    ctx.strokeStyle=AC;ctx.globalAlpha=0.10+hover*0.12;ctx.lineWidth=1;
+    ctx.strokeStyle=C.acc;ctx.globalAlpha=0.10+hover*0.12;ctx.lineWidth=1;
     ctx.beginPath();
     ctx.moveTo(cx-padR,cy);ctx.lineTo(cx-R*0.5,cy);
     ctx.moveTo(cx+R*0.5,cy);ctx.lineTo(cx+padR,cy);
@@ -146,7 +181,7 @@
     const fs=Math.max(13,Math.min(34,R*0.20));
     ctx.font=`600 ${fs}px ui-monospace,SFMono-Regular,Menlo,monospace`;
     ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillStyle=AC;ctx.globalAlpha=0.55+depth*0.45;
+    ctx.fillStyle=C.acc;ctx.globalAlpha=0.55+depth*0.45;
     ctx.fillText(grams, cx, cy+padR+fs*0.95);
     ctx.font=`600 ${fs*0.38}px ui-monospace,SFMono-Regular,Menlo,monospace`;
     ctx.globalAlpha=0.4;

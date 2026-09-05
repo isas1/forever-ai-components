@@ -5,11 +5,27 @@
 <meta name="description" content="Soft grey lattice on black with white disks at the crossings that slowly twinkle, evoking the scintillating-grid illusion.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Scintillating Grid</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a}
-  #op12-stage{position:fixed;inset:0;background:#0a0a0a;overflow:hidden}
+  /* theme tokens — dark values are the defaults; light inverts the whole stack
+     (paper ground, paper-tinted cells, ink streets, ink disks with a paper halo)
+     — the reverse-contrast reading of the same illusion. */
+  :root{
+    --op12-bg:#0a0a0a; --op12-cell:#171717; --op12-street:rgba(235,235,235,0.16);
+    --op12-ink-rgb:255,255,255; --op12-cap:#fff; --op12-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --op12-bg:#f4f4f2; --op12-cell:#e8e8e5; --op12-street:rgba(20,20,20,0.16);
+    --op12-ink-rgb:20,20,20; --op12-cap:#141414; --op12-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--op12-bg)}
+  #op12-stage{position:fixed;inset:0;background:var(--op12-bg);overflow:hidden}
   #op12-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op12-cap);opacity:var(--op12-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,21 +35,23 @@
  "description": "Grey lattice on black with white disks at intersections that slowly twinkle via dual-sine phases, evoking the classic scintillating-grid optical illusion.",
  "useWhen": "Dark-mode ambient backgrounds, science/perception-themed UIs, screensaver-style loops where subtle motion is desired.",
  "avoidWhen": "Light backgrounds (hardcoded dark theme). Contexts where illusory flicker could distress users with visual sensitivities.",
- "agentPrompt": "Change disk color to soft gold by replacing 'rgba(255,255,255,'+a...')' with 'rgba(255,215,100,'+a+')', increase gap divisor from 8.5 to 6 for a looser grid.",
+ "agentPrompt": "Change disk color to soft gold by replacing 'rgba(255,255,255,'+a...')' with 'rgba(255,215,100,'+a+')', increase gap divisor from 8.5 to 6 for a looser grid. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid spacing (gap = Math.round(m/8.5))",
   "disk radius multiplier (gap*0.18)",
   "bar thickness (gap*0.085)",
   "shimmer speed (t*0.9 and t*0.37)",
-  "disk brightness range (0.30 + 0.62*v*v)"
+  "disk brightness range (0.30 + 0.62*v*v)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange stop/start guard",
-  "reduced-motion static fallback (draw(1.2))"
+  "reduced-motion static fallback (draw(1.2))",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background and grid colors are hardcoded dark — light-theme use requires editing both CSS and canvas fillStyle values",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Illusion effect may be uncomfortable for viewers with certain visual sensitivities"
  ],
  "tier": "curated",
@@ -43,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "op-art",
@@ -69,6 +88,24 @@
   var cv=document.getElementById('op12-c');
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root=document.documentElement;
+
+  // colours the canvas draws with — read once from the tokens, once per switch
+  var C={bg:'#0a0a0a',cell:'#171717',street:'rgba(235,235,235,0.16)',ink:'255,255,255'};
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--op12-bg').trim();
+    C.cell=cs.getPropertyValue('--op12-cell').trim();
+    C.street=cs.getPropertyValue('--op12-street').trim();
+    C.ink=cs.getPropertyValue('--op12-ink-rgb').trim();
+    if(reduce&&W)draw(1.2);   // static fallback must repaint on a live switch
+  }
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
 
   // layout cache (recomputed only on resize)
   var W=0,H=0,DPR=1,gap=0,cols=0,rows=0,ox=0,oy=0,bar=0,disk=0;
@@ -95,12 +132,12 @@
     var w=cv.width,h=cv.height;
     ctx.setTransform(DPR,0,0,DPR,0,0);
     // solid background
-    ctx.fillStyle='#0a0a0a';
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
 
     // --- the channels: dark-grey lattice creating the bright "streets" illusion ---
     // We paint grey squares leaving thin gaps; the gaps read as a white-ish grid.
-    ctx.fillStyle='#171717';
+    ctx.fillStyle=C.cell;
     var i,j,x,y;
     var step=gap;
     for(i=0;i<rows;i++){
@@ -111,7 +148,7 @@
       }
     }
     // brighten the channels themselves with a faint stroke grid (static)
-    ctx.strokeStyle='rgba(235,235,235,0.16)';
+    ctx.strokeStyle=C.street;
     ctx.lineWidth=bar;
     ctx.beginPath();
     for(j=0;j<=cols;j++){ x=ox+(j-1)*step; ctx.moveTo(x,0); ctx.lineTo(x,H); }
@@ -121,7 +158,7 @@
     // --- intersections: white disks that scintillate ---
     // Classic scintillating-grid: disks at crossings; brightness drifts so they
     // appear to twinkle without any single one flashing fast.
-    ctx.fillStyle='#0a0a0a';
+    ctx.fillStyle=C.bg;
     var r=disk;
     for(i=0;i<=rows;i++){
       y=oy+(i-1)*step;
@@ -136,9 +173,9 @@
         // keep contrast gentle: disks range from soft grey to bright white
         var a=0.30+0.62*v*v;            // ease toward bright, floor stays visible
         // outer dark dot keeps the crossing from being a hard white blob
-        ctx.fillStyle='#0a0a0a';
+        ctx.fillStyle=C.bg;
         ctx.beginPath(); ctx.arc(x,y,r+bar*0.6,0,6.2832); ctx.fill();
-        ctx.fillStyle='rgba(255,255,255,'+a.toFixed(3)+')';
+        ctx.fillStyle='rgba('+C.ink+','+a.toFixed(3)+')';
         ctx.beginPath(); ctx.arc(x,y,r,0,6.2832); ctx.fill();
       }
     }
@@ -161,6 +198,7 @@
 
   function onResize(){ layout(); if(reduce){ draw(1.2); } }
   layout();
+  syncTheme();
 
   document.addEventListener('visibilitychange',function(){
     if(reduce) return;

@@ -5,11 +5,34 @@
 <meta name="description" content="Hilbert space-filling curve drawing itself with a glowing teal-to-violet ribbon and leading spark, cycling through orders.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Hilbert Weave</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#021016;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme lives in the one [data-theme="light"] block. The ribbon hue sweep
+     (teal -> violet) is shared; only the hsl saturation/lightness/alpha numbers change, so in
+     light the glow underlay reads as a soft coloured shadow under a dark ribbon. */
+  :root{
+    --hw-bg:#021016; --hw-cap:#23c2c9; --hw-cap-o:.34;
+    --hw-ghost:rgba(35,194,201,0.07);
+    --hw-glow-s:85; --hw-glow-l:60; --hw-glow-a:0.22;
+    --hw-core-s:70; --hw-core-l:58; --hw-core-a:0.95;
+    --hw-spark0:rgba(220,255,255,0.95); --hw-spark1:rgba(35,194,201,0.6); --hw-spark2:rgba(35,194,201,0);
+  }
+  :root[data-theme="light"]{
+    --hw-bg:#eef6f7; --hw-cap:#12666a; --hw-cap-o:.75;
+    --hw-ghost:rgba(10,90,96,0.10);
+    --hw-glow-s:55; --hw-glow-l:46; --hw-glow-a:0.20;
+    --hw-core-s:72; --hw-core-l:26; --hw-core-a:0.95;
+    --hw-spark0:rgba(6,40,44,0.95); --hw-spark1:rgba(12,110,118,0.55); --hw-spark2:rgba(12,110,118,0);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--hw-bg);}
   #hw-c{display:block;width:100%;height:100%;}
   .hw-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.16em;color:#23c2c9;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--hw-cap);opacity:var(--hw-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +42,21 @@
  "description": "A Hilbert space-filling curve draws itself as a glowing teal-to-violet ribbon with a leading spark, cycling through orders 2–5 and looping continuously.",
  "useWhen": "Generative art backgrounds, math/algorithm showcase sections, dark-themed hero panels needing ambient geometric motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy). Contexts where high segment-count draw loops at order 5 (1024 cells) may stress low-end CPUs.",
- "agentPrompt": "Change the hue sweep from teal-violet to amber-rose by setting the base hue to 30 and the sweep range to 120 (line: `const h=(168+f*150)%360` → `const h=(30+f*120)%360`).",
+ "agentPrompt": "Change the hue sweep from teal-violet to amber-rose by setting the base hue to 30 and the sweep range to 120 (line: `const h=(168+f*150)%360` → `const h=(30+f*120)%360`). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "hue base and sweep range (168 + f*150)",
   "draw speed (SPEED = 0.018)",
   "hold duration before order advance (hold > 90)",
   "order range (2..5 in the order++ loop)",
-  "ribbon width multiplier (cell * 0.30)"
+  "ribbon width multiplier (cell * 0.30)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange start/stop guards",
   "IIFE wrapper",
-  "prefers-reduced-motion static render branch"
+  "prefers-reduced-motion static render branch",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Per-segment draw loop scales as O(n²) cells — order 5 draws 1023 segments twice per frame (glow + core), may drop frames on slow hardware",
@@ -44,7 +69,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "hilbert-curve",
@@ -103,8 +129,27 @@
 
   function hsl(h,s,l,a){return 'hsla('+h+','+s+'%,'+l+'%,'+a+')';}
 
+  // theme: bg, ghost stroke, the ribbon's hsl saturation/lightness/alpha and the head-spark
+  // gradient stops all come from the CSS tokens — read once, and again on a theme flip.
+  const root=document.documentElement;
+  const C={bg:'#021016',ghost:'rgba(35,194,201,0.07)',gs:'85',gl:'60',ga:0.22,
+           cs:'70',cl:'58',ca:'0.95',
+           s0:'rgba(220,255,255,0.95)',s1:'rgba(35,194,201,0.6)',s2:'rgba(35,194,201,0)'};
+  function syncTheme(){
+    const cs=getComputedStyle(root),s=n=>cs.getPropertyValue(n).trim();
+    C.bg=s('--hw-bg')||C.bg;C.ghost=s('--hw-ghost')||C.ghost;
+    C.gs=s('--hw-glow-s')||C.gs;C.gl=s('--hw-glow-l')||C.gl;C.ga=+(s('--hw-glow-a')||C.ga);
+    C.cs=s('--hw-core-s')||C.cs;C.cl=s('--hw-core-l')||C.cl;C.ca=s('--hw-core-a')||C.ca;
+    C.s0=s('--hw-spark0')||C.s0;C.s1=s('--hw-spark1')||C.s1;C.s2=s('--hw-spark2')||C.s2;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce)render(1);}
+  });
+  syncTheme();
+
   function render(prog){
-    ctx.fillStyle='#021016';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const {pts,total}=path;
     const seg=total-1;
     const drawn=prog*seg;          // how many segments fully/partly drawn
@@ -113,7 +158,7 @@
     // faint full-curve ghost so completed lattice reads as woven cloth
     ctx.lineCap='round';ctx.lineJoin='round';
     ctx.lineWidth=Math.max(1, path.cell*0.10);
-    ctx.strokeStyle='rgba(35,194,201,0.07)';
+    ctx.strokeStyle=C.ghost;
     ctx.beginPath();ctx.moveTo(pts[0],pts[1]);
     for(let i=1;i<total;i++)ctx.lineTo(pts[i*2],pts[i*2+1]);
     ctx.stroke();
@@ -121,7 +166,7 @@
     const lw=Math.max(1.4, path.cell*0.30);
     // soft glow underlay: one wide translucent pass instead of a per-segment
     // shadowBlur (animated shadows repaint the whole element every frame).
-    ctx.lineWidth=lw*2.4;ctx.globalAlpha=0.22;
+    ctx.lineWidth=lw*2.4;ctx.globalAlpha=C.ga;
     for(let i=0;i<=full && i<seg;i++){
       const f=(i/seg+hueShift)%1;
       const h=(168+f*150)%360;
@@ -131,7 +176,7 @@
       if(i===full){frac=lastFrac;}
       x1=x0+(x1-x0)*frac;y1=y0+(y1-y0)*frac;
       ctx.beginPath();
-      ctx.strokeStyle=hsl(h.toFixed(0),85,60,1);
+      ctx.strokeStyle=hsl(h.toFixed(0),C.gs,C.gl,1);
       ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
     }
     ctx.globalAlpha=1;
@@ -146,7 +191,7 @@
       if(i===full){frac=lastFrac;}
       x1=x0+(x1-x0)*frac;y1=y0+(y1-y0)*frac;
       ctx.beginPath();
-      ctx.strokeStyle=hsl(h.toFixed(0),70,58,0.95);
+      ctx.strokeStyle=hsl(h.toFixed(0),C.cs,C.cl,C.ca);
       ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();
     }
     // leading head spark
@@ -155,9 +200,9 @@
       const x1=pts[(full+1)*2],y1=pts[(full+1)*2+1];
       const hx=x0+(x1-x0)*lastFrac, hy=y0+(y1-y0)*lastFrac;
       const g=ctx.createRadialGradient(hx,hy,0,hx,hy,lw*3);
-      g.addColorStop(0,'rgba(220,255,255,0.95)');
-      g.addColorStop(.4,'rgba(35,194,201,0.6)');
-      g.addColorStop(1,'rgba(35,194,201,0)');
+      g.addColorStop(0,C.s0);
+      g.addColorStop(.4,C.s1);
+      g.addColorStop(1,C.s2);
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(hx,hy,lw*3,0,Math.PI*2);ctx.fill();
     }
   }

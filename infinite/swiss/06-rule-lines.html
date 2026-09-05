@@ -5,12 +5,25 @@
 <meta name="description" content="Horizontal rule bars slide in from alternating edges and pulse in rhythm with a red accent line and asymmetric vertical axis under RULE LINE">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rule Lines</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme (Swiss paper stock, black ink, deeper vermilion) is the
+     [data-theme="light"] block */
   :root{
     --sw06-bg:#0f0f10;
     --sw06-ink:#f2f1ec;
     --sw06-dim:#6c6c70;
     --sw06-red:#e8482b;
+    --sw06-cap:#fff; --sw06-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --sw06-bg:#f4f3ef; --sw06-ink:#141416; --sw06-dim:#5f5f66; --sw06-red:#cf3316;
+    --sw06-cap:#141416; --sw06-cap-o:.55;
   }
   html,body{margin:0;height:100%}
   body{background:var(--sw06-bg);overflow:hidden}
@@ -73,7 +86,7 @@
   #sw06-axis{position:absolute;top:0;bottom:0;left:62%;width:1px;background:var(--sw06-dim);opacity:.32;transform:scaleY(0);transform-origin:top;animation:sw06-axis .9s cubic-bezier(.2,.7,.2,1) .35s forwards}
   @keyframes sw06-axis{to{transform:scaleY(1)}}
 
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--sw06-cap);opacity:var(--sw06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
@@ -89,19 +102,21 @@
  "description": "Six horizontal bars slide in from alternating edges then pulse slowly. One red accent rule and a vertical axis enforce Swiss typographic restraint.",
  "useWhen": "Swiss-style design showcases, editorial hero sections, brand decks needing structured typographic motion without distraction.",
  "avoidWhen": "Content-heavy layouts where horizontal bars compete with text. Light-background UIs — background is hardcoded dark (#0f0f10).",
- "agentPrompt": "Change the red accent line index from redIdx=3 to redIdx=0 (thickest bar), set --sw06-red to #0057ff, and slow the entrance by updating the slide duration from .9s to 1.4s.",
+ "agentPrompt": "Change the red accent line index from redIdx=3 to redIdx=0 (thickest bar), set --sw06-red to #0057ff, and slow the entrance by updating the slide duration from .9s to 1.4s. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "tier positions (tiers array)",
   "bar thicknesses (weights array)",
   "red accent index (redIdx)",
   "pulse durations (pulseDur formula)",
   "CSS color variables (--sw06-red, --sw06-ink, --sw06-bg)",
-  "vertical axis position (left:62%)"
+  "vertical axis position (left:62%)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
-  "visibilitychange pause/resume handler"
+  "visibilitychange pause/resume handler",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded — must edit --sw06-bg to change from dark theme",
@@ -114,7 +129,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "swiss",
@@ -144,6 +160,12 @@
 <script>
 (function(){
   "use strict";
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))
+      document.documentElement.setAttribute("data-theme",d.theme);
+  });
   var field=document.getElementById("sw06-field");
   if(!field)return;
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;

@@ -5,15 +5,32 @@
 <meta name="description" content="Mint plus/minus stepper with a rolling number reel that springs and overshoots between digits on each step.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Spring Stepper</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#06231f;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  :root{
+    --c03-bg:#06231f; --c03-cap:#5fffcf; --c03-cap-o:.4;
+    --c03-btn-bg:#0e3a32; --c03-btn-active:#165247; --c03-btn-ink:#5fffcf;
+    --c03-num-bg:#0a2e29; --c03-roll-ink:#eafff8;
+    --c03-shadow:rgba(0,0,0,.4);
+  }
+  :root[data-theme="light"]{
+    --c03-bg:#f0faf7; --c03-cap:#007f59; --c03-cap-o:.5;
+    --c03-btn-bg:#ffffff; --c03-btn-active:#d7f3e9; --c03-btn-ink:#007f59;
+    --c03-num-bg:#e2f5ee; --c03-roll-ink:#0b3b30;
+    --c03-shadow:rgba(0,127,89,.18);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c03-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   .wrap{height:100%;display:flex;align-items:center;justify-content:center}
   .stepper{display:flex;align-items:center;gap:14px;user-select:none}
-  .btn{width:54px;height:54px;border-radius:16px;background:#0e3a32;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#5fffcf;font-size:30px;font-weight:600;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.4);transition:transform .12s,background .2s}
-  .btn:active{transform:scale(.9);background:#165247}
-  .num{width:78px;height:74px;overflow:hidden;position:relative;border-radius:14px;background:#0a2e29}
-  .roll{position:absolute;left:0;width:100%;text-align:center;font-size:46px;font-weight:800;color:#eafff8;line-height:74px;will-change:transform}
-  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#5fffcf;opacity:.4;text-transform:uppercase}
+  .btn{width:54px;height:54px;border-radius:16px;background:var(--c03-btn-bg);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--c03-btn-ink);font-size:30px;font-weight:600;line-height:1;box-shadow:0 6px 18px var(--c03-shadow);transition:transform .12s,background .2s}
+  .btn:active{transform:scale(.9);background:var(--c03-btn-active)}
+  .num{width:78px;height:74px;overflow:hidden;position:relative;border-radius:14px;background:var(--c03-num-bg)}
+  .roll{position:absolute;left:0;width:100%;text-align:center;font-size:46px;font-weight:800;color:var(--c03-roll-ink);line-height:74px;will-change:transform}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c03-cap);opacity:var(--c03-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -22,18 +39,20 @@
  "description": "Mint-themed +/- stepper with a number reel that springs and overshoots between digits 0–9; auto-cycles as a demo. Dark green palette.",
  "useWhen": "Quantity selectors, numeric inputs, settings with discrete integer steps where tactile spring feedback adds polish.",
  "avoidWhen": "Ranges beyond 0–9 (strip is hardcoded 12 rows). Remove auto-cycle timer before shipping in production.",
- "agentPrompt": "Change the value range to 0–99 by rebuilding the strip with 100 rows, set spring stiffness k=0.22, and change accent color from #5fffcf to #a78bfa.",
+ "agentPrompt": "Change the value range to 0–99 by rebuilding the strip with 100 rows, set spring stiffness k=0.22, and change accent color from #5fffcf to #a78bfa. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "spring stiffness (k=0.16)",
   "damping factor (damp=0.62)",
   "accent color (#5fffcf)",
   "auto-cycle interval (auto>90)",
-  "button/num box border-radius and size"
+  "button/num box border-radius and size",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static translateY fallback)",
-  "visibilitychange pause guard"
+  "visibilitychange pause guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Value clamped 0–9; strip only contains 12 rows so ranges beyond single digits need a rebuild",
@@ -47,7 +66,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "stepper",
@@ -92,6 +112,11 @@
     requestAnimationFrame(frame);
   }
   document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
   if(reduce){roll.style.transform='translateY('+(-val*H)+'px)';}
   else requestAnimationFrame(frame);
 })();

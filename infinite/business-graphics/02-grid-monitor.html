@@ -5,171 +5,99 @@
 <meta name="description" content="Grid Monitor Dashboard - Business Graphics. Grid array mapping node status and telemetry reports with active pulse sweeps.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Grid Monitor</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root {
-    --bg-900: #08090d; --bg-800: #12141c; --green: #10b981; --red: #ef4444; --blue: #A68D3F;
-    --gray-700: #374151; --gray-800: #1f2937; --text-primary: #f3f4f6; --text-muted: #9ca3af;
-  }
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg-900); }
-  .bg02-stage {
-    position: fixed; inset: 0; display: flex; flex-direction: column; padding: 24px;
-    font-family: system-ui, -apple-system, sans-serif; color: var(--text-primary);
-  }
-  .bg02-header { margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; user-select: none; }
-  .bg02-header h1 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-  .bg02-header p { margin: 4px 0 0 0; font-size: 11px; color: var(--text-muted); }
-  .bg02-stats { font-size: 11px; font-family: ui-monospace, monospace; text-align: right; }
-  .bg02-stats span { color: var(--green); font-weight: 700; }
-  .bg02-body { flex: 1; display: grid; grid-template-columns: 2fr 1fr; gap: 20px; min-height: 0; }
-  .bg02-grid-pane {
-    background: var(--bg-800); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px;
-    display: grid; grid-template-columns: repeat(6, 1fr); grid-template-rows: repeat(5, 1fr); gap: 8px; position: relative; overflow: hidden;
-  }
-  .bg02-cell {
-    background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 4px;
-    cursor: pointer; position: relative; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  .bg02-cell::after {
-    content: ''; position: absolute; right: 6px; bottom: 6px; width: 6px; height: 6px; border-radius: 50%;
-    background: var(--cell-color, var(--green)); box-shadow: 0 0 8px var(--cell-color, var(--green)); transition: background 0.3s, box-shadow 0.3s;
-  }
-  .bg02-cell-label { position: absolute; left: 8px; top: 8px; font-size: 9px; font-family: ui-monospace, monospace; color: var(--text-muted); font-weight: 600; }
-  .bg02-cell:hover, .bg02-cell.active { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.2); transform: scale(1.03); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); z-index: 10; }
-  .bg02-cell.active { border-color: var(--blue); box-shadow: 0 0 10px rgba(166,141,63, 0.4); }
-  .bg02-sweep {
-    position: absolute; top: 0; bottom: 0; width: 80px;
-    background: linear-gradient(90deg, transparent, rgba(166,141,63, 0.08) 50%, transparent);
-    border-right: 1px solid rgba(166,141,63, 0.3); pointer-events: none; z-index: 2; animation: bg02-sweep-anim 4s linear infinite;
-  }
-  @keyframes bg02-sweep-anim { 0% { left: -100px; } 100% { left: 105%; } }
-  .bg02-detail-pane { background: var(--bg-800); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-  .bg02-detail-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 8px; color: var(--blue); }
-  .bg02-detail-metric { display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
-  .bg02-detail-metric label { color: var(--text-muted); }
-  .bg02-detail-metric span { font-family: ui-monospace, monospace; font-weight: 600; }
-  .bg02-bar-outer { height: 6px; background: rgba(255, 255, 255, 0.05); border-radius: 3px; overflow: hidden; margin-top: 4px; }
-  .bg02-bar-inner { height: 100%; width: 0%; background: var(--blue); border-radius: 3px; transition: width 0.4s ease-out; }
-  .bg02-detail-health {
-    display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; text-transform: uppercase;
-    padding: 2px 8px; border-radius: 12px; align-self: flex-start; background: rgba(16, 185, 129, 0.15); color: var(--green);
-  }
-  .bg02-detail-health.error { background: rgba(239, 68, 68, 0.15); color: var(--red); }
-  .cap { position: fixed; left: 8px; bottom: 7px; font: 600 10px/1 ui-monospace, Menlo, monospace; color: var(--blue); opacity: 0.5; letter-spacing: 0.08em; text-transform: uppercase; user-select: none; pointer-events: none; }
-  @media (max-width: 480px) { .bg02-body { grid-template-columns: 1fr; grid-template-rows: 2fr 1fr; gap: 12px; } }
-  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } .bg02-sweep { display: none; } }
+  :root{--bg-900:#08090d;--bg-800:#12141c;--green:#10b981;--red:#ef4444;--blue:#A68D3F;--gray-700:#374151;--gray-800:#1f2937;--text-primary:#f3f4f6;--text-muted:#9ca3af;--hairline:rgba(255,255,255,.05);--hairline-2:rgba(255,255,255,.08);--cell-fill:rgba(255,255,255,.02);--cell-fill-hover:rgba(255,255,255,.07);--cell-border-hover:rgba(255,255,255,.2);--hover-shadow:rgba(0,0,0,.3)}:root[data-theme="light"]{--bg-900:#eef1f4;--bg-800:#fff;--green:#0b7c56;--red:#d81212;--blue:#7d6a30;--text-primary:#1c2230;--text-muted:#646d7c;--hairline:rgba(0,0,0,.07);--hairline-2:rgba(0,0,0,.1);--cell-fill:rgba(0,0,0,.02);--cell-fill-hover:rgba(0,0,0,.05);--cell-border-hover:rgba(0,0,0,.18);--hover-shadow:rgba(15,23,42,.14)}*,*::before,*::after{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:var(--bg-900)}.bg02-stage{position:fixed;inset:0;display:flex;flex-direction:column;padding:24px;font-family:system-ui,-apple-system,sans-serif;color:var(--text-primary)}.bg02-header{margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end;user-select:none}.bg02-header h1{margin:0;font-size:16px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}.bg02-header p{margin:4px 0 0 0;font-size:11px;color:var(--text-muted)}.bg02-stats{font-size:11px;font-family:ui-monospace,monospace;text-align:right}.bg02-stats span{color:var(--green);font-weight:700}.bg02-body{flex:1;display:grid;grid-template-columns:2fr 1fr;gap:20px;min-height:0}.bg02-grid-pane{background:var(--bg-800);border:1px solid var(--hairline);border-radius:8px;padding:16px;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(5,1fr);gap:8px;position:relative;overflow:hidden}.bg02-cell{background:var(--cell-fill);border:1px solid var(--hairline);border-radius:4px;cursor:pointer;position:relative;transition:all .2s cubic-bezier(.4,0,.2,1)}.bg02-cell::after{content:'';position:absolute;right:6px;bottom:6px;width:6px;height:6px;border-radius:50%;background:var(--cell-color,var(--green));box-shadow:0 0 8px var(--cell-color,var(--green));transition:background .3s,box-shadow .3s;animation:bg02-led 1.5s ease-in-out var(--d,0s) infinite}@keyframes bg02-led{0%,100%{opacity:.28}50%{opacity:1}}.bg02-cell-label{position:absolute;left:8px;top:8px;font-size:9px;font-family:ui-monospace,monospace;color:var(--text-muted);font-weight:600}.bg02-cell:hover,.bg02-cell.active{background:var(--cell-fill-hover);border-color:var(--cell-border-hover);transform:scale(1.03);box-shadow:0 4px 12px var(--hover-shadow);z-index:10}.bg02-cell.active{border-color:var(--blue);box-shadow:0 0 10px color-mix(in srgb,var(--blue) 40%,transparent)}.bg02-sweep{position:absolute;top:0;bottom:0;width:80px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--blue) 8%,transparent) 50%,transparent);border-right:1px solid color-mix(in srgb,var(--blue) 30%,transparent);pointer-events:none;z-index:2;animation:bg02-sweep-anim 4s linear infinite}@keyframes bg02-sweep-anim{0%{left:-100px}100%{left:105%}}.bg02-detail-pane{background:var(--bg-800);border:1px solid var(--hairline);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:12px}.bg02-detail-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--hairline-2);padding-bottom:8px;color:var(--blue)}.bg02-detail-metric{display:flex;justify-content:space-between;align-items:center;font-size:11px}.bg02-detail-metric label{color:var(--text-muted)}.bg02-detail-metric span{font-family:ui-monospace,monospace;font-weight:600}.bg02-bar-outer{height:6px;background:var(--hairline);border-radius:3px;overflow:hidden;margin-top:4px}.bg02-bar-inner{height:100%;width:0%;background:var(--blue);border-radius:3px;transition:width .4s ease-out}.bg02-detail-health{display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:700;text-transform:uppercase;padding:2px 8px;border-radius:12px;align-self:flex-start;background:color-mix(in srgb,var(--green) 15%,transparent);color:var(--green)}.bg02-detail-health.error{background:color-mix(in srgb,var(--red) 15%,transparent);color:var(--red)}.cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--blue);opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}@media (max-width:480px){.bg02-body{grid-template-columns:1fr;grid-template-rows:2fr 1fr;gap:12px}.bg02-header{margin-bottom:12px}.bg02-header h1{font-size:13px}}.bg02-paused .bg02-sweep,.bg02-paused .bg02-cell::after{animation-play-state:paused}@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}.bg02-sweep{display:none}}
 </style>
 </head>
 <body>
-  <div class="bg02-stage" id="bg02-root">
-    <div class="bg02-header">
-      <div>
-        <h1 id="bg02-title-el">System Operations Grid</h1>
-        <p id="bg02-desc-el">Real-time Node Clusters & Traffic Monitor</p>
-      </div>
-      <div class="bg02-stats">NODES ONLINE: <span id="bg02-online-count">29/30</span></div>
-    </div>
-    <div class="bg02-body">
-      <div class="bg02-grid-pane" id="bg02-grid">
-        <div class="bg02-sweep"></div>
-      </div>
-      <div class="bg02-detail-pane">
-        <div class="bg02-detail-title" id="bg02-node-name">Node ID: --</div>
-        <div class="bg02-detail-health" id="bg02-node-status">Status: Normal</div>
-        <div style="margin-top: 10px;">
-          <div class="bg02-detail-metric"><label>CPU Utilization</label><span id="bg02-cpu-val">0%</span></div>
-          <div class="bg02-bar-outer"><div class="bg02-bar-inner" id="bg02-cpu-bar"></div></div>
-        </div>
-        <div>
-          <div class="bg02-detail-metric"><label>Memory Usage</label><span id="bg02-mem-val">0%</span></div>
-          <div class="bg02-bar-outer"><div class="bg02-bar-inner" id="bg02-mem-bar"></div></div>
-        </div>
-        <div>
-          <div class="bg02-detail-metric"><label>Response Latency</label><span id="bg02-latency-val">0ms</span></div>
-          <div class="bg02-bar-outer"><div class="bg02-bar-inner" id="bg02-latency-bar"></div></div>
-        </div>
-      </div>
-    </div>
-  <script>(function(){"use strict";
-    var totalCells = 30, grid = document.getElementById("bg02-grid"), activeNodeName = document.getElementById("bg02-node-name");
-    var activeNodeStatus = document.getElementById("bg02-node-status"), cpuVal = document.getElementById("bg02-cpu-val");
-    var memVal = document.getElementById("bg02-mem-val"), latencyVal = document.getElementById("bg02-latency-val");
-    var cpuBar = document.getElementById("bg02-cpu-bar"), memBar = document.getElementById("bg02-mem-bar");
-    var latencyBar = document.getElementById("bg02-latency-bar"), onlineCounter = document.getElementById("bg02-online-count");
-    if (!grid || !activeNodeName) return;
-    var cellStates = [], activeIndex = 0, running = true;
-    var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    for (var i = 0; i < totalCells; i++) {
-      var isError = (i === 17);
-      cellStates.push({
-        name: "srv-" + (100 + i), error: isError,
-        cpu: isError ? 98 : Math.floor(10 + Math.random() * 65),
-        mem: isError ? 94 : Math.floor(20 + Math.random() * 55),
-        latency: isError ? 820 : Math.floor(12 + Math.random() * 45)
-      });
-    }
-    var cellsHtml = '<div class="bg02-sweep"></div>';
-    cellStates.forEach(function(state, idx) {
-      var color = state.error ? "var(--red)" : "var(--green)";
-      cellsHtml += '<div class="bg02-cell" data-index="' + idx + '" style="--cell-color: ' + color + '">' +
-                     '<span class="bg02-cell-label">' + state.name.split("-")[1] + '</span>' +
-                   '</div>';
-    });
-    grid.innerHTML = cellsHtml;
-    var cellElements = grid.querySelectorAll(".bg02-cell");
-    function selectNode(index) {
-      activeIndex = index;
-      cellElements.forEach(function(el, idx) { el.classList.toggle("active", idx === index); });
-      var state = cellStates[index];
-      activeNodeName.textContent = "Node: " + state.name;
-      if (state.error) {
-        activeNodeStatus.textContent = "Status: Critical"; activeNodeStatus.className = "bg02-detail-health error";
-      } else {
-        activeNodeStatus.textContent = "Status: Normal"; activeNodeStatus.className = "bg02-detail-health";
-      }
-      cpuVal.textContent = state.cpu + "%"; cpuBar.style.width = state.cpu + "%";
-      cpuBar.style.background = state.cpu > 80 ? "var(--red)" : "var(--blue)";
-      memVal.textContent = state.mem + "%"; memBar.style.width = state.mem + "%";
-      memBar.style.background = state.mem > 85 ? "var(--red)" : "var(--blue)";
-      var latPct = Math.min((state.latency / 1000) * 100, 100);
-      latencyVal.textContent = state.latency + "ms"; latencyBar.style.width = latPct + "%";
-      latencyBar.style.background = state.latency > 500 ? "var(--red)" : "var(--blue)";
-    }
-    cellElements.forEach(function(el) {
-      el.addEventListener("click", function() { selectNode(parseInt(el.getAttribute("data-index"), 10)); });
-    });
-    selectNode(activeIndex);
-    function simulateMetrics() {
-      if (!running || reduce) return;
-      var onlineCount = 30;
-      cellStates.forEach(function(state, idx) {
-        if (Math.random() > 0.75) {
-          if (!state.error) {
-            state.cpu = Math.max(5, Math.min(95, state.cpu + Math.floor((Math.random() - 0.5) * 10)));
-            state.mem = Math.max(10, Math.min(95, state.mem + Math.floor((Math.random() - 0.5) * 6)));
-            state.latency = Math.max(5, Math.min(180, state.latency + Math.floor((Math.random() - 0.5) * 12)));
-          } else {
-            state.cpu = Math.max(90, Math.min(100, state.cpu + Math.floor((Math.random() - 0.5) * 4)));
-            state.latency = Math.max(700, Math.min(950, state.latency + Math.floor((Math.random() - 0.5) * 40)));
-          }
-        }
-        if (idx !== 17 && Math.random() > 0.995) {
-          state.error = !state.error;
-          cellElements[idx].style.setProperty("--cell-color", state.error ? "var(--red)" : "var(--green)");
-        }
-        if (state.error) onlineCount--;
-      });
-      onlineCounter.textContent = onlineCount + "/30"; selectNode(activeIndex);
-      setTimeout(simulateMetrics, 1200);
-    }
-    if (!reduce) { setTimeout(simulateMetrics, 1000); }
-    document.addEventListener("visibilitychange", function() {
-      running = !document.hidden;
-      var sweepEl = grid.querySelector(".bg02-sweep");
-      if (sweepEl) sweepEl.style.animationPlayState = running ? "running" : "paused";
-    });
-  })();
-  </script>
+<div class="bg02-stage" id="bg02-root" role="img" aria-label="Operations grid: 30 nodes with live status LEDs, nodes-online and throughput counters, and a card rotating through each node's metrics.">
+<div class="bg02-header">
+<div>
+<h1 id="bg02-title-el">System Operations Grid</h1>
+<p id="bg02-desc-el">Real-time Node Clusters & Traffic Monitor</p>
+</div>
+<div class="bg02-stats">NODES ONLINE: <span id="bg02-online-count">29/30</span><br>THROUGHPUT: <span id="bg02-throughput">8.42 Gb/s</span></div>
+</div>
+<div class="bg02-body">
+<div class="bg02-grid-pane" id="bg02-grid">
+<div class="bg02-sweep"></div>
+</div>
+<div class="bg02-detail-pane">
+<div class="bg02-detail-title" id="bg02-node-name">Node ID: --</div>
+<div class="bg02-detail-health" id="bg02-node-status">Status: Normal</div>
+<div style="margin-top: 10px;">
+<div class="bg02-detail-metric"><label>CPU Utilization</label><span id="bg02-cpu-val">0%</span></div>
+<div class="bg02-bar-outer"><div class="bg02-bar-inner" id="bg02-cpu-bar"></div></div>
+</div>
+<div>
+<div class="bg02-detail-metric"><label>Memory Usage</label><span id="bg02-mem-val">0%</span></div>
+<div class="bg02-bar-outer"><div class="bg02-bar-inner" id="bg02-mem-bar"></div></div>
+</div>
+<div>
+<div class="bg02-detail-metric"><label>Response Latency</label><span id="bg02-latency-val">0ms</span></div>
+<div class="bg02-bar-outer"><div class="bg02-bar-inner" id="bg02-latency-bar"></div></div>
+</div>
+</div>
+</div>
+<script>(function(){"use strict";
+var root=document.documentElement;
+// colours are set as inline "var(--x)" strings (not resolved hex), so the CSS cascade
+// re-paints them on a theme switch with no JS-side cache to invalidate.
+addEventListener("message",function(e){var d=e.data;
+if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))root.setAttribute("data-theme",d.theme);});
+var $=function(id){return document.getElementById(id);};
+var totalCells=30,grid=$("bg02-grid"),nameEl=$("bg02-node-name"),statusEl=$("bg02-node-status"),
+cpuVal=$("bg02-cpu-val"),memVal=$("bg02-mem-val"),latVal=$("bg02-latency-val"),cpuBar=$("bg02-cpu-bar"),
+memBar=$("bg02-mem-bar"),latBar=$("bg02-latency-bar"),onlineEl=$("bg02-online-count"),thrEl=$("bg02-throughput");
+if(!grid||!nameEl)return;
+var cells=[],activeIndex=0,running=true,gbps=8.42,html='<div class="bg02-sweep"></div>';
+var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+function rnd(a,b){return a+((Math.random()*(b-a+1))|0);}
+for(var i=0;i<totalCells;i++){var err=i===17;
+cells.push({name:"srv-"+(100+i),error:err,cpu:err?98:rnd(10,74),mem:err?94:rnd(20,74),latency:err?820:rnd(12,56)});
+// --d staggers each LED's beat
+html+='<div class="bg02-cell" data-index="'+i+'" style="--cell-color:'+(err?"var(--red)":"var(--green)")+
+';--d:-'+((i*0.29)%1.5).toFixed(2)+'s"><span class="bg02-cell-label">'+(100+i)+'</span></div>';}
+grid.innerHTML=html;
+var els=grid.querySelectorAll(".bg02-cell");
+function led(i){els[i].style.setProperty("--cell-color",cells[i].error?"var(--red)":"var(--green)");}
+function bar(lab,el,txt,pct,val,lim){lab.textContent=txt;el.style.width=pct+"%";el.style.background=val>lim?"var(--red)":"var(--blue)";}
+function selectNode(x){activeIndex=x;
+els.forEach(function(el,i){el.classList.toggle("active",i===x);});
+var st=cells[x];nameEl.textContent="Node: "+st.name;
+statusEl.textContent=st.error?"Status: Critical":"Status: Normal";
+statusEl.className="bg02-detail-health"+(st.error?" error":"");
+bar(cpuVal,cpuBar,st.cpu+"%",st.cpu,st.cpu,80);bar(memVal,memBar,st.mem+"%",st.mem,st.mem,85);
+bar(latVal,latBar,st.latency+"ms",Math.min(st.latency/10,100),st.latency,500);}
+els.forEach(function(el,i){el.addEventListener("click",function(){selectNode(i);});});
+selectNode(activeIndex);
+function drift(v,d,lo,hi){return Math.max(lo,Math.min(hi,v+(((Math.random()-0.5)*d)|0)));}
+function simulateMetrics(){        // telemetry tick: node drift, one degrade or recover, throughput
+if(!running)return;var on=30,bad=[];
+cells.forEach(function(st,i){if(Math.random()>0.55){
+if(st.error){st.cpu=drift(st.cpu,4,90,100);st.latency=drift(st.latency,40,700,950);}
+else{st.cpu=drift(st.cpu,10,5,95);st.mem=drift(st.mem,6,10,95);st.latency=drift(st.latency,12,5,180);}}
+if(st.error){on--;if(i!==17)bad.push(i);}});
+if(bad.length&&Math.random()<0.4){                   // a degraded node recovers…
+var r=bad[(Math.random()*bad.length)|0],rs=cells[r];
+rs.error=false;rs.cpu=rnd(38,66);rs.mem=rnd(34,62);rs.latency=rnd(16,48);led(r);on++;}
+else if(!bad.length&&Math.random()<0.14){            // …or another one starts to fail
+var n=rnd(0,totalCells-1),ns=cells[n];
+if(n!==17){ns.error=true;ns.cpu=rnd(93,99);ns.mem=rnd(88,96);ns.latency=rnd(720,900);led(n);on--;}}
+gbps=Math.max(6.4,Math.min(11.6,gbps+(Math.random()-0.5)*0.7));
+thrEl.textContent=gbps.toFixed(2)+" Gb/s";onlineEl.textContent=on+"/30";selectNode(activeIndex);}
+function rotate(){if(running)selectNode((activeIndex+1)%totalCells);}
+if(!reduce){setInterval(simulateMetrics,900);        // the wall auto-rotates the inspected node
+setTimeout(function(){rotate();setInterval(rotate,2200);},550);}
+document.addEventListener("visibilitychange",function(){running=!document.hidden;
+document.body.classList.toggle("bg02-paused",document.hidden);});   // freezes sweep + LED heartbeat
+})();
+</script>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/business-graphics/02-grid-monitor.html",
@@ -177,17 +105,21 @@
  "description": "System health grid monitoring status of 30 nodes with active scanning sweeps and interactive detail pane.",
  "useWhen": "DevOps status pages, server health dashboards, security telemetry centers, system logs overview.",
  "avoidWhen": "UIs requiring a light aesthetic, or dashboards with only 3-5 nodes (looks best at 24+ nodes).",
- "agentPrompt": "Alter the count of grid cells to 24 by updating totalCells to 24 in JS, and adjust cells color by editing css colors.",
+ "agentPrompt": "Alter the count of grid cells to 24 by updating totalCells to 24 in JS, and adjust cells color by editing css colors. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "total nodes count (totalCells=30)",
   "sweep scanline speed (bg02-sweep-anim 4s)",
   "accent colors in CSS variables (--blue, --green, --red)",
-  "metric update frequency (1200ms in simulateMetrics)"
+  "metric update frequency (1200ms in simulateMetrics)",
+  "ambient cadence (setInterval(rotate, 2200 ms) cycles the selected node; setInterval(simulateMetrics, 900 ms) ticks the metrics)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange sweep play-state control",
   "prefers-reduced-motion scanline check",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "ambient live-data loop (rotate/simulateMetrics intervals; paused on visibilitychange)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Grid layout is hardcoded to 6 columns by 5 rows, must change grid-template-columns for other totals"
@@ -199,7 +131,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "grid",

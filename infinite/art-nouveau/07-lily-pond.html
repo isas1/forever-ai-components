@@ -5,10 +5,27 @@
 <meta name="description" content="Stylised water lilies and pads bloom and drift over expanding gold ripples on a green pond framed by whiplash vines.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Lily Pond</title>
+<script>/* theme hook: ?theme=light|dark (or data-theme on <html>), before first paint — no flash; standalone stays dark */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  html,body{margin:0;height:100%;background:#0e1310;overflow:hidden}
+  :root{ /* theme tokens — dark defaults; light re-theme below. The canvas paints its own
+            water, so every one of these is re-read by syncTheme() on a flip. */
+    --an07-bg:#0e1310; --an07-w0:#16241c; --an07-w1:#102019;
+    --an07-gold:#c9a24b; --an07-gold2:#e6c477; --an07-green:#3f6b4f; --an07-green2:#598a64;
+    --an07-leaf:#274838; --an07-rose:#c98a8f; --an07-rose2:#e3aeb0; --an07-line:#1a2a22;
+    --an07-petal:#f0dca8; --an07-vein:rgba(14,19,16,0.55); --an07-vine:rgba(201,162,75,0.30);
+    --an07-rip:201,162,75; --an07-cap:#fff; --an07-cap-o:.42;
+  }
+  :root[data-theme="light"]{ /* pale water on parchment; lilies in ochre, olive and deep rose */
+    --an07-bg:#f4f1e6; --an07-w0:#fdfbf2; --an07-w1:#f8f4e8;
+    --an07-gold:#866928; --an07-gold2:#a98533; --an07-green:#4f6b3a; --an07-green2:#6b8a52;
+    --an07-leaf:#35502a; --an07-rose:#b96470; --an07-rose2:#8f3f4f; --an07-line:#2b3a26;
+    --an07-petal:#d9b45e; --an07-vein:rgba(43,58,38,0.45); --an07-vine:rgba(134,105,40,0.55);
+    --an07-rip:134,105,40; --an07-cap:#262a1d; --an07-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;background:var(--an07-bg);overflow:hidden}
   #an07-stage{position:fixed;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--an07-cap);opacity:var(--an07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -18,19 +35,21 @@
  "description": "Stylised lilies with radial petals and kidney pads drift over expanding gold ripple rings on a deep green pond, framed by whiplash vine corners.",
  "useWhen": "Ambient hero backgrounds for botanical, wellness, or art nouveau-themed UIs. Looping screensavers or decorative section dividers.",
  "avoidWhen": "Contexts requiring legible text overlays — dark pond background limits contrast. Low-end devices running continuous rAF loops.",
- "agentPrompt": "Change lily petal color from rose to lavender by setting ROSE to '#b08fbf' and ROSE2 to '#d4bbe0', and add a fifth lily at {x:0.80, y:0.70, s:0.65, h:0, ph:5.2} to the lilies array.",
+ "agentPrompt": "Change lily petal color from rose to lavender by setting ROSE to '#b08fbf' and ROSE2 to '#d4bbe0', and add a fifth lily at {x:0.80, y:0.70, s:0.65, h:0, ph:5.2} to the lilies array. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "palette constants (GOLD, ROSE, GREEN, LEAF, PETAL)",
   "lily positions and scales (lilies array)",
   "ripple origin points (ripO array)",
   "drift speed multiplier (time*0.5)",
-  "vine corner margin (S*0.06)"
+  "vine corner margin (S*0.06)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce variable)",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing with setTransform"
+  "DPR-aware canvas sizing with setTransform",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in BG constant and radial gradient stops — edit both to change pond color",
@@ -44,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-nouveau",
@@ -68,10 +88,19 @@
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var W=0,H=0,S=0,dpr=1,running=true,raf=0,t0=0;
 
-  // Art Nouveau palette: pond green, gold, rose
-  var BG="#0e1310", GOLD="#c9a24b", GOLD2="#e6c477", GREEN="#3f6b4f",
-      GREEN2="#598a64", LEAF="#274838", ROSE="#c98a8f", ROSE2="#e3aeb0",
-      LINE="#1a2a22", PETAL="#f0dca8";
+  // Art Nouveau palette: pond green, gold, rose — read from tokens, re-read on a theme flip
+  var root=document.documentElement;
+  var BG,GOLD,GOLD2,GREEN,GREEN2,LEAF,ROSE,ROSE2,LINE,PETAL,W0,W1,VEIN,VINE,RIP;
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){return cs.getPropertyValue("--an07-"+n).trim();};
+    BG=g("bg"); GOLD=g("gold"); GOLD2=g("gold2"); GREEN=g("green"); GREEN2=g("green2");
+    LEAF=g("leaf"); ROSE=g("rose"); ROSE2=g("rose2"); LINE=g("line"); PETAL=g("petal");
+    W0=g("w0"); W1=g("w1"); VEIN=g("vein"); VINE=g("vine"); RIP=g("rip");
+  }
+  addEventListener("message",function(e){var d=e.data;   // live re-theme from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce)scene(1.2); }});
+  syncTheme();
 
   // Lily definitions: cx,cy in fractional pond coords, scale, hue(0 rose/1 gold), phase
   var lilies=[
@@ -108,7 +137,7 @@
     ctx.fillStyle=col; ctx.fill();
     ctx.strokeStyle=LINE; ctx.lineWidth=Math.max(1,S*0.004); ctx.stroke();
     // radial veins
-    ctx.strokeStyle="rgba(14,19,16,0.55)"; ctx.lineWidth=Math.max(0.6,S*0.0022);
+    ctx.strokeStyle=VEIN; ctx.lineWidth=Math.max(0.6,S*0.0022);
     for(var v=0;v<7;v++){
       var va=-1.1+v/6*2.2;
       ctx.beginPath(); ctx.moveTo(0,0);
@@ -161,7 +190,7 @@
   // whiplash vine border (static frame line, drawn once per frame, cheap)
   function vines(){
     var m=S*0.06;
-    ctx.strokeStyle="rgba(201,162,75,0.30)";
+    ctx.strokeStyle=VINE;
     ctx.lineWidth=Math.max(1.2,S*0.0045);
     var corners=[[m,m,1,1],[W-m,m,-1,1],[W-m,H-m,-1,-1],[m,H-m,1,-1]];
     for(var c=0;c<4;c++){
@@ -187,7 +216,7 @@
       if(al<=0.01) continue;
       ctx.beginPath();
       ctx.ellipse(cx,cy,rad,rad*0.78,0,0,Math.PI*2);
-      ctx.strokeStyle="rgba(201,162,75,"+al.toFixed(3)+")";
+      ctx.strokeStyle="rgba("+RIP+","+al.toFixed(3)+")";
       ctx.lineWidth=Math.max(0.8,S*0.0028);
       ctx.stroke();
     }
@@ -196,7 +225,7 @@
   function scene(time){
     // water ground with subtle stained-glass cell shading (static gradient)
     var g=ctx.createRadialGradient(W*0.4,H*0.4,S*0.05,W*0.5,H*0.5,S*0.75);
-    g.addColorStop(0,"#16241c"); g.addColorStop(0.55,"#102019"); g.addColorStop(1,BG);
+    g.addColorStop(0,W0); g.addColorStop(0.55,W1); g.addColorStop(1,BG);
     ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
 
     // pond mapping

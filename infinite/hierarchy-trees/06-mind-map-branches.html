@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Mind map that grows its own branches - six curved limbs draw outward from a central topic one at a time, each sprouting node dots and landing on a labelled chip, then the map clears and regrows.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mind Map Branches</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#75894D;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  :root[data-theme="light"]{--pro-bg:#f6f8fa;--pro-surface:#fff;--pro-border:rgba(0,0,0,.08);--pro-text:#1f2328;--pro-muted:#59636e;--pro-accent:#4f5f2e}
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .mmp-stage{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;
+    padding:3.6vmin 3.6vmin clamp(16px,3vmin,24px);font-family:var(--pro-font);color:var(--pro-text)}
+  .mmp-head{display:flex;align-items:baseline;gap:1.6vmin;flex:none;min-width:0}
+  .mmp-title{font-size:clamp(10px,2.4vmin,14px);font-weight:700;white-space:nowrap}
+  .mmp-sub{margin-left:auto;font-size:clamp(7px,1.6vmin,10px);color:var(--pro-muted);
+    font-weight:600;white-space:nowrap}
+  /* square box: the SVG limbs and the HTML chips share one 0-100 grid */
+  .mmp-mid{flex:1;min-height:0;container-type:size;display:grid;place-items:center}
+  .mmp-map{position:relative;width:100%;height:100%;
+    width:min(100cqw,100cqh);height:min(100cqw,100cqh)}
+  .mmp-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .mmp-svg path{fill:none;stroke:var(--pro-accent);stroke-width:.75;stroke-linecap:round;
+    opacity:.75;stroke-dasharray:100;stroke-dashoffset:100;transition:stroke-dashoffset .62s ease-out}
+  .mmp-svg path.on{stroke-dashoffset:0}
+  .mmp-svg circle{fill:var(--pro-accent);opacity:0;transition:opacity .3s}
+  .mmp-svg circle.on{opacity:.55}
+  .mmp-hub{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);white-space:nowrap;
+    font-size:clamp(7.5px,1.9vmin,12px);font-weight:700;color:var(--pro-bg);
+    background:var(--pro-accent);border-radius:999px;
+    padding:clamp(3px,1.1vmin,8px) clamp(6px,1.8vmin,13px);
+    box-shadow:0 0 0 clamp(2px,.8vmin,5px) color-mix(in srgb,var(--pro-accent) 18%,transparent)}
+  .mmp-chip{position:absolute;transform:translate(-50%,-50%) scale(.85);white-space:nowrap;opacity:0;
+    display:flex;align-items:center;gap:clamp(3px,.9vmin,6px);
+    font-size:clamp(6.5px,1.6vmin,10.5px);font-weight:600;
+    background:var(--pro-surface);border:1px solid var(--pro-border);border-radius:999px;
+    padding:clamp(2px,.9vmin,7px) clamp(5px,1.5vmin,11px);
+    transition:opacity .34s ease-out,transform .34s cubic-bezier(.34,1.56,.64,1)}
+  .mmp-chip.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  .mmp-dot{flex:none;width:clamp(3px,1vmin,6px);height:clamp(3px,1vmin,6px);border-radius:50%;
+    background:var(--pro-accent)}
+  .mmp-n{flex:none;color:var(--pro-muted);font-variant-numeric:tabular-nums;
+    font-size:clamp(5.5px,1.35vmin,9px);font-weight:700}
+  .cap{position:fixed;left:8px;bottom:6px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.45;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  .mmp-stage.snap *{transition:none!important}
+  @media (max-width:280px){ .mmp-n{display:none} }
+  @media (prefers-reduced-motion:reduce){ .mmp-stage *{transition:none!important} }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/hierarchy-trees/06-mind-map-branches.html",
+ "title": "Mind Map Branches",
+ "description": "Six curved limbs grow outward from a central topic pill one at a time, each sprouting two node dots before landing on a labelled chip with its open-item count; once the map is complete it clears and regrows.",
+ "useWhen": "Scope and roadmap maps, topic or concept diagrams, feature breakdowns, section headers for planning docs — a hierarchy that should feel drawn rather than laid out.",
+ "avoidWhen": "More than six or seven branches, or long labels — chips are placed by hand and will collide; and any case needing a second level of labelled sub-branches.",
+ "agentPrompt": "Edit the limbs array — d is the limb's quadratic curve in the 0-100 grid, x/y the chip's centre, t its label, n its count; end each curve just inside the chip so the chip's surface hides the line end. Change the growth beat with setInterval(advance,760) and the node-dot sample points ([.5,.78] along the path). Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "theme tokens (:root --pro-* dark defaults + the :root[data-theme=\"light\"] overrides)",
+  "the branches (limbs array: d curve path, x/y chip centre, t label, n count)",
+  "node dot positions along each limb ([.5,.78] fractions) and radius (r=1.1)",
+  "growth beat (setInterval(advance,760)) and the hold before regrow (limbs.length+3)",
+  "limb weight and opacity (.mmp-svg path stroke-width .75, opacity .75)",
+  "hub pill text and glow (.mmp-hub box-shadow ring)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .mmp-stage",
+  "IIFE wrapper",
+  "pathLength=100 with stroke-dasharray:100 — this is what makes the draw-on work regardless of the curve's real length",
+  "the container-query square box (.mmp-mid/.mmp-map) that keeps the SVG grid and the HTML chip percentages aligned",
+  "getPointAtLength sampling for the node dots (they follow the real curve)",
+  "the .snap class used to clear without animating backwards",
+  "prefers-reduced-motion early return to the fully grown map",
+  "visibilitychange pause (halt/play on the interval)",
+  "theme hook (?theme= pre-paint bootstrap + forever:theme message listener + the two-palette token block)"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Curves and chip positions are authored — no radial auto-layout, so a seventh branch needs its own curve",
+  "One level of branches; sub-branches would need their own curves and collision checks",
+  "Item counts are hidden below 280px (media query)"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "mind-map",
+  "branching",
+  "diagram",
+  "radial",
+  "scope-map",
+  "draw-on",
+  "curves",
+  "planning"
+ ]
+}
+</script>
+</head>
+<body>
+  <div class="mmp-stage" id="mmpStage" role="img"
+       aria-label="Mind map around a central Checkout v3 topic: six curved branches grow outward to labelled chips - Payments, Fraud, Locales, Analytics, Mobile and Accessibility - each carrying a count of open items. Branches draw one at a time, then the map clears and regrows.">
+    <div class="mmp-head">
+      <span class="mmp-title">Checkout v3 · scope map</span>
+      <span class="mmp-sub">6 branches · 34 items</span>
+    </div>
+    <div class="mmp-mid">
+      <div class="mmp-map" id="mmpMap">
+        <svg class="mmp-svg" id="mmpSvg" viewBox="0 0 100 100" aria-hidden="true"></svg>
+        <div class="mmp-hub">Checkout v3</div>
+      </div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Mind Map Branches</div>
+  <script>(function(){"use strict";
+    var root=document.documentElement;
+    addEventListener("message",function(e){var d=e.data;
+      if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))root.setAttribute("data-theme",d.theme);});
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var NS="http://www.w3.org/2000/svg";
+    // one entry per branch: the limb curve, where its chip lands, and what it says
+    var limbs=[
+      {d:"M52 45 Q52 27 71 19",  x:74,y:17,t:"Payments",     n:"8"},
+      {d:"M55 49 Q71 53 81 43",  x:84,y:42,t:"Fraud",        n:"5"},
+      {d:"M53 54 Q57 73 74 78",  x:77,y:79,t:"Locales",      n:"6"},
+      {d:"M47 54 Q43 73 26 79",  x:23,y:80,t:"Analytics",    n:"4"},
+      {d:"M45 50 Q29 46 19 51",  x:16,y:52,t:"Mobile",       n:"7"},
+      {d:"M48 45 Q46 27 27 21",  x:24,y:20,t:"Accessibility",n:"4"}
+    ];
+    var map=document.getElementById("mmpMap"),svg=document.getElementById("mmpSvg"),
+        stage=document.getElementById("mmpStage");
+    if(!map||!svg)return;
+    var parts=limbs.map(function(b){
+      var p=document.createElementNS(NS,"path");
+      p.setAttribute("d",b.d); p.setAttribute("pathLength","100");
+      svg.appendChild(p);
+      // two node dots sprout along the limb — sampled off the real curve
+      var L=p.getTotalLength(),dots=[.5,.78].map(function(f){
+        var q=p.getPointAtLength(L*f),c=document.createElementNS(NS,"circle");
+        c.setAttribute("cx",q.x.toFixed(2)); c.setAttribute("cy",q.y.toFixed(2));
+        c.setAttribute("r",1.1); svg.appendChild(c); return c;
+      });
+      var chip=document.createElement("div");
+      chip.className="mmp-chip"; chip.style.left=b.x+"%"; chip.style.top=b.y+"%";
+      chip.innerHTML='<span class="mmp-dot"></span>'+b.t+'<span class="mmp-n">'+b.n+'</span>';
+      map.appendChild(chip);
+      return {path:p,dots:dots,chip:chip};
+    });
+
+    function grow(i){
+      var p=parts[i];
+      p.path.classList.add("on");
+      p.dots.forEach(function(c,j){
+        setTimeout(function(){ c.classList.add("on"); }, reduce?0:180+j*160);
+      });
+      setTimeout(function(){ p.chip.classList.add("on"); }, reduce?0:420);
+    }
+    function clear(){
+      stage.classList.add("snap");
+      parts.forEach(function(p){
+        p.path.classList.remove("on"); p.chip.classList.remove("on");
+        p.dots.forEach(function(c){ c.classList.remove("on"); });
+      });
+      void stage.offsetWidth;                     // flush, then let transitions run again
+      stage.classList.remove("snap");
+    }
+
+    if(reduce){ parts.forEach(function(_,i){ grow(i); }); return; }  // static: the full map
+
+    var i=0,timer=null;
+    function advance(){
+      if(i>=limbs.length+3){ clear(); i=0; return; }   // hold the finished map, then regrow
+      if(i<limbs.length) grow(i);
+      i++;
+    }
+    function play(){ if(!timer) timer=setInterval(advance,760); }
+    function halt(){ clearInterval(timer); timer=null; }
+    document.addEventListener("visibilitychange",function(){ document.hidden?halt():play(); });
+    advance(); play();
+  })();
+  </script>
+</body>
+</html>

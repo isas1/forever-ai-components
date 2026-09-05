@@ -5,11 +5,21 @@
 <meta name="description" content="Bright Memphis triangles, solid and outlined, tumble and sway downward through faint dotted columns against deep plum.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Triangle Rain</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#141019;overflow:hidden}
-  #mp08-stage{position:fixed;inset:0;background:#141019}
+  /* theme tokens — dark defaults, light re-theme below; --mp08-p0..p5 feed the canvas via syncTheme() */
+  :root{--mp08-bg:#141019;--mp08-dot:rgba(54,214,195,0.07);--mp08-cap:#fff;--mp08-cap-o:.42;
+    --mp08-p0:#36d6c3;--mp08-p1:#ff5e8a;--mp08-p2:#ffd23f;--mp08-p3:#7b6cff;--mp08-p4:#ff8a3d;--mp08-p5:#f4f1ea}
+  :root[data-theme="light"]{--mp08-bg:#f6f2f8;--mp08-dot:rgba(24,119,107,0.12);--mp08-cap:#2b2733;--mp08-cap-o:.5;
+    --mp08-p0:#18776b;--mp08-p1:#db003c;--mp08-p2:#8a6900;--mp08-p3:#4833ff;--mp08-p4:#bd4b00;--mp08-p5:#2b2733}
+  html,body{margin:0;height:100%;background:var(--mp08-bg);overflow:hidden}
+  #mp08-stage{position:fixed;inset:0;background:var(--mp08-bg)}
   #mp08-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--mp08-cap);opacity:var(--mp08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +29,21 @@
  "description": "90 Memphis-palette triangles — solid and outlined — tumble and sway downward through faint dotted columns on a deep plum background.",
  "useWhen": "Retro/Memphis-themed hero backgrounds, 80s design showcases, ambient looping tile backdrops.",
  "avoidWhen": "Light backgrounds (hardcoded dark plum). Contexts needing legible text overlays — constant motion competes with reading.",
- "agentPrompt": "Change triangle count to 60 by setting N=60, swap palette to pastels (edit COL array), and slow fall speed by changing the vy base from 0.55 to 0.25.",
+ "agentPrompt": "Change triangle count to 60 by setting N=60, swap palette to pastels (edit COL array), and slow fall speed by changing the vy base from 0.55 to 0.25. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "triangle count (N=90)",
   "color palette (COL array)",
   "fall speed (vy base 0.55 + rnd*1.5)",
   "solid vs outline ratio (rnd()<0.62)",
-  "sway amplitude (Math.sin(sway[i])*7)"
+  "sway amplitude (Math.sin(sway[i])*7)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static frame",
-  "DPR-aware canvas sizing + setTransform reset"
+  "DPR-aware canvas sizing + setTransform reset",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and canvas backdrop() — must change both to retheme",
@@ -44,7 +56,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "memphis",
@@ -71,8 +84,19 @@
   var dpr=Math.min(2,window.devicePixelRatio||1);
   var W=0,H=0,run=true,raf=0,last=0;
 
-  // Memphis palette: teal accent #36d6c3 on plum #141019, with hot clash colors
+  // Memphis palette: teal accent on plum — read from theme tokens so light recolours the rain.
+  var root=document.documentElement;
   var COL=["#36d6c3","#ff5e8a","#ffd23f","#7b6cff","#ff8a3d","#f4f1ea"];
+  var BG="#141019", DOT="rgba(54,214,195,0.07)";
+  function syncTheme(){
+    var cs=getComputedStyle(root),i;
+    for(i=0;i<COL.length;i++)COL[i]=cs.getPropertyValue("--mp08-p"+i).trim();
+    BG=cs.getPropertyValue("--mp08-bg").trim(); DOT=cs.getPropertyValue("--mp08-dot").trim();
+  }
+  addEventListener("message",function(e){ // live re-theme broadcast by the canvas
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme();if(reduce)staticFrame();}
+  });
   var N=90;
   var px=new Float32Array(N),py=new Float32Array(N);
   var vy=new Float32Array(N),vx=new Float32Array(N);
@@ -102,9 +126,9 @@
   // Static Memphis backdrop: faint dotted columns + a couple of fixed zigzag rails.
   // Drawn fresh each frame (cheap fills only, no layout reads, no compositor-killers).
   function backdrop(){
-    ctx.fillStyle="#141019"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
     var step=Math.max(34,W/9);
-    ctx.fillStyle="rgba(54,214,195,0.07)";
+    ctx.fillStyle=DOT;
     for(var x=step*0.5;x<W;x+=step){
       for(var y=step*0.5;y<H;y+=step){
         ctx.beginPath(); ctx.arc(x,y,2.1,0,6.2832); ctx.fill();
@@ -157,7 +181,7 @@
   }
 
   function start(){
-    resize();
+    syncTheme(); resize();
     for(var i=0;i<N;i++) reset(i,false);
     if(reduce){ staticFrame(); return; }
     last=0; run=true; raf=requestAnimationFrame(frame);

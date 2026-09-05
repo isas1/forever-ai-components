@@ -1,7 +1,7 @@
 # Forever AI Components
 
 [![600+ components](https://img.shields.io/badge/components-600%2B-blueviolet?style=flat)](https://forevercomponents.com/infinite/)
-[![Themes](https://img.shields.io/badge/themes-61-blue?style=flat)](#component-index-by-theme)
+[![Themes](https://img.shields.io/badge/themes-62-blue?style=flat)](#component-index-by-theme)
 [![License](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
 [![Zero deps](https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat)](#)
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-☕-FFDD00?style=flat-square)](https://buymeacoffee.com/isas1)
@@ -242,7 +242,7 @@ forever-ai-components/
 
 ## Component index by theme
 
-600+ components across 61 themes:
+600+ components across 62 themes:
 
 ### UI Components
 
@@ -333,6 +333,7 @@ forever-ai-components/
 | Marketing Sections | 2 |
 | Product Flows | 2 |
 | Dev Status | 2 |
+| Hierarchy & Trees | 6 |
 
 ---
 

@@ -5,11 +5,31 @@
 <meta name="description" content="Diffusion-limited aggregation builds a six-fold dendritic snowflake of white-blue crystal that shimmers, then sublimes and refreezes.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Diffusion-Limited Frost</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a1620;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. --dlf-c0..c2 are the crystal core ->
+     tip ramp (dark: white-hot core; light: the order inverts, deepest ice at the core),
+     --dlf-fade is the sublimation wash as "r,g,b" and --dlf-blend swaps the additive
+     frost stack for plain painting once the ground is pale. */
+  :root{
+    --dlf-bg:#0a1620; --dlf-cap:#a8e4ff; --dlf-cap-o:.34;
+    --dlf-fade:10,22,32; --dlf-blend:lighter;
+    --dlf-c0:#dff4ff; --dlf-c1:#a8e4ff; --dlf-c2:#5fb6e8; --dlf-glint:#eaf7ff;
+  }
+  :root[data-theme="light"]{
+    --dlf-bg:#eef4fa; --dlf-cap:#0074a8; --dlf-cap-o:.66;
+    --dlf-fade:238,244,250; --dlf-blend:source-over;
+    --dlf-c0:#0b4c70; --dlf-c1:#2c7fa8; --dlf-c2:#6aa6c6; --dlf-glint:#08374f;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--dlf-bg);}
   #dlf-c{display:block;width:100%;height:100%;}
   .dlf-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.14em;color:#a8e4ff;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--dlf-cap);opacity:var(--dlf-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +39,22 @@
  "description": "Six-fold dendritic snowflake grows via diffusion-limited aggregation; arms shimmer white-blue to cyan and cycle through sublimation/refreeze.",
  "useWhen": "Dark-mode hero backgrounds, winter/holiday themes, generative art showcases, ambient screensaver-style displays.",
  "avoidWhen": "Low-end mobile devices — 42 walker iterations per frame is CPU-intensive. Light backgrounds (dark navy is hardcoded).",
- "agentPrompt": "Change frost colors to warm gold by replacing '#dff4ff','#a8e4ff','#5fb6e8' with '#fff3cc','#ffd966','#e8a230', and slow shimmer by changing t*0.02 to t*0.01.",
+ "agentPrompt": "Change frost colors to warm gold by replacing '#dff4ff','#a8e4ff','#5fb6e8' with '#fff3cc','#ffd966','#e8a230', and slow shimmer by changing t*0.02 to t*0.01. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "walker iterations per frame (iter=42)",
   "refreeze threshold (nodes.length>560)",
   "shimmer speed (t*0.02)",
   "inward bias strength (0.18)",
   "crystal color palette (3 hex values in draw())",
-  "cell size divisor (gs = W/150)"
+  "cell size divisor (gs = W/150)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "six-fold fold() symmetry function",
   "DPR-aware canvas sizing",
   "reduced-motion static fallback (pre-grows 3000 steps)",
-  "visibilitychange pause/start"
+  "visibilitychange pause/start",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound: 42 DLA iterations per frame may stutter on low-end devices",
@@ -45,7 +67,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "snowflake",
@@ -67,6 +90,22 @@
 (function(){
   const cv=document.getElementById('dlf-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const root=document.documentElement;
+  // every colour the canvas draws with comes from the tokens, re-read once per switch
+  const C={bg:'',fade:'',blend:'lighter',c0:'',c1:'',c2:'',glint:''};
+  function syncTheme(){
+    const cs=getComputedStyle(root),get=k=>cs.getPropertyValue(k).trim();
+    C.bg=get('--dlf-bg');C.fade=get('--dlf-fade');C.blend=get('--dlf-blend');
+    C.c0=get('--dlf-c0');C.c1=get('--dlf-c1');C.c2=get('--dlf-c2');C.glint=get('--dlf-glint');
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);draw();   // clear the old palette's frost
+    }
+  });
+  syncTheme();
   let W,H,DPR,cx,cy,R,grid,gs,gw,gh;
   let nodes,t=0,walker=null; // nodes: {x,y,gen,b,birth} stuck particles in folded canonical frame
   // hex grid (six-fold) — diffusing particles stick to a seed; aggregate folded into one wedge
@@ -133,9 +172,9 @@
 
   function draw(){
     // soft frost fade — slow sublimation tint
-    ctx.fillStyle='rgba(10,22,32,0.10)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba('+C.fade+',0.10)';ctx.fillRect(0,0,W,H);
     ctx.save();ctx.translate(cx,cy);
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=C.blend;
     const pulse=reduce?1:0.5+0.5*Math.sin(t*0.012);
     for(let i=0;i<nodes.length;i++){
       const n=nodes[i];
@@ -145,7 +184,7 @@
       const size=(0.8+heat*1.4)*n.b;
       const al=(0.10+heat*0.32)*n.b*(0.6+0.4*shimmer);
       // crystalline white-blue core to cyan tips
-      const col=heat>0.6?'#dff4ff':heat>0.3?'#a8e4ff':'#5fb6e8';
+      const col=heat>0.6?C.c0:heat>0.3?C.c1:C.c2;
       // draw all 6 rotations + mirror for full dendritic snowflake
       for(let s=0;s<6;s++){
         const c=Math.cos(s*Math.PI/3),sn=Math.sin(s*Math.PI/3);
@@ -157,7 +196,7 @@
       }
     }
     // central glint
-    ctx.globalAlpha=0.5+0.3*pulse;ctx.fillStyle='#eaf7ff';
+    ctx.globalAlpha=0.5+0.3*pulse;ctx.fillStyle=C.glint;
     ctx.beginPath();ctx.arc(0,0,2.2,0,6.283);ctx.fill();
     ctx.restore();ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
   }
@@ -186,7 +225,7 @@
 
   if(reduce){
     // grow a static crystal then render one frame
-    ctx.fillStyle='#0a1620';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     for(let i=0;i<3000;i++){
       if(!walker)spawnWalker();
       const w=walker,stepLen=gs*0.9,r=Math.hypot(w.x,w.y)||1;

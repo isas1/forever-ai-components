@@ -5,8 +5,21 @@
 <meta name="description" content="Bold word DEPTH on deep purple, rendered with layered drop-shadow extrusion, oscillating in 3D rotateX/Y like a turning solid block.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>3D Extruded Word</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1a1030;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c09-bg:#1a1030; --c09-ink:#ffcf4d; --c09-cap:#ffcf4d; --c09-cap-o:.4;
+  }
+  :root[data-theme="light"]{
+    --c09-bg:#f5f0fa; --c09-ink:#8f6800; --c09-cap:#1f1630; --c09-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c09-bg);}
   body{display:flex;align-items:center;justify-content:center;
        font-family:"Helvetica Neue",Arial,sans-serif;
        perspective:600px;}
@@ -14,13 +27,13 @@
     font-size:clamp(40px,17vw,128px);
     font-weight:900;
     letter-spacing:.02em;
-    color:#ffcf4d;
+    color:var(--c09-ink);
     transform-style:preserve-3d;
     will-change:transform;
-    /* layered shadow = extrusion depth */
+    /* layered shadow = extrusion depth (dark warm tones read as depth in both themes) */
   }
   .cap{position:absolute;right:10px;bottom:8px;font-size:11px;letter-spacing:.08em;
-       color:#ffcf4d;opacity:.4;text-transform:uppercase;font-weight:600;}
+       color:var(--c09-cap);opacity:var(--c09-cap-o);text-transform:uppercase;font-weight:600;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -29,23 +42,25 @@
  "description": "Bold word \"DEPTH\" rotates in 3D via oscillating rotateX/Y transforms; 14-layer drop-shadow stack creates a warm extruded block illusion.",
  "useWhen": "Hero displays, title cards, or any brand word that benefits from tactile 3D depth without 3D-library overhead.",
  "avoidWhen": "Strings longer than 6–7 characters (shadow stack becomes visually noisy) or low-contrast light backgrounds.",
- "agentPrompt": "Change the word to 'BOLD', set color to #00eaff, increase extrusion depth to 20 layers (d<=20), and slow the rotation by setting t+=0.01.",
+ "agentPrompt": "Change the word to 'BOLD', set color to #00eaff, increase extrusion depth to 20 layers (d<=20), and slow the rotation by setting t+=0.01. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (div#word text)",
   "font color (#ffcf4d)",
   "extrusion depth (d<=14 loop)",
   "rotation speed (t+=0.02)",
-  "rotation amplitude (ry=sin(t)*32, rx=cos(t*0.8)*10)"
+  "rotation amplitude (ry=sin(t)*32, rx=cos(t*0.8)*10)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard",
   "visibilitychange pause/resume",
-  "transform-style:preserve-3d + perspective on body"
+  "transform-style:preserve-3d + perspective on body",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Text shadow extrusion is purely 2D layered — true depth breaks if the word is rotated beyond ~45deg",
-  "Background color hardcoded in CSS (#1a1030); must edit to use on light backgrounds"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -54,7 +69,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -89,6 +105,13 @@
   function start(){ if(!raf&&!reduce) raf=requestAnimationFrame(frame); }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d = e.data;
+    if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) {
+      document.documentElement.setAttribute('data-theme', d.theme);
+    }
+  });
   if(!reduce) start();
 })();
 </script>

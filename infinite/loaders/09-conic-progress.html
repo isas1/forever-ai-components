@@ -8,27 +8,47 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block */
 :root{
   --bg-900:#08090d; --bg-600:#181b27;
   --text-0:#f4f6fb; --text-2:#8a91a8;
   --accent-iris:#A9D22D; --accent-cyan:#C0B459;
+  --glow-a:rgba(169,210,45,.16); --glow-b:rgba(192,180,89,.16);
+  --track:rgba(255,255,255,.06);
+  --ring-glow:rgba(169,210,45,.5);
+  --cap:#C0B459; --cap-o:.45;
+}
+:root[data-theme="light"]{
+  --bg-900:#f2f4f8; --bg-600:#ffffff;
+  --text-0:#1b2130; --text-2:#5b6172;
+  --accent-iris:#5f7619; --accent-cyan:#776e2d;
+  --glow-a:rgba(169,210,45,.18); --glow-b:rgba(192,180,89,.18);
+  --track:rgba(27,33,48,.08);
+  --ring-glow:rgba(95,118,25,.35);
+  --cap:#1b2130; --cap-o:.5;
 }
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden}
 body{
   background:var(--bg-900);
   background-image:
-    radial-gradient(60vw 40vw at 15% -10%,rgba(169,210,45,.16),transparent 60%),
-    radial-gradient(50vw 40vw at 90% 0%,rgba(192,180,89,.16),transparent 55%);
+    radial-gradient(60vw 40vw at 15% -10%,var(--glow-a),transparent 60%),
+    radial-gradient(50vw 40vw at 90% 0%,var(--glow-b),transparent 55%);
   display:grid;place-items:center;
 }
 .c09-ring{position:relative;width:min(40vmin,170px);aspect-ratio:1;border-radius:50%;
   display:grid;place-items:center;
-  background:conic-gradient(var(--accent-iris) calc(var(--c09-pct,0)*1%),rgba(255,255,255,.06) 0);
+  background:conic-gradient(var(--accent-iris) calc(var(--c09-pct,0)*1%),var(--track) 0);
   transition:background .1s linear}
 .c09-ring::before{content:"";position:absolute;inset:12px;border-radius:50%;background:var(--bg-600);
-  box-shadow:inset 0 0 20px -8px rgba(169,210,45,.5)}
+  box-shadow:inset 0 0 20px -8px var(--ring-glow)}
 .c09-ring__glow{position:absolute;inset:0;border-radius:50%;
   background:conic-gradient(var(--accent-cyan) calc(var(--c09-pct,0)*1%),transparent 0);
   filter:blur(8px);opacity:.45;transition:background .1s linear}
@@ -36,7 +56,7 @@ body{
   font-weight:700;font-size:clamp(24px,8vmin,32px);color:var(--text-0);letter-spacing:-.02em}
 .c09-ring__num span{font-size:.55em;color:var(--text-2);font-weight:500}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 "Space Grotesk",ui-monospace,monospace;
-  color:#C0B459;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -45,19 +65,21 @@ body{
  "description": "A circular conic-gradient ring fills from 0–100% with a lime arc and a blurred gold glow layer; a live numeric counter updates in sync.",
  "useWhen": "Loading screens, file upload progress, onboarding steps — anywhere a single prominent percentage needs ambient drama.",
  "avoidWhen": "Contexts needing multiple simultaneous progress rings; the hardcoded dark background makes it unsuitable for light-mode UIs.",
- "agentPrompt": "Change the fill color from iris to amber by setting --accent-iris to #f59e0b and --accent-cyan to #fcd34d, then increase the cycle duration from 2600ms to 4000ms (RUN variable).",
+ "agentPrompt": "Change the fill color from iris to amber by setting --accent-iris to #f59e0b and --accent-cyan to #fcd34d, then increase the cycle duration from 2600ms to 4000ms (RUN variable). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent colors (--accent-iris, --accent-cyan)",
   "cycle duration (RUN=2600, HOLD=900)",
   "ring size (min(40vmin,170px))",
   "glow blur intensity (filter:blur(8px))",
-  "inner track inset (inset:12px in ::before)"
+  "inner track inset (inset:12px in ::before)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "setPct() dirty-check (lastWhole guard) — avoids full repaint every frame",
   "IIFE wrapper",
   "visibilitychange pause/play",
-  "prefers-reduced-motion static fallback"
+  "prefers-reduced-motion static fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to dark navy — must edit CSS vars to use in light-mode layouts",
@@ -70,7 +92,8 @@ body{
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "loader",
@@ -92,6 +115,7 @@ body{
 <div class="cap">Conic Progress</div>
 <script>
 (function(){
+  var root=document.documentElement;
   var ring=document.getElementById('c09-ring'), num=document.getElementById('c09-num');
   if(!ring||!num) return;
   var glow=ring.querySelector('.c09-ring__glow');
@@ -107,6 +131,12 @@ body{
     if(glow) glow.style.setProperty('--c09-pct',w);
     num.firstChild.nodeValue=String(w);
   }
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);
+    }
+  });
   if(reduce){setPct(72);return;}
   var start=null, HOLD=900, RUN=2600, raf;
   function loop(ts){

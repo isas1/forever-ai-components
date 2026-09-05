@@ -5,11 +5,29 @@
 <meta name="description" content="Glassy radially-symmetric diatom frustules with tessellated pores drift and slowly rotate in deep teal water, twinkling refractively.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tide Pool Diatoms</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#04161a;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. The whole frustule is drawn in one
+     accent at many alphas, so --tpd-acc is "r,g,b" and --tpd-am scales every alpha:
+     additive glass on deep water becomes etched deep-teal glass on a sunlit pool,
+     where the same alphas would otherwise read too faint. */
+  :root{
+    --tpd-bg:#04161a; --tpd-cap:#3fd6c0; --tpd-cap-o:.34;
+    --tpd-fade:4,22,26; --tpd-blend:lighter; --tpd-acc:63,214,192; --tpd-am:1;
+  }
+  :root[data-theme="light"]{
+    --tpd-bg:#e9f4f3; --tpd-cap:#1a7b6d; --tpd-cap-o:.66;
+    --tpd-fade:233,244,243; --tpd-blend:source-over; --tpd-acc:26,123,109; --tpd-am:1.3;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--tpd-bg);}
   #tpd-c{display:block;width:100%;height:100%;}
   .tpd-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.14em;color:#3fd6c0;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--tpd-cap);opacity:var(--tpd-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,23 +37,25 @@
  "description": "Five glassy radially-symmetric diatom frustules drift and slowly rotate in deep teal water; tessellated pores twinkle refractively with a lighter-mode glow.",
  "useWhen": "Ambient scientific or nature-themed backgrounds, biology/ocean UIs, screensaver-style hero sections.",
  "avoidWhen": "Contexts requiring legible text overlays — the additive lighter composite blends with anything placed on top. Light backgrounds need a full restyle.",
- "agentPrompt": "Change accent color from teal to amber by replacing ACC=[63,214,192] with ACC=[255,180,60], increase rotation speed by doubling each sp value in specs, and add a sixth diatom at x:0.5, y:0.8.",
+ "agentPrompt": "Change accent color from teal to amber by replacing ACC=[63,214,192] with ACC=[255,180,60], increase rotation speed by doubling each sp value in specs, and add a sixth diatom at x:0.5, y:0.8. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (ACC array)",
   "diatom positions and sizes (specs array)",
   "rotation speeds (sp values)",
   "ring count per diatom (rings property)",
   "symmetry order per diatom (sym property)",
-  "twinkle speed multiplier (g*1.6)"
+  "twinkle speed multiplier (g*1.6)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback frame",
   "visibilitychange stop/start",
-  "globalCompositeOperation lighter reset to source-over"
+  "globalCompositeOperation lighter reset to source-over",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded in CSS (#04161a) — must edit to use on light backgrounds",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Pore count grows quadratically with ring count — large sym+rings combos can slow frame rate",
   "Pointer only boosts rotation speed; no per-diatom hit detection or interaction"
  ],
@@ -45,7 +65,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "diatoms",
@@ -67,7 +88,22 @@
 (function(){
   const cv=document.getElementById('tpd-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ACC=[63,214,192];
+  const root=document.documentElement;
+  // one accent at many alphas is the whole palette here — read it from the tokens
+  const C={bg:'',fade:'',blend:'lighter',acc:'63,214,192',am:1};
+  function syncTheme(){
+    const cs=getComputedStyle(root),get=k=>cs.getPropertyValue(k).trim();
+    C.bg=get('--tpd-bg');C.fade=get('--tpd-fade');C.blend=get('--tpd-blend');
+    C.acc=get('--tpd-acc');C.am=parseFloat(get('--tpd-am'));
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);if(reduce)frame();   // drop the old water
+    }
+  });
+  syncTheme();
   let W,H,DPR,frust=[];
   function rnd(a,b){return a+Math.random()*(b-a);}
   function build(){
@@ -98,7 +134,7 @@
   addEventListener('resize',size);
   let t=0,boost=0;
   cv.addEventListener('pointermove',()=>{boost=Math.min(boost+0.25,1.4);});
-  function aRGBA(a){return 'rgba('+ACC[0]+','+ACC[1]+','+ACC[2]+','+a+')';}
+  function aRGBA(a){return 'rgba('+C.acc+','+(a*C.am>1?1:a*C.am)+')';}
 
   // one radially-symmetric frustule: mirrored phyllotaxis + tessellated pores
   function drawFrustule(f){
@@ -168,8 +204,8 @@
     t+=reduce?0:1;
     boost*=0.95;
     // deep cold water with slow trails
-    ctx.fillStyle='rgba(4,22,26,0.16)';ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle='rgba('+C.fade+',0.16)';ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation=C.blend;
     frust.forEach(f=>{
       if(!reduce) f.rot+=f.sp*(1+boost*4);
       if(!reduce) f.drift+=f.damp*0.04;
@@ -183,8 +219,8 @@
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   size();
-  if(reduce){ctx.fillStyle='#04161a';ctx.fillRect(0,0,W,H);frame();}
-  else{ctx.fillStyle='#04161a';ctx.fillRect(0,0,W,H);start();}
+  if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);frame();}
+  else{ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);start();}
 })();
 </script>
 </body>

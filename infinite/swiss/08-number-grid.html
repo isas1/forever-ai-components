@@ -5,12 +5,23 @@
 <meta name="description" content="A 5x5 Swiss grid of tabular numerals counting in a staggered diagonal beat, with a red accent sweeping each anti-diagonal.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Number Grid</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark defaults + the light re-theme (Swiss paper stock) */
   :root{
     --sw08-bg:#0f0f10;
     --sw08-ink:#f4f1ea;
     --sw08-acc:#e8482b;
     --sw08-mut:#5a5a5e;
+    --sw08-cap:#fff; --sw08-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --sw08-bg:#f4f3ef; --sw08-ink:#141416; --sw08-acc:#cf3316; --sw08-mut:#5f5f66;
+    --sw08-cap:#141416; --sw08-cap-o:.55;
   }
   html,body{margin:0;height:100%;background:var(--sw08-bg)}
   #sw08-stage{
@@ -68,7 +79,7 @@
   }
   #sw08-bar b{color:var(--sw08-ink);font-weight:700;letter-spacing:.02em}
   #sw08-tick{color:var(--sw08-acc);font-variant-numeric:tabular-nums}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--sw08-cap);opacity:var(--sw08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -78,20 +89,22 @@
  "description": "5x5 grid of bold tabular numerals counting in a staggered diagonal beat; a red accent sweeps each anti-diagonal in sequence.",
  "useWhen": "Data dashboards, typographic hero sections, or ambient displays needing rhythmic numeric motion with a Swiss/Helvetica aesthetic.",
  "avoidWhen": "Contexts where large numerals compete with meaningful content, or where rapid modular counting causes confusion.",
- "agentPrompt": "Change STEP from 520 to 300 to speed up the beat, and change --sw08-acc from #e8482b to #00eaff for a cyan accent sweep.",
+ "agentPrompt": "Change STEP from 520 to 300 to speed up the beat, and change --sw08-acc from #e8482b to #00eaff for a cyan accent sweep. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "beat speed (STEP=520)",
   "accent color (--sw08-acc)",
   "grid size (COLS/ROWS)",
   "font size (min(7.2vw,7.2vh))",
   "background/ink colors (--sw08-bg, --sw08-ink)",
-  "pop animation easing (cubic-bezier values)"
+  "pop animation easing (cubic-bezier values)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (drawStatic path)",
   "visibilitychange stop/start handlers",
-  "alternating sw08-a/sw08-b class swap (prevents forced reflow)"
+  "alternating sw08-a/sw08-b class swap (prevents forced reflow)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Grid size is hardcoded at 5x5; changing COLS/ROWS requires recomputing phase and diag arrays",
@@ -104,7 +117,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "swiss",
@@ -126,6 +140,8 @@
 <div class="cap">Number Grid</div>
 <script>
 (function(){
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});
   var COLS=5, ROWS=5, N=COLS*ROWS;
   var field=document.getElementById('sw08-field');
   var tick=document.getElementById('sw08-tick');

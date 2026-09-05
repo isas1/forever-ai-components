@@ -5,11 +5,20 @@
 <meta name="description" content="Denim-blue cylindrical thumbwheel with curved ribs you fling and scrub; flywheel friction, detent ticks, and a FRAME counter readout.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Thumbwheel Scrubber</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1A1C1E;}
+  /* theme tokens — dark defaults; housing/wheel stay a dark physical surface in
+     both themes, only the page bg + off-housing readout shift in the light block. */
+  :root{ --tws-bg:#1A1C1E; --tws-acc-rgb:80,126,149; --tws-cap:#507E95; --tws-cap-o:.36; }
+  :root[data-theme="light"]{ --tws-bg:#f1f2f5; --tws-acc-rgb:73,115,136; --tws-cap:#1b2130; --tws-cap-o:.5; }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--tws-bg);}
   #tws-c{display:block;width:100%;height:100%;cursor:ew-resize;touch-action:none;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
-       letter-spacing:.16em;color:#507E95;opacity:.36;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--tws-cap);opacity:var(--tws-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +28,21 @@
  "description": "Denim-blue cylindrical thumbwheel with curved ribs you drag and fling; flywheel friction, detent ticks, and a FRAME counter readout.",
  "useWhen": "Timeline scrubbers, video frame selectors, or any UI needing tactile precision input with inertia feel.",
  "avoidWhen": "Accessibility-first contexts — drag/fling only, no keyboard nav or ARIA roles. Reduced-motion users get a static frozen frame.",
- "agentPrompt": "Change the accent color from denim-blue to amber by setting ACC='#f59e0b', update the rib gradient midpoint colors to match, and slow friction from 0.975 to 0.96 for a longer coast.",
+ "agentPrompt": "Change the accent color from denim-blue to amber by setting ACC='#f59e0b', update the rib gradient midpoint colors to match, and slow friction from 0.975 to 0.96 for a longer coast. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (ACC='#507E95')",
   "flywheel friction (vel*=0.975)",
   "rib pitch/spacing (PITCH=0.30)",
   "initial velocity (vel=1.9)",
-  "wheel dimensions (wW, wH scale factors)"
+  "wheel dimensions (wW, wH scale factors)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion guard (static single frame)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Reduced-motion renders one static frame — wheel is non-interactive for those users",
@@ -44,7 +55,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "thumbwheel",
@@ -65,7 +77,15 @@
 (function(){
   const cv=document.getElementById('tws-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ACC='#507E95', BG='#1A1C1E';
+  const ACC='#507E95';
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--tws-bg').trim(); C.accRgb=cs.getPropertyValue('--tws-acc-rgb').trim();
+  }
+  addEventListener('message',function(e){ const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
+  syncTheme();
   let W,H,DPR,cx,cy,wW,wH;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -100,7 +120,7 @@
     if(tick!==lastTick){ pulse=1; frameIdx+=(tick-lastTick); lastTick=tick; }
 
     // bg
-    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const speed=Math.min(Math.abs(vel),2.4);
     const blur=Math.min(speed/0.9,1);    // 0 crisp -> 1 smeared
 
@@ -110,7 +130,7 @@
     let bz=ctx.createLinearGradient(0,by,0,by+bh);
     bz.addColorStop(0,'#242830');bz.addColorStop(.5,'#1c2024');bz.addColorStop(1,'#141618');
     ctx.fillStyle=bz;ctx.fill();
-    ctx.lineWidth=1;ctx.strokeStyle='rgba(80,126,149,0.18)';ctx.stroke();
+    ctx.lineWidth=1;ctx.strokeStyle=`rgba(${C.accRgb},0.18)`;ctx.stroke();
 
     // --- wheel well (clip) ---
     ctx.save();
@@ -185,11 +205,11 @@
     ctx.font='700 '+fs+'px ui-monospace,Menlo,monospace';
     ctx.textAlign='center';ctx.textBaseline='alphabetic';
     const lbl=(frameIdx<0?'-':'')+String(Math.abs(frameIdx)).padStart(4,'0');
-    ctx.fillStyle='rgba(80,126,149,'+(0.6+pulse*0.4).toFixed(3)+')';
+    ctx.fillStyle='rgba('+C.accRgb+','+(0.6+pulse*0.4).toFixed(3)+')';
     ctx.fillText('FRAME '+lbl, cx, by-9);
     // tiny velocity caption
     ctx.font='600 '+Math.max(8,fs*0.5)+'px ui-monospace,Menlo,monospace';
-    ctx.fillStyle='rgba(80,126,149,0.30)';
+    ctx.fillStyle='rgba('+C.accRgb+',0.30)';
     ctx.fillText(vel===0?'AT REST':'COASTING', cx, by+bh+fs+4);
     ctx.textAlign='left';
 

@@ -5,11 +5,29 @@
 <meta name="description" content="Vertical black-and-white stripes undulate into a woven fabric ripple with detuned moire interference and a central bulge.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wave Columns</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
-  #op04-stage{position:fixed;inset:0;background:#0a0a0a}
+  /* theme tokens — dark values are the defaults; light inverts the stripe pair
+     (ink columns on paper). The g-* numbers are the shaded-stripe grey ramp the
+     JS builds its rgb() fill from: base +/- amp, clamped to lo..hi. */
+  :root{
+    --op04-bg:#0a0a0a; --op04-col-b:#0c0c0c;
+    --op04-g-base:210; --op04-g-amp:45; --op04-g-lo:150; --op04-g-hi:255;
+    --op04-seam:rgba(255,255,255,0.06); --op04-cap:#fff; --op04-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --op04-bg:#f4f4f2; --op04-col-b:#efefec;
+    --op04-g-base:40; --op04-g-amp:34; --op04-g-lo:6; --op04-g-hi:96;
+    --op04-seam:rgba(20,20,20,0.10); --op04-cap:#141414; --op04-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--op04-bg);overflow:hidden}
+  #op04-stage{position:fixed;inset:0;background:var(--op04-bg)}
   #op04-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op04-cap);opacity:var(--op04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +37,21 @@
  "description": "Vertical B&W stripe columns undulate via detuned sine waves, creating a woven fabric ripple with a central bulge illusion and moire interference.",
  "useWhen": "Dark ambient backgrounds, op-art/generative art showcases, loading screens needing hypnotic looping motion.",
  "avoidWhen": "Light-background UIs (background hardcoded near-black). Contexts where motion competes with legible text overlays.",
- "agentPrompt": "Change column count to 36 by setting COLS=36, set ampBase to colW*2.2 for wider sway, and shift the white column fill to a warm ivory rgb(255,245,210).",
+ "agentPrompt": "Change column count to 36 by setting COLS=36, set ampBase to colW*2.2 for wider sway, and shift the white column fill to a warm ivory rgb(255,245,210). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "column count (COLS, dynamically clamped 28–60)",
   "sway amplitude (ampBase = colW*1.65)",
   "wave numbers k1=0.16 / k2=0.205 (detune for moire density)",
   "phase speed multipliers (0.00042 / 0.00031)",
-  "white column brightness range (g = 210±45)"
+  "white column brightness range (g = 210±45)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and ctx.setTransform",
   "visibilitychange pause/start loop",
   "reduced-motion guard (drawOneFrame on reduce)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to near-black (#0a0a0a) in both CSS and canvas clear — must change in both places",
@@ -44,7 +64,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "op-art",
@@ -70,6 +91,27 @@
   var cv=document.getElementById("op04-c");
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var root=document.documentElement;
+
+  // colours the canvas draws with — read once from the tokens, once per switch
+  var C={bg:"#0a0a0a",colB:"#0c0c0c",gBase:210,gAmp:45,gLo:150,gHi:255,seam:"rgba(255,255,255,0.06)"};
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue("--op04-bg").trim();
+    C.colB=cs.getPropertyValue("--op04-col-b").trim();
+    C.gBase=parseFloat(cs.getPropertyValue("--op04-g-base"))||210;
+    C.gAmp=parseFloat(cs.getPropertyValue("--op04-g-amp"))||45;
+    C.gLo=parseFloat(cs.getPropertyValue("--op04-g-lo"))||0;
+    C.gHi=parseFloat(cs.getPropertyValue("--op04-g-hi"))||255;
+    C.seam=cs.getPropertyValue("--op04-seam").trim();
+    if(reduce&&W)drawOneFrame();   // static fallback must repaint on a live switch
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme();
+    }
+  });
 
   // sizing (cached; recomputed only on resize)
   var W=0,H=0,DPR=1;
@@ -99,7 +141,7 @@
   var ROWS=64; // vertical samples per column (sane, fixed)
 
   function paint(t){
-    ctx.fillStyle="#0a0a0a";
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
 
     var rowH=H/ROWS;
@@ -149,16 +191,16 @@
       if(white){
         // brightness shaded by sway -> shimmer without per-frame filters
         var sh=Math.sin(i*0.30+sp1*1.0);
-        var g=Math.round(210+sh*45); if(g>255)g=255; if(g<150)g=150;
+        var g=Math.round(C.gBase+sh*C.gAmp); if(g>C.gHi)g=C.gHi; if(g<C.gLo)g=C.gLo;
         ctx.fillStyle="rgb("+g+","+g+","+g+")";
       } else {
-        ctx.fillStyle="#0c0c0c";
+        ctx.fillStyle=C.colB;
       }
       ctx.fill();
     }
 
     // single static accent: a thin centerline seam that anchors the ripple
-    ctx.fillStyle="rgba(255,255,255,0.06)";
+    ctx.fillStyle=C.seam;
     ctx.fillRect(0,cy-1,W,2);
   }
 
@@ -180,6 +222,7 @@
     if(document.hidden) stop(); else start();
   });
 
+  syncTheme();
   resize();
   if(reduce){ drawOneFrame(); }
   else { start(); }

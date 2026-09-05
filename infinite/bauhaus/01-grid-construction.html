@@ -5,11 +5,19 @@
 <meta name="description" content="Primary-colored squares, circles, quarter-discs and triangles scatter then snap into a balanced modular 4x4 grid composition and recompose o">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Grid Construction</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
-  #bh01-stage{position:fixed;inset:0;background:#101012}
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme in [data-theme="light"]; JS reads both */
+  :root{--bh01-bg:#101012;--bh01-line:rgba(233,227,210,0.07);--bh01-red:#e63329;--bh01-blu:#2b4ea2;--bh01-yel:#edc01f;--bh01-blk:#15151a;--bh01-crm:#e9e3d2;--bh01-cap:#fff;--bh01-cap-o:.42}
+  :root[data-theme="light"]{--bh01-bg:#f6f2ea;--bh01-line:rgba(27,27,32,0.10);--bh01-red:#cc2b1f;--bh01-blu:#2b4ea2;--bh01-yel:#ad7f08;--bh01-blk:#1b1b20;--bh01-crm:#8c8172;--bh01-cap:#1b1b20;--bh01-cap-o:.5}
+  html,body{margin:0;height:100%;background:var(--bh01-bg);overflow:hidden}
+  #bh01-stage{position:fixed;inset:0;background:var(--bh01-bg)}
   #bh01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--bh01-cap);opacity:var(--bh01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +27,21 @@
  "description": "16 primary-colored geometric shapes scatter then snap into a 4x4 modular grid, hold, dissolve, and recompose in a new Bauhaus arrangement.",
  "useWhen": "Design portfolio heroes, Bauhaus/geometric brand contexts, ambient looping backgrounds where structured motion signals craft.",
  "avoidWhen": "Contexts requiring legible text overlays — shapes occupy most of the viewport. Low-end devices running many simultaneous canvas tiles.",
- "agentPrompt": "Change the grid size from N=4 to N=3 (9 modules), swap YEL to '#f97316' for an orange accent, and slow the build phase by increasing dur[0] from 2200 to 3500.",
+ "agentPrompt": "Change the grid size from N=4 to N=3 (9 modules), swap YEL to '#f97316' for an orange accent, and slow the build phase by increasing dur[0] from 2200 to 3500. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid size N (default 4)",
   "Bauhaus palette constants RED/BLU/YEL/BLK/CRM",
   "phase durations array dur=[2200,1500,2600,1500]",
   "composition square scale (grid=Math.min(W,H)*0.78)",
-  "stagger timing per tile (i*0.045)"
+  "stagger timing per tile (i*0.045)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback (reduce branch)",
   "visibilitychange pause/resume guard",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Shape grammar rotates each cycle (sh[i]+1&3) — tile shapes change every loop, may surprise if a fixed layout is expected",
@@ -44,7 +54,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bauhaus",
@@ -69,10 +80,19 @@
   var cv=document.getElementById("bh01-c"),ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  // Bauhaus palette: primary red/blue/yellow + black, on off-dark.
-  var RED="#e63329",BLU="#2b4ea2",YEL="#edc01f",BLK="#15151a",CRM="#e9e3d2";
-  var COLS=[RED,BLU,YEL,BLK,CRM];
-
+  // Bauhaus palette: primary red/blue/yellow + black on off-dark (light: on warm off-white).
+  var root=document.documentElement, onTheme=null;                // every canvas colour comes from the CSS tokens
+  var COLS=["#e63329","#2b4ea2","#edc01f","#15151a","#e9e3d2"];   // cached colour array — refilled on theme switch
+  var C={bg:"#101012",line:"rgba(233,227,210,0.07)",blk:"#15151a"};
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    C.bg=g("--bh01-bg"); C.line=g("--bh01-line"); C.blk=g("--bh01-blk");
+    COLS[0]=g("--bh01-red"); COLS[1]=g("--bh01-blu"); COLS[2]=g("--bh01-yel"); COLS[3]=C.blk; COLS[4]=g("--bh01-crm");
+    if(onTheme) onTheme();
+  }
+  addEventListener("message",function(e){ var d=e.data;           // live re-theme broadcast from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); }
+  });
   // Module grammar. shape:0 square,1 circle,2 quarter-disc,3 triangle.
   // Cells live on a NxN modular grid; each cell holds a tile that animates
   // from a scattered state to a snapped grid slot, then recomposes.
@@ -146,11 +166,11 @@
   // Phase machine: 0 build->A, 1 hold A, 2 dissolve->scatter->B, 3 hold B, loop
   var t0=0, dur=[2200,1500,2600,1500];
   function frameAt(now){
-    ctx.fillStyle="#101012";
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
 
     // faint construction grid lines (static look, drawn each frame cheaply)
-    ctx.strokeStyle="rgba(233,227,210,0.07)";
+    ctx.strokeStyle=C.line;
     ctx.lineWidth=1;
     for(var g=0;g<=N;g++){
       var p=ox+g*unit;
@@ -187,7 +207,7 @@
     }
 
     // one anchoring black bar — Bauhaus structural accent (static)
-    ctx.fillStyle=BLK;
+    ctx.fillStyle=C.blk;
     ctx.fillRect(ox, oy+grid+unit*0.18, grid, Math.max(2,unit*0.08));
 
     if(phase===3 && lt>=1){
@@ -202,14 +222,14 @@
       t0=now;
     }
   }
-
+  syncTheme();
   if(reduce){
     // settle to one balanced static frame (pose A), no loop
-    size(); t0=-99999; ctx.fillStyle="#101012"; ctx.fillRect(0,0,W,H);
+    size(); t0=-99999; ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     // draw pose A directly
     var prev=performance.now();
     t0=prev - (dur[0]+10); // land in hold-A
-    frameAt(prev);
+    frameAt(prev); onTheme=function(){ frameAt(prev); };   // static frame repaints on a theme switch
     return;
   }
 

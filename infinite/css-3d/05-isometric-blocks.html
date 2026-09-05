@@ -5,8 +5,26 @@
 <meta name="description" content="A 3x3 grid of soft lilac isometric cubes that gently bob up and down in a sine wave on a dark lilac-tinted field.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Isometric Blocks</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1B191D;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block.
+     --c05-top/lft/rgt are the "S% L%" pairs of each cube face; the JS reads them per hue. */
+  :root{
+    --c05-bg:#1B191D; --c05-top:30% 82%; --c05-lft:26% 68%; --c05-rgt:22% 54%;
+    --c05-fb-top:#eae4f1; --c05-fb-lft:#B2A9BC; --c05-fb-rgt:#D8C197;
+    --c05-cap:#D0C3DF; --c05-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --c05-bg:#f4f1f7; --c05-top:38% 62%; --c05-lft:34% 48%; --c05-rgt:30% 38%;
+    --c05-fb-top:#9879c3; --c05-fb-lft:#7351a4; --c05-fb-rgt:#7e6b44;
+    --c05-cap:#241f2b; --c05-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c05-bg);
     font-family:system-ui,-apple-system,sans-serif;}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:1000px;}
@@ -14,10 +32,11 @@
     transform:rotateX(58deg) rotateZ(-45deg);}
   .cube{position:absolute;width:9vmin;height:9vmin;transform-style:preserve-3d;}
   .s{position:absolute;width:9vmin;height:9vmin;}
-  .top{background:#eae4f1;transform:translateZ(4.5vmin);}
-  .lft{background:#B2A9BC;transform:rotateY(-90deg) translateZ(4.5vmin);transform-origin:left;}
-  .rgt{background:#D8C197;transform:rotateX(90deg) translateZ(4.5vmin);transform-origin:top;}
-  .cap{position:fixed;left:10px;bottom:8px;color:#D0C3DF;opacity:.34;
+  /* .top/.lft/.rgt fills are re-set per hue by the JS; these are the pre-script fallbacks */
+  .top{background:var(--c05-fb-top);transform:translateZ(4.5vmin);}
+  .lft{background:var(--c05-fb-lft);transform:rotateY(-90deg) translateZ(4.5vmin);transform-origin:left;}
+  .rgt{background:var(--c05-fb-rgt);transform:rotateX(90deg) translateZ(4.5vmin);transform-origin:top;}
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--c05-cap);opacity:var(--c05-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -27,19 +46,21 @@
  "description": "3x3 grid of soft lilac CSS 3D cubes bobs in a staggered sine wave on a dark lilac-tinted ground. Three shaded faces per cube simulate isometric lighting.",
  "useWhen": "Ambient hero backgrounds, game UI, or dashboards with a retro/isometric aesthetic.",
  "avoidWhen": "Old WebViews or GPU-constrained devices where CSS 3D transforms are unreliable. Avoid over text-heavy layouts.",
- "agentPrompt": "Change grid to 4x4 by setting G=4, shift hue palette to amber (hues array near 35-45), slow the bob to t+=0.02.",
+ "agentPrompt": "Change grid to 4x4 by setting G=4, shift hue palette to amber (hues array near 35-45), slow the bob to t+=0.02. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid size (G=3)",
   "hue palette (hues array)",
   "bob amplitude (3.2vmin)",
   "animation speed (t+=0.04)",
   "cube size (9vmin)",
-  "phase offset ((x+y)*0.7)"
+  "phase offset ((x+y)*0.7)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "transform-style:preserve-3d on #scene and .cube",
   "visibilitychange pause/start",
-  "prefers-reduced-motion static fallback"
+  "prefers-reduced-motion static fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Changing cube size requires updating left/top offsets in the loop (hardcoded vmin math)",
@@ -52,7 +73,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "isometric",
@@ -70,6 +92,7 @@
 <div id="stage"><div id="scene"></div></div>
 <div class="cap">Isometric Blocks</div>
 <script>
+(function(){
   const scene=document.getElementById('scene');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const G=3,blocks=[];
@@ -79,11 +102,22 @@
     const c=document.createElement('div');c.className='cube';
     c.style.left=(x*9-9)+'vmin';c.style.top=(y*9-9)+'vmin';
     const h=hues[k%hues.length];
-    c.innerHTML=`<div class="s top" style="background:hsl(${h} 30% 82%)"></div>
-      <div class="s lft" style="background:hsl(${h} 26% 68%)"></div>
-      <div class="s rgt" style="background:hsl(${h} 22% 54%)"></div>`;
-    scene.appendChild(c);blocks.push({el:c,ph:(x+y)*0.7});k++;
+    c.innerHTML='<div class="s top"></div><div class="s lft"></div><div class="s rgt"></div>';
+    scene.appendChild(c);blocks.push({el:c,ph:(x+y)*0.7,h});k++;
   }
+  // face shading is JS-drawn: read the per-face "S% L%" pairs from the theme tokens
+  const docEl=document.documentElement;
+  function syncTheme(){
+    const cs=getComputedStyle(docEl);
+    const sl=['--c05-top','--c05-lft','--c05-rgt'].map(n=>cs.getPropertyValue(n).trim());
+    blocks.forEach(b=>{const f=b.el.children;
+      for(let i=0;i<3;i++)f[i].style.background=`hsl(${b.h} ${sl[i]})`;});
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      docEl.setAttribute('data-theme',d.theme);syncTheme();}});
+  syncTheme();
   let t=0,raf;
   function loop(){
     t+=0.04;
@@ -98,6 +132,7 @@
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
   if(reduce){blocks.forEach((b,i)=>b.el.style.transform=`translateZ(${(i%3)*1.5}vmin)`);}
   else start();
+})();
 </script>
 </body>
 </html>

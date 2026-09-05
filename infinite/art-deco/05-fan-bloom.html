@@ -5,17 +5,31 @@
 <meta name="description" content="A peacock fan of fine gold ribs with emerald eye-spots blooms open and closed from a sunburst medallion over a ziggurat base on black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fan Bloom</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0b08}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme (deep gold on ivory) is the [data-theme="light"] block.
+     The canvas draws with these too — see syncTheme(). */
+  :root{--ad05-bg:#0c0b08;--ad05-bg-2:#161208;--ad05-gold:#d4af37;--ad05-gold-2:#f2d97a;--ad05-gold-3:#8a6e22;
+    --ad05-emer:#0e5c4a;--ad05-emer-0:rgba(14,92,74,0);--ad05-base:rgba(212,175,55,0.10);
+    --ad05-glow:rgba(212,175,55,.18);--ad05-glow-0:rgba(212,175,55,0);--ad05-vignette:rgba(0,0,0,.6);--ad05-cap:#fff;--ad05-cap-o:.42}
+  :root[data-theme="light"]{--ad05-bg:#f7f1e4;--ad05-bg-2:#fbf7ec;--ad05-gold:#87681a;--ad05-gold-2:#b08a2a;--ad05-gold-3:#7a5c14;
+    --ad05-emer:#0e5c4a;--ad05-emer-0:rgba(14,92,74,0);--ad05-base:rgba(135,104,26,0.16);
+    --ad05-glow:rgba(135,104,26,.13);--ad05-glow-0:rgba(135,104,26,0);--ad05-vignette:rgba(95,74,18,.16);--ad05-cap:#2a2110;--ad05-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--ad05-bg)}
   #ad05-stage{position:fixed;inset:0;overflow:hidden;background:
-    radial-gradient(120% 90% at 50% 86%,#161208 0%,#0c0b08 60%);}
+    radial-gradient(120% 90% at 50% 86%,var(--ad05-bg-2) 0%,var(--ad05-bg) 60%);}
   #ad05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* static gold vignette + glow, never repaints */
   #ad05-glow{position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(40% 34% at 50% 60%,rgba(212,175,55,.18),rgba(212,175,55,0) 70%);
-    box-shadow:inset 0 0 120px 30px rgba(0,0,0,.6)}
+    background:radial-gradient(40% 34% at 50% 60%,var(--ad05-glow),var(--ad05-glow-0) 70%);
+    box-shadow:inset 0 0 120px 30px var(--ad05-vignette)}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--ad05-cap);opacity:var(--ad05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -25,20 +39,22 @@
  "description": "A 16-rib peacock fan blooms open and closed from a sunburst medallion over a gold ziggurat base; each rib has barbs and an emerald eye-spot.",
  "useWhen": "Dark luxury hero backgrounds, art deco themes, ambient looping displays needing ornate geometric motion.",
  "avoidWhen": "Light-background UIs (background hardcoded near-black). Contexts where slow 9-second cycle feels too sedate.",
- "agentPrompt": "Change rib count to 24 by setting RIB=24, shift the accent to rose gold by replacing GOLD=\"#d4af37\" with GOLD=\"#c9956c\", and slow the cycle to 12 seconds.",
+ "agentPrompt": "Change rib count to 24 by setting RIB=24, shift the accent to rose gold by replacing GOLD=\"#d4af37\" with GOLD=\"#c9956c\", and slow the cycle to 12 seconds. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "rib count (RIB=16)",
   "bloom cycle duration (9s cycle)",
   "spread arc width (0.30+0.65*open multipliers)",
   "gold color palette (GOLD, GOLD2, GOLD3)",
   "emerald eye color (EMER)",
-  "barb count per rib (n=7)"
+  "barb count per rib (n=7)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback (drawFrame(0.78,0))",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded near-black in both CSS and radial-gradient — must edit both to change",
@@ -52,7 +68,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-deco",
@@ -81,7 +98,18 @@
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
   var W=0,H=0,DPR=1,cx=0,cy=0,R=0;
-  var GOLD="#d4af37",GOLD2="#f2d97a",GOLD3="#8a6e22",EMER="#0e5c4a";
+  // every colour the canvas draws with is a CSS token, read once at start and once per
+  // theme flip (never per frame); per-frame gradients pick the new values up automatically.
+  var root=document.documentElement, GOLD,GOLD2,GOLD3,EMER,EMER0,BASE;
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    GOLD=v("--ad05-gold"); GOLD2=v("--ad05-gold-2"); GOLD3=v("--ad05-gold-3");
+    EMER=v("--ad05-emer"); EMER0=v("--ad05-emer-0"); BASE=v("--ad05-base");
+    if(reduce&&W) drawFrame(0.78,0);          // no loop is running to repaint the static frame
+  }
+  addEventListener("message",function(e){ var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); } });
+  syncTheme();
   var RIB=16;            // fan ribs (<=110 elements total)
   var TAU=Math.PI*2;
 
@@ -122,7 +150,7 @@
     var er=R*(0.05+0.02*Math.sin(phase));
     var gx=cx+Math.cos(a)*len*0.92, gy=cy+Math.sin(a)*len*0.92;
     var grd=ctx.createRadialGradient(gx,gy,0,gx,gy,er);
-    grd.addColorStop(0,GOLD2); grd.addColorStop(.45,EMER); grd.addColorStop(1,"rgba(14,92,74,0)");
+    grd.addColorStop(0,GOLD2); grd.addColorStop(.45,EMER); grd.addColorStop(1,EMER0);
     ctx.globalAlpha=f;
     ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(gx,gy,er,0,TAU); ctx.fill();
     ctx.strokeStyle=GOLD; ctx.lineWidth=Math.max(.5,R*0.004);
@@ -133,7 +161,7 @@
   function drawFrame(open,phase){
     ctx.clearRect(0,0,W,H);
     // stepped ziggurat base — symmetric, static silhouette
-    ctx.fillStyle="rgba(212,175,55,0.10)";
+    ctx.fillStyle=BASE;
     var bw=R*1.05, bh=R*0.16, steps=4;
     for(var s=0;s<steps;s++){
       var w=bw*(1-s*0.18), y=cy+R*0.12+s*(bh/steps);

@@ -5,12 +5,27 @@
 <meta name="description" content="Scrolling green/red candlestick stock chart with wicks, gridlines and a dashed last-price line plus live price label.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Candlestick Ticker</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a0f0d;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --c10-up/-dn/-grid/-ink feed the canvas. */
+  :root{
+    --c10-bg:#0a0f0d; --c10-cap:#9aa7a0; --c10-cap-o:.45;
+    --c10-up:#2fd47a; --c10-dn:#ff5a6e; --c10-grid:#ffffff0d; --c10-ink:#ffffff;
+  }
+  :root[data-theme="light"]{
+    --c10-bg:#eef4f0; --c10-cap:#64726b; --c10-cap-o:.8;
+    --c10-up:#1a7e47; --c10-dn:#d1102a; --c10-grid:#0a0f0d16; --c10-ink:#101a15;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c10-bg);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
-    color:#9aa7a0;opacity:.45;text-transform:uppercase}
+    color:var(--c10-cap);opacity:var(--c10-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -19,19 +34,21 @@
  "description": "22 green/red candlesticks scroll left continuously, generating random OHLC data; a dashed last-price line with live label updates in real time.",
  "useWhen": "Finance dashboards, trading UI mockups, ambient data-viz backgrounds for fintech products.",
  "avoidWhen": "Contexts needing real data — all prices are procedurally generated. Not suitable where motion competes with dense text content.",
- "agentPrompt": "Change UP color to '#00cfff' and DN color to '#ff9500', increase candle count to 30 (N=30), and slow scroll speed by changing 1100 to 1800.",
+ "agentPrompt": "Change UP color to '#00cfff' and DN color to '#ff9500', increase candle count to 30 (N=30), and slow scroll speed by changing 1100 to 1800. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "candle count (N=22)",
   "scroll speed (acc/1100 threshold)",
   "up/down colors (UP, DN constants)",
   "price volatility (random spread *7)",
-  "canvas padding (padL/padR as W fraction)"
+  "canvas padding (padL/padR as W fraction)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas resize",
   "visibilitychange pause guard",
   "prefers-reduced-motion freeze (shift=0 branch)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Price scale is normalized 0–100 internally — not real market data",
@@ -45,7 +62,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "candlestick",
@@ -66,8 +84,23 @@
 (function(){
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  let W,H,DPR; const UP='#2fd47a',DN='#ff5a6e';
+  const root=document.documentElement;
+  let W,H,DPR; let UP='#2fd47a',DN='#ff5a6e';
+  const C={grid:'',ink:''};
   const N=22; let candles=[], price=50;
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    UP=cs.getPropertyValue('--c10-up').trim();   // candle + dashed last-price colours derive from these
+    DN=cs.getPropertyValue('--c10-dn').trim();
+    C.grid=cs.getPropertyValue('--c10-grid').trim();
+    C.ink=cs.getPropertyValue('--c10-ink').trim();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
   function mk(){
     const o=price; let c=o+(Math.random()-0.48)*7; c=Math.max(8,Math.min(92,c));
     const hi=Math.max(o,c)+Math.random()*4, lo=Math.min(o,c)-Math.random()*4;
@@ -89,7 +122,7 @@
     // y maps 0..100 price
     const py=v=>bot-(bot-top)*(v/100);
     // grid
-    ctx.strokeStyle='#ffffff0d';ctx.lineWidth=1;
+    ctx.strokeStyle=C.grid;ctx.lineWidth=1;
     for(let i=0;i<5;i++){const y=top+(bot-top)*i/4;ctx.beginPath();ctx.moveTo(padL,y);ctx.lineTo(W-padR,y);ctx.stroke();}
     ctx.save();
     ctx.beginPath();ctx.rect(0,0,W,H);ctx.clip();
@@ -113,7 +146,7 @@
     const ly=py(lastK.c);
     ctx.strokeStyle=(lastK.c>=lastK.o?UP:DN)+'aa';ctx.lineWidth=1;ctx.setLineDash([4,4]);
     ctx.beginPath();ctx.moveTo(padL,ly);ctx.lineTo(W-padR,ly);ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle='#fff';ctx.textAlign='right';ctx.textBaseline='bottom';
+    ctx.fillStyle=C.ink;ctx.textAlign='right';ctx.textBaseline='bottom';
     ctx.font='700 '+(H*0.1)+'px ui-monospace,monospace';
     ctx.fillText(lastK.c.toFixed(2),W-padR,ly-3);
     raf();
@@ -124,7 +157,7 @@
   addEventListener('resize',resize);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
   cv.addEventListener('pointerdown',init);
-  resize();init();raf();
+  syncTheme();resize();init();raf();
 })();
 </script>
 </body>

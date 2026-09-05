@@ -5,11 +5,32 @@
 <meta name="description" content="A wave of colored dots sweeps left to right, revealing a glowing sun setting over water in optically mixing pigment.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Density Wave</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  /* theme tokens — dark values are the defaults; the light re-theme is the one
+     [data-theme="light"] block. Each band is a token of RGB triples; syncTheme()
+     re-reads them and rebuilds the baked per-cell pigment. */
+  :root{
+    --po06-bg:#0d0f14; --po06-cap:#fff; --po06-cap-o:.42;
+    --po06-sky:240 168 48/244 196 96/232 118 56/210 142 170/150 118 176;
+    --po06-sea:64 96 150/42 70 128/96 128 170/150 110 150/34 52 96;
+    --po06-sun:255 224 150/244 176 72/255 200 110/240 150 90;
+  }
+  :root[data-theme="light"]{
+    /* canvas-linen ground; the same bands deepened so the dots read as pigment */
+    --po06-bg:#f4efe3; --po06-cap:#2b2418; --po06-cap-o:.55;
+    --po06-sky:196 124 10/204 152 44/178 68 26/168 96 126/104 76 140;
+    --po06-sea:50 82 140/34 60 116/76 108 152/124 86 128/26 42 84;
+    --po06-sun:230 176 60/212 132 30/224 158 48/204 110 44;
+  }
+  html,body{margin:0;height:100%;background:var(--po06-bg);overflow:hidden}
   #po06-stage{position:fixed;inset:0;display:block}
   #po06-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--po06-cap);opacity:var(--po06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,24 +40,27 @@
  "description": "A density wave sweeps left to right revealing a Divisionist sunset — sky, sun disc, and sea rendered as jittered pigment dots that optically mix at distance.",
  "useWhen": "Ambient hero backgrounds with a painterly aesthetic. Gallery intros, creative portfolio headers, screensavers.",
  "avoidWhen": "Contexts requiring readable text overlay or low-end mobile — per-frame ImageData pixel loop is CPU-bound and background is hardcoded dark.",
- "agentPrompt": "Change sunX to 0.65 and sunY to 0.48 to move the sun right, then swap SKY palette to cool blues/greens for a dawn scene.",
+ "agentPrompt": "Change sunX to 0.65 and sunY to 0.48 to move the sun right, then swap SKY palette to cool blues/greens for a dawn scene. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "sun position (sunX=0.40, sunY=0.56)",
   "wave speed (divisor 5200 in head calculation)",
+  "mount offset (t0=ts-3600: crest starts mid-frame)",
   "dot grid size (GRID default 9*dpr)",
   "color palettes (SKY, SEA, SUN arrays)",
   "sun radius (sunR=0.26)",
-  "pigment scatter amount (jit * 44)"
+  "pigment scatter amount (jit * 44)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "typed array cell buffers (cellR/G/B/JX/JY/Sz/Thr) — allocation-free inner loop",
   "visibility pause via visibilitychange",
   "reduced-motion static fallback (frame(1.4))",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Per-frame full ImageData pixel write is CPU-bound — can drop frames on large viewports on low-end devices",
-  "Background color hardcoded dark navy in CSS — must edit to change",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "No pointer interactivity — purely autonomous"
  ],
  "tier": "curated",
@@ -45,7 +69,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "pointillism",
@@ -71,12 +96,10 @@
   var ctx=cv.getContext("2d",{alpha:false});
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  // Divisionist palette (pointillist): warm orange light over cool violet water.
-  // Each band is a small set of pure hues that optically mix at viewing distance.
-  var SKY=[[240,168,48],[244,196,96],[232,118,56],[210,142,170],[150,118,176]];
-  var SEA=[[64,96,150],[42,70,128],[96,128,170],[150,110,150],[34,52,96]];
-  var SUN=[[255,224,150],[244,176,72],[255,200,110],[240,150,90]];
-  var BG =[13,15,20];
+  // Divisionist palette (pointillist): warm light over cool water. Each band is a small set of
+  // pure hues that optically mix at viewing distance; all live in the CSS tokens (syncTheme()).
+  var root=document.documentElement;
+  var SKY=[], SEA=[], SUN=[], BG=[13,15,20];
 
   var W=0,H=0,dpr=1,GRID=10,cols=0,rows=0;
   var img=null,data=null;
@@ -180,10 +203,23 @@
     ctx.putImageData(img,0,0);
   }
 
+  // JS-drawn colors read the tokens, so CSS stays the single source of truth. The
+  // per-cell pigment is baked in build(), so a theme flip has to re-bake it.
+  function syncTheme(){
+    var cs=getComputedStyle(root), h=cs.getPropertyValue('--po06-bg').trim().replace('#','');
+    var band=function(n){return cs.getPropertyValue(n).trim().split('/').map(function(q){return q.trim().split(/\s+/).map(Number);});};
+    BG=[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];
+    SKY=band('--po06-sky'); SEA=band('--po06-sea'); SUN=band('--po06-sun');
+    if(cellR){ build(); if(reduce) frame(1.4); }
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme();}});
+
   var running=true,raf=0,head=-0.15,t0=0;
   function loop(ts){
     if(!running)return;
-    if(!t0)t0=ts;
+    if(!t0)t0=ts-3600;                        // mount with the crest mid-frame (the empty lead-in reads dead on the wall)
     head=((ts-t0)/5200)%1.5 -0.25;            // sweep crest L->R, then loop with empty lead-in
     frame(head);
     raf=requestAnimationFrame(loop);
@@ -204,6 +240,7 @@
     rt=setTimeout(function(){ build(); if(reduce){frame(1.4);} },140);
   });
 
+  syncTheme();
   build();
   start();
 })();

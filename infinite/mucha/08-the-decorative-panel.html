@@ -5,11 +5,26 @@
 <meta name="description" content="The Decorative Panel — Art Nouveau Ornamental Panels. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>The Decorative Panel</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#17181A;overflow:hidden}
-  #muc08-stage{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 40%,#1D2023,#17181A)}
+  /* theme tokens — dark values are the defaults; the light ivory palette is the one
+     [data-theme="light"] block. Every colour the canvas draws is read from here. */
+  :root{
+    --muc08-bg:#17181A;--muc08-bg2:#1D2023;--muc08-cream:#f4ecd8;--muc08-sage:#879CA1;--muc08-peach:#CDC37A;
+    --muc08-gold:#1DACC9;--muc08-rose:#9A9047;--muc08-outline:rgba(244,236,216,0.4);--muc08-cap:#f4ecd8;--muc08-cap-o:.46;
+  }
+  :root[data-theme="light"]{
+    --muc08-bg:#f3efe4;--muc08-bg2:#fbf8f0;--muc08-cream:#4a3520;--muc08-sage:#5c7075;--muc08-peach:#7f6a24;
+    --muc08-gold:#14778b;--muc08-rose:#5d6b3c;--muc08-outline:rgba(74,53,32,0.4);--muc08-cap:#5b4632;--muc08-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--muc08-bg);overflow:hidden}
+  #muc08-stage{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 40%,var(--muc08-bg2),var(--muc08-bg))}
   #muc08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .muc08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f4ecd8;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .muc08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--muc08-cap);opacity:var(--muc08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +33,22 @@
  "description": "Arched Art Nouveau panel on canvas: gold frame breathes open, rotating petal rings and a rayed halo glow at center, garland of flowers sways along the base.",
  "useWhen": "Art nouveau hero backgrounds, luxury brand contexts, museum or gallery interfaces needing ornate ambient motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark brown). Contexts needing legible text overlays — centered composition fills the viewport.",
- "agentPrompt": "Change PAL.peach to '#879CA1', PAL.rose to '#5F8FA3', PAL.gold to '#C9A227', and slow breathing by changing t*0.5 to t*0.25.",
+ "agentPrompt": "Change PAL.peach to '#879CA1', PAL.rose to '#5F8FA3', PAL.gold to '#C9A227', and slow breathing by changing t*0.5 to t*0.25. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (PAL object — cream, sage, peach, gold, rose)",
   "breathing speed (t*0.5 in breath calculation)",
   "panel width ratio (W*0.7, 520 cap)",
   "halo ray count (rays=24)",
   "garland flower count (gN=7)",
-  "petal ring rotation speed (t*0.2, -t*0.3)"
+  "petal ring rotation speed (t*0.2, -t*0.3)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED flag)",
   "visibilitychange stop/start loop",
-  "DPR-aware fitCanvas with setTransform"
+  "DPR-aware fitCanvas with setTransform",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and canvas gradient — must change both to recolor",
@@ -44,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-nouveau",
@@ -66,7 +84,19 @@
 (function(){
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const PAL={cream:'#f4ecd8',sage:'#879CA1',peach:'#CDC37A',gold:'#1DACC9',rose:'#9A9047'};
+  const root=document.documentElement;
+  const PAL={};                       // colours the canvas draws with — read from the CSS tokens
+  let BG0='',BG1='',OUTL='',ready=false;
+  function syncTheme(){               // re-read tokens once per switch, then repaint
+    const cs=getComputedStyle(root), v=n=>cs.getPropertyValue(n).trim();
+    PAL.cream=v('--muc08-cream');PAL.sage=v('--muc08-sage');PAL.peach=v('--muc08-peach');
+    PAL.gold=v('--muc08-gold');PAL.rose=v('--muc08-rose');
+    BG0=v('--muc08-bg2');BG1=v('--muc08-bg');OUTL=v('--muc08-outline');
+    if(ready) draw(performance.now());
+  }
+  addEventListener('message',function(e){const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}
+  });
   const cv=document.getElementById('muc08-cv'); if(!cv) return;
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
@@ -85,12 +115,12 @@
   function withA(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
   let S=fitCanvas(cv);
   let t=0,last=performance.now();
-  function paintBg(){const g=S.ctx.createRadialGradient(S.w/2,S.h*0.4,0,S.w/2,S.h*0.4,Math.max(S.w,S.h));g.addColorStop(0,'#1D2023');g.addColorStop(1,'#17181A');S.ctx.fillStyle=g;S.ctx.fillRect(0,0,S.w,S.h);}
+  function paintBg(){const g=S.ctx.createRadialGradient(S.w/2,S.h*0.4,0,S.w/2,S.h*0.4,Math.max(S.w,S.h));g.addColorStop(0,BG0);g.addColorStop(1,BG1);S.ctx.fillStyle=g;S.ctx.fillRect(0,0,S.w,S.h);}
   function petalsRing(ctx,cx,cy,R,n,col,col2,rot){
     for(let i=0;i<n;i++){
       ctx.save();ctx.translate(cx,cy);ctx.rotate((i/n)*Math.PI*2+rot);
       ctx.translate(0,-R);
-      ctx.fillStyle=i%2?col:col2;ctx.strokeStyle='rgba(244,236,216,0.4)';ctx.lineWidth=0.8;
+      ctx.fillStyle=i%2?col:col2;ctx.strokeStyle=OUTL;ctx.lineWidth=0.8;
       petal(ctx,R*0.32,R*0.12);ctx.fill();ctx.stroke();
       ctx.restore();
     }
@@ -175,6 +205,7 @@
   function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
   function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
   function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
+  syncTheme(); ready=true;
   paintBg();
   let _rt;
   window.addEventListener('resize',()=>{clearTimeout(_rt);_rt=setTimeout(()=>{S=fitCanvas(cv);if(REDUCED) draw(performance.now());},150);},{passive:true});

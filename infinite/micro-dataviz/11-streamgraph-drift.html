@@ -5,11 +5,32 @@
 <meta name="description" content="Five plum-toned stacked streamgraph ribbons drifting inside-out with smooth bezier flow and a glowing right-edge data-entry seam.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Streamgraph Drift</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1E1A1C;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The canvas paints its own
+     backdrop, so --c11-bg0/-bg1 (vignette), --c11-h0..h4 (ribbons), --c11-contour and
+     the seam colours are all re-read on a theme switch. */
+  :root{
+    --c11-bg0:#1E1A1C; --c11-bg1:#140f11; --c11-cap:#925D78; --c11-cap-o:.36;
+    --c11-h0:#5C3A4B; --c11-h1:#999086; --c11-h2:#925D78; --c11-h3:#5E7A78; --c11-h4:#D9C2CE;
+    --c11-contour:#f0e0e8; --c11-seam0:rgba(146,93,120,0); --c11-seam1:rgba(146,93,120,0.16);
+    --c11-edge:rgba(217,194,206,0.6);
+  }
+  :root[data-theme="light"]{
+    --c11-bg0:#f7f1f4; --c11-bg1:#ece0e7; --c11-cap:#925D78; --c11-cap-o:.75;
+    --c11-h0:#d9c3cf; --c11-h1:#6b625a; --c11-h2:#a86e8b; --c11-h3:#5f7f7c; --c11-h4:#6d4457;
+    --c11-contour:#7a4c63; --c11-seam0:rgba(122,76,99,0); --c11-seam1:rgba(122,76,99,0.18);
+    --c11-edge:rgba(122,76,99,0.55);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c11-bg0);}
   #sgd-c{display:block;width:100%;height:100%;}
   .sgd-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
-       letter-spacing:.14em;color:#925D78;opacity:.36;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--c11-cap);opacity:var(--c11-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +40,22 @@
  "description": "Five stacked blue ribbons flow as a streamgraph using bezier curves and layered sines; ribbons swell organically with a glowing right-edge data-entry seam.",
  "useWhen": "Dashboard hero sections, analytics loading screens, ambient data-flow backgrounds on dark UIs.",
  "avoidWhen": "Light backgrounds (dark navy hardcoded). Contexts where actual data values need to be read — this is decorative only.",
- "agentPrompt": "Change the color palette from blue to warm amber/gold by replacing the hues array with ['#8f4a1a','#d06a20','#ff8c38','#ffb870','#ffddb0'] and set background to #1a1008.",
+ "agentPrompt": "Change the color palette from blue to warm amber/gold by replacing the hues array with ['#8f4a1a','#d06a20','#ff8c38','#ffb870','#ffddb0'] and set background to #1a1008. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ribbon count (N=5)",
   "color palette (hues array)",
   "column buffer length (COLS=120)",
   "vertical scale (vscale=H*0.30)",
   "amplitude range (amp: 0.55+random*0.5)",
-  "pointer boost strength (boost+=0.25)"
+  "pointer boost strength (boost+=0.25)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard and static fallback",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#0e1424) — must edit to change theme",
@@ -45,7 +68,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "streamgraph",
@@ -75,8 +99,23 @@
   addEventListener('resize',size);size();
 
   // Five series, each a column buffer of values that drift over time.
+  const root=document.documentElement;
   const N=5, COLS=120;
-  const hues=['#5C3A4B','#999086','#925D78','#5E7A78','#D9C2CE'];
+  let hues=['#5C3A4B','#999086','#925D78','#5E7A78','#D9C2CE'];
+  const C={bg0:'',bg1:'',contour:'',seam0:'',seam1:'',edge:''};
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    hues=hues.map((_,i)=>cs.getPropertyValue('--c11-h'+i).trim());
+    for(const k of ['bg0','bg1','contour','seam0','seam1','edge'])C[k]=cs.getPropertyValue('--c11-'+k).trim();
+  }                                // backdrop + seam gradients are rebuilt from C every frame
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      if(reduce)frame();           // reduced motion draws one static frame — repaint it
+    }
+  });
+  syncTheme();
   const series=[];
   for(let s=0;s<N;s++){
     const col=[]; for(let i=0;i<COLS;i++) col.push(0.4+0.3*Math.random());
@@ -112,7 +151,7 @@
     ctx.clearRect(0,0,W,H);
     // subtle vertical vignette backdrop
     const bg=ctx.createLinearGradient(0,0,0,H);
-    bg.addColorStop(0,'#1E1A1C');bg.addColorStop(1,'#140f11');
+    bg.addColorStop(0,C.bg0);bg.addColorStop(1,C.bg1);
     ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
 
     const cy=H*0.5, vscale=H*0.30;
@@ -152,7 +191,7 @@
       ctx.fill();
       // top contour highlight
       ctx.globalAlpha=0.20+0.4*lum;
-      ctx.lineWidth=1; ctx.strokeStyle='#f0e0e8';
+      ctx.lineWidth=1; ctx.strokeStyle=C.contour;
       ctx.beginPath();ctx.moveTo(xAt(0),lo[s][0]);
       for(let i=1;i<xs;i++){const x0=xAt(i-1),x1=xAt(i);ctx.bezierCurveTo((x0+x1)/2,lo[s][i-1],(x0+x1)/2,lo[s][i],x1,lo[s][i]);}
       ctx.stroke();
@@ -161,9 +200,9 @@
 
     // right-edge data-entry seam (where new columns arrive)
     const seam=ctx.createLinearGradient(W-40,0,W,0);
-    seam.addColorStop(0,'rgba(146,93,120,0)');seam.addColorStop(1,'rgba(146,93,120,0.16)');
+    seam.addColorStop(0,C.seam0);seam.addColorStop(1,C.seam1);
     ctx.fillStyle=seam;ctx.fillRect(W-40,0,40,H);
-    ctx.fillStyle='rgba(217,194,206,0.6)';ctx.fillRect(W-1.2,0,1.2,H);
+    ctx.fillStyle=C.edge;ctx.fillRect(W-1.2,0,1.2,H);
 
     if(!reduce) raf=requestAnimationFrame(frame);
   }

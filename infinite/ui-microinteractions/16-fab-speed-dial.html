@@ -5,8 +5,17 @@
 <meta name="description" content="Pink floating action button that rotates plus-to-X and fans out three labeled mini action buttons on a springy arc with a pulse ring.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FAB Speed Dial</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#171717;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{ --fsd-bg:#171717; --fsd-fab:#FB7185; --fsd-fab-glow:rgba(251,113,133,.38); --fsd-acc:#FB7185; --fsd-pulse-ring:rgba(251,113,133,.35); --fsd-surface:#1f1f1f; --fsd-border:rgba(251,113,133,.55); --fsd-mini-shadow:0 4px 14px rgba(0,0,0,.45); --fsd-label-ink:#f4f4f4; --fsd-label-bg:rgba(20,20,20,.92); --fsd-label-shadow:0 3px 10px rgba(0,0,0,.4); --fsd-cap:#FB7185; --fsd-cap-o:.34; }
+  :root[data-theme="light"]{ --fsd-bg:#f6f6f6; --fsd-fab:#f93955; --fsd-fab-glow:rgba(249,57,85,.28); --fsd-acc:#df0626; --fsd-pulse-ring:rgba(223,6,38,.28); --fsd-surface:#ffffff; --fsd-border:rgba(223,6,38,.5); --fsd-mini-shadow:0 4px 14px rgba(15,23,42,.15); --fsd-label-ink:#1b2130; --fsd-label-bg:rgba(255,255,255,.98); --fsd-label-shadow:0 3px 10px rgba(15,23,42,.14),0 0 0 1px rgba(15,23,42,.08); --fsd-cap:#1b2130; --fsd-cap-o:.5; }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--fsd-bg);}
   .fsd-stage{
     position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -16,8 +25,8 @@
   .fsd-fab{
     position:absolute;right:6%;bottom:6%;
     width:clamp(40px,15vmin,72px);height:clamp(40px,15vmin,72px);
-    border-radius:50%;background:#FB7185;
-    box-shadow:0 6px 18px rgba(251,113,133,.38);
+    border-radius:50%;background:var(--fsd-fab);
+    box-shadow:0 6px 18px var(--fsd-fab-glow);
     will-change:transform;transform-origin:center;cursor:pointer;z-index:5;
   }
   /* pulse ring on its own compositor layer (transform/opacity only) */
@@ -25,33 +34,33 @@
     position:absolute;right:6%;bottom:6%;
     width:clamp(40px,15vmin,72px);height:clamp(40px,15vmin,72px);
     border-radius:50%;
-    box-shadow:0 0 0 6px rgba(251,113,133,.35);
+    box-shadow:0 0 0 6px var(--fsd-pulse-ring);
     transform-origin:center;will-change:transform,opacity;
     pointer-events:none;z-index:4;opacity:0;
   }
   .fsd-x{position:absolute;inset:0;}
   .fsd-x i{
     position:absolute;left:50%;top:50%;width:42%;height:9%;min-height:2px;border-radius:2px;
-    background:#171717;transform-origin:center;
+    background:var(--fsd-bg);transform-origin:center;
     transform:translate(-50%,-50%) rotate(0deg);
   }
   .fsd-mini{
     position:absolute;width:clamp(30px,11vmin,52px);height:clamp(30px,11vmin,52px);
-    border-radius:50%;background:#1f1f1f;border:1.5px solid rgba(251,113,133,.55);
-    box-shadow:0 4px 14px rgba(0,0,0,.45);
+    border-radius:50%;background:var(--fsd-surface);border:1.5px solid var(--fsd-border);
+    box-shadow:var(--fsd-mini-shadow);
     will-change:transform,opacity;transform-origin:center;
     display:flex;align-items:center;justify-content:center;z-index:4;
   }
-  .fsd-mini svg{width:46%;height:46%;stroke:#FB7185;fill:none;
+  .fsd-mini svg{width:46%;height:46%;stroke:var(--fsd-acc);fill:none;
     stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
   .fsd-label{
     position:absolute;right:0;top:50%;transform:translate(8px,-50%);
     white-space:nowrap;font-size:clamp(9px,3vmin,13px);font-weight:600;letter-spacing:.02em;
-    color:#f4f4f4;background:rgba(20,20,20,.92);padding:.32em .6em;border-radius:6px;
-    box-shadow:0 3px 10px rgba(0,0,0,.4);pointer-events:none;will-change:transform,opacity;
+    color:var(--fsd-label-ink);background:var(--fsd-label-bg);padding:.32em .6em;border-radius:6px;
+    box-shadow:var(--fsd-label-shadow);pointer-events:none;will-change:transform,opacity;
   }
   .fsd-cap{position:fixed;left:10px;bottom:8px;font-size:10px;letter-spacing:.14em;
-    color:#FB7185;opacity:.34;text-transform:uppercase;pointer-events:none;
+    color:var(--fsd-cap);opacity:var(--fsd-cap-o);text-transform:uppercase;pointer-events:none;
     font-family:ui-monospace,monospace;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -61,24 +70,26 @@
  "description": "Pink FAB rotates plus-to-X and fans three labeled mini action buttons on a springy arc with overshoot; auto-cycles open/close as a demo.",
  "useWhen": "Mobile-style UIs needing a contextual action menu, creative portfolios, or any layout where a compact floating action button should reveal multiple options.",
  "avoidWhen": "Contexts requiring immediate access to actions — auto-cycles by default; remove the phase-transition timer before shipping in production. Avoid on extremely small viewports under 160px.",
- "agentPrompt": "Change the three labels to ['Share', 'Edit', 'Delete'], update icons to match, and slow the open animation by setting T.open to 0.9.",
+ "agentPrompt": "Change the three labels to ['Share', 'Edit', 'Delete'], update icons to match, and slow the open animation by setting T.open to 0.9. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "FAB color (#FB7185)",
   "action labels (labels array)",
   "arc angles (ang array)",
   "spring timing (T.open / T.close / T.hold)",
-  "mini button count and icons (icons array)"
+  "mini button count and icons (icons array)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce branch)",
   "visibilitychange pause/start",
-  "springPos overshoot easing"
+  "springPos overshoot easing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles open/close — remove phase-transition block in step() for production use",
   "Mini buttons lack aria roles; add role=button + aria-label for accessibility",
-  "Background color hardcoded dark (#171717) in CSS"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -87,7 +98,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "fab",
@@ -112,6 +124,11 @@
 <script>
 (function(){
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // live re-theme: no JS-drawn colours (CSS vars recascade on their own) — just flip data-theme
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme',d.theme);
+  });
   const rig=document.getElementById('fsd-rig'), fab=document.getElementById('fsd-fab'), pulse=document.getElementById('fsd-pulse');
   const bars=fab.querySelectorAll('.fsd-x i');
   const icons=[

@@ -5,12 +5,27 @@
 <meta name="description" content="Seven-band audio EQ of vertical teal sliders that auto-undulate and snap to your pointer with glowing level-meter dots.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reactive EQ</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#05080d;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  :root{
+    --c10-bg:#05080d; --c10-track:#0e1a22; --c10-grad-a:#0c7a5e; --c10-grad-b:#19e8b0;
+    --c10-dot:#19e8b0; --c10-knob-outer:#eafff8; --c10-knob-inner:#0c7a5e;
+    --c10-cap-o:.45;
+  }
+  :root[data-theme="light"]{
+    --c10-bg:#eef4f2; --c10-track:#d8e8e3; --c10-grad-a:#0c7a5e; --c10-grad-b:#0c7a5d;
+    --c10-dot:#0c7a5d; --c10-knob-outer:#ffffff; --c10-knob-inner:#0c7a5d;
+    --c10-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c10-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   .wrap{height:100%;display:flex;align-items:center;justify-content:center}
   .stage{width:min(80vmin,330px)}
   canvas{width:100%;height:auto;display:block}
-  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#19e8b0;opacity:.45;text-transform:uppercase}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c10-dot);opacity:var(--c10-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -19,19 +34,21 @@
  "description": "Seven vertical teal sliders auto-undulate in a sine wave; hovering a band snaps its knob to pointer height. Glowing level-meter dots accent the active fill.",
  "useWhen": "Music/audio UI demos, equalizer visuals, ambient dashboard widgets with a dark techy aesthetic.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy). Contexts needing real audio output — this is purely visual.",
- "agentPrompt": "Change BANDS to 10, set the gradient top color to '#a855f7' (purple), and slow the undulation by changing clock*0.03 to clock*0.015.",
+ "agentPrompt": "Change BANDS to 10, set the gradient top color to '#a855f7' (purple), and slow the undulation by changing clock*0.03 to clock*0.015. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "band count (BANDS=7)",
   "undulation speed (clock*0.03)",
   "gradient colors (#0c7a5e / #19e8b0)",
   "spring constants (k=0.2, damp=0.6)",
-  "level-meter dot count (d<10)"
+  "level-meter dot count (d<10)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with drawStatic fallback",
   "visibilitychange pause",
-  "pointer coordinate scaling via getBoundingClientRect"
+  "pointer coordinate scaling via getBoundingClientRect",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS — must edit to change from dark navy",
@@ -44,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "eq",
@@ -65,10 +83,21 @@
 (function(){
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const root=document.documentElement;
   const W=cv.width,H=cv.height;
   const BANDS=7,gap=14,bw=(W-gap*(BANDS+1))/BANDS;
   const bands=[];for(let i=0;i<BANDS;i++)bands.push({v:0.5+0.3*Math.sin(i),t:0.5,vel:0,boost:Math.random()*Math.PI*2});
   let running=true,clock=0,target=-1;
+  var C={};                      // colours the canvas draws with — read from tokens, re-read on theme flip
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.track=cs.getPropertyValue('--c10-track').trim();
+    C.gradA=cs.getPropertyValue('--c10-grad-a').trim();
+    C.gradB=cs.getPropertyValue('--c10-grad-b').trim();
+    C.dot=cs.getPropertyValue('--c10-dot').trim();
+    C.knobOuter=cs.getPropertyValue('--c10-knob-outer').trim();
+    C.knobInner=cs.getPropertyValue('--c10-knob-inner').trim();
+  }
   function frame(){
     if(!running)return;
     clock+=1;
@@ -79,23 +108,23 @@
       const x=gap+i*(bw+gap);
       const trackTop=40,trackBot=H-40,trackH=trackBot-trackTop;
       // track
-      ctx.fillStyle='#0e1a22';rr(ctx,x,trackTop,bw,trackH,bw/2);ctx.fill();
+      ctx.fillStyle=C.track;rr(ctx,x,trackTop,bw,trackH,bw/2);ctx.fill();
       // active fill from bottom
       const knobY=trackBot-trackH*b.v;
       const grad=ctx.createLinearGradient(0,trackBot,0,trackTop);
-      grad.addColorStop(0,'#0c7a5e');grad.addColorStop(1,'#19e8b0');
+      grad.addColorStop(0,C.gradA);grad.addColorStop(1,C.gradB);
       ctx.fillStyle=grad;rr(ctx,x,knobY,bw,trackBot-knobY,bw/2);ctx.fill();
       // glow bars (level meter dots) above knob
       for(let d=0;d<10;d++){
         const dy=trackBot-12-d*((trackH-24)/10);
         const lit=dy>knobY;
         ctx.globalAlpha=lit?0.18:0.0;
-        if(lit){ctx.fillStyle='#19e8b0';rr(ctx,x+4,dy-3,bw-8,4,2);ctx.fill();}
+        if(lit){ctx.fillStyle=C.dot;rr(ctx,x+4,dy-3,bw-8,4,2);ctx.fill();}
       }
       ctx.globalAlpha=1;
       // knob
-      ctx.fillStyle='#eafff8';ctx.beginPath();ctx.arc(x+bw/2,knobY,bw/2+3,0,7);ctx.fill();
-      ctx.fillStyle='#0c7a5e';ctx.beginPath();ctx.arc(x+bw/2,knobY,bw/2-4,0,7);ctx.fill();
+      ctx.fillStyle=C.knobOuter;ctx.beginPath();ctx.arc(x+bw/2,knobY,bw/2+3,0,7);ctx.fill();
+      ctx.fillStyle=C.knobInner;ctx.beginPath();ctx.arc(x+bw/2,knobY,bw/2-4,0,7);ctx.fill();
     });
     requestAnimationFrame(frame);
   }
@@ -106,6 +135,15 @@
   });
   cv.addEventListener('pointerleave',()=>{target=-1;});
   document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme();
+      if(!running || reduce) drawStatic();
+    }
+  });
+  syncTheme();
   if(reduce){
     running=false;
     bands.forEach(b=>{b.v=0.4+0.4*Math.random();});
@@ -115,12 +153,12 @@
     ctx.clearRect(0,0,W,H);
     bands.forEach((b,i)=>{
       const x=gap+i*(bw+gap),trackTop=40,trackBot=H-40,trackH=trackBot-trackTop;
-      ctx.fillStyle='#0e1a22';rr(ctx,x,trackTop,bw,trackH,bw/2);ctx.fill();
+      ctx.fillStyle=C.track;rr(ctx,x,trackTop,bw,trackH,bw/2);ctx.fill();
       const knobY=trackBot-trackH*b.v;
-      const grad=ctx.createLinearGradient(0,trackBot,0,trackTop);grad.addColorStop(0,'#0c7a5e');grad.addColorStop(1,'#19e8b0');
+      const grad=ctx.createLinearGradient(0,trackBot,0,trackTop);grad.addColorStop(0,C.gradA);grad.addColorStop(1,C.gradB);
       ctx.fillStyle=grad;rr(ctx,x,knobY,bw,trackBot-knobY,bw/2);ctx.fill();
-      ctx.fillStyle='#eafff8';ctx.beginPath();ctx.arc(x+bw/2,knobY,bw/2+3,0,7);ctx.fill();
-      ctx.fillStyle='#0c7a5e';ctx.beginPath();ctx.arc(x+bw/2,knobY,bw/2-4,0,7);ctx.fill();
+      ctx.fillStyle=C.knobOuter;ctx.beginPath();ctx.arc(x+bw/2,knobY,bw/2+3,0,7);ctx.fill();
+      ctx.fillStyle=C.knobInner;ctx.beginPath();ctx.arc(x+bw/2,knobY,bw/2-4,0,7);ctx.fill();
     });
   }
 })();

@@ -5,11 +5,26 @@
 <meta name="description" content="A Sierpinski triangle fractal endlessly zooms into itself with rainbow-cycling colors in a seamless self-similar loop.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sierpinski Zoom</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#120c06}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. tri-s/tri-l feed the JS hsl() fill. */
+  :root{
+    --gg08-bg:#120c06; --gg08-cap:#ffc46b; --gg08-cap-o:.45;
+    --gg08-tri-s:70; --gg08-tri-l:55;
+  }
+  :root[data-theme="light"]{
+    --gg08-bg:#f6f2ea; --gg08-cap:#9e5f00; --gg08-cap-o:.8;
+    --gg08-tri-s:58; --gg08-tri-l:44;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--gg08-bg)}
   #c{display:block;width:100%;height:100%}
   #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
-       color:#ffc46b;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+       color:var(--gg08-cap);opacity:var(--gg08-cap-o);letter-spacing:.5px;pointer-events:none;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +33,22 @@
  "description": "A Sierpinski triangle fractal endlessly zooms into itself with rainbow-cycling hues in a seamless self-similar loop. Tap to burst the zoom speed.",
  "useWhen": "Dark ambient backgrounds, math/generative-art showcases, screensaver-style displays needing perpetual motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark brown canvas). Contexts where constant high-motion competes with readable content.",
- "agentPrompt": "Change the zoom period to 4000 for faster cycling, set depth from 6 to 7 for finer detail, and shift base hue by adding 120 to the hue calculation so colors start in the green range.",
+ "agentPrompt": "Change the zoom period to 4000 for faster cycling, set depth from 6 to 7 for finer detail, and shift base hue by adding 120 to the hue calculation so colors start in the green range. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "zoom period (period=6000)",
   "fractal recursion depth (depth=6)",
   "base triangle size (s*0.62)",
   "hue formula (t*0.03+size*0.5+depth*40)",
   "slow rotation amplitude (Math.sin*0.05)",
-  "background color (#120c06)"
+  "background color (#120c06)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "seamless scale wrap (Math.pow(2,z) with modulo period)",
   "IIFE wrapper",
   "visibilitychange pause",
-  "prefers-reduced-motion guard with static fallback"
+  "prefers-reduced-motion guard with static fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Recursive canvas fill calls — depth>7 may stutter on low-end devices",
@@ -44,7 +61,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "fractal",
@@ -66,12 +84,26 @@
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   let W,H,DPR,zoom=0,boost=0;
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  // theme: every canvas colour is read from the CSS tokens, once at start and once per switch
+  const root=document.documentElement;
+  const C={bg:'#120c06',triS:70,triL:55};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--gg08-bg').trim()||C.bg;
+    C.triS=parseFloat(cs.getPropertyValue('--gg08-tri-s'))||70;
+    C.triL=parseFloat(cs.getPropertyValue('--gg08-tri-l'))||55;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce&&W)draw(0);}
+  });
+  syncTheme();
   function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
   function tri(x,y,size,depth,t){
     if(depth<=0||size<3){
       const hue=(t*0.03+size*0.5+depth*40)%360;
-      ctx.fillStyle='hsl('+hue+','+(70)+'%,'+(55)+'%)';
+      ctx.fillStyle='hsl('+hue+','+C.triS+'%,'+C.triL+'%)';
       ctx.beginPath();
       ctx.moveTo(x,y-size*0.577);
       ctx.lineTo(x-size*0.5,y+size*0.289);
@@ -85,7 +117,7 @@
     tri(x+h*0.5,y+h*0.289,h,depth-1,t);
   }
   function draw(t){
-    ctx.fillStyle='#120c06';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const s=Math.min(W,H);
     // continuous zoom: scale grows, wraps every doubling -> seamless self-similar loop
     const period=6000;

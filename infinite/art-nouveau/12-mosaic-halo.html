@@ -5,12 +5,33 @@
 <meta name="description" content="Concentric rings of stained-glass mosaic cells in gold, green and rose shimmer softly around a central floral medallion.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mosaic Halo</title>
+<script>/* theme hook: ?theme=light|dark before first paint — no flash; standalone stays dark */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  html,body{margin:0;height:100%;background:#0e1310;overflow:hidden}
+  :root{ /* dark defaults; light re-theme below. Mosaic cells carry .an12-p0..p7 classes,
+            so the whole halo re-colours from CSS on a flip — no per-cell JS repaint. */
+    --an12-bg:#0e1310; --an12-lead:#0e1310; --an12-gold:#c9a24b; --an12-vine:#a9c08a; --an12-seed:#e0cf8e;
+    --an12-glow0:#c9a24b; --an12-glow1:#6f7d4a; --an12-glow2:#0e1310;
+    --an12-core0:#f0d590; --an12-core1:#c9a24b; --an12-core2:#8a6f2e;
+    --an12-p0:#c9a24b; --an12-p1:#d9b65f; --an12-p2:#8a9b56; --an12-p3:#6f7d4a;
+    --an12-p4:#b06a6a; --an12-p5:#c98a86; --an12-p6:#9a8f5a; --an12-p7:#e0cf8e;
+    --an12-cap:#fff; --an12-cap-o:.42;
+  }
+  :root[data-theme="light"]{ /* ivory ground, dark lead cames, mid-tone jewel glass */
+    --an12-bg:#f4f1e6; --an12-lead:#2b2f22; --an12-gold:#866928; --an12-vine:#5c7644; --an12-seed:#7a5e28;
+    --an12-glow0:#c9a24b; --an12-glow1:#8a9b56; --an12-glow2:#f4f1e6;
+    --an12-core0:#dcb768; --an12-core1:#a98533; --an12-core2:#6f5620;
+    --an12-p0:#a98533; --an12-p1:#8f6f2e; --an12-p2:#7f9152; --an12-p3:#5f7040;
+    --an12-p4:#b06a6a; --an12-p5:#a95160; --an12-p6:#948956; --an12-p7:#6f7d4a;
+    --an12-cap:#262a1d; --an12-cap-o:.5;
+  }
+  .an12-p0{fill:var(--an12-p0)}.an12-p1{fill:var(--an12-p1)}.an12-p2{fill:var(--an12-p2)}.an12-p3{fill:var(--an12-p3)}
+  .an12-p4{fill:var(--an12-p4)}.an12-p5{fill:var(--an12-p5)}.an12-p6{fill:var(--an12-p6)}.an12-p7{fill:var(--an12-p7)}
+  html,body{margin:0;height:100%;background:var(--an12-bg);overflow:hidden}
   #an12-stage{position:fixed;inset:0;display:grid;place-items:center}
   #an12-svg{width:100%;height:100%}
-  .an12-cell{transform-box:fill-box;transform-origin:center}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .an12-cell{transform-box:fill-box;transform-origin:center;stroke:var(--an12-lead)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--an12-cap);opacity:var(--an12-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -20,19 +41,21 @@
  "description": "84 stained-glass trapezoid cells in gold, green, and rose shimmer via staggered sine-wave opacity; a floral medallion and vine flourishes anchor the center.",
  "useWhen": "Decorative hero backgrounds, ornamental loading screens, or Art Nouveau themed UI sections needing ambient looping motion.",
  "avoidWhen": "Contexts requiring legible text overlay. Light backgrounds — dark navy is hardcoded. Low-contrast branding palettes.",
- "agentPrompt": "Change the palette to cool blues by replacing PAL with [\"#4a6fa5\",\"#6a8fc8\",\"#4a7a8a\",\"#3a5f7a\",\"#7a5a9a\",\"#9a7ab0\",\"#5a6a8a\",\"#a0b8d8\"] and update the background to #0a0c14.",
+ "agentPrompt": "Change the palette to cool blues by replacing PAL with [\"#4a6fa5\",\"#6a8fc8\",\"#4a7a8a\",\"#3a5f7a\",\"#7a5a9a\",\"#9a7ab0\",\"#5a6a8a\",\"#a0b8d8\"] and update the background to #0a0c14. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (PAL array, 8 colors)",
   "ring radii and segment counts (ring() r0, r1, n args)",
   "shimmer speed range (spd[i] = 0.6 + ... formula)",
   "petal count (loop p<6, rotate p*60)",
-  "vine count and offset (loop v<8, a offset 0.2)"
+  "vine count and offset (loop v<8, a offset 0.2)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce + drawFrame(1.2) early return)",
   "visibilitychange stop/go handlers",
-  "Float32Array phase/spd pre-allocation"
+  "Float32Array phase/spd pre-allocation",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color is hardcoded in both CSS (#0e1310) and SVG rect — must change both",
@@ -46,7 +69,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-nouveau",
@@ -65,27 +89,30 @@
   <svg id="an12-svg" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
     <defs>
       <radialGradient id="an12-glow" cx="50%" cy="50%" r="50%">
-        <stop offset="0%" stop-color="#c9a24b" stop-opacity="0.34"/>
-        <stop offset="42%" stop-color="#6f7d4a" stop-opacity="0.14"/>
-        <stop offset="100%" stop-color="#0e1310" stop-opacity="0"/>
+        <stop offset="0%" stop-color="var(--an12-glow0)" stop-opacity="0.34"/>
+        <stop offset="42%" stop-color="var(--an12-glow1)" stop-opacity="0.14"/>
+        <stop offset="100%" stop-color="var(--an12-glow2)" stop-opacity="0"/>
       </radialGradient>
       <radialGradient id="an12-core" cx="50%" cy="42%" r="60%">
-        <stop offset="0%" stop-color="#f0d590"/>
-        <stop offset="55%" stop-color="#c9a24b"/>
-        <stop offset="100%" stop-color="#8a6f2e"/>
+        <stop offset="0%" stop-color="var(--an12-core0)"/>
+        <stop offset="55%" stop-color="var(--an12-core1)"/>
+        <stop offset="100%" stop-color="var(--an12-core2)"/>
       </radialGradient>
     </defs>
-    <rect width="400" height="400" fill="#0e1310"/>
+    <rect width="400" height="400" fill="var(--an12-bg)"/>
     <circle cx="200" cy="200" r="190" fill="url(#an12-glow)"/>
     <g id="an12-mosaic" fill="none"></g>
-    <g id="an12-medallion" stroke="#0e1310" stroke-width="1.1" stroke-linejoin="round"></g>
-    <g id="an12-vines" fill="none" stroke="#a9c08a" stroke-width="1.6" stroke-linecap="round" opacity="0.9"></g>
+    <g id="an12-medallion" stroke="var(--an12-lead)" stroke-width="1.1" stroke-linejoin="round"></g>
+    <g id="an12-vines" fill="none" stroke="var(--an12-vine)" stroke-width="1.6" stroke-linecap="round" opacity="0.9"></g>
   </svg>
 </div>
 <div class="cap">Mosaic Halo</div>
 <script>
 (function(){
   "use strict";
+  // live re-theme; every colour is a CSS token, so the flip repaints itself
+  addEventListener("message",function(e){var d=e.data,m=d&&d.type==="forever:theme"&&d.theme;
+    if(m==="light"||m==="dark")document.documentElement.setAttribute("data-theme",m);});
   var svg=document.getElementById("an12-svg");
   var mosaic=document.getElementById("an12-mosaic");
   var med=document.getElementById("an12-medallion");
@@ -94,17 +121,16 @@
   var CX=200, CY=200, TAU=Math.PI*2;
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  // Art Nouveau stained-glass palette (muted gold / green / rose)
-  var PAL=["#c9a24b","#d9b65f","#8a9b56","#6f7d4a","#b06a6a","#c98a86","#9a8f5a","#e0cf8e"];
+  // Art Nouveau stained-glass palette (muted gold / green / rose) — 8 tokens, one class each,
+  // so a theme flip recolours all 84 cells through CSS instead of touching the DOM
+  var NPAL=8;
 
-  function cell(d,fill){
+  function cell(d,tone){
     var p=document.createElementNS(SVGNS,"path");
     p.setAttribute("d",d);
-    p.setAttribute("fill",fill);
-    p.setAttribute("stroke","#0e1310");
     p.setAttribute("stroke-width","1.1");
     p.setAttribute("stroke-linejoin","round");
-    p.setAttribute("class","an12-cell");
+    p.setAttribute("class","an12-cell an12-p"+tone);
     mosaic.appendChild(p);
     return p;
   }
@@ -119,7 +145,7 @@
         +"A"+r1+","+r1+" 0 0 1 "+(CX+c1*r1).toFixed(2)+","+(CY+s1*r1).toFixed(2)
         +"L"+(CX+c1*r0).toFixed(2)+","+(CY+s1*r0).toFixed(2)
         +"A"+r0+","+r0+" 0 0 0 "+(CX+c0*r0).toFixed(2)+","+(CY+s0*r0).toFixed(2)+"Z";
-      cell(d,PAL[(i+palShift)%PAL.length]);
+      cell(d,(i+palShift)%NPAL);
     }
   }
   // Three concentric rings of mosaic cells (24+30+30 = 84 cells, under 110 cap)
@@ -145,11 +171,11 @@
   for(var p=0;p<6;p++) petal(p*60);
   var disc=document.createElementNS(SVGNS,"circle");
   disc.setAttribute("cx",CX);disc.setAttribute("cy",CY);disc.setAttribute("r","16");
-  disc.setAttribute("fill","#0e1310");disc.setAttribute("stroke","#c9a24b");disc.setAttribute("stroke-width","1.4");
+  disc.setAttribute("fill","var(--an12-bg)");disc.setAttribute("stroke","var(--an12-gold)");disc.setAttribute("stroke-width","1.4");
   med.appendChild(disc);
   var seed=document.createElementNS(SVGNS,"circle");
   seed.setAttribute("cx",CX);seed.setAttribute("cy",CY);seed.setAttribute("r","6");
-  seed.setAttribute("fill","#e0cf8e");
+  seed.setAttribute("fill","var(--an12-seed)");
   med.appendChild(seed);
 
   // Whiplash vine flourishes sweeping out of the halo (static line work)

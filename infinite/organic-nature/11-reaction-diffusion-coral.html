@@ -5,6 +5,12 @@
 <meta name="description" content="A Gray-Scott reaction-diffusion simulation grows coral-like stripes and spots in teal-to-coral glowing contour bands; pointer seeds growth.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reaction-Diffusion Coral</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   This tile's default palette is already light, so both themes render the same; the hook keeps it
+   on the canvas's light wall and lets it answer the forever:theme protocol. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#0a1418;}
   #rdc-c{display:block;width:100%;height:100%;}
@@ -19,19 +25,21 @@
  "description": "Gray-Scott reaction-diffusion simulation grows teal-to-coral stripe and spot patterns with glowing contour bands; pointer seeds new growth zones.",
  "useWhen": "Ambient sci-art backgrounds, generative art demos, biology/nature-themed hero sections, creative portfolio backdrops.",
  "avoidWhen": "Low-end devices — runs 5 simulation steps per frame on a Float32 grid; heavy on CPU. Any context requiring legible text overlaid on the canvas.",
- "agentPrompt": "Change the palette to purple-to-gold by updating the stops array: [[10,5,20],[40,10,80],[120,60,180],[255,180,50],[255,240,200]], then reduce glow intensity by setting the glow multiplier from 0.55 to 0.25.",
+ "agentPrompt": "Change the palette to purple-to-gold by updating the stops array: [[10,5,20],[40,10,80],[120,60,180],[255,180,50],[255,240,200]], then reduce glow intensity by setting the glow multiplier from 0.55 to 0.25. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "feed/kill rates (f=0.0367, kk=0.0649) — controls spots vs stripes pattern",
   "palette color stops array (stops)",
   "grid resolution target (tgt=148)",
   "steps per frame (s<5 loop count)",
-  "seed radius on pointer (r=4)"
+  "seed radius on pointer (r=4)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "low-res offscreen buffer canvas (critical for perf — upscaled via drawImage)",
   "Float32Array double-buffer swap (a/a2, b/b2)",
   "visibilitychange pause/resume",
-  "prefers-reduced-motion static render (900 pre-steps then paint)"
+  "prefers-reduced-motion static render (900 pre-steps then paint)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound: 5 Gray-Scott steps per rAF on a ~148x83 grid — sustained load on low-end devices",
@@ -44,7 +52,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "reaction-diffusion",
@@ -81,10 +90,17 @@
     const n=gw*gh; a=new Float32Array(n);b=new Float32Array(n);a2=new Float32Array(n);b2=new Float32Array(n);
     a.fill(1);
     img=ctx.createImageData(gw,gh);
-    for(let s=0;s<26;s++){const cx=Math.random()*gw|0,cy=Math.random()*gh|0,r=3+Math.random()*4;
+    // integer radius: the loop below indexes typed arrays with cx+x — a fractional r made every
+    // key fractional, typed arrays silently drop those writes, and the field started with no seeds
+    // at all (a flat top-stop tile until a pointer touched it)
+    for(let s=0;s<30;s++){const cx=Math.random()*gw|0,cy=Math.random()*gh|0,r=4+(Math.random()*4|0);
       for(let y=-r;y<=r;y++)for(let x=-r;x<=r;x++){const px=(cx+x+gw)%gw,py=(cy+y+gh)%gh;if(x*x+y*y<r*r)b[py*gw+px]=1;}}
     buf=document.createElement('canvas');buf.width=gw;buf.height=gh;
+    // short pre-roll so the first painted frame shows softened, already-reacting seeds rather
+    // than hard discs (~40ms once; the sim is CPU-bound anyway, see knownLimitations)
+    for(let s=0;s<PREROLL;s++)step();
   }
+  const PREROLL=60;
   addEventListener('resize',size);size();
 
   function step(){
@@ -99,8 +115,12 @@
         const lb=b[ym*gw+x]+b[yp*gw+x]+b[y*gw+xm]+b[y*gw+xp]
                 +0.25*(b[ym*gw+xm]+b[ym*gw+xp]+b[yp*gw+xm]+b[yp*gw+xp])-5*bv;
         const r=av*bv*bv;
-        a2[i]=av+(Da*la-r+f*(1-av));
-        b2[i]=bv+(Db*lb+r-(kk+f)*bv);
+        // the 9-point stencil above sums to 5x the unit Laplacian (edges 1, corners .25, centre -5):
+        // scale to the standard .2/.05/-1 weights, and clamp both concentrations to [0,1] — the
+        // classic formulation relies on that clamp; without it the seeds overshoot and the whole
+        // field goes non-finite within ten steps.
+        const na=av+(Da*0.2*la-r+f*(1-av)), nb=bv+(Db*0.2*lb+r-(kk+f)*bv);
+        a2[i]=na<0?0:na>1?1:na; b2[i]=nb<0?0:nb>1?1:nb;
       }
     }
     a.set(a2);b.set(b2);
@@ -133,7 +153,7 @@
 
   let raf=0;
   function frame(){
-    for(let s=0;s<5;s++)step();
+    for(let s=0;s<8;s++)step();   // mitosis regime grows slowly — 8 steps/frame keeps it visibly alive
     paint(); t++;
     raf=requestAnimationFrame(frame);
   }
@@ -143,5 +163,6 @@
   if(reduce){for(let s=0;s<900;s++)step();paint();}else start();
 })();
 </script>
+<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>

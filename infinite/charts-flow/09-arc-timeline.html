@@ -2,14 +2,25 @@
 <meta name="description" content="Quarter-circle arc timeline on dark navy; a mint playhead sweeps the arc, lighting event markers and tracing a cumulative magnitude ribbon w">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Arc Timeline</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root{--ch09-bg:#0a0d12;--ch09-ac:#5ad1a0;--ch09-ax:#1c2530;--ch09-dim:#6f8aa0}
+  /* theme tokens — dark = defaults (solid-dark-bg contract); light re-theme = the [data-theme="light"] block; JS re-reads them all in syncTheme() */
+  :root{--ch09-bg:#0a0d12;--ch09-ac:#5ad1a0;--ch09-ax:#1c2530;--ch09-dim:#6f8aa0;--ch09-cap:#fff;--ch09-cap-o:.42;
+    --ch09-ac2:#9be9c7;--ch09-warm:#e0b15a;--ch09-warm2:#f3d79a;--ch09-ax2:#141b24;--ch09-spoke:#16202b;--ch09-stem:#1a242f;
+    --ch09-stem-lit:rgba(90,209,160,0.45);--ch09-ribbon:rgba(90,209,160,0.10);--ch09-dot:#26313d;--ch09-dim2:#3a4a5a;--ch09-end:#2f3e4c}
+  :root[data-theme="light"]{--ch09-bg:#f1f4f8;--ch09-ac:#237e59;--ch09-ax:#c3cdd8;--ch09-dim:#5a6f80;--ch09-cap:#1b2130;--ch09-cap-o:.5;
+    --ch09-ac2:#15694a;--ch09-warm:#92681b;--ch09-warm2:#7a5714;--ch09-ax2:#d5dde5;--ch09-spoke:#dde3ea;--ch09-stem:#ccd5de;
+    --ch09-stem-lit:rgba(35,126,89,0.45);--ch09-ribbon:rgba(35,126,89,0.13);--ch09-dot:#b9c4cf;--ch09-dim2:#55687a;--ch09-end:#a4b0bb}
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%}
   body{background:var(--ch09-bg);overflow:hidden}
   #ch09-stage{position:fixed;inset:0;width:100%;height:100%}
   #ch09-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ch09-cap);opacity:var(--ch09-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +29,21 @@
  "description": "Mint playhead sweeps a quarter-circle arc, lighting 11 event markers and tracing a cumulative magnitude ribbon on dark navy.",
  "useWhen": "Data storytelling dashboards, project retrospectives, or ambient displays showing how events accumulate over a time span.",
  "avoidWhen": "Light-background UIs (background hardcoded dark navy). Contexts needing interactive scrubbing — playhead sweeps automatically only.",
- "agentPrompt": "Change accent color from '#5ad1a0' to '#7c3aed', increase event count N to 16, and slow the sweep duration DUR from 8200 to 12000.",
+ "agentPrompt": "Change accent color from '#5ad1a0' to '#7c3aed', increase event count N to 16, and slow the sweep duration DUR from 8200 to 12000. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (AC='#5ad1a0')",
   "event count (N=11)",
   "sweep duration (DUR=8200)",
   "arc span angles (T0, T1)",
-  "ribbon fill opacity (rgba 0.10)"
+  "ribbon fill opacity (rgba 0.10)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback (frame(1))",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS — must edit --ch09-bg to change from dark navy",
@@ -44,7 +57,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "arc",
@@ -71,8 +85,16 @@
   var cv = document.getElementById('ch09-c');
   var ctx = cv.getContext('2d');
 
-  // palette around accent #5ad1a0
+  // palette around accent #5ad1a0 — every value here is re-read from the CSS tokens in syncTheme()
   var AC='#5ad1a0', AC2='#9be9c7', WARM='#e0b15a', AX='#1c2530', DIM='#3a4a5a';
+  var root=document.documentElement, WARM2='#f3d79a', AX2='#141b24', SPOKE='#16202b',
+      STEM='#1a242f', STEMLIT='rgba(90,209,160,0.45)', RIBBON='rgba(90,209,160,0.10)', DOT='#26313d', END='#2f3e4c';
+  function syncTheme(){ var cs=getComputedStyle(root),g=function(n){return cs.getPropertyValue(n).trim();};
+    AC=g('--ch09-ac'); AC2=g('--ch09-ac2'); WARM=g('--ch09-warm'); WARM2=g('--ch09-warm2');
+    AX=g('--ch09-ax'); AX2=g('--ch09-ax2'); SPOKE=g('--ch09-spoke'); STEM=g('--ch09-stem');
+    STEMLIT=g('--ch09-stem-lit'); RIBBON=g('--ch09-ribbon'); DOT=g('--ch09-dot'); DIM=g('--ch09-dim2'); END=g('--ch09-end');
+    if(reduce&&W) frame(1); }
+  addEventListener('message',function(e){ var d=e.data; if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
 
   // synthetic events: position along arc (0..1) + magnitude (0..1) + kind
   var N=11, EV=[];
@@ -114,10 +136,10 @@
 
     // baseline axes
     drawArc(R,AX,Math.max(1.5,R*0.012));
-    drawArc(R2,'#141b24',Math.max(1,R*0.008));
+    drawArc(R2,AX2,Math.max(1,R*0.008));
 
     // radial tick spokes
-    ctx.lineWidth=1; ctx.strokeStyle='#16202b';
+    ctx.lineWidth=1; ctx.strokeStyle=SPOKE;
     for(var s=0;s<=8;s++){ var tt=s/8;
       ctx.beginPath(); ctx.moveTo(px(tt,R2-6),py(tt,R2-6)); ctx.lineTo(px(tt,R+8),py(tt,R+8)); ctx.stroke(); }
 
@@ -138,7 +160,7 @@
     ctx.lineTo(px(pt,R2),py(pt,R2));
     for(i=Math.floor(pt*60);i>=0;i--){ var tb=i/60; ctx.lineTo(px(tb,R2),py(tb,R2)); }
     ctx.closePath();
-    ctx.fillStyle='rgba(90,209,160,0.10)'; ctx.fill();
+    ctx.fillStyle=RIBBON; ctx.fill();
 
     // cumulative line on top
     ctx.beginPath(); ctx.lineWidth=Math.max(1.5,R*0.012); ctx.strokeStyle=AC; first=true;
@@ -160,15 +182,15 @@
       var near=Math.abs(e.t-ph);
       var pulse=lit?Math.max(0,1-near*7):0;
       // stem
-      ctx.beginPath(); ctx.lineWidth=lit?1.6:1; ctx.strokeStyle=lit?'rgba(90,209,160,0.45)':'#1a242f';
+      ctx.beginPath(); ctx.lineWidth=lit?1.6:1; ctx.strokeStyle=lit?STEMLIT:STEM;
       ctx.moveTo(ix,iy); ctx.lineTo(ex,ey); ctx.stroke();
       // marker
       var base=Math.max(2.4,R*0.018);
       var rad=base+(e.m)*base*1.4+pulse*base*1.3;
       var col=e.k? WARM : (lit?AC:DIM);
       ctx.beginPath(); ctx.arc(ex,ey,rad,0,Math.PI*2);
-      ctx.fillStyle=lit?col:'#26313d'; ctx.fill();
-      if(lit){ ctx.beginPath(); ctx.lineWidth=1.4; ctx.strokeStyle=e.k?'#f3d79a':AC2;
+      ctx.fillStyle=lit?col:DOT; ctx.fill();
+      if(lit){ ctx.beginPath(); ctx.lineWidth=1.4; ctx.strokeStyle=e.k?WARM2:AC2;
         ctx.arc(ex,ey,rad+1.5,0,Math.PI*2); ctx.stroke(); }
     }
 
@@ -188,7 +210,7 @@
     ctx.fillStyle=DIM; ctx.font='600 '+(fs*0.62).toFixed(1)+'px ui-monospace,Menlo,monospace';
     ctx.fillText(fired+' / '+N+' EVENTS', cx, cy+fs*0.95);
     // endpoint labels
-    ctx.fillStyle='#2f3e4c'; ctx.font='600 '+(fs*0.55).toFixed(1)+'px ui-monospace,Menlo,monospace';
+    ctx.fillStyle=END; ctx.font='600 '+(fs*0.55).toFixed(1)+'px ui-monospace,Menlo,monospace';
     ctx.textAlign='left'; ctx.fillText('T0', px(0,R)-fs*1.4, py(0,R)-fs*0.4);
     ctx.textAlign='right'; ctx.fillText('NOW', px(1,R)+fs*1.4, py(1,R)-fs*0.4);
   }
@@ -205,7 +227,7 @@
   }
 
   function go(){
-    size();
+    syncTheme(); size();
     if(reduce){ frame(1); return; }
     start=0; running=true; raf=requestAnimationFrame(loop2);
   }

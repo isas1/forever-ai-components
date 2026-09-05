@@ -5,11 +5,27 @@
 <meta name="description" content="Nine amber-toned ranked lines crossing between BEFORE and AFTER axes, easing into new rank orders each loop with labeled endpoints.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Slope Chart Crossing</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1a1410;}
+  /* theme tokens — dark values are the defaults; --scc-hue/sat/lit feed the JS col() ramp */
+  :root{
+    --scc-bg:#1a1410; --scc-accent:#f0a830; --scc-cap-o:.34;
+    --scc-tick:rgba(240,168,48,0.10); --scc-axis:rgba(240,168,48,0.22); --scc-colcap:rgba(240,168,48,0.38);
+    --scc-hue:34; --scc-sat:58; --scc-lit:56;
+  }
+  :root[data-theme="light"]{
+    --scc-bg:#f6f2ea; --scc-accent:#96620b; --scc-cap-o:.62;
+    --scc-tick:rgba(150,98,11,0.20); --scc-axis:rgba(150,98,11,0.38); --scc-colcap:rgba(150,98,11,0.62);
+    --scc-hue:33; --scc-sat:74; --scc-lit:30;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--scc-bg);}
   #scc{display:block;width:100%;height:100%;}
   .scc-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
-       letter-spacing:.14em;color:#f0a830;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--scc-accent);opacity:var(--scc-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +35,21 @@
  "description": "Nine labeled lines connect BEFORE and AFTER rank axes, animating crossings each loop as series shuffle to new positions in warm amber tones.",
  "useWhen": "Visualizing ranked list changes over time — A/B test results, survey rank shifts, league table movements.",
  "avoidWhen": "More than 9 series (labels will collide). Light backgrounds — color palette is hardcoded dark brown.",
- "agentPrompt": "Change N to 6, update NAMES to \"ABCDEF\", and set loopDur to 120 to make a faster 6-series chart.",
+ "agentPrompt": "Change N to 6, update NAMES to \"ABCDEF\", and set loopDur to 120 to make a faster 6-series chart. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "series count (N=9)",
   "loop duration (loopDur=170)",
   "hold pause frames (hold=46)",
   "color palette (col() hue/sat/light offsets)",
-  "label names (NAMES string)"
+  "label names (NAMES string)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/start",
   "reduced-motion static frame",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded (#1a1410) — must edit CSS to change dark theme",
@@ -45,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "slope-chart",
@@ -99,10 +118,10 @@
   cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.4,3);});
   cv.addEventListener('click',()=>{phase=loopDur;});
 
-  function col(h,a){ // warm palette anchored on accent #f0a830
+  function col(h,a){ // warm palette anchored on the accent token
     const ang=(h/N)*120-50;                 // -50..70 deg around amber
-    const hue=34+ang*0.5;
-    return 'hsla('+hue+','+(58+(h%2)*12)+'%,'+(56+(h%3)*6)+'%,'+a+')';
+    const hue=C.hue+ang*0.5;
+    return 'hsla('+hue+','+(C.sat+(h%2)*12)+'%,'+(C.lit+(h%3)*6)+'%,'+a+')';
   }
 
   function draw(){
@@ -112,15 +131,15 @@
     if(phase>=loopDur){ phase=0; shuffleRight(); }
     const p = ease((phase-hold/2)/(loopDur-hold)); // 0 hold start, ease through
 
-    ctx.fillStyle='#1a1410';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
 
     // axis ticks (faint) — position is the only encoding, so mark the slots
-    ctx.strokeStyle='rgba(240,168,48,0.10)';ctx.lineWidth=1;
+    ctx.strokeStyle=C.tick;ctx.lineWidth=1;
     for(let r=0;r<N;r++){const y=yFor(r);
       ctx.beginPath();ctx.moveTo(colL,y);ctx.lineTo(colL-6*scale,y);ctx.stroke();
       ctx.beginPath();ctx.moveTo(colR,y);ctx.lineTo(colR+6*scale,y);ctx.stroke();
     }
-    ctx.strokeStyle='rgba(240,168,48,0.22)';
+    ctx.strokeStyle=C.axis;
     ctx.beginPath();ctx.moveTo(colL,padY-8*scale);ctx.lineTo(colL,H-padY+8*scale);ctx.stroke();
     ctx.beginPath();ctx.moveTo(colR,padY-8*scale);ctx.lineTo(colR,H-padY+8*scale);ctx.stroke();
 
@@ -149,7 +168,7 @@
     }
 
     // column captions
-    ctx.fillStyle='rgba(240,168,48,0.38)';
+    ctx.fillStyle=C.colcap;
     ctx.font='600 '+(9*scale)+'px ui-monospace,monospace';
     ctx.textBaseline='alphabetic';
     ctx.textAlign='center';
@@ -163,7 +182,29 @@
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(draw);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){phase=loopDur*0.5;draw();stop();}else start();
+
+  // theme: every colour the canvas draws with is read from the tokens, once per switch
+  const root=document.documentElement, C={};
+  let ready=0;
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--scc-bg').trim();
+    C.tick=cs.getPropertyValue('--scc-tick').trim();
+    C.axis=cs.getPropertyValue('--scc-axis').trim();
+    C.colcap=cs.getPropertyValue('--scc-colcap').trim();
+    C.hue=parseFloat(cs.getPropertyValue('--scc-hue'));
+    C.sat=parseFloat(cs.getPropertyValue('--scc-sat'));
+    C.lit=parseFloat(cs.getPropertyValue('--scc-lit'));
+    if(reduce&&ready){draw();stop();}          // running loop repaints itself
+  }
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
+  syncTheme();
+  if(reduce){phase=loopDur*0.5;ready=1;draw();stop();}else start();
 })();
 </script>
 </body>

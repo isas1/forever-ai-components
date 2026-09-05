@@ -5,6 +5,12 @@
 <meta name="description" content="A pill magnifier icon elastically expands into a white search bar and types a query with a blinking caret, then collapses back.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Search Bar Morph</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   This tile's default palette is already light, so both themes render the same; the hook keeps it
+   on the canvas's light wall and lets it answer the forever:theme protocol. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#F4F4F5;}
   .sbm-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
@@ -41,19 +47,22 @@
  "description": "A pill-shaped magnifier icon elastically expands into a full search bar, types a query with a blinking caret, then collapses back — looping automatically.",
  "useWhen": "App headers, search entry points, or onboarding flows where you want to demonstrate search affordance without requiring user input.",
  "avoidWhen": "Functional search forms where the bar must be interactive — this is a demo loop; wire click handlers and disable the auto-cycle for production use.",
- "agentPrompt": "Change the typed query to 'find your next idea', set the accent color to #8B5CF6 by replacing #0EA5E9 everywhere, and slow the open phase to 1100ms by setting its dur to 1100.",
+ "agentPrompt": "Change the typed query to 'find your next idea', set the accent color to #8B5CF6 by replacing #0EA5E9 everywhere, and slow the open phase to 1100ms by setting its dur to 1100. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "query string (QUERY constant)",
   "phase durations (PHASES array dur values)",
+  "mount offset (t0 = now-900: the bar opens at ~0.2 s instead of 1.1 s)",
   "accent color (#0EA5E9 in CSS)",
   "expanded width multiplier (H*8.6 in OPEN)",
-  "elastic overshoot curve (elastic function coefficients)"
+  "elastic overshoot curve (elastic function coefficients)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback render()",
   "visibilitychange pause/start handlers",
-  "geo() resize recalculation"
+  "geo() resize recalculation",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "SVG handle length does not actually elongate on open — len is constant (lerp of identical values), so the handle stub stays the same size regardless of open state",
@@ -66,7 +75,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "search",
@@ -130,7 +140,7 @@
     {name:'hold',  dur:1400},
     {name:'close', dur:640},
   ];
-  let pi=0,t0=performance.now(),last={o:0,type:0,caret:1};
+  let pi=0,t0=performance.now()-900,last={o:0,type:0,caret:1};   // mount 0.9 s into the idle phase: the bar opens at ~0.2 s instead of 1.1 s
 
   function render(s){
     last=s;
@@ -198,5 +208,6 @@
   } else start();
 })();
 </script>
+<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>

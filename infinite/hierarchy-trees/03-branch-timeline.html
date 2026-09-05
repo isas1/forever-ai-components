@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Branch and merge commit graph - three vertical lanes with rounded elbow connectors: the trunk advances, a feature branch splits off for two commits and merges back, then a hotfix branches and lands tagged v2.4.0. Commits reveal top to bottom, each with its own message and hash.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Branch Timeline</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#925D78;
+    --pro-accent-2:#507E95;
+    --pro-warn:#A68D3F;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --btl-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    --btl-w:2px;                       /* lane thickness */
+  }
+  :root[data-theme="light"]{--pro-bg:#f6f8fa;--pro-surface:#fff;--pro-border:rgba(0,0,0,.08);--pro-text:#1f2328;--pro-muted:#59636e;--pro-accent:#7a4560;--pro-accent-2:#3a6172;--pro-warn:#6f5d21}
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .btl-stage{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;
+    padding:3.6vmin 3.6vmin clamp(16px,3vmin,24px);font-family:var(--pro-font);color:var(--pro-text)}
+  .btl-head{display:flex;align-items:baseline;gap:1.6vmin;flex:none;min-width:0;
+    padding-bottom:1.6vmin;border-bottom:1px solid var(--pro-border)}
+  .btl-title{font-size:clamp(10px,2.4vmin,14px);font-weight:700;white-space:nowrap}
+  .btl-sub{margin-left:auto;font-size:clamp(7px,1.6vmin,10px);color:var(--pro-muted);
+    font-weight:600;white-space:nowrap}
+  .btl-body{flex:1;min-height:0;display:flex;gap:clamp(4px,1.4vmin,10px);padding-top:1.2vmin}
+  /* the graph gutter: lanes and elbows are plain divs, so line weight stays
+     constant at every tile size and the whole thing costs no canvas */
+  .btl-gut{position:relative;flex:none;width:clamp(32px,15%,78px)}
+  .btl-seg{position:absolute;width:var(--btl-w);background:var(--c);border-radius:2px;
+    transform:translateX(-50%);clip-path:inset(0 0 100% 0);transition:clip-path .42s ease-out}
+  .btl-elb{position:absolute;border:0 solid var(--c);border-bottom-width:var(--btl-w);
+    clip-path:inset(0 0 100% 0);transition:clip-path .42s ease-out}
+  .btl-elb.out{border-left-width:var(--btl-w);border-bottom-left-radius:clamp(4px,1.8vmin,11px)}
+  .btl-elb.in{border-right-width:var(--btl-w);border-bottom-right-radius:clamp(4px,1.8vmin,11px)}
+  .btl-seg.on,.btl-elb.on{clip-path:inset(0 0 0 0)}
+  .btl-dot{position:absolute;border-radius:50%;transform:translate(-50%,-50%) scale(0);
+    width:clamp(7px,2.2vmin,13px);height:clamp(7px,2.2vmin,13px);
+    background:var(--c);border:2px solid var(--c);
+    transition:transform .3s cubic-bezier(.34,1.56,.64,1)}
+  .btl-dot.merge{background:var(--pro-bg);
+    box-shadow:0 0 0 clamp(2px,.6vmin,4px) color-mix(in srgb,var(--c) 20%,transparent)}
+  .btl-dot.on{transform:translate(-50%,-50%) scale(1)}
+  /* one text row per commit, aligned to its dot */
+  .btl-rows{flex:1;min-width:0;display:flex;flex-direction:column}
+  .btl-row{flex:1;min-height:0;display:flex;align-items:center;gap:clamp(4px,1.2vmin,9px);
+    min-width:0;opacity:0;transform:translateX(-5px);
+    transition:opacity .34s ease-out,transform .34s cubic-bezier(.22,1,.36,1)}
+  .btl-row.on{opacity:1;transform:none}
+  .btl-msg{font-size:clamp(7px,1.75vmin,11px);font-weight:600;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .btl-tag{flex:none;font:700 clamp(6px,1.4vmin,9px)/1 var(--btl-mono);color:var(--pro-accent);
+    background:color-mix(in srgb,var(--pro-accent) 15%,transparent);
+    border:1px solid color-mix(in srgb,var(--pro-accent) 45%,transparent);border-radius:999px;
+    padding:clamp(2px,.6vmin,4px) clamp(3px,1vmin,7px)}
+  .btl-br{flex:none;font:600 clamp(6px,1.4vmin,9px)/1 var(--btl-mono);color:var(--c);
+    background:color-mix(in srgb,var(--c) 14%,transparent);border-radius:999px;
+    padding:clamp(2px,.6vmin,4px) clamp(3px,1vmin,7px)}
+  .btl-hash{margin-left:auto;flex:none;font:600 clamp(6px,1.5vmin,9.5px)/1 var(--btl-mono);
+    color:var(--pro-muted)}
+  .cap{position:fixed;left:8px;bottom:6px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.45;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  .btl-stage.snap *{transition:none!important}
+  @media (max-width:300px){ .btl-hash{display:none} }
+  @media (prefers-reduced-motion:reduce){ .btl-stage *{transition:none!important} }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/hierarchy-trees/03-branch-timeline.html",
+ "title": "Branch Timeline",
+ "description": "A three-lane commit graph that draws itself top to bottom: the trunk advances, a feature branch splits off through two commits and merges back, then a hotfix branches and lands tagged v2.4.0 — each row naming its message, branch and hash.",
+ "useWhen": "Release timelines, changelogs, CI or VCS surfaces, onboarding docs explaining a branching model — anywhere branch-and-merge structure needs to read at a glance.",
+ "avoidWhen": "Real repository data with many concurrent branches — lanes are authored, and more than three or four crowd the gutter. Also wide-screen layouts wanting a horizontal graph.",
+ "agentPrompt": "Edit the log array (l lane, h hash, m message, from = branches off that lane, merge = lands from it, tag = release marker) and the LANE map (x percent in the gutter, c colour) — lanes, elbows, dots and rows are all derived, and row spacing follows the commit count. Change the reveal beat with setInterval(advance,820). Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "theme tokens (:root --pro-* dark defaults + the :root[data-theme=\"light\"] overrides)",
+  "the commit list (log array: lane, hash, message, from/merge, tag)",
+  "lane positions and colours (LANE map: x percent of the gutter, c)",
+  "lane thickness (--btl-w) and elbow radius (.btl-elb border-radius clamp)",
+  "reveal beat (setInterval(advance,820)) and the hold before replay (N+3)",
+  "gutter width (.btl-gut clamp(32px,15%,78px))"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .btl-stage",
+  "IIFE wrapper",
+  "the .snap class + void offsetWidth reflow, which resets without animating backwards",
+  "clip-path inset reveal on .btl-seg/.btl-elb — a top-down wipe matching time flowing downward",
+  "prefers-reduced-motion early return to the fully drawn graph",
+  "visibilitychange pause (halt/play on the interval)",
+  "theme hook (?theme= pre-paint bootstrap + forever:theme message listener + the two-palette token block)"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Lanes and the commit list are authored, not derived from a repository",
+  "One commit per row at a fixed rhythm — no dates, authors or per-commit spacing",
+  "The hash column is hidden below 300px (media query)"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "branching",
+  "commit-graph",
+  "git",
+  "merge",
+  "timeline",
+  "devops",
+  "lanes",
+  "changelog"
+ ]
+}
+</script>
+</head>
+<body>
+  <div class="btl-stage" id="btlStage" role="img"
+       aria-label="Commit graph on three lanes. The main trunk runs down the left; a feature branch splits off for two commits and merges back; a hotfix branch then splits and lands, tagged v2.4.0. Commits reveal from the top down, each row naming its message and hash.">
+    <div class="btl-head">
+      <span class="btl-title">acme/checkout</span>
+      <span class="btl-sub">3 lanes · 7 commits</span>
+    </div>
+    <div class="btl-body">
+      <div class="btl-gut" id="btlGut"></div>
+      <div class="btl-rows" id="btlRows"></div>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Branch Timeline</div>
+  <script>(function(){"use strict";
+    var root=document.documentElement;
+    addEventListener("message",function(e){var d=e.data;
+      if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))root.setAttribute("data-theme",d.theme);});
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // lane x positions (percent of the gutter) and their colours
+    var LANE={main:{x:18,c:"var(--pro-accent)"},
+              feat:{x:50,c:"var(--pro-accent-2)"},
+              hot: {x:82,c:"var(--pro-warn)"}};
+    // The commit list is the whole component. from = branches off that lane,
+    // merge = lands from that lane, tag = release marker on the row.
+    var log=[
+      {l:"main",h:"a13f0c1",m:"chore: bootstrap checkout"},
+      {l:"main",h:"7e2b845",m:"feat: cart totals + tax rules"},
+      {l:"feat",h:"c4d19aa",m:"wip: card form validation",from:"main",br:"feat/checkout"},
+      {l:"feat",h:"9f0e6b2",m:"test: checkout e2e coverage"},
+      {l:"main",h:"31c7de0",m:"merge feat/checkout (+412 −86)",merge:"feat"},
+      {l:"hot", h:"b82a4f5",m:"fix: auth token expiry window",from:"main",br:"hotfix/auth"},
+      {l:"main",h:"5ad0c93",m:"merge hotfix/auth · release",merge:"hot",tag:"v2.4.0"}
+    ];
+    var gut=document.getElementById("btlGut"),rowBox=document.getElementById("btlRows"),
+        stage=document.getElementById("btlStage");
+    if(!gut||!rowBox)return;
+    var N=log.length,STEP=100/N;
+    function mid(i){ return STEP*(i+.5); }         // row centre, percent of the gutter
+
+    var parts=[];                                  // parts[i] = what row i draws
+    log.forEach(function(c,i){
+      var lane=LANE[c.l],own=[],prev=-1;
+      for(var j=i-1;j>=0;j--){ if(log[j].l===c.l){ prev=j; break; } }
+      // trunk / lane segment down from the previous commit on this same lane
+      if(prev>-1){
+        var s=document.createElement("div");
+        s.className="btl-seg"; s.style.setProperty("--c",lane.c);
+        s.style.left=lane.x+"%"; s.style.top=mid(prev)+"%"; s.style.height=(mid(i)-mid(prev))+"%";
+        gut.appendChild(s); own.push(s);
+      }
+      // elbow: a branch leaving its parent lane, or a branch landing back on it
+      var other=c.from||c.merge;
+      if(other){
+        var a=LANE[other],e=document.createElement("div");
+        var out=a.x<lane.x;                        // out = away from the trunk, in = back to it
+        e.className="btl-elb "+(out?"out":"in");
+        e.style.setProperty("--c",out?lane.c:a.c);
+        e.style.left=Math.min(a.x,lane.x)+"%";
+        e.style.width=Math.abs(lane.x-a.x)+"%";
+        e.style.top=mid(i-1)+"%"; e.style.height=(mid(i)-mid(i-1))+"%";
+        gut.appendChild(e); own.push(e);
+      }
+      var d=document.createElement("div");
+      d.className="btl-dot"+(c.merge?" merge":"");
+      d.style.setProperty("--c",lane.c); d.style.left=lane.x+"%"; d.style.top=mid(i)+"%";
+      gut.appendChild(d);
+
+      var r=document.createElement("div");
+      r.className="btl-row";
+      r.innerHTML='<span class="btl-msg">'+c.m+'</span>'+
+        (c.tag?'<span class="btl-tag">'+c.tag+'</span>':'')+
+        (c.br?'<span class="btl-br" style="--c:'+lane.c+'">'+c.br+'</span>':'')+
+        '<span class="btl-hash">'+c.h+'</span>';
+      rowBox.appendChild(r);
+      parts.push({row:r,dot:d,own:own});
+    });
+
+    function show(i){
+      var p=parts[i];
+      p.own.forEach(function(el){ el.classList.add("on"); });
+      p.dot.classList.add("on"); p.row.classList.add("on");
+    }
+    function clear(){
+      stage.classList.add("snap");
+      parts.forEach(function(p){
+        p.own.forEach(function(el){ el.classList.remove("on"); });
+        p.dot.classList.remove("on"); p.row.classList.remove("on");
+      });
+      void stage.offsetWidth;                      // flush, then let transitions run again
+      stage.classList.remove("snap");
+    }
+
+    if(reduce){ parts.forEach(function(p,i){ show(i); }); return; }  // static: full graph
+
+    var i=0,timer=null;
+    function advance(){
+      if(i>=N+3){ clear(); i=0; return; }          // hold the finished graph, then replay
+      if(i<N) show(i);
+      i++;
+    }
+    function play(){ if(!timer) timer=setInterval(advance,820); }
+    function halt(){ clearInterval(timer); timer=null; }
+    document.addEventListener("visibilitychange",function(){ document.hidden?halt():play(); });
+    advance(); play();
+  })();
+  </script>
+</body>
+</html>

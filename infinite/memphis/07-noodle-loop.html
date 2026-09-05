@@ -5,7 +5,14 @@
 <meta name="description" content="Looping SVG noodle lines in teal, pink and yellow snake around the frame with pulsing dots and spinning confetti on a dark violet field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Noodle Loop</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults; the light re-theme is the block below.
+     Every noodle/dot/confetti fill is already a var(), so a flip needs no repaint code. */
   :root{
     --mp07-bg:#141019;
     --mp07-teal:#36d6c3;
@@ -13,16 +20,26 @@
     --mp07-yellow:#ffd23f;
     --mp07-violet:#9b6bff;
     --mp07-coral:#ff7a45;
+    --mp07-glow-a:rgba(155,107,255,.16); --mp07-glow-b:rgba(54,214,195,.16);
+    --mp07-grid-c:#ffffff; --mp07-grid-o:.05; --mp07-cap:#fff; --mp07-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --mp07-bg:#f6f2f8; --mp07-teal:#18776b; --mp07-pink:#db0044; --mp07-yellow:#8a6900;
+    --mp07-violet:#7533ff; --mp07-coral:#cc3a00;
+    --mp07-glow-a:rgba(117,51,255,.10); --mp07-glow-b:rgba(24,119,107,.10);
+    --mp07-grid-c:#141019; --mp07-grid-o:.10; --mp07-cap:#2b2733; --mp07-cap-o:.5;
   }
   html,body{margin:0;height:100%;background:var(--mp07-bg);overflow:hidden}
   .mp07-stage{
     position:fixed;inset:0;display:block;
     background:
-      radial-gradient(120% 120% at 18% 12%, rgba(155,107,255,.16), transparent 46%),
-      radial-gradient(120% 120% at 86% 88%, rgba(54,214,195,.16), transparent 46%),
+      radial-gradient(120% 120% at 18% 12%, var(--mp07-glow-a), transparent 46%),
+      radial-gradient(120% 120% at 86% 88%, var(--mp07-glow-b), transparent 46%),
       var(--mp07-bg);
   }
   #mp07-svg{position:absolute;inset:0;width:100%;height:100%}
+  /* the dotted grid texture lives in <defs>; CSS beats the presentation attributes so it themes too */
+  #mp07-grid circle{fill:var(--mp07-grid-c);opacity:var(--mp07-grid-o)}
   /* noodles: animate ONLY stroke-dashoffset (compositor-friendly transform-ish via SMIL) — here CSS on dashoffset is paint, so we drive via transform of a clip-less mask?  -> use stroke-dashoffset animation which is GPU-cheap for stroked paths in modern engines, kept to <=6 paths */
   .mp07-noodle{
     fill:none;stroke-linecap:round;stroke-linejoin:round;
@@ -37,7 +54,7 @@
   .mp07-confetti{transform-box:fill-box;transform-origin:center;
     animation:mp07-spin var(--mp07-sd,9s) linear infinite}
   @keyframes mp07-spin{to{transform:rotate(360deg)}}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--mp07-cap);opacity:var(--mp07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
     .mp07-noodle{stroke-dashoffset:0!important}
@@ -50,22 +67,24 @@
  "description": "Five thick snaking SVG noodles in Memphis colors travel via stroke-dashoffset on a dark violet field; corner dots pulse and confetti spins.",
  "useWhen": "Memphis or retro 80s hero backgrounds, screensavers, or decorative section breaks where looping ambient motion fits the brand.",
  "avoidWhen": "Light-background layouts (background hardcoded dark violet). Content-heavy contexts where thick animated strokes compete with readable text.",
- "agentPrompt": "Change the teal noodle to hot orange (#ff6b00) by updating --mp07-teal, and slow its travel by setting --mp07-dur to 10s on the fourth path element.",
+ "agentPrompt": "Change the teal noodle to hot orange (#ff6b00) by updating --mp07-teal, and slow its travel by setting --mp07-dur to 10s on the fourth path element. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "noodle colors (CSS vars --mp07-teal, --mp07-pink, --mp07-yellow, --mp07-violet, --mp07-coral)",
   "travel speed per noodle (--mp07-dur on each path)",
   "stroke width (stroke-width 13 on the noodle group)",
   "dot pulse scale (1.35 in mp07-pulse keyframe)",
-  "confetti spin duration (--mp07-sd per element)"
+  "confetti spin duration (--mp07-sd per element)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper with setMotion() reduced-motion guard",
   "visibilitychange pause handler",
-  "coral noodle stroke-width:0 markup guard (promoted in JS only when motion allowed)"
+  "coral noodle stroke-width:0 markup guard (promoted in JS only when motion allowed)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "stroke-dashoffset is paint-layer — may stutter on low-end devices with all 5 noodles active",
-  "Background hardcoded dark violet; update --mp07-bg and gradients for light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Coral noodle invisible if JS disabled (stroke-width promoted from 0 only in JS)"
  ],
  "tier": "curated",
@@ -75,7 +94,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "memphis",
@@ -160,6 +180,12 @@
   var svg = document.getElementById("mp07-svg");
   if(!svg) return;
   var mq = window.matchMedia("(prefers-reduced-motion:reduce)");
+
+  // live re-theme: every SVG colour is a var() reference, so re-stamping data-theme is the switch
+  addEventListener("message", function(e){
+    var d=e.data;
+    if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);
+  });
 
   // Coral overlay noodle: give it width only after load so reduced-motion stays calm.
   // (kept stroke-width 0 in markup as a no-op guard; promote here when motion allowed.)

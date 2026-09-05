@@ -5,11 +5,22 @@
 <meta name="description" content="Red, blue and yellow rectangles hang from a black beam that tilts and settles toward level on a near-black field, a balancing mobile.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dynamic Equilibrium</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0e0e10}
-  #ds05-stage{position:fixed;inset:0;overflow:hidden;background:#0e0e10}
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme below: the mobile
+     hangs in a white gallery, planes go true white, the level marker inverts to dark ink. */
+  :root{--ds05-bg:#0e0e10;--ds05-paint:#ece7da;--ds05-line:#0a0a0c;--ds05-red:#cc2a1e;
+    --ds05-blue:#1b5fc4;--ds05-yel:#e8b416;--ds05-ref:rgba(236,231,218,0.10);--ds05-cap:#fff;--ds05-cap-o:.42}
+  :root[data-theme="light"]{--ds05-bg:#f2f0ea;--ds05-paint:#ffffff;--ds05-ref:rgba(20,20,26,0.14);
+    --ds05-cap:#14141a;--ds05-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--ds05-bg)}
+  #ds05-stage{position:fixed;inset:0;overflow:hidden;background:var(--ds05-bg)}
   #ds05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ds05-cap);opacity:var(--ds05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +30,21 @@
  "description": "Six neoplastic-colored rectangles hang from a tilting beam; a spring-damper drives it toward equilibrium while a slow bias keeps it gently alive.",
  "useWhen": "Art/design portfolio heroes, screensaver-style ambient displays, dark-background contexts needing calm physics-driven motion with a neoplastic aesthetic.",
  "avoidWhen": "Light-background layouts (background hardcoded near-black). Contexts where ambient motion competes with adjacent readable content.",
- "agentPrompt": "Change the bias retarget range from 0.16 to 0.30 and shorten the interval (biasT=1.2+Math.random()*1.2) for more restless swinging.",
+ "agentPrompt": "Change the bias retarget range from 0.16 to 0.30 and shorten the interval (biasT=1.2+Math.random()*1.2) for more restless swinging. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "block colors (RED/BLUE/YEL/PAINT constants)",
   "block weights and offsets (blocks array w/off fields)",
   "spring stiffness and damping (k=14, c=4.6)",
   "bias magnitude (0.16) and retarget interval (2.4s)",
-  "beam length fraction (S*0.78)"
+  "beam length fraction (S*0.78)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "visibilitychange pause/resume guards",
   "prefers-reduced-motion static fallback",
-  "DPR-aware canvas sizing with ctx.setTransform"
+  "DPR-aware canvas sizing with ctx.setTransform",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background hardcoded to near-black (#0e0e10) — edit CSS and draw() fill to change",
@@ -44,7 +57,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "de-stijl",
@@ -71,80 +85,80 @@
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 
-  // Neoplastic palette around accent #1b5fc4
-  var PAINT='#ece7da', LINE='#0a0a0c';
-  var RED='#cc2a1e', BLUE='#1b5fc4', YEL='#e8b416';
+  // Neoplastic palette around accent #1b5fc4 — read from the CSS tokens so a theme
+  // switch re-paints the canvas; PAL is the cached primary triple, blocks cache col.
+  var root=document.documentElement;
+  var BG='',PAINT='',LINE='',REF='',PAL=['','',''];   // PAL = [red, blue, yellow]
 
   var W=0,H=0,DPR=1,S=0,OX=0,OY=0,LW=0;
 
   // The beam pivots at fulcrum. Six blocks hang at fixed offsets along it.
   // Each block has weight; net torque drives the beam toward level.
-  // off = horizontal slot along beam (-1..1), w = relative weight, col, sz = block size frac.
+  // off = slot along beam (-1..1), w = relative weight, k = PAL index (-1 = plane), sz = size frac.
   var blocks=[
-    {off:-0.86,w:1.0,col:RED, sz:0.20},
-    {off:-0.50,w:0.6,col:PAINT,sz:0.13},
-    {off:-0.16,w:0.9,col:BLUE,sz:0.17},
-    {off: 0.22,w:0.5,col:YEL, sz:0.12},
-    {off: 0.54,w:0.8,col:PAINT,sz:0.15},
-    {off: 0.88,w:1.1,col:BLUE,sz:0.21}
+    {off:-0.86,w:1.0,k: 0,sz:0.20,col:''},{off:-0.50,w:0.6,k:-1,sz:0.13,col:''},
+    {off:-0.16,w:0.9,k: 1,sz:0.17,col:''},{off: 0.22,w:0.5,k: 2,sz:0.12,col:''},
+    {off: 0.54,w:0.8,k:-1,sz:0.15,col:''},{off: 0.88,w:1.1,k: 1,sz:0.21,col:''}
   ];
 
+  function syncTheme(){
+    var cs=getComputedStyle(root),g=function(n){return cs.getPropertyValue(n).trim();};
+    BG=g('--ds05-bg'); PAINT=g('--ds05-paint'); LINE=g('--ds05-line'); REF=g('--ds05-ref');
+    PAL[0]=g('--ds05-red'); PAL[1]=g('--ds05-blue'); PAL[2]=g('--ds05-yel');
+    for(var i=0;i<blocks.length;i++) blocks[i].col=blocks[i].k<0?PAINT:PAL[blocks[i].k];
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){ var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme(); if(reduce)draw(); }
+  });
+  syncTheme();
+
   // Beam angle dynamics (radians). Spring toward target torque equilibrium with damping.
-  var ang=0, av=0;          // angle, angular velocity
-  var torqueBias=0;         // slowly shifting offset that breaks perfect balance -> "dynamic"
-  var biasV=0, biasT=0;     // bias target retarget timer
+  var ang=0, av=0, torqueBias=0;   // angle, angular velocity, drifting balance offset
+  var biasV=0, biasT=0;            // bias target + retarget timer
   var blockBob=new Float32Array(blocks.length);   // tiny settle bob per block (transform only equiv)
 
   function resize(){
-    W=stage.clientWidth; H=stage.clientHeight;
-    DPR=Math.min(2,window.devicePixelRatio||1);
+    W=stage.clientWidth; H=stage.clientHeight; DPR=Math.min(2,window.devicePixelRatio||1);
     cv.width=Math.max(1,(W*DPR)|0); cv.height=Math.max(1,(H*DPR)|0);
     S=Math.min(W,H); OX=(W-S)/2; OY=(H-S)/2;
-    LW=Math.max(3,Math.round(S*0.020));
-    ctx.setTransform(DPR,0,0,DPR,0,0);
+    LW=Math.max(3,Math.round(S*0.020)); ctx.setTransform(DPR,0,0,DPR,0,0);
   }
 
   function netTorque(){
-    var t=0,i,b;
-    for(i=0;i<blocks.length;i++){ b=blocks[i]; t+=b.off*b.w; }
+    for(var t=0,i=0;i<blocks.length;i++) t+=blocks[i].off*blocks[i].w;
     return t*0.10 + torqueBias;     // scaled; bias keeps it gently alive
   }
 
   function step(dt){
     // retarget the bias occasionally so equilibrium keeps drifting (never strobes)
-    biasT-=dt;
-    if(biasT<=0){ biasV=(Math.random()*2-1)*0.16; biasT=2.4+Math.random()*2.4; }
+    biasT-=dt; if(biasT<=0){ biasV=(Math.random()*2-1)*0.16; biasT=2.4+Math.random()*2.4; }
     torqueBias += (biasV-torqueBias)*Math.min(1,dt*0.7);
 
     // angular spring: restoring toward angle implied by torque, with damping
     var target=netTorque();                 // desired tilt (small radians)
-    var k=14, c=4.6;                         // stiffness, damping
-    var acc=k*(target-ang) - c*av;
+    var k=14, c=4.6, acc=k*(target-ang) - c*av;   // stiffness, damping
     av+=acc*dt; ang+=av*dt;
     if(ang>0.42)ang=0.42; if(ang<-0.42)ang=-0.42;
 
     // per-block bob eases to rest (settle metaphor)
-    for(var i=0;i<blocks.length;i++){
-      blockBob[i] += (0 - blockBob[i])*Math.min(1,dt*3.0);
-    }
+    for(var i=0;i<blocks.length;i++) blockBob[i] += (0 - blockBob[i])*Math.min(1,dt*3.0);
   }
 
   function rrect(x,y,w,h){ ctx.fillRect(x,y,w,h); }
 
   function draw(){
-    ctx.fillStyle='#0e0e10'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
 
     var cx=OX+S*0.5, cy=OY+S*0.5;
     var beamLen=S*0.78, half=beamLen/2;
     var fy=cy - S*0.20;                       // fulcrum y (beam hangs blocks below)
 
     // --- static counter-plane: a few flat neoplastic rectangles anchoring corners (no motion) ---
-    ctx.fillStyle=PAINT;
-    rrect(OX+S*0.0, OY+S*0.0, S*0.30, S*0.16);     // top-left plane
-    ctx.fillStyle=YEL;
-    rrect(OX+S*0.0, OY+S*0.84, S*0.18, S*0.16);    // bottom-left primary
-    ctx.fillStyle=PAINT;
-    rrect(OX+S*0.74, OY+S*0.0, S*0.26, S*0.12);
+    ctx.fillStyle=PAINT; rrect(OX+S*0.0, OY+S*0.0, S*0.30, S*0.16);   // top-left plane
+    ctx.fillStyle=PAL[2]; rrect(OX+S*0.0, OY+S*0.84, S*0.18, S*0.16);  // bottom-left primary
+    ctx.fillStyle=PAINT; rrect(OX+S*0.74, OY+S*0.0, S*0.26, S*0.12);
 
     // --- fulcrum post (vertical, black) ---
     ctx.fillStyle=LINE;
@@ -177,12 +191,9 @@
       var bxL=ax-bw/2;
       rrect(bxL, topY, bw, bh);
       // heavy black border on block (neoplastic outline) drawn as 4 bars
-      ctx.fillStyle=LINE;
-      var hw=LW*0.55;
-      rrect(bxL-hw, topY-hw, bw+hw*2, hw);
-      rrect(bxL-hw, topY+bh, bw+hw*2, hw);
-      rrect(bxL-hw, topY-hw, hw, bh+hw*2);
-      rrect(bxL+bw, topY-hw, hw, bh+hw*2);
+      ctx.fillStyle=LINE; var hw=LW*0.55;
+      rrect(bxL-hw, topY-hw, bw+hw*2, hw); rrect(bxL-hw, topY+bh, bw+hw*2, hw);
+      rrect(bxL-hw, topY-hw, hw, bh+hw*2); rrect(bxL+bw, topY-hw, hw, bh+hw*2);
     }
 
     // --- the beam itself (thick black bar), drawn over hanger tops ---
@@ -190,32 +201,27 @@
     drawThickLine(bx0,by0,bx1,by1,LW*1.15);
 
     // --- equilibrium reference line: faint horizontal level marker (static, low opacity) ---
-    ctx.fillStyle='rgba(236,231,218,0.10)';
+    ctx.fillStyle=REF;
     rrect(cx-half, fy-1, beamLen, 2);
 
     // outer containing frame
     ctx.fillStyle=LINE; var hw2=LW/2;
-    rrect(OX-hw2, OY-hw2, S+LW, hw2*2);
-    rrect(OX-hw2, OY+S-hw2, S+LW, hw2*2);
-    rrect(OX-hw2, OY-hw2, hw2*2, S+LW);
-    rrect(OX+S-hw2, OY-hw2, hw2*2, S+LW);
+    rrect(OX-hw2, OY-hw2, S+LW, hw2*2); rrect(OX-hw2, OY+S-hw2, S+LW, hw2*2);
+    rrect(OX-hw2, OY-hw2, hw2*2, S+LW); rrect(OX+S-hw2, OY-hw2, hw2*2, S+LW);
   }
 
   // axis-aligned-ish thick bar between two points via rotated fill
   function drawThickLine(x0,y0,x1,y1,wpx){
     var dx=x1-x0, dy=y1-y0, len=Math.sqrt(dx*dx+dy*dy);
-    var a=Math.atan2(dy,dx);
-    ctx.save();
-    ctx.translate(x0,y0); ctx.rotate(a);
-    ctx.fillRect(0,-wpx/2,len,wpx);
-    ctx.restore();
+    ctx.save(); ctx.translate(x0,y0); ctx.rotate(Math.atan2(dy,dx));
+    ctx.fillRect(0,-wpx/2,len,wpx); ctx.restore();
   }
 
   var raf=0, running=false, last=0;
   function loop(ts){
     if(!running)return;
     if(!last)last=ts;
-    var dt=(ts-last)/1000; last=ts;
+    var dt=(ts-last)/1000; last=ts;   // seconds since last frame
     if(dt>0.05)dt=0.05;       // clamp after tab return
     step(dt); draw();
     raf=requestAnimationFrame(loop);
@@ -225,17 +231,14 @@
 
   function init(){
     resize();
-    if(reduce){
-      // settle to one static, balanced frame
-      torqueBias=0.06; ang=0.05; draw(); return;
-    }
+    // reduced motion: settle to one static, balanced frame
+    if(reduce){ torqueBias=0.06; ang=0.05; draw(); return; }
     startLoop();
   }
 
   var rt;
   window.addEventListener('resize',function(){
-    clearTimeout(rt);
-    rt=setTimeout(function(){ resize(); if(reduce)draw(); },120);
+    clearTimeout(rt); rt=setTimeout(function(){ resize(); if(reduce)draw(); },120);
   });
   document.addEventListener('visibilitychange',function(){
     if(reduce)return;

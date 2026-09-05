@@ -5,11 +5,29 @@
 <meta name="description" content="Cyan dot plot of seven labeled rows whose values animate and rows reorder by rank, dots sliding to new positions each round.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dot Plot Rank Flip</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a1f24;}
+  /* theme tokens — dark values are the defaults; the JS reads every canvas colour from here */
+  :root{
+    --dprf-bg:#0a1f24; --dprf-acc:#26c6da; --dprf-grid:rgba(38,198,218,0.12);
+    --dprf-grid0:rgba(38,198,218,0.22); --dprf-base:rgba(38,198,218,0.16);
+    --dprf-halo:rgba(38,198,218,0.18); --dprf-dim:rgba(173,210,216,0.55);
+    --dprf-val:rgba(207,233,238,0.45); --dprf-ink:#cfe9ee; --dprf-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --dprf-bg:#eef5f7; --dprf-acc:#177b88; --dprf-grid:rgba(23,123,136,0.18);
+    --dprf-grid0:rgba(23,123,136,0.34); --dprf-base:rgba(23,123,136,0.26);
+    --dprf-halo:rgba(23,123,136,0.22); --dprf-dim:rgba(28,56,62,0.78);
+    --dprf-val:rgba(28,56,62,0.7); --dprf-ink:#e6f3f5; --dprf-cap-o:.62;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--dprf-bg);}
   #dprf{display:block;width:100%;height:100%;}
   .dprf-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
-       letter-spacing:.14em;color:#26c6da;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--dprf-acc);opacity:var(--dprf-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +37,22 @@
  "description": "Seven labeled rows animate new random values and reorder by rank each round; cyan dots slide horizontally and rows swap positions with cubic easing.",
  "useWhen": "Leaderboard visualizations, live ranking dashboards, or ambient data-story loops where rank changes need to feel legible and smooth.",
  "avoidWhen": "Contexts needing real data binding — values are randomly generated. Not suitable for static reports or light-background UIs (background hardcoded dark teal).",
- "agentPrompt": "Change the labels array to ['ALPHA','BETA','GAMMA','DELTA','EPSILON','ZETA','ETA'], set AC to '#ff6b6b' for a red accent, and increase dur from 92 to 140 for a slower transition.",
+ "agentPrompt": "Change the labels array to ['ALPHA','BETA','GAMMA','DELTA','EPSILON','ZETA','ETA'], set AC to '#ff6b6b' for a red accent, and increase dur from 92 to 140 for a slower transition. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "labels array (7 row names)",
   "accent color (AC='#26c6da')",
   "transition duration (dur=92 frames)",
   "hold pause length (hold=46 frames)",
   "dot radius scale (dotR calc)",
-  "value random delta range (±0.5 in newRound)"
+  "value random delta range (±0.5 in newRound)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and ctx.setTransform",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Values are randomly generated — no real data binding",
@@ -46,7 +66,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "dot-plot",
@@ -67,8 +88,28 @@
 (function(){
   const cv=document.getElementById('dprf'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const BG='#0a1f24',AC='#26c6da',GRID='rgba(38,198,218,0.12)',
-        DIM='rgba(173,210,216,0.55)',INK='#cfe9ee';
+  // theme: every colour the canvas draws with is read from the tokens, once per switch.
+  // No repaint hook needed here: frame() re-renders every rAF tick in both motion modes.
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--dprf-bg').trim();
+    C.acc=cs.getPropertyValue('--dprf-acc').trim();
+    C.grid=cs.getPropertyValue('--dprf-grid').trim();
+    C.grid0=cs.getPropertyValue('--dprf-grid0').trim();
+    C.base=cs.getPropertyValue('--dprf-base').trim();
+    C.halo=cs.getPropertyValue('--dprf-halo').trim();
+    C.dim=cs.getPropertyValue('--dprf-dim').trim();
+    C.val=cs.getPropertyValue('--dprf-val').trim();
+    C.ink=cs.getPropertyValue('--dprf-ink').trim();
+  }
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
+  syncTheme();
   const labels=['NORTH','EMBER','CASCADE','VERMILLION','SOLSTICE','HALCYON','MERIDIAN'];
   const N=labels.length;
   let W,H,DPR,L,R,top,rowH,dotR;
@@ -105,7 +146,7 @@
   const ease=x=>x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
 
   function frame(){
-    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     if(!reduce){
       if(phase===0){ t++; const p=Math.min(1,t/dur),e=ease(p);
         rows.forEach(r=>{ r.val=r.from+(r.to-r.from)*e; r.cur=r.val; r.y=r.fy+(r.ty-r.fy)*e; });
@@ -119,27 +160,27 @@
     ctx.textBaseline='middle';
     for(let g=0;g<=4;g++){
       const gx=L+(R-L)*(g/4);
-      ctx.strokeStyle=g===0?'rgba(38,198,218,0.22)':GRID;
+      ctx.strokeStyle=g===0?C.grid0:C.grid;
       ctx.beginPath();ctx.moveTo(gx,top-rowH*0.55);ctx.lineTo(gx,top+(N-1)*rowH+rowH*0.55);ctx.stroke();
     }
 
     rows.forEach(r=>{
       const x=L+(R-L)*r.cur, y=r.y;
       // baseline: the single line, position doing the work
-      ctx.strokeStyle='rgba(38,198,218,0.16)';ctx.lineWidth=1;
+      ctx.strokeStyle=C.base;ctx.lineWidth=1;
       ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(x,y);ctx.stroke();
       // label, right-aligned to the axis
-      ctx.fillStyle=DIM;ctx.textAlign='right';
+      ctx.fillStyle=C.dim;ctx.textAlign='right';
       ctx.fillText(r.name,L-clampPx(8,12),y);
       // value readout, faint, trailing the dot
-      ctx.fillStyle='rgba(207,233,238,0.45)';ctx.textAlign='left';
+      ctx.fillStyle=C.val;ctx.textAlign='left';
       ctx.fillText(Math.round(r.cur*100),Math.min(x+dotR+6,R-clampPx(2,4)),y);
       // the dot — outer halo + solid core
-      ctx.fillStyle='rgba(38,198,218,0.18)';
+      ctx.fillStyle=C.halo;
       ctx.beginPath();ctx.arc(x,y,dotR+2.4,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle=AC;
+      ctx.fillStyle=C.acc;
       ctx.beginPath();ctx.arc(x,y,dotR,0,Math.PI*2);ctx.fill();
-      ctx.fillStyle=INK;
+      ctx.fillStyle=C.ink;
       ctx.beginPath();ctx.arc(x-dotR*0.28,y-dotR*0.28,dotR*0.34,0,Math.PI*2);ctx.fill();
     });
     raf=requestAnimationFrame(frame);

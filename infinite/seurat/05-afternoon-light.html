@@ -5,11 +5,27 @@
 <meta name="description" content="Afternoon Light — Pointillist Dot-Field Studies. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Afternoon Light</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#1a1f27;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The dot triples are
+     read by syncTheme() — the canvas draws no colour that is not a token. */
+  :root{
+    --seu05-bg:#1a1f27; --seu05-cap:#fff; --seu05-cap-o:.46;
+    --seu05-green:111,155,78; --seu05-sky:143,184,214; --seu05-orange:224,138,46; --seu05-violet:107,91,149;
+  }
+  :root[data-theme="light"]{
+    --seu05-bg:#f1ecdf; --seu05-cap:#2a2620; --seu05-cap-o:.5;
+    --seu05-green:82,114,58; --seu05-sky:56,112,153; --seu05-orange:155,91,23; --seu05-violet:107,91,149;
+  }
+  html,body{margin:0;height:100%;background:var(--seu05-bg);overflow:hidden}
   #seu05-stage{position:fixed;inset:0;width:100%;height:100%}
   #seu05-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .seu05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .seu05-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--seu05-cap);opacity:var(--seu05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,22 +34,24 @@
  "description": "A diagonal light band sweeps a pointillist dot grid; dots shift from violet/sky-blue to orange/green as sunlight passes, then settle back.",
  "useWhen": "Dark-mode hero backgrounds, art-themed or museum contexts, ambient loops needing a calm color-shift effect.",
  "avoidWhen": "Light-background layouts (background hardcoded dark navy). Contexts where subtle motion is insufficient.",
- "agentPrompt": "Change warm colors to gold and coral by setting RGB.orange=[230,160,60] and RGB.green=[210,100,80], then widen the light band with bw=W*0.45.",
+ "agentPrompt": "Change warm colors to gold and coral by setting RGB.orange=[230,160,60] and RGB.green=[210,100,80], then widen the light band with bw=W*0.45. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "dot grid spacing (gap=14)",
   "band width (bw=W*0.30)",
   "sweep speed (t*0.10)",
   "color palette (RGB object)",
-  "dot size range (1.6 + Math.random()*1.4)"
+  "dot size range (1.6 + Math.random()*1.4)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing in fitCanvas()",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded in CSS — must change #1a1f27 for light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Sweep direction is fixed diagonal; not configurable without code changes"
  ],
  "tier": "curated",
@@ -43,7 +61,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "agent-ready",
-  "easy-to-modify"
+  "easy-to-modify",
+  "light-ready"
  ],
  "tags": [
   "pointillism",
@@ -66,8 +85,24 @@
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('seu05-cv'); if(!cv) return;
+  const root=document.documentElement;
   const RGB={green:[111,155,78],sky:[143,184,214],orange:[224,138,46],violet:[107,91,149]};
-  const NIGHT='#1a1f27';
+  let NIGHT='#1a1f27';
+  function trip(cs,name,out){const v=cs.getPropertyValue(name).trim();if(!v)return;const p=v.split(',');out[0]=+p[0];out[1]=+p[1];out[2]=+p[2];}
+  function syncTheme(){                 // every canvas colour comes from a token, read once per theme
+    const cs=getComputedStyle(root);    // triples are rewritten in place, so the grid's cached
+    NIGHT=cs.getPropertyValue('--seu05-bg').trim()||NIGHT;   // base/warm references re-colour too
+    trip(cs,'--seu05-green',RGB.green);trip(cs,'--seu05-sky',RGB.sky);
+    trip(cs,'--seu05-orange',RGB.orange);trip(cs,'--seu05-violet',RGB.violet);
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(REDUCED)draw(0);
+    }
+  });
+  syncTheme();
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
     const r=c.getBoundingClientRect();

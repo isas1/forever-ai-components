@@ -5,18 +5,38 @@
 <meta name="description" content="Concentric black-and-white rings expand outward from the center implying infinite depth with subtle moire shimmer.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Concentric Pulse</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
-  #op03-stage{position:fixed;inset:0;display:block;background:#0a0a0a}
+  /* theme tokens — dark values are the defaults; light inverts the ground/ink pair
+     (black rings on white paper) and fades the vignette toward paper, not black.
+     --op03-ink-rgb feeds the JS stroke alphas. */
+  :root{
+    --op03-bg:#0a0a0a; --op03-ink-rgb:255,255,255;
+    --op03-glow:rgba(255,255,255,.10); --op03-glow-t:rgba(255,255,255,0);
+    --op03-vig-t:rgba(0,0,0,0); --op03-vig:rgba(0,0,0,.62);
+    --op03-cap:#fff; --op03-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --op03-bg:#f4f4f2; --op03-ink-rgb:20,20,20;
+    --op03-glow:rgba(20,20,20,.05); --op03-glow-t:rgba(20,20,20,0);
+    --op03-vig-t:rgba(244,244,242,0); --op03-vig:rgba(244,244,242,.72);
+    --op03-cap:#141414; --op03-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--op03-bg);overflow:hidden}
+  #op03-stage{position:fixed;inset:0;display:block;background:var(--op03-bg)}
   #op03-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* static radial vignette + faint core glow — never repaints */
   #op03-stage::after{
     content:"";position:absolute;inset:0;pointer-events:none;
     background:
-      radial-gradient(circle at 50% 50%, rgba(255,255,255,.10) 0%, rgba(255,255,255,0) 22%),
-      radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 58%, rgba(0,0,0,.62) 100%);
+      radial-gradient(circle at 50% 50%, var(--op03-glow) 0%, var(--op03-glow-t) 22%),
+      radial-gradient(circle at 50% 50%, var(--op03-vig-t) 58%, var(--op03-vig) 100%);
   }
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op03-cap);opacity:var(--op03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -26,19 +46,21 @@
  "description": "26 white rings march outward from center in a ~6s loop; a second scaled field produces slow moire interference fringes on a dark background.",
  "useWhen": "Dark-mode hero backgrounds, loading screens, or meditative ambient displays needing a hypnotic depth illusion.",
  "avoidWhen": "Light-background UIs (background hardcoded dark). Contexts where moire shimmer may trigger visual sensitivity.",
- "agentPrompt": "Change RINGS to 18, increase PERIOD to 9000 for a slower pulse, and tint rings amber by replacing \"rgba(255,255,255,\" with \"rgba(255,200,100,\".",
+ "agentPrompt": "Change RINGS to 18, increase PERIOD to 9000 for a slower pulse, and tint rings amber by replacing \"rgba(255,255,255,\" with \"rgba(255,200,100,\". Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ring count (RINGS=26)",
   "animation cycle duration (PERIOD=6200)",
   "moire scale factor (GAP*1.058)",
   "moire counter-march speed (phase*0.62)",
-  "stroke opacity range (0.10 + 0.82*op)"
+  "stroke opacity range (0.10 + 0.82*op)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange pause/resume",
   "reduced-motion static fallback (drawOneFrame)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background hardcoded near-black in both CSS and canvas — edit both to change",
@@ -51,7 +73,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "op-art",
@@ -78,6 +101,20 @@
   var stage = document.getElementById("op03-stage");
   var cvs = document.getElementById("op03-c");
   var ctx = cvs.getContext("2d");
+  var root = document.documentElement;
+
+  // the ring colour JS draws with — read once from the token, once per switch
+  var C={ink:"255,255,255"};
+  function syncTheme(){
+    C.ink=getComputedStyle(root).getPropertyValue("--op03-ink-rgb").trim();
+    if(reduce&&W)drawField(0.0);   // static fallback must repaint on a live switch
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme();
+    }
+  });
 
   var W=0,H=0,cx=0,cy=0,maxR=0,dpr=1;
   // ring field constants
@@ -119,7 +156,7 @@
       w = (0.6 + 2.4*Math.sin(a*Math.PI)) ;
       // opacity: fade newest (center) in, oldest (rim) out -> infinite feel
       var op = Math.sin(a*Math.PI);
-      ctx.strokeStyle = "rgba(255,255,255," + (0.10 + 0.82*op).toFixed(3) + ")";
+      ctx.strokeStyle = "rgba(" + C.ink + "," + (0.10 + 0.82*op).toFixed(3) + ")";
       ctx.lineWidth = w;
       ctx.beginPath();
       ctx.arc(cx,cy,r,0,TWO_PI);
@@ -127,7 +164,7 @@
     }
     // moire field: same rings scaled ~1.06 and counter-marching slowly.
     // The near-but-not-equal spacing produces slow interference fringes.
-    ctx.strokeStyle = "rgba(255,255,255,0.16)";
+    ctx.strokeStyle = "rgba(" + C.ink + ",0.16)";
     ctx.lineWidth = 1;
     var GAP2 = GAP*1.058;
     var ph2 = phase*0.62;
@@ -147,6 +184,7 @@
     drawField(0.0);
   }
 
+  syncTheme();
   if(reduce){
     drawOneFrame();
     return;

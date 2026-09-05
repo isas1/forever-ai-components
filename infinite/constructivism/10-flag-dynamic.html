@@ -5,11 +5,27 @@
 <meta name="description" content="A red banner snaps and waves along a black diagonal strut with a white tick bar and Suprematist-style square accent on black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dynamic Flag</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0c0d;overflow:hidden}
-  #cv10-stage{position:fixed;inset:0;background:#0c0c0d}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light re-theme is the
+     [data-theme="light"] block, re-read by syncTheme() (which also rebuilds the cached ground layer).
+     --mass, the big suprematist wedge, sat one step off the dark ground, so it sits one step off the
+     cream one; --wht is the slab bar riding the red banner and stays light, while --rule (baseline +
+     pivot disc) sits on the open ground and flips to ink. */
+  :root{--c10-bg:#0c0c0d;--c10-red:#d11f1f;--c10-red2:#a8161a;--c10-wht:#efe9df;--c10-rule:#efe9df;
+    --c10-blk:#111012;--c10-mass:#111012;--c10-ink:#1b1a1c;--c10-strut:#2a2a2d;
+    --c10-glow0:#3a0a0a;--c10-glow1:rgba(12,12,13,0);--c10-cap:#ffffff;--c10-cap-o:.42}
+  :root[data-theme="light"]{--c10-bg:#f4efe4;--c10-red:#d11f1f;--c10-red2:#a8161a;--c10-wht:#fbf7ef;--c10-rule:#1b1a17;
+    --c10-blk:#17171a;--c10-mass:#ece5d6;--c10-ink:#26231e;--c10-strut:#4a4438;
+    --c10-glow0:rgba(209,31,31,.20);--c10-glow1:rgba(209,31,31,0);--c10-cap:#1b1a17;--c10-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--c10-bg);overflow:hidden}
+  #cv10-stage{position:fixed;inset:0;background:var(--c10-bg)}
   #cv10-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--c10-cap);opacity:var(--c10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +34,22 @@
  "description": "A red banner waves and snaps along a black diagonal strut, with a white slab bar, rhythm tick marks, and a Suprematist-style square accent on a dark ground.",
  "useWhen": "Constructivist or propaganda-art themed hero sections, political/historical editorial, bold ambient backgrounds needing strong diagonal composition.",
  "avoidWhen": "Light backgrounds (hardcoded dark ground), contexts requiring legible text overlays over the flag area, or low-end devices where the per-frame blit + wave math may stutter.",
- "agentPrompt": "Change the banner color to deep blue by setting RED='#1a3bd1' and RED2='#122a9e', increase segment count to 20 (SEG=20), and slow the wave speed by changing t*4.0 to t*2.5.",
+ "agentPrompt": "Change the banner color to deep blue by setting RED='#1a3bd1' and RED2='#122a9e', increase segment count to 20 (SEG=20), and slow the wave speed by changing t*4.0 to t*2.5. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "banner color (RED, RED2 palette vars)",
   "wave speed multiplier (t*4.0)",
   "banner thickness (band=S*0.30)",
   "segment count (SEG=14)",
   "diagonal angle (ANG=-0.62)",
-  "white slab bar size (bw=len*0.40, bh=band*0.24)"
+  "white slab bar size (bw=len*0.40, bh=band*0.24)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "offscreen groundCv cache pattern (prevents gradient alloc in rAF)",
   "prefers-reduced-motion static frame fallback",
   "visibilitychange stop/play guard",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to dark near-black — must edit BG and CSS to change",
@@ -45,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "constructivism",
@@ -72,8 +91,15 @@
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 
-  // palette
-  var BG='#0c0c0d', RED='#d11f1f', RED2='#a8161a', WHT='#efe9df', BLK='#111012', INK='#1b1a1c';
+  // palette — every colour the canvas draws with is read from the theme tokens
+  var root=document.documentElement, C={},
+      KEYS=['bg','red','red2','wht','rule','blk','mass','ink','strut','glow0','glow1'];
+  function syncTheme(){ var cs=getComputedStyle(root); for(var k=0;k<KEYS.length;k++) C[KEYS[k]]=cs.getPropertyValue('--c10-'+KEYS[k]).trim(); }
+  // live re-theme: re-read the tokens AND rebuild the cached static ground layer
+  addEventListener('message',function(e){ var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme(); buildGround();
+      if(reduce) frame(W*0.5,H*0.5,0.55); } });
 
   var W=0,H=0,S=0,DPR=1;
 
@@ -113,11 +139,11 @@
 
   // draws the fully-static ground into the given context (called once per resize, never per frame)
   function drawStaticGround(g2,cx,cy){
-    g2.fillStyle=BG; g2.fillRect(0,0,W,H);
+    g2.fillStyle=C.bg; g2.fillRect(0,0,W,H);
     // large black wedge (suprematist mass)
     g2.save();
     g2.translate(cx,cy); g2.rotate(ANG);
-    g2.fillStyle=BLK;
+    g2.fillStyle=C.mass;
     g2.beginPath();
     g2.moveTo(-S*0.9,S*0.12); g2.lineTo(S*0.9,-S*0.04);
     g2.lineTo(S*0.9,S*0.9); g2.lineTo(-S*0.9,S*0.9); g2.closePath(); g2.fill();
@@ -126,13 +152,13 @@
     // black diagonal strut the flag snaps from (the pole/axis)
     g2.save();
     g2.lineCap='butt';
-    g2.strokeStyle=INK; g2.lineWidth=Math.max(10,S*0.05);
+    g2.strokeStyle=C.ink; g2.lineWidth=Math.max(10,S*0.05);
     g2.beginPath();
     g2.moveTo(cx-COS*S*0.62, cy-SIN*S*0.62);
     g2.lineTo(cx+COS*S*0.62, cy+SIN*S*0.62);
     g2.stroke();
     // bright accent strut just behind
-    g2.strokeStyle='#2a2a2d'; g2.lineWidth=Math.max(3,S*0.012);
+    g2.strokeStyle=C.strut; g2.lineWidth=Math.max(3,S*0.012);
     g2.beginPath();
     g2.moveTo(cx-COS*S*0.66 + SIN*S*0.05, cy-SIN*S*0.66 - COS*S*0.05);
     g2.lineTo(cx+COS*S*0.5 + SIN*S*0.05, cy+SIN*S*0.5 - COS*S*0.05);
@@ -142,12 +168,12 @@
     // pivot disc (static, with baked radial — gradient allocated here, never in rAF)
     var pr=S*0.052;
     var grad=g2.createRadialGradient(cx-COS*S*0.5,cy-SIN*S*0.5,0,cx-COS*S*0.5,cy-SIN*S*0.5,pr*2.2);
-    grad.addColorStop(0,'#3a0a0a'); grad.addColorStop(1,'rgba(12,12,13,0)');
+    grad.addColorStop(0,C.glow0); grad.addColorStop(1,C.glow1);
     g2.fillStyle=grad;
     g2.beginPath(); g2.arc(cx-COS*S*0.5,cy-SIN*S*0.5,pr*2.2,0,6.2832); g2.fill();
-    g2.fillStyle=WHT;
+    g2.fillStyle=C.rule;
     g2.beginPath(); g2.arc(cx-COS*S*0.5,cy-SIN*S*0.5,pr,0,6.2832); g2.fill();
-    g2.fillStyle=RED;
+    g2.fillStyle=C.red;
     g2.beginPath(); g2.arc(cx-COS*S*0.5,cy-SIN*S*0.5,pr*0.5,0,6.2832); g2.fill();
   }
 
@@ -178,7 +204,7 @@
       ctx.lineTo(x, botY+w*0.4);
     }
     ctx.closePath();
-    ctx.fillStyle=RED; ctx.fill();
+    ctx.fillStyle=C.red; ctx.fill();
 
     // dark fold band (shaded valley) — drawn as a thin offset strip, static-color
     ctx.beginPath();
@@ -194,17 +220,17 @@
       ctx.lineTo(x, topY+band*0.78+w*0.4);
     }
     ctx.closePath();
-    ctx.fillStyle=RED2; ctx.fill();
+    ctx.fillStyle=C.red2; ctx.fill();
 
     // white slab bar riding the banner (propaganda type block) — clipped to body feel
     ctx.save();
     var bx=poleX+len*0.30, bw=len*0.40, by=topY+band*0.20, bh=band*0.24;
     var wob=Math.sin(t*4.0-1.8)*ampBase*0.55;
     ctx.translate(0,wob);
-    ctx.fillStyle=WHT;
+    ctx.fillStyle=C.wht;
     ctx.fillRect(bx,by,bw,bh);
     // black tick marks (constructivist rhythm) on the bar
-    ctx.fillStyle=BLK;
+    ctx.fillStyle=C.blk;
     var ticks=5, tw=bw/(ticks*2);
     for(var m=0;m<ticks;m++) ctx.fillRect(bx+ (m*2+0.5)*tw, by+bh*0.22, tw, bh*0.56);
     ctx.restore();
@@ -216,7 +242,7 @@
     ctx.lineTo(poleEndX+len*0.10, (topY+botY)*0.5+endW*0.4);
     ctx.lineTo(poleEndX, botY+endW*0.4);
     ctx.closePath();
-    ctx.fillStyle=RED2; ctx.fill();
+    ctx.fillStyle=C.red2; ctx.fill();
 
     ctx.restore();
   }
@@ -226,13 +252,13 @@
     ctx.save();
     ctx.translate(cx,cy); ctx.rotate(ANG);
     // thin white baseline along the axis
-    ctx.fillStyle=WHT;
+    ctx.fillStyle=C.rule;
     ctx.fillRect(-S*0.5, S*0.40, S*0.96, Math.max(3,S*0.014));
     // black square accent (Suprematist nod) bottom-left of axis
-    ctx.fillStyle=BLK;
+    ctx.fillStyle=C.blk;
     var q=S*0.10;
     ctx.fillRect(-S*0.5, S*0.42+Math.max(3,S*0.014), q, q);
-    ctx.fillStyle=RED;
+    ctx.fillStyle=C.red;
     ctx.fillRect(-S*0.5+q*0.28, S*0.42+Math.max(3,S*0.014)+q*0.28, q*0.44, q*0.44);
     ctx.restore();
   }
@@ -256,6 +282,7 @@
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
   function init(){
+    syncTheme();
     size();
     if(reduce){ frame(W*0.5,H*0.5,0.55); return; }
     play();
