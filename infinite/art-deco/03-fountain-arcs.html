@@ -5,15 +5,23 @@
 <meta name="description" content="Symmetrical golden fountain arcs well up from a central jet with chevron crown and cascade outward over a black field, breathing slowly.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fountain Arcs</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0b08;overflow:hidden}
+  /* theme tokens — dark defaults; light re-theme (deep gold on ivory) = the [data-theme="light"] line. JS strokes with these; see syncTheme(). */
+  :root{--ad03-bg:#0c0b08;--ad03-gold:#d4af37;--ad03-pale:#f3e2a3;--ad03-amber:#c8922a;--ad03-deep:#7c5c14;--ad03-glow:rgba(212,175,55,.10);--ad03-glow-0:rgba(212,175,55,0);--ad03-cap:#fff;--ad03-cap-o:.42}
+  :root[data-theme="light"]{--ad03-bg:#f7f1e4;--ad03-gold:#87681a;--ad03-pale:#6b4f12;--ad03-amber:#a8801f;--ad03-deep:#c2a05a;--ad03-glow:rgba(135,104,26,.13);--ad03-glow-0:rgba(135,104,26,0);--ad03-cap:#2a2110;--ad03-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--ad03-bg);overflow:hidden}
   #ad03-stage{position:fixed;inset:0;display:block}
   #ad03-c{position:absolute;inset:0;width:100%;height:100%;
     background:
-      radial-gradient(120% 80% at 50% 16%, rgba(212,175,55,.10), rgba(212,175,55,0) 55%),
-      #0c0b08}
+      radial-gradient(120% 80% at 50% 16%, var(--ad03-glow), var(--ad03-glow-0) 55%),
+      var(--ad03-bg)}
   .ad03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--ad03-cap);opacity:var(--ad03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -23,19 +31,21 @@
  "description": "Symmetrical golden arcs well up from a central jet with a chevron crown, fanning outward in a breathing 7.2s cycle over a near-black field.",
  "useWhen": "Dark luxury hero backgrounds, Art Deco themed headers, ambient looping display for premium brand contexts.",
  "avoidWhen": "Light backgrounds (hardcoded dark field). Contexts requiring legible text overlaid — arc motion competes with reading.",
- "agentPrompt": "Change ARCS from 9 to 12, set GOLD to '#e8c97a', and slow the breathing cycle by changing the cycle variable from 7.2 to 10.",
+ "agentPrompt": "Change ARCS from 9 to 12, set GOLD to '#e8c97a', and slow the breathing cycle by changing the cycle variable from 7.2 to 10. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "arc count per side (ARCS=9)",
   "color palette (GOLD, PALE, AMBER, DEEP constants)",
   "breathing cycle duration (cycle=7.2)",
   "spread and lift ratios (W*0.46, unit*0.46)",
-  "chevron crown stack count (k<3)"
+  "chevron crown stack count (k<3)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "cached gradient rebuild on resize only (gradL/gradR)",
   "visibilitychange pause/resume",
-  "reduced-motion static frame fallback (render(2.6))"
+  "reduced-motion static frame fallback (render(2.6))",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and canvas — must edit both to change from near-black",
@@ -49,7 +59,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-deco",
@@ -77,8 +88,15 @@
   var W=0,H=0,DPR=1,cx=0,baseY=0,running=true,raf=0,t0=0;
   var gradL=null, gradR=null;   // cached per-side stroke gradients (rebuilt on resize)
 
-  // Palette around #d4af37 on #0c0b08
-  var GOLD='#d4af37', PALE='#f3e2a3', AMBER='#c8922a', DEEP='#7c5c14';
+  // Palette lives in the CSS tokens; read once at start + once per theme flip, never per frame.
+  var root=document.documentElement, GOLD, PALE, AMBER, DEEP;
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    GOLD=v('--ad03-gold'); PALE=v('--ad03-pale'); AMBER=v('--ad03-amber'); DEEP=v('--ad03-deep');
+    if(W){ size(); if(reduce) render(2.6); }   // size() rebuilds the cached gradients
+  }
+  addEventListener('message', function(e){ var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
   var ARCS = 9;          // arcs per side  (<<110 elements)
   var DOTS = 7;          // droplets per arc
 
@@ -88,15 +106,12 @@
     cv.width = Math.max(1,(W*DPR)|0); cv.height = Math.max(1,(H*DPR)|0);
     ctx.setTransform(DPR,0,0,DPR,0,0);
     cx = W*0.5; baseY = H*0.80;
-    var unit = Math.min(W,H);
-    var spread = W*0.46;
-    var lift = unit*0.46;
-    // Cache per-side stroke gradients: constant given geometry, so rebuild only here.
+    var unit = Math.min(W,H), spread = W*0.46, lift = unit*0.46;
+    // Cache per-side stroke gradients: constant given geometry + palette, so they are
+    // rebuilt here only — on resize, and on a theme flip (syncTheme calls size()).
     gradL = ctx.createLinearGradient(cx, baseY-lift, cx-spread, baseY);
     gradR = ctx.createLinearGradient(cx, baseY-lift, cx+spread, baseY);
-    [gradL,gradR].forEach(function(g){
-      g.addColorStop(0, PALE); g.addColorStop(0.5, GOLD); g.addColorStop(1, AMBER);
-    });
+    [gradL,gradR].forEach(function(g){ g.addColorStop(0,PALE); g.addColorStop(0.5,GOLD); g.addColorStop(1,AMBER); });
   }
 
   // One arc: parabola from (cx, baseY) launched at angle, reflected by side.
@@ -218,7 +233,7 @@
   }
 
   function init(){
-    size();
+    syncTheme(); size();
     if(reduce){ render(2.6); return; }   // one settled, on-brand frame near peak
     start();
   }

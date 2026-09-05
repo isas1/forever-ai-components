@@ -5,11 +5,33 @@
 <meta name="description" content="A recursive branching fractal tree grows from the base, sways in wind with green blossoms at its tips, over a warm brown gradient.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fractal Tree</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#241a10}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. The branch colour is hsl() driven by depth:
+     --ft-bh/-bs/-bl are the base hue/sat/lightness and --ft-bsd/-bld the per-depth step, so
+     light mode keeps the same "tips recede" gradient with ink-brown branches on parchment.
+     --ft-l* are the blossom hsla parts. */
+  :root{
+    --ft-bg:#241a10; --ft-cap:#ffd9a0; --ft-cap-o:.34;
+    --ft-g0:#3a2a18; --ft-g1:#1c1409;
+    --ft-bh:28; --ft-bs:40; --ft-bsd:5; --ft-bl:18; --ft-bld:4;
+    --ft-lh:100; --ft-ls:60; --ft-ll:55; --ft-la:.55;
+  }
+  :root[data-theme="light"]{
+    --ft-bg:#f6f1e8; --ft-cap:#7a4a12; --ft-cap-o:.62;
+    --ft-g0:#f7f2e9; --ft-g1:#e5d9c6;
+    --ft-bh:26; --ft-bs:55; --ft-bsd:-3; --ft-bl:14; --ft-bld:3.5;
+    --ft-lh:104; --ft-ls:58; --ft-ll:30; --ft-la:.72;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--ft-bg)}
   #c{display:block;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
-       letter-spacing:.08em;text-transform:uppercase;color:#ffd9a0;opacity:.34;user-select:none}
+       letter-spacing:.08em;text-transform:uppercase;color:var(--ft-cap);opacity:var(--ft-cap-o);user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,24 +40,26 @@
  "description": "A recursive 7-level fractal tree grows from the base with a wind sway animation; green blossoms appear at tips; pointer horizontal position bends the tree.",
  "useWhen": "Nature or organic-themed hero backgrounds, generative art sections, ambient screensaver-style displays.",
  "avoidWhen": "Layouts requiring text legibility over the canvas — dark background is hardcoded and branches fill the viewport.",
- "agentPrompt": "Change branch depth to 9, set blossom color to pink (change 100 to 320 in the hsla leaf fillStyle), and slow wind sway by setting t*1.2 to t*0.6.",
+ "agentPrompt": "Change branch depth to 9, set blossom color to pink (change 100 to 320 in the hsla leaf fillStyle), and slow wind sway by setting t*1.2 to t*0.6. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "branch depth (depth=7 in branch() call)",
   "base trunk length (Math.min(W,H)*0.21)",
   "branch spread angle (0.42)",
   "blossom hue base (100 in hsla)",
   "sway wind amplitude (0.05 multiplier)",
-  "grow-in cycle duration (t*0.25 modulo 6)"
+  "grow-in cycle duration (t*0.25 modulo 6)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange cancelAnimationFrame guard",
   "DPR-aware canvas sizing",
   "prefers-reduced-motion t increment guard",
-  "IIFE-equivalent top-level scoping via const"
+  "IIFE-equivalent top-level scoping via const",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Recursive branch() redraws every branch every frame — depth 8+ noticeably expensive on mobile",
-  "Background color hardcoded dark brown in CSS — must edit both CSS and gradient stops to change",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "grow-in animation restarts on a 6-second cycle indefinitely"
  ],
  "tier": "curated",
@@ -44,7 +68,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "fractal",
@@ -62,9 +87,27 @@
 <canvas id="c"></canvas>
 <div class="cap">Fractal Tree</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
-let W,H,DPR,raf,t=0,mw=0;
+let W,H,DPR,raf,t=6,mw=0;   // t=6: mount ~60% grown; the clock below runs the grow-in in ~4s, not 20
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const root=document.documentElement;
+const C={g0:'',g1:'',bh:28,bs:40,bsd:5,bl:18,bld:4,lh:100,ls:60,ll:55,la:.55};
+function syncTheme(){            // every colour the canvas draws with comes from the tokens
+  const cs=getComputedStyle(root),num=k=>parseFloat(cs.getPropertyValue(k));
+  C.g0=cs.getPropertyValue('--ft-g0').trim();      // sky gradient is rebuilt every frame
+  C.g1=cs.getPropertyValue('--ft-g1').trim();
+  C.bh=num('--ft-bh');C.bs=num('--ft-bs');C.bsd=num('--ft-bsd');   // branch hsl per depth
+  C.bl=num('--ft-bl');C.bld=num('--ft-bld');
+  C.lh=num('--ft-lh');C.ls=num('--ft-ls');C.ll=num('--ft-ll');C.la=num('--ft-la'); // blossoms
+}
+addEventListener('message',function(e){
+  const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme);syncTheme();
+  }
+});
+syncTheme();
 function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
 addEventListener('resize',size);size();
@@ -75,14 +118,14 @@ function branch(px,py,len,ang,depth,sway,grow){
   const wind=Math.sin(t*1.2+depth*0.5+px*0.01)*0.05*(7-depth)+sway*0.02*(7-depth);
   const a=ang+wind;
   const ex=px+Math.cos(a)*len*grow, ey=py+Math.sin(a)*len*grow;
-  x.strokeStyle=`hsl(${28+depth*4},${40+depth*5}%,${18+depth*4}%)`;
+  x.strokeStyle=`hsl(${C.bh+depth*4},${C.bs+depth*C.bsd}%,${C.bl+depth*C.bld}%)`;
   x.lineWidth=Math.max(0.6,depth*1.05);
   x.lineCap='round';
   x.beginPath();x.moveTo(px,py);x.lineTo(ex,ey);x.stroke();
   if(depth<=2){
     // leaf/blossom
     const lg=grow;
-    x.fillStyle=`hsla(${100+Math.sin(px*0.05+t)*30},60%,55%,${0.55*lg})`;
+    x.fillStyle=`hsla(${C.lh+Math.sin(px*0.05+t)*30},${C.ls}%,${C.ll}%,${C.la*lg})`;
     x.beginPath();x.arc(ex,ey,2.2+depth,0,7);x.fill();
   }
   const spread=0.42+Math.sin(t*0.5)*0.05;
@@ -91,9 +134,9 @@ function branch(px,py,len,ang,depth,sway,grow){
   if(depth%2===0)branch(ex,ey,len*0.55,a+Math.sin(depth)*0.2,depth-1,sway,grow);
 }
 function frame(){
-  t+=reduce?0:0.01;
+  t+=reduce?0:0.05;
   const g=x.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,'#3a2a18');g.addColorStop(1,'#1c1409');
+  g.addColorStop(0,C.g0);g.addColorStop(1,C.g1);
   x.fillStyle=g;x.fillRect(0,0,W,H);
   // grow-in loop
   const cyc=reduce?1:(t*0.25)%6;
@@ -106,6 +149,7 @@ raf=requestAnimationFrame(frame);
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
 });
+})();
 </script>
 </body>
 </html>

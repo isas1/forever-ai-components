@@ -5,11 +5,19 @@
 <meta name="description" content="Cherry-blossom petals flutter and drift down over an indigo-to-coral dawn sky above a stylised woodblock mountain.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Blossom Fall</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
-  #uk04-stage{position:fixed;inset:0;background:#0f1822}
+  /* theme tokens: dark defaults, light = the washi-paper re-print */
+  :root{--uk04-bg:#0f1822;--uk04-sky-top:#1a2c46;--uk04-sky-mid:#5a4a6a;--uk04-sky-low:#c97a6d;--uk04-sky-hz:#e8d5b0;--uk04-fuji:#2a3d5c;--uk04-snow:#e8d5b0;--uk04-petal-a:#f3c9cf;--uk04-petal-b:#e89aa6;--uk04-petal-c:#f6e4d6;--uk04-sun:rgba(243,201,207,0.16);--uk04-branch:#13202f;--uk04-cap:#fff;--uk04-cap-o:.42}
+  :root[data-theme="light"]{--uk04-bg:#f7f0e6;--uk04-sky-top:#cddced;--uk04-sky-mid:#e6d8e6;--uk04-sky-low:#f2c9b8;--uk04-sky-hz:#f8ecd8;--uk04-fuji:#46688f;--uk04-snow:#fffdf7;--uk04-petal-a:#d3798f;--uk04-petal-b:#b8415f;--uk04-petal-c:#f0cfc4;--uk04-sun:rgba(200,90,70,0.14);--uk04-branch:#3a2a24;--uk04-cap:#2a3446;--uk04-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--uk04-bg);overflow:hidden}
+  #uk04-stage{position:fixed;inset:0;background:var(--uk04-bg)}
   #uk04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--uk04-cap);opacity:var(--uk04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +27,22 @@
  "description": "110 sakura petals drift and flutter down over an indigo-to-coral bokashi sky with a stylised woodblock mountain and bare branch silhouette.",
  "useWhen": "Spring or nature-themed hero backgrounds, Japanese aesthetic UIs, ambient screensaver-style displays.",
  "avoidWhen": "Light-mode UIs (sky hardcoded dark indigo). Layouts needing legible text overlay — petals compete with reading.",
- "agentPrompt": "Change petal count to 60 by setting N=60, shift the palette to warm gold by setting PETAL_A=\"#f5e0a0\", PETAL_B=\"#e8c96d\", PETAL_C=\"#faf0c0\", and slow fall speed by changing the rnd range in psp to (0.10, 0.30).",
+ "agentPrompt": "Change petal count to 60 by setting N=60, shift the palette to warm gold by setting PETAL_A=\"#f5e0a0\", PETAL_B=\"#e8c96d\", PETAL_C=\"#faf0c0\", and slow fall speed by changing the rnd range in psp to (0.10, 0.30). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "petal count (N=110)",
   "fall speed range (psp rnd 0.18..0.55)",
   "petal color palette (PETAL_A/B/C)",
   "sky gradient stops (SKY_TOP/MID/LOW/HORIZON)",
   "mountain position and size (bx, peakY, halfW)",
-  "drift amplitude multiplier (*6 in drawPetals)"
+  "drift amplitude multiplier (*6 in drawPetals)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange stop/start guard",
   "reduced-motion static single-frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Sky and background color hardcoded — must edit CSS and gradient stops to change scheme",
@@ -45,7 +55,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "cherry-blossom",
@@ -72,9 +83,18 @@
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  // palette — bokashi dawn: indigo -> coral -> cream
-  var SKY_TOP="#1a2c46", SKY_MID="#5a4a6a", SKY_LOW="#c97a6d", SKY_HORIZON="#e8d5b0";
-  var FUJI="#2a3d5c", FUJI_SNOW="#e8d5b0", PETAL_A="#f3c9cf", PETAL_B="#e89aa6", PETAL_C="#f6e4d6";
+  // palette — bokashi dawn read from the CSS tokens, re-read on a theme switch
+  var root=document.documentElement, SKY_TOP,SKY_MID,SKY_LOW,SKY_HORIZON,FUJI,FUJI_SNOW,PETAL_A,PETAL_B,PETAL_C,SUN_WASH,BRANCH;
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    SKY_TOP=v("--uk04-sky-top"); SKY_MID=v("--uk04-sky-mid"); SKY_LOW=v("--uk04-sky-low"); SKY_HORIZON=v("--uk04-sky-hz");
+    FUJI=v("--uk04-fuji"); FUJI_SNOW=v("--uk04-snow"); SUN_WASH=v("--uk04-sun"); BRANCH=v("--uk04-branch");
+    PETAL_A=v("--uk04-petal-a"); PETAL_B=v("--uk04-petal-b"); PETAL_C=v("--uk04-petal-c");
+  }
+  syncTheme();
+  addEventListener("message",function(e){ var d=e.data; // live re-theme from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce){ drawScene(); drawPetals(); } }
+  });
 
   var W=0,H=0,dpr=1,running=true,raf=0,t=0;
 
@@ -146,11 +166,11 @@
     // pale sun disc — static, low coral, behind petals
     ctx.beginPath();
     ctx.arc(W*0.28,H*0.34,Math.min(W,H)*0.11,0,Math.PI*2);
-    ctx.fillStyle="rgba(243,201,207,0.16)"; ctx.fill();
+    ctx.fillStyle=SUN_WASH; ctx.fill();
 
     // distant blossom branch — bold outline, top-left, original silhouette
     ctx.save();
-    ctx.strokeStyle="#13202f"; ctx.lineWidth=Math.max(2,W/220); ctx.lineCap="round";
+    ctx.strokeStyle=BRANCH; ctx.lineWidth=Math.max(2,W/220); ctx.lineCap="round";
     ctx.beginPath();
     ctx.moveTo(-4,H*0.02);
     ctx.bezierCurveTo(W*0.10,H*0.05,W*0.16,H*0.14,W*0.30,H*0.12);

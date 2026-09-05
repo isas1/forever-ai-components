@@ -5,11 +5,29 @@
 <meta name="description" content="Two concentric black-and-white ring grids slide apart, producing soft drifting moire interference fringes.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Moire Drift</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
-  #op01-stage{position:fixed;inset:0;background:#0a0a0a}
+  /* theme tokens — dark values are the defaults; the light re-theme inverts the
+     ground/ink pair (white paper, black ink) and swaps the canvas blend modes:
+     additive/difference on black becomes subtractive multiply on paper. */
+  :root{
+    --op01-bg:#0a0a0a; --op01-ink-a:#f4f4f4; --op01-ink-b:#ffffff;
+    --op01-blend-a:lighter; --op01-blend-b:difference; --op01-duty:.5;
+    --op01-cap:#fff; --op01-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --op01-bg:#f4f4f2; --op01-ink-a:#141414; --op01-ink-b:#1c1c1c;
+    --op01-blend-a:multiply; --op01-blend-b:multiply; --op01-duty:.22;
+    --op01-cap:#141414; --op01-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--op01-bg);overflow:hidden}
+  #op01-stage{position:fixed;inset:0;background:var(--op01-bg)}
   #op01-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op01-cap);opacity:var(--op01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +37,21 @@
  "description": "Two concentric ring grids drift apart with opposed phase, producing slow-shifting moire interference fringes via canvas lighter/difference compositing.",
  "useWhen": "Dark-background hero sections, generative art showcases, optical illusion demos, ambient looping backgrounds.",
  "avoidWhen": "Light-background UIs (background hardcoded #0a0a0a). Contexts where users are sensitive to optical illusions or patterned motion.",
- "agentPrompt": "Change the ring period base by editing the P formula (e.g., minD/18 for denser rings), set ring color to a warm tone like #ffe066 for field A, and slow the drift by multiplying t by 0.5.",
+ "agentPrompt": "Change the ring period base by editing the P formula (e.g., minD/18 for denser rings), set ring color to a warm tone like #ffe066 for field A, and slow the drift by multiplying t by 0.5. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ring period density (minD/26 divisor)",
   "drift speed multipliers (t*0.18, t*0.13 etc.)",
   "field A stroke color (#f4f4f4)",
   "drift amplitude (P*1.7, P*1.9)",
-  "composite modes (lighter / difference)"
+  "composite modes (lighter / difference)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (drawOneFrame static fallback)",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and JS fillStyle — must update both to change",
@@ -44,7 +64,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "moire",
@@ -70,6 +91,26 @@
   var c=document.getElementById("op01-c");
   var ctx=c.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var root=document.documentElement;
+
+  // colours the canvas draws with — read once from the tokens, once per switch
+  var C={bg:"#0a0a0a",inkA:"#f4f4f4",inkB:"#ffffff",blendA:"lighter",blendB:"difference",duty:0.5};
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue("--op01-bg").trim();
+    C.inkA=cs.getPropertyValue("--op01-ink-a").trim();
+    C.inkB=cs.getPropertyValue("--op01-ink-b").trim();
+    C.blendA=cs.getPropertyValue("--op01-blend-a").trim();
+    C.blendB=cs.getPropertyValue("--op01-blend-b").trim();
+    C.duty=parseFloat(cs.getPropertyValue("--op01-duty"))||0.5;
+    if(reduce&&W)drawOneFrame();   // static fallback must repaint on a live switch
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme();
+    }
+  });
 
   // cached geometry (recomputed on resize only)
   var W=0,H=0,dpr=1,cx0=0,cy0=0;
@@ -98,7 +139,7 @@
     var maxR=Math.hypot(W,H); // cover frame
     var n=Math.ceil(maxR/P)+1;
     ctx.strokeStyle=shade;
-    ctx.lineWidth=P*0.5;
+    ctx.lineWidth=P*C.duty;
     var i,r;
     ctx.beginPath();
     for(i=0;i<n;i++){
@@ -123,15 +164,15 @@
     var sep=Math.sin(t*0.07)*P*0.9;
 
     ctx.globalCompositeOperation="source-over";
-    ctx.fillStyle="#0a0a0a";
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
 
-    // field A: white rings
-    ctx.globalCompositeOperation="lighter";
-    drawField(cx0+ax,cy0+ay,"#f4f4f4");
+    // field A: ink rings (additive on black, subtractive on paper)
+    ctx.globalCompositeOperation=C.blendA;
+    drawField(cx0+ax,cy0+ay,C.inkA);
     // field B: rings that subtract where they fall between A's rings -> moire
-    ctx.globalCompositeOperation="difference";
-    drawField(cx0+bx+sep,cy0+by,"#ffffff");
+    ctx.globalCompositeOperation=C.blendB;
+    drawField(cx0+bx+sep,cy0+by,C.inkB);
 
     ctx.globalCompositeOperation="source-over";
     raf=requestAnimationFrame(frame);
@@ -139,12 +180,12 @@
 
   function drawOneFrame(){
     ctx.globalCompositeOperation="source-over";
-    ctx.fillStyle="#0a0a0a";
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation="lighter";
-    drawField(cx0-P*1.2,cy0,"#f4f4f4");
-    ctx.globalCompositeOperation="difference";
-    drawField(cx0+P*1.2,cy0,"#ffffff");
+    ctx.globalCompositeOperation=C.blendA;
+    drawField(cx0-P*1.2,cy0,C.inkA);
+    ctx.globalCompositeOperation=C.blendB;
+    drawField(cx0+P*1.2,cy0,C.inkB);
     ctx.globalCompositeOperation="source-over";
   }
 
@@ -171,6 +212,7 @@
   });
 
   resize();
+  syncTheme();
   if(reduce){drawOneFrame();return;}
   start();
 })();

@@ -5,11 +5,33 @@
 <meta name="description" content="Boat on the Swell — Ukiyo-e Weather &amp; Road. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Boat on the Swell</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#243044;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Every colour the canvas
+     paints with is re-read from these in syncTheme(). */
+  :root{
+    --hir06-bg:#243044; --hir06-cap:#f2f0e8; --hir06-cap-o:.5;
+    --hir06-paper:#f2f0e8; --hir06-ink:#16202b; --hir06-indigo:#1f3a5f; --hir06-sienna:#9a5b3b;
+    --hir06-snow:#f2f0e8; --hir06-sun-hi:#f2c27a;
+    --hir06-glow:rgba(232,147,74,.95); --hir06-glow-0:rgba(232,147,74,0);
+    --hir06-gull:rgba(22,32,43,.55); --hir06-path:rgba(232,147,74,.16); --hir06-swell:rgba(242,240,232,.30);
+  }
+  :root[data-theme="light"]{
+    --hir06-bg:#eef3f7; --hir06-cap:#16202b; --hir06-cap-o:.55;
+    --hir06-paper:#f9f5ec; --hir06-ink:#16202b; --hir06-indigo:#b6d0e4; --hir06-sienna:#cc8654;
+    --hir06-snow:#ffffff; --hir06-sun-hi:#b83c14;
+    --hir06-glow:rgba(226,98,44,.50); --hir06-glow-0:rgba(226,98,44,0);
+    --hir06-gull:rgba(22,32,43,.55); --hir06-path:rgba(200,86,40,.20); --hir06-swell:rgba(31,58,95,.32);
+  }
+  html,body{margin:0;height:100%;background:var(--hir06-bg);overflow:hidden}
   #hir06-stage{position:fixed;inset:0;width:100%;height:100%}
   #hir06-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .hir06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f2f0e8;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .hir06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--hir06-cap);opacity:var(--hir06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +40,21 @@
  "description": "A small ferry rocks on sine-wave swells at dusk beneath a sienna sun and three circling gulls, rendered in ukiyo-e woodblock palette.",
  "useWhen": "Ambient hero backgrounds, cultural or travel themes, dark-mode landing pages needing calm painterly motion.",
  "avoidWhen": "Light-background layouts (background is hardcoded dark navy). Contexts where subtle motion competes with text legibility.",
- "agentPrompt": "Move the sun to the right side by changing sx to W*0.70, shift sunset palette by replacing PAL.sienna with '#7a3b6a' for a violet dusk.",
+ "agentPrompt": "Move the sun to the right side by changing sx to W*0.70, shift sunset palette by replacing PAL.sienna with '#7a3b6a' for a violet dusk. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "sun position (sx = W*0.30)",
   "palette colors (PAL object)",
   "swell amplitude and count (amp, b loop 0..3)",
   "boat tilt sensitivity (Math.sin(t*0.9)*0.02)",
-  "gull count and spacing (i loop 0..2)"
+  "gull count and spacing (i loop 0..2)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED)",
   "visibilitychange pause/resume",
-  "DPR-aware fitCanvas()"
+  "DPR-aware fitCanvas()",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#243044) — must edit both CSS and canvas gradient to change sky",
@@ -43,7 +67,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "canvas",
@@ -80,7 +105,21 @@
     const pb=[parseInt(b.slice(1,3),16),parseInt(b.slice(3,5),16),parseInt(b.slice(5,7),16)];
     return 'rgb('+pa.map((v,i)=>Math.round(v+(pb[i]-v)*k)).join(',')+')';
   }
-  const PAL={paper:'#f2f0e8',ink:'#16202b',indigo:'#1f3a5f',sienna:'#9a5b3b',snow:'#f2f0e8'};
+  const PAL={paper:'',ink:'',indigo:'',sienna:'',snow:'',sunHi:'',glow:'',glow0:'',gull:'',path:'',swell:''};
+  const root=document.documentElement;
+  function syncTheme(){                       // colours are CSS-owned; JS re-reads them per theme
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue('--hir06-'+n).trim();
+    PAL.paper=g('paper');PAL.ink=g('ink');PAL.indigo=g('indigo');PAL.sienna=g('sienna');
+    PAL.snow=g('snow');PAL.sunHi=g('sun-hi');PAL.glow=g('glow');PAL.glow0=g('glow-0');
+    PAL.gull=g('gull');PAL.path=g('path');PAL.swell=g('swell');
+  }
+  addEventListener('message',function(e){      // live re-theme from the canvas
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(REDUCED) draw(performance.now());
+    }
+  });
+  syncTheme();
   let S=fitCanvas(cv), t=0, last=performance.now();
   function swellY(x,W,baseY,amp,k,ph){ return baseY + Math.sin(x/W*Math.PI*k + ph)*amp; }
   function draw(now){
@@ -94,10 +133,10 @@
     ctx.fillStyle=g;ctx.fillRect(0,0,W,H*0.60);
     const sx=W*0.30, sy=H*0.44;
     const gr=ctx.createRadialGradient(sx,sy,2,sx,sy,W*0.16);
-    gr.addColorStop(0,'rgba(232,147,74,.95)');gr.addColorStop(1,'rgba(232,147,74,0)');
+    gr.addColorStop(0,PAL.glow);gr.addColorStop(1,PAL.glow0);
     ctx.fillStyle=gr;ctx.beginPath();ctx.arc(sx,sy,W*0.16,0,7);ctx.fill();
-    ctx.fillStyle=mix(PAL.sienna,'#f2c27a',0.5);ctx.beginPath();ctx.arc(sx,sy,Math.max(10,W*0.035),0,7);ctx.fill();
-    ctx.strokeStyle='rgba(22,32,43,.55)';ctx.lineWidth=2;
+    ctx.fillStyle=mix(PAL.sienna,PAL.sunHi,0.5);ctx.beginPath();ctx.arc(sx,sy,Math.max(10,W*0.035),0,7);ctx.fill();
+    ctx.strokeStyle=PAL.gull;ctx.lineWidth=2;
     for(let i=0;i<3;i++){
       const gx=W*(0.6+i*0.10)+Math.sin(t*0.4+i)*10, gy=H*(0.18+i*0.05);
       const wf=Math.sin(t*4+i)*3;
@@ -108,13 +147,13 @@
     wg.addColorStop(0,mix(PAL.indigo,PAL.sienna,0.20));
     wg.addColorStop(1,mix(PAL.indigo,PAL.ink,0.30));
     ctx.fillStyle=wg;ctx.fillRect(0,waterTop,W,H-waterTop);
-    ctx.fillStyle='rgba(232,147,74,.16)';
+    ctx.fillStyle=PAL.path;
     for(let r=0;r<6;r++){
       const ry=waterTop+ r*(H-waterTop)/7 + 6;
       const ww=(W*0.10)*(1+r*0.18);
       ctx.fillRect(sx-ww/2, ry, ww, 3);
     }
-    ctx.strokeStyle='rgba(242,240,232,.30)';ctx.lineWidth=2;
+    ctx.strokeStyle=PAL.swell;ctx.lineWidth=2;
     for(let b=0;b<4;b++){
       const baseY=waterTop + (H-waterTop)*(0.18+b*0.22);
       const amp=4+b*2, k=3+b, ph=t*(0.8+b*0.3)+b;

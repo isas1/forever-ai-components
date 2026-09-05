@@ -1,12 +1,25 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="Monospace gold word resolves out of scrambling random glyphs left-to-right with a tracking caret, then re-scrambles away on a loop.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Scramble Decode</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block */
+:root{
+  --tte01-bg:#0a0b10; --tte01-acc:#f5d76e; --tte01-dim:#3a3d4a; --tte01-cap-o:.4;
+}
+:root[data-theme="light"]{
+  --tte01-bg:#f2f4f8; --tte01-acc:#866a09; --tte01-dim:#d7d9e0; --tte01-cap-o:.5;
+}
 html,body{margin:0;height:100%;overflow:hidden}
-body{background:#0a0b10;display:grid;place-items:center}
+body{background:var(--tte01-bg);display:grid;place-items:center}
 #tte01-c{display:block;width:100%;height:100%}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#f5d76e;opacity:.4;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--tte01-acc);opacity:var(--tte01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/text-effects/01-scramble-decode.html",
@@ -14,19 +27,21 @@ body{background:#0a0b10;display:grid;place-items:center}
  "description": "Gold monospace text resolves from random glyphs left-to-right with a tracking caret, holds with micro-flickers, then re-scrambles through a 6-phrase loop.",
  "useWhen": "Hacker/terminal aesthetic hero sections, loading screens, or reveal animations where text identity emerges from noise.",
  "avoidWhen": "Contexts requiring immediate legibility — text is unreadable during scramble. Avoid when motion-sensitive audiences are primary users.",
- "agentPrompt": "Change PHRASES to ['LAUNCH','IGNITE','DEPLOY'], set ACC to '#00ffaa', and slow decode to DEC=1.2 for a more dramatic reveal.",
+ "agentPrompt": "Change PHRASES to ['LAUNCH','IGNITE','DEPLOY'], set ACC to '#00ffaa', and slow decode to DEC=1.2 for a more dramatic reveal. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "PHRASES array (word list)",
   "ACC color (#f5d76e gold)",
   "DEC/HOLD/OUT timing constants",
   "GLYPHS charset string",
-  "glyphSize ratio (0.22 height / 0.78 width)"
+  "glyphSize ratio (0.22 height / 0.78 width)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion staticFrame() guard",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Phrase cycling is fully automatic — no click-to-advance",
@@ -40,7 +55,8 @@ body{background:#0a0b10;display:grid;place-items:center}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -59,7 +75,21 @@ body{background:#0a0b10;display:grid;place-items:center}
 <script>(function(){
 var cv=document.getElementById('tte01-c'),ctx=cv.getContext('2d');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var root=document.documentElement;
 var BG='#0a0b10',ACC='#f5d76e',DIM='#3a3d4a';
+function syncTheme(){
+  var cs=getComputedStyle(root);
+  BG=cs.getPropertyValue('--tte01-bg').trim()||BG;
+  ACC=cs.getPropertyValue('--tte01-acc').trim()||ACC;
+  DIM=cs.getPropertyValue('--tte01-dim').trim()||DIM;
+}
+syncTheme();
+addEventListener('message',function(e){
+  var d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme);syncTheme();
+  }
+});
 var PHRASES=['DECODE','SIGNAL','ENTROPY','RESOLVE','SCRAMBLE','CLARITY'];
 var GLYPHS='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@$/<>*+=?';
 var W=0,H=0,DPR=1,cell=0,baseY=0,glyphSize=0;

@@ -8,12 +8,28 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block. --trail-* feed the
+   canvas: additive glow on dark, plain source-over ink on light. */
 :root{
   --bg-900:#08090d;
-  --text-2:#8a91a8; --text-3:#565d73;
+  --text-2:#8a91a8; --text-3:#565d73; --cap-o:.7;
+  --trail-1:#B1CCA4; --trail-2:#D8B297; --trail-3:#AFBCA9;
+  --trail-blend:lighter; --trail-a:1; --trail-fade:rgba(0,0,0,0);
   --font-display:"Space Grotesk",system-ui,sans-serif;
   --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
+}
+:root[data-theme="light"]{
+  --bg-900:#f1f3ef;
+  --text-2:#414a3e; --text-3:#6b7566; --cap-o:.62;
+  --trail-1:#537642; --trail-2:#986139; --trail-3:#617359;
+  --trail-blend:source-over; --trail-a:.8; --trail-fade:rgba(241,243,239,0);
 }
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;overflow:hidden;}
@@ -28,7 +44,7 @@ body{background:var(--bg-900);}
 .c10-trail--active .c10-trail__hint{opacity:0;}
 .caption{position:absolute;left:12px;bottom:10px;z-index:5;
   font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-2);opacity:.7;pointer-events:none;}
+  text-transform:uppercase;color:var(--text-2);opacity:var(--cap-o);pointer-events:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -37,22 +53,24 @@ body{background:var(--bg-900);}
  "description": "Glowing sage, tan, and stone particles trail the pointer with additive blending on a dark canvas; idle drift animation keeps the tile alive without interaction.",
  "useWhen": "Dark hero backgrounds, creative portfolio canvases, or interactive demos where pointer feedback adds ambient delight.",
  "avoidWhen": "Light-background UIs (background hardcoded dark), content-heavy layouts where trail competes with text, or contexts without pointer input (pure touch kiosks).",
- "agentPrompt": "Change the COLORS array to [\"#ff6b35\",\"#ffcc00\",\"#00ff88\"] for a warm sunset palette and increase MAX to 180 for a denser trail.",
+ "agentPrompt": "Change the COLORS array to [\"#ff6b35\",\"#ffcc00\",\"#00ff88\"] for a warm sunset palette and increase MAX to 180 for a denser trail. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "COLORS array (iris/cyan/pink palette)",
   "MAX particle count (120)",
   "particle size range (r: 1.5–5)",
   "decay rate (0.012 + random*0.02)",
-  "idle drift speed (auto.t += 0.018)"
+  "idle drift speed (auto.t += 0.018)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "precomputed sprite canvas per color (perf-critical)",
   "visibilitychange pause via runLoop",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded dark in CSS — must edit to use on light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Touch support uses passive touchmove so emit fires but no cursor feedback is visible on touch devices"
  ],
  "tier": "curated",
@@ -61,7 +79,8 @@ body{background:var(--bg-900);}
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "cursor",
@@ -117,7 +136,8 @@ body{background:var(--bg-900);}
 
   var host=document.querySelector("[data-c10]");
   if(!host) return;
-  var COLORS=["#B1CCA4","#D8B297","#AFBCA9"];
+  var root=document.documentElement;
+  var COLORS=["#B1CCA4","#D8B297","#AFBCA9"],BLEND="lighter",ALPHA=1,FADE="rgba(0,0,0,0)";
   var MAX=120;
   var particles=[];
   var pointer={x:0,y:0,active:false};
@@ -127,14 +147,36 @@ body{background:var(--bg-900);}
   // Precompute one soft radial-gradient sprite per color once; draw scaled per frame
   // instead of allocating a fresh gradient for every particle every frame.
   var SPRITE=64; // sprite radius in px (drawn down to particle size)
-  var sprites=COLORS.map(function(c){
-    var s=document.createElement("canvas");s.width=s.height=SPRITE*2;
-    var sc=s.getContext("2d");
-    var g=sc.createRadialGradient(SPRITE,SPRITE,0,SPRITE,SPRITE,SPRITE);
-    g.addColorStop(0,c);g.addColorStop(1,"rgba(0,0,0,0)");
-    sc.fillStyle=g;sc.beginPath();sc.arc(SPRITE,SPRITE,SPRITE,0,Math.PI*2);sc.fill();
-    return s;
+  var sprites=[];
+  function makeSprites(){
+    sprites=COLORS.map(function(c){
+      var s=document.createElement("canvas");s.width=s.height=SPRITE*2;
+      var sc=s.getContext("2d");
+      var g=sc.createRadialGradient(SPRITE,SPRITE,0,SPRITE,SPRITE,SPRITE);
+      g.addColorStop(0,c);g.addColorStop(1,FADE);
+      sc.fillStyle=g;sc.beginPath();sc.arc(SPRITE,SPRITE,SPRITE,0,Math.PI*2);sc.fill();
+      return s;
+    });
+  }
+  // canvas colours live in CSS tokens: read once at start and once per theme switch,
+  // rebuilding the cached sprites (they bake the palette in).
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    COLORS=[(cs.getPropertyValue("--trail-1")||"#B1CCA4").trim(),
+            (cs.getPropertyValue("--trail-2")||"#D8B297").trim(),
+            (cs.getPropertyValue("--trail-3")||"#AFBCA9").trim()];
+    BLEND=(cs.getPropertyValue("--trail-blend")||"lighter").trim();
+    ALPHA=parseFloat(cs.getPropertyValue("--trail-a"))||1;
+    FADE=(cs.getPropertyValue("--trail-fade")||"rgba(0,0,0,0)").trim();
+    makeSprites();
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme);syncTheme();if(REDUCED) staticFrame();
+    }
   });
+  syncTheme();
 
   function emit(x,y,n){
     for(var i=0;i<n;i++){
@@ -165,32 +207,33 @@ body{background:var(--bg-900);}
       var ay=h*(0.5+0.3*Math.sin(auto.t*1.3));
       emit(ax,ay,2);
     }
-    ctx.globalCompositeOperation="lighter";
+    ctx.globalCompositeOperation=BLEND;
     for(var i=particles.length-1;i>=0;i--){
       var p=particles[i];
       p.x+=p.vx;p.y+=p.vy;p.vx*=0.96;p.vy*=0.96;p.vy+=0.015;
       p.life-=p.decay;
       if(p.life<=0){particles.splice(i,1);continue;}
-      ctx.globalAlpha=p.life;
+      ctx.globalAlpha=p.life*ALPHA;
       var rad=p.r*3,d=rad*2;
       ctx.drawImage(sprites[p.ci],p.x-rad,p.y-rad,d,d);
     }
     ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";
   }
 
-  if(REDUCED){
+  function staticFrame(){
     var ctx=cv.ctx;ctx.clearRect(0,0,cv.w,cv.h);
-    ctx.globalCompositeOperation="lighter";
+    ctx.globalCompositeOperation=BLEND;
     for(var k=0;k<40;k++){
       var px=cv.w/2+(Math.random()-0.5)*cv.w*0.5;
       var py=cv.h/2+(Math.random()-0.5)*cv.h*0.5;
       var rr=4+Math.random()*8;
-      ctx.globalAlpha=0.5;
+      ctx.globalAlpha=0.5*ALPHA;
       ctx.drawImage(sprites[k%3],px-rr,py-rr,rr*2,rr*2);
     }
-    ctx.globalCompositeOperation="source-over";
-    return;
+    ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";
   }
+
+  if(REDUCED){ staticFrame(); return; }
   runLoop(render);
 })();
 </script>

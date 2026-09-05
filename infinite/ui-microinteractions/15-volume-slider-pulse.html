@@ -5,11 +5,26 @@
 <meta name="description" content="Chartreuse glowing volume slider whose thumb travels while an equalizer of spring-bouncing bars reacts and a numeric readout counts the level.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Volume Slider Pulse</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#131B12;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --vsp-ac feeds the JS gradients. */
+  :root{
+    --vsp-bg:#131B12; --vsp-ac:#A9D22D; --vsp-thumb:#F2F7E4;
+    --vsp-track:rgba(255,255,255,0.08); --vsp-cap:#A9D22D; --vsp-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --vsp-bg:#f2f6f1; --vsp-ac:#5f7619; --vsp-thumb:#1b2e19;
+    --vsp-track:rgba(27,46,25,0.10); --vsp-cap:#1b2e19; --vsp-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--vsp-bg);}
   #vsp{display:block;width:100%;height:100%;}
   .vsp-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.12em;color:#A9D22D;opacity:.34;text-transform:uppercase;
+       letter-spacing:.12em;color:var(--vsp-cap);opacity:var(--vsp-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,23 +34,25 @@
  "description": "Auto-cycling volume slider with a glowing thumb and 13 spring-bouncing equalizer bars that react to slider position; numeric readout counts 0–100.",
  "useWhen": "Audio player UIs, media controls demos, ambient dashboard widgets showing dynamic range or activity.",
  "avoidWhen": "Contexts requiring a real interactive slider — thumb position is auto-driven and cannot be user-controlled without rewriting drivePos().",
- "agentPrompt": "Change the accent color from #A9D22D to #C0B459, increase bar count to 18 (NB=18), and slow the slider cycle by changing t*0.018 to t*0.012.",
+ "agentPrompt": "Change the accent color from #A9D22D to #C0B459, increase bar count to 18 (NB=18), and slow the slider cycle by changing t*0.018 to t*0.012. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (AC='#A9D22D')",
   "bar count (NB=13)",
   "slider speed (t*0.018)",
   "bar max height (H*0.32)",
-  "nudge boost on click (nudge=1.8)"
+  "nudge boost on click (nudge=1.8)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Slider is auto-driven only — no real user drag control",
-  "Background color hardcoded dark navy in CSS",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Random flicker on bars causes minor frame variance"
  ],
  "tier": "curated",
@@ -45,7 +62,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "slider",
@@ -66,7 +84,24 @@
 (function(){
   const cv=document.getElementById('vsp'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const AC='#A9D22D';
+  const root=document.documentElement;
+  let AC='#A9D22D', AC_RGB='169,210,45', THUMB='#F2F7E4', TRACK='rgba(255,255,255,0.08)';
+  function hexToRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');
+    const n=parseInt(h,16);return (n>>16&255)+','+(n>>8&255)+','+(n&255);}
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    AC=(cs.getPropertyValue('--vsp-ac')||AC).trim();
+    AC_RGB=hexToRgb(AC);
+    THUMB=(cs.getPropertyValue('--vsp-thumb')||THUMB).trim();
+    TRACK=(cs.getPropertyValue('--vsp-track')||TRACK).trim();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   let W,H,DPR,S,raf=0,t=0;
   const NB=13, bars=[];               // equalizer bars: value + velocity (spring)
   for(let i=0;i<NB;i++) bars.push({v:0.12,vel:0});
@@ -129,47 +164,47 @@
       const bh=barMaxH*b.v;
       const a=0.22+0.62*Math.min(1,b.v);
       const grd=ctx.createLinearGradient(0,barBase-bh,0,barBase);
-      grd.addColorStop(0,AC);grd.addColorStop(1,'rgba(169,210,45,0.12)');
+      grd.addColorStop(0,AC);grd.addColorStop(1,'rgba('+AC_RGB+',0.12)');
       ctx.globalAlpha=a;ctx.fillStyle=grd;
       roundRect(bx,barBase-bh,bWidth,bh,bWidth*0.4);ctx.fill();
       ctx.globalAlpha=1;
     }
 
     // --- track (unfilled) ---
-    ctx.fillStyle='rgba(255,255,255,0.08)';
+    ctx.fillStyle=TRACK;
     roundRect(x0,trackY-th/2,trackW,th,th/2);ctx.fill();
 
     // --- filled track with breathing glow (gradient halo instead of shadowBlur) ---
     const gh=th*0.5+(10+glow*26);
     const tg=ctx.createLinearGradient(0,trackY-gh,0,trackY+gh);
-    tg.addColorStop(0,'rgba(169,210,45,0)');
-    tg.addColorStop(0.5,'rgba(169,210,45,'+(0.10+glow*0.16).toFixed(3)+')');
-    tg.addColorStop(1,'rgba(169,210,45,0)');
+    tg.addColorStop(0,'rgba('+AC_RGB+',0)');
+    tg.addColorStop(0.5,'rgba('+AC_RGB+','+(0.10+glow*0.16).toFixed(3)+')');
+    tg.addColorStop(1,'rgba('+AC_RGB+',0)');
     ctx.fillStyle=tg;
     roundRect(x0,trackY-gh,Math.max(th,fillW),gh*2,gh);ctx.fill();
     const fg=ctx.createLinearGradient(x0,0,thumbX,0);
-    fg.addColorStop(0,'rgba(169,210,45,0.55)');fg.addColorStop(1,AC);
+    fg.addColorStop(0,'rgba('+AC_RGB+',0.55)');fg.addColorStop(1,AC);
     ctx.fillStyle=fg;
     roundRect(x0,trackY-th/2,Math.max(th,fillW),th,th/2);ctx.fill();
 
     // --- thumb: halo + core ---
     const haloR=thumbR*(1.8+glow*0.7);
     const hg=ctx.createRadialGradient(thumbX,trackY,thumbR*0.4,thumbX,trackY,haloR);
-    hg.addColorStop(0,'rgba(169,210,45,'+(0.30+glow*0.18)+')');
-    hg.addColorStop(1,'rgba(169,210,45,0)');
+    hg.addColorStop(0,'rgba('+AC_RGB+','+(0.30+glow*0.18)+')');
+    hg.addColorStop(1,'rgba('+AC_RGB+',0)');
     ctx.fillStyle=hg;ctx.beginPath();ctx.arc(thumbX,trackY,haloR,0,Math.PI*2);ctx.fill();
     // tight inner halo replaces per-frame shadowBlur on the core
     const ig=ctx.createRadialGradient(thumbX,trackY,thumbR*0.6,thumbX,trackY,thumbR*1.9);
-    ig.addColorStop(0,'rgba(169,210,45,'+(0.5+glow*0.2).toFixed(3)+')');
-    ig.addColorStop(1,'rgba(169,210,45,0)');
+    ig.addColorStop(0,'rgba('+AC_RGB+','+(0.5+glow*0.2).toFixed(3)+')');
+    ig.addColorStop(1,'rgba('+AC_RGB+',0)');
     ctx.fillStyle=ig;ctx.beginPath();ctx.arc(thumbX,trackY,thumbR*1.9,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle='#F2F7E4';
+    ctx.fillStyle=THUMB;
     ctx.beginPath();ctx.arc(thumbX,trackY,thumbR,0,Math.PI*2);ctx.fill();
     ctx.fillStyle=AC;
     ctx.beginPath();ctx.arc(thumbX,trackY,thumbR*0.42,0,Math.PI*2);ctx.fill();
 
     // --- volume readout ---
-    ctx.fillStyle='rgba(169,210,45,0.85)';
+    ctx.fillStyle='rgba('+AC_RGB+',0.85)';
     ctx.font='600 '+Math.max(10,S*0.05).toFixed(0)+'px ui-monospace,SFMono-Regular,Menlo,monospace';
     ctx.textAlign='center';ctx.textBaseline='alphabetic';
     ctx.fillText(Math.round(pos*100).toString().padStart(2,'0'),cx,trackY+S*0.13);

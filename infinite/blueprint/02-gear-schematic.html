@@ -4,21 +4,37 @@
 <meta charset="utf-8">
 <meta name="description" content="Mechanical Gear Schematic — Blueprint Technical. A self-contained, zero-dependency animated web component.">
 <title>Mechanical Gear Schematic</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (cyanotype: light lines on navy);
+   light inverts to a classic whiteprint: dark-blue lines on pale blue paper. */
+:root{
+  --gs-bg:#002147;--gs-grid:rgba(126,200,227,.05);
+  --gs-line:#7ec8e3;--gs-dim:#a8d8ea;--gs-cap:#7ec8e3;--gs-cap-o:.45;
+}
+:root[data-theme="light"]{
+  --gs-bg:#eaf0f7;--gs-grid:rgba(23,74,120,.1);
+  --gs-line:#1d5580;--gs-dim:#3a6d96;--gs-cap:#1b5480;--gs-cap-o:.8;
+}
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:#002147}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--gs-bg)}
 body{
   background-image:
-    repeating-linear-gradient(0deg,transparent,transparent 19px,rgba(126,200,227,.05) 19px,rgba(126,200,227,.05) 20px),
-    repeating-linear-gradient(90deg,transparent,transparent 19px,rgba(126,200,227,.05) 19px,rgba(126,200,227,.05) 20px);
+    repeating-linear-gradient(0deg,transparent,transparent 19px,var(--gs-grid) 19px,var(--gs-grid) 20px),
+    repeating-linear-gradient(90deg,transparent,transparent 19px,var(--gs-grid) 19px,var(--gs-grid) 20px);
 }
 #gs-root{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
 #gs-svg{width:88%;height:88%}
-.gs-stroke{stroke:#7ec8e3;stroke-width:1.2;fill:none}
-.gs-thin{stroke:#7ec8e3;stroke-width:.6;fill:none;opacity:.55}
-.gs-dim{stroke:#a8d8ea;stroke-width:.5;fill:none;opacity:.45}
-.gs-txt{fill:#a8d8ea;font:8px monospace;opacity:.8}
-.gs-title{fill:#7ec8e3;font:bold 7.5px monospace}
+.gs-stroke{stroke:var(--gs-line);stroke-width:1.2;fill:none}
+.gs-thin{stroke:var(--gs-line);stroke-width:.6;fill:none;opacity:.55}
+.gs-dim{stroke:var(--gs-dim);stroke-width:.5;fill:none;opacity:.45}
+.gs-txt{fill:var(--gs-dim);font:8px monospace;opacity:.8}
+.gs-title{fill:var(--gs-line);font:bold 7.5px monospace}
+#gs-scanline{stroke:var(--gs-line)}
 
 /* gear rotations — strong and obvious */
 #gs-gear-a{transform-origin:90px 120px;animation:gs-cw 4s linear infinite}
@@ -40,7 +56,7 @@ body{
 .gs-dimp{animation:gs-dimp 1.6s ease-in-out infinite}
 @keyframes gs-dimp{0%,100%{opacity:.45}50%{opacity:1;stroke-width:1.2}}
 
-#gs-cap{position:fixed;left:8px;bottom:7px;font:11px/1 monospace;color:#7ec8e3;opacity:.45;pointer-events:none}
+#gs-cap{position:fixed;left:8px;bottom:7px;font:11px/1 monospace;color:var(--gs-cap);opacity:var(--gs-cap-o);pointer-events:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -49,19 +65,21 @@ body{
  "description": "Three interlocking gears rotate at matched ratios on a blueprint grid with scanning dimension lines and engineering annotation blocks.",
  "useWhen": "Technical/engineering-themed hero sections, mechanical product showcases, retro industrial dashboards.",
  "avoidWhen": "Contexts requiring high legibility text overlays — the rotating SVG elements compete with static content. Avoid on low-motion preference UIs without fallback content.",
- "agentPrompt": "Change the blueprint color from cyan-blue (#7ec8e3) to amber (#f59e0b), slow gear A rotation to 8s, and update the title block text to 'TURBINE ASSEMBLY · DWG-007'.",
+ "agentPrompt": "Change the blueprint color from cyan-blue (#7ec8e3) to amber (#f59e0b), slow gear A rotation to 8s, and update the title block text to 'TURBINE ASSEMBLY · DWG-007'. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "stroke color (--gs-stroke: #7ec8e3)",
   "gear rotation speeds (4s / 2s / 2.67s in CSS)",
   "scanline sweep duration (gs-scanh 2.8s)",
   "title block text (GEAR ASSEMBLY, DWG-002, REV B)",
-  "background grid color (rgba(126,200,227,.05))"
+  "background grid color (rgba(126,200,227,.05))",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "transform-origin on each gear group (must match cx/cy of gear center)",
   "prefers-reduced-motion guard in IIFE",
   "visibilitychange pause handler",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Gear teeth are decorative lines at fixed angles — they do not mesh geometrically with neighboring gears",
@@ -75,7 +93,8 @@ body{
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "blueprint",
@@ -179,7 +198,7 @@ body{
   </g>
 
   <!-- scanning measurement line (vertical, sweeps across gear A horizontally) -->
-  <line id="gs-scanline" x1="90" y1="68" x2="90" y2="172" stroke="#7ec8e3" stroke-width="1.5" stroke-dasharray="3,3" opacity=".9"/>
+  <line id="gs-scanline" x1="90" y1="68" x2="90" y2="172" stroke-width="1.5" stroke-dasharray="3,3" opacity=".9"/>
 
   <!-- dimension annotations -->
   <line x1="40" y1="20" x2="140" y2="20" class="gs-dim gs-dimp"/>
@@ -201,6 +220,13 @@ body{
 </div>
 <div id="gs-cap">GEAR ASSEMBLY · DWG-002</div>
 <script>(()=>{
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // Every colour is a CSS token, so re-setting the attribute is the whole switch.
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);
+  });
   const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
   if(reduce){
     ['gs-gear-a','gs-gear-b','gs-gear-c'].forEach(id=>{

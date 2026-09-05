@@ -5,11 +5,33 @@
 <meta name="description" content="A jittered grid of paired complementary dots oscillates apart so the eye fuses a shimmering amber hue over deep blue.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Vibrato Field</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
-  #po10-stage{position:fixed;inset:0;background:#0d0f14}
+  /* theme tokens — dark values are the defaults; the light re-theme is the one
+     [data-theme="light"] block. --po10-blend is the fallback the light palette
+     needs: additive fusion glows on black, but only clips to white on linen, so
+     light lays the paired dots opaquely and lets the eye do the mixing. */
+  :root{
+    --po10-bg:#0d0f14; --po10-blend:lighter; --po10-anchor:#1c2740;
+    --po10-cap:#fff; --po10-cap-o:.42;
+    /* five complementary pairs: amber/violet, vermilion/cobalt, gold/ultramarine,
+       rose/viridian, amber/cobalt (the signature vibrato) */
+    --po10-pairs:#f0a830 #9a3fb0 #e8542e #2a7fb8 #f0c235 #3a55a8 #d83a6a #3fae8e #f0a830 #2a7fb8;
+  }
+  :root[data-theme="light"]{
+    /* canvas-linen ground; the same pairs deepened to pigment, neutral anchor pale */
+    --po10-bg:#f4efe3; --po10-blend:source-over; --po10-anchor:#cfc6b2;
+    --po10-cap:#2b2418; --po10-cap-o:.55;
+    --po10-pairs:#b47a08 #6a2b7c #a83a18 #1d5a86 #a8850f #283c7c #9c2848 #1c7a60 #b47a08 #1d5a86;
+  }
+  html,body{margin:0;height:100%;background:var(--po10-bg);overflow:hidden}
+  #po10-stage{position:fixed;inset:0;background:var(--po10-bg)}
   #po10-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--po10-cap);opacity:var(--po10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +41,21 @@
  "description": "108 paired complementary dot-couples oscillate apart so the eye optically fuses them into a shimmering amber-over-cobalt vibrato across a dark field.",
  "useWhen": "Dark-mode hero backgrounds, art/design portfolio ambience, or anywhere a painterly, slowly-shifting texture is needed without distraction.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy), contexts requiring legible text overlays, or low-end mobile where 216 canvas arcs per frame may stutter.",
- "agentPrompt": "Change the dominant pair to teal/rose by replacing PAIRS[0] with [\"#2dd4bf\",\"#e11d74\"] and slow the oscillation by changing t*1.6 to t*0.9.",
+ "agentPrompt": "Change the dominant pair to teal/rose by replacing PAIRS[0] with [\"#2dd4bf\",\"#e11d74\"] and slow the oscillation by changing t*1.6 to t*0.9. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color pairs (PAIRS array)",
   "dot count (N=108)",
   "oscillation speed (t*1.6)",
   "separation amplitude (0.55+0.85*amp[i])",
-  "dot size scale (unit=base*0.030)"
+  "dot size scale (unit=base*0.030)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "additive compositing (globalCompositeOperation='lighter')",
   "IIFE wrapper",
   "visibilitychange pause",
-  "prefers-reduced-motion drawOneFrame() fallback"
+  "prefers-reduced-motion drawOneFrame() fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and JS fillRect — must change in both places",
@@ -44,7 +68,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "pointillism",
@@ -70,15 +95,11 @@
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var W=0,H=0,DPR=1,running=true,raf=0,t=0;
 
-  // Divisionist palette: each "vibrato" cell pairs two complementary tints
-  // that the eye fuses into a singing intermediate hue (pointillist idiom).
-  var PAIRS=[
-    ["#f0a830","#9a3fb0"], // amber  / violet  -> warm glow
-    ["#e8542e","#2a7fb8"], // vermilion / cobalt
-    ["#f0c235","#3a55a8"], // gold   / ultramarine
-    ["#d83a6a","#3fae8e"], // rose   / viridian
-    ["#f0a830","#2a7fb8"]  // amber  / cobalt -> the signature vibrato
-  ];
+  // Divisionist palette: each "vibrato" cell pairs two complementary tints that
+  // the eye fuses into a singing intermediate hue (pointillist idiom). The pairs,
+  // the ground, the anchor and the blend mode all come from the CSS tokens.
+  var root=document.documentElement, PAIRS=[];
+  var BG="#0d0f14", BLEND="lighter", ANCHOR="#1c2740";
 
   // capped dot field, packed into typed arrays (<=110 dots)
   var N=108;
@@ -98,8 +119,6 @@
         var jx=(Math.sin(i*12.9898)*43758.5453)%1;
         var jy=(Math.sin(i*78.233)*12543.123)%1;
         px[i]+=(jx-0.5)*0.045; py[i]+=(jy-0.5)*0.06;
-        var p=PAIRS[i%PAIRS.length];
-        ca[i]=p[0]; cb[i]=p[1];
         ph[i]=i*0.7;
         rad[i]=0.34+0.5*((jx+1)%1); // relative dot size
         amp[i]=0.5+0.5*((jy+1)%1);
@@ -107,6 +126,12 @@
         ax[i]=Math.cos(ang); ay[i]=Math.sin(ang);
       }
     }
+  }
+
+  // ca/cb cache each dot's pair; a theme flip re-reads them without disturbing
+  // the field's positions, phases or drift axes.
+  function recolor(){
+    for(var i=0;i<N;i++){ var p=PAIRS[i%PAIRS.length]; ca[i]=p[0]; cb[i]=p[1]; }
   }
 
   function resize(){
@@ -129,10 +154,10 @@
     t=now*0.001;
     // ground: deep blue-black wash, painted once per frame (no layout reads)
     x.globalCompositeOperation="source-over";
-    x.fillStyle="#0d0f14";
+    x.fillStyle=BG;
     x.fillRect(0,0,W,H);
     // faint cool underpainting toward the lower field (static gradient, drawn flat)
-    x.globalCompositeOperation="lighter";
+    x.globalCompositeOperation=BLEND;
     var base=Math.min(W,H);
     var unit=base*0.030; // dot scale relative to frame -> legible 180..640px
     for(var i=0;i<N;i++){
@@ -149,7 +174,7 @@
       dot(cxv+ox, cyv+oy, r, ca[i]);
       dot(cxv-ox, cyv-oy, r, cb[i]);
       // small neutral anchor dot keeps the field grounded (Divisionist tessera)
-      dot(cxv, cyv, r*0.42, "#1c2740");
+      dot(cxv, cyv, r*0.42, ANCHOR);
     }
     x.globalCompositeOperation="source-over";
     raf=requestAnimationFrame(frame);
@@ -158,16 +183,16 @@
   function drawOneFrame(){
     // reduced-motion: one calm, balanced, on-brand frame (no vibration)
     x.globalCompositeOperation="source-over";
-    x.fillStyle="#0d0f14";
+    x.fillStyle=BG;
     x.fillRect(0,0,W,H);
-    x.globalCompositeOperation="lighter";
+    x.globalCompositeOperation=BLEND;
     var base=Math.min(W,H), unit=base*0.030;
     for(var i=0;i<N;i++){
       var cxv=px[i]*W, cyv=py[i]*H, r=unit*(0.6+rad[i]*0.7);
       var sep=unit*(0.55+0.85*amp[i])*0.35; // settled, small offset
       dot(cxv+ax[i]*sep, cyv+ay[i]*sep, r, ca[i]);
       dot(cxv-ax[i]*sep, cyv-ay[i]*sep, r, cb[i]);
-      dot(cxv, cyv, r*0.42, "#1c2740");
+      dot(cxv, cyv, r*0.42, ANCHOR);
     }
     x.globalCompositeOperation="source-over";
   }
@@ -177,7 +202,21 @@
     raf=requestAnimationFrame(frame);
   }
 
+  // JS-drawn colors read the tokens, so CSS stays the single source of truth.
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    BG=v('--po10-bg'); ANCHOR=v('--po10-anchor'); BLEND=v('--po10-blend');
+    var h=v('--po10-pairs').split(/\s+/); PAIRS=[];
+    for(var i=0;i<h.length;i+=2) PAIRS.push([h[i],h[i+1]]);
+    recolor();
+    if(reduce) drawOneFrame();
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme();}});
+
   seed();
+  syncTheme();
   resize();
   window.addEventListener("resize",function(){
     resize();

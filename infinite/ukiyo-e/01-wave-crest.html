@@ -5,11 +5,19 @@
 <meta name="description" content="Stylized Japanese woodblock cresting wave with curling foam claws over an indigo sea, a Fuji-like cone, cream sky and low coral sun.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wave Crest</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  /* theme tokens: dark defaults, light = the washi-paper re-print */
+  :root{--uk01-bg:#0f1822;--uk01-sky:#f0e3c6;--uk01-cream:#e8d5b0;--uk01-sea:#2f5e86;--uk01-indigo:#1c3a5e;--uk01-deep:#102438;--uk01-foam:#f3ead4;--uk01-coral:#d96a4a;--uk01-sun:#e89a6a;--uk01-ink:#0c151f;--uk01-cap:#fff;--uk01-cap-o:.42}
+  :root[data-theme="light"]{--uk01-bg:#f7f1e3;--uk01-sky:#fdf9f0;--uk01-cream:#f2e6ce;--uk01-sea:#a9c6dd;--uk01-indigo:#7ba2c2;--uk01-deep:#5a86ab;--uk01-foam:#fffcf4;--uk01-coral:#ba4827;--uk01-sun:#dd7b4f;--uk01-ink:#17293c;--uk01-cap:#17293c;--uk01-cap-o:.5}
+  html,body{margin:0;height:100%;background:var(--uk01-bg);overflow:hidden}
   #uk01-stage{position:fixed;inset:0;width:100%;height:100%}
   #uk01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .uk01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .uk01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--uk01-cap);opacity:var(--uk01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){#uk01-stage,.uk01-cap{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +27,22 @@
  "description": "A stylized ukiyo-e-inspired cresting wave with curling foam claws, an indigo sea gradient, Fuji-like cone, and coral sun — all drawn procedurally on canvas.",
  "useWhen": "Hero backgrounds or ambient loops needing a cultural/artistic aesthetic. Japanese theme sections, travel, nature, or fine-art brand contexts.",
  "avoidWhen": "Contexts requiring legible text overlays — the wave animation occupies the full viewport. Bright/light-background layouts (background is hardcoded dark navy).",
- "agentPrompt": "Change the foam color from #f3ead4 to pure white (#ffffff), increase the number of foam fingers from 11 to 16 by changing N=11 to N=16, and slow the wave swell by changing tt*0.9 to tt*0.5.",
+ "agentPrompt": "Change the foam color from #f3ead4 to pure white (#ffffff), increase the number of foam fingers from 11 to 16 by changing N=11 to N=16, and slow the wave swell by changing tt*0.9 to tt*0.5. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "foam finger count (N=11)",
   "palette constants (INDIGO, SEA, FOAM, CORAL, SUN)",
   "wave swell amplitude (H*0.05)",
   "crest lift peak position (nx-0.42)",
   "sun position (W*0.76, H*0.27)",
-  "animation speed (t+=0.016)"
+  "animation speed (t+=0.016)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static-frame fallback",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#0f1822) — must edit both CSS and canvas drawSky() to change theme",
@@ -45,7 +55,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "ukiyo-e",
@@ -71,9 +82,18 @@
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var W=0,H=0,dpr=1,running=false,raf=0,t=0;
 
-  // palette
-  var INDIGO="#1c3a5e", DEEP="#102438", SEA="#2f5e86", FOAM="#f3ead4",
-      CREAM="#e8d5b0", SKY="#f0e3c6", CORAL="#d96a4a", INK="#0c151f", SUN="#e89a6a";
+  // palette — every drawn colour comes from the CSS tokens, re-read on a theme switch
+  var root=document.documentElement, INDIGO,DEEP,SEA,FOAM,CREAM,SKY,CORAL,INK,SUN;
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    INDIGO=v("--uk01-indigo"); DEEP=v("--uk01-deep"); SEA=v("--uk01-sea"); FOAM=v("--uk01-foam");
+    CREAM=v("--uk01-cream"); SKY=v("--uk01-sky"); CORAL=v("--uk01-coral");
+    INK=v("--uk01-ink"); SUN=v("--uk01-sun");
+  }
+  syncTheme();
+  addEventListener("message",function(e){ var d=e.data;   // live re-theme from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce) render(); }
+  });
 
   // foam fingers along the crest: position 0..1 + phase
   var N=11, fx=new Float32Array(N), fph=new Float32Array(N), fln=new Float32Array(N);

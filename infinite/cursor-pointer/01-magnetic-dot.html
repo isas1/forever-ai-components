@@ -1,12 +1,26 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="A glowing pink dot springs to the pointer while a laggy outer ring squashes along its travel, joined by a fading tendril.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Magnetic Dot</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults; light re-theme is the [data-theme="light"] block. */
+:root{
+  --ccp01-bg:#0a0a0f; --ccp01-acc:#ff5ca8;
+  --ccp01-ring-a:.85; --ccp01-halo-a:.05; --ccp01-tendril-a:.45; --cap-o:.42;
+}
+:root[data-theme="light"]{
+  --ccp01-bg:#f2f2f6; --ccp01-acc:#d60064;
+  --ccp01-ring-a:.92; --ccp01-halo-a:.09; --ccp01-tendril-a:.4; --cap-o:.55;
+}
 html,body{margin:0;height:100%;overflow:hidden}
-body{background:#0a0a0f;display:grid;place-items:center}
+body{background:var(--ccp01-bg);display:grid;place-items:center}
 #ccp01-c{display:block;width:100vw;height:100vh;cursor:none}
 .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#ff5ca8;opacity:.42;letter-spacing:.1em;text-transform:uppercase;user-select:none;pointer-events:none}
+  color:var(--ccp01-acc);opacity:var(--cap-o);letter-spacing:.1em;text-transform:uppercase;user-select:none;pointer-events:none}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/cursor-pointer/01-magnetic-dot.html",
@@ -14,22 +28,24 @@ body{background:#0a0a0f;display:grid;place-items:center}
  "description": "Glowing pink dot springs to the pointer; a laggy outer ring squashes along its travel, joined by a fading tendril. Self-demos via Lissajous path when idle.",
  "useWhen": "Custom cursor replacements, interactive portfolio heroes, or any dark-background canvas needing a tactile pointer feel.",
  "avoidWhen": "Light backgrounds (hardcoded dark body), or UIs where hiding the native cursor would confuse users.",
- "agentPrompt": "Change the accent color from '#ff5ca8' to '#00eaff', increase dot spring stiffness from 0.22 to 0.35, and slow ring lag from 0.10 to 0.06.",
+ "agentPrompt": "Change the accent color from '#ff5ca8' to '#00eaff', increase dot spring stiffness from 0.22 to 0.35, and slow ring lag from 0.10 to 0.06. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (ACC = '#ff5ca8')",
   "dot spring stiffness (0.22)",
   "ring spring lag (0.10)",
   "ring base radius (W*0.085+10)",
-  "self-demo Lissajous path amplitudes (ax, ay)"
+  "self-demo Lissajous path amplitudes (ax, ay)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded dark — must edit CSS to use on light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "cursor:none hides native cursor globally on the canvas element"
  ],
  "tier": "curated",
@@ -39,7 +55,8 @@ body{background:#0a0a0f;display:grid;place-items:center}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "cursor",
@@ -58,8 +75,29 @@ body{background:#0a0a0f;display:grid;place-items:center}
 <script>(function(){
 var cv=document.getElementById('ccp01-c'),ctx=cv.getContext('2d');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var root=document.documentElement;
 var W=0,H=0,DPR=1,running=true,raf=0,t0=0;
-var ACC='#ff5ca8';
+
+// colours JS draws with — read from tokens, re-read + invalidated on theme switch
+var C={};
+function hex2rgb(h){h=h.replace('#','');var n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255];}
+function syncTheme(){
+  var cs=getComputedStyle(root);
+  C.acc=cs.getPropertyValue('--ccp01-acc').trim();
+  C.rgb=hex2rgb(C.acc);
+  C.ringA=parseFloat(cs.getPropertyValue('--ccp01-ring-a'))||.85;
+  C.haloA=parseFloat(cs.getPropertyValue('--ccp01-halo-a'))||.05;
+  C.tendrilA=parseFloat(cs.getPropertyValue('--ccp01-tendril-a'))||.45;
+}
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',function(e){
+  var d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme);syncTheme();
+    if(reduce)draw();      // no rAF loop in reduced motion — force a recolor
+  }
+});
+syncTheme();
 
 // target (the "pointer"), dot (fast follower), ring (laggy follower)
 var tx=0,ty=0, dx=0,dy=0, rx=0,ry=0;       // positions
@@ -118,7 +156,7 @@ function draw(){
   // connecting tendril (dot -> ring), fades with distance
   var ddx=dx-rx,ddy=dy-ry,dist=Math.sqrt(ddx*ddx+ddy*ddy);
   if(dist>1){
-    ctx.strokeStyle='rgba(255,92,168,'+Math.min(dist/220,0.45)+')';
+    ctx.strokeStyle='rgba('+C.rgb+','+Math.min(dist/220,C.tendrilA)+')';
     ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(rx,ry);ctx.lineTo(dx,dy);ctx.stroke();
   }
 
@@ -127,22 +165,22 @@ function draw(){
   ctx.translate(rx,ry);ctx.rotate(ang);
   ctx.scale(1+stretch,1-stretch*0.55);
   ctx.lineWidth=1.6;
-  ctx.strokeStyle='rgba(255,92,168,0.85)';
-  ctx.shadowColor=ACC;ctx.shadowBlur=14;
+  ctx.strokeStyle='rgba('+C.rgb+','+C.ringA+')';
+  ctx.shadowColor=C.acc;ctx.shadowBlur=14;
   ctx.beginPath();ctx.arc(0,0,base,0,6.2832);ctx.stroke();
   ctx.restore();
 
   // faint trailing halo on the ring
   ctx.save();
   ctx.translate(rx,ry);
-  ctx.fillStyle='rgba(255,92,168,0.05)';
+  ctx.fillStyle='rgba('+C.rgb+','+C.haloA+')';
   ctx.beginPath();ctx.arc(0,0,base*0.96,0,6.2832);ctx.fill();
   ctx.restore();
 
   // core dot — solid, glowing, with a tiny velocity smear
   ctx.save();
-  ctx.shadowColor=ACC;ctx.shadowBlur=18;
-  ctx.fillStyle=ACC;
+  ctx.shadowColor=C.acc;ctx.shadowBlur=18;
+  ctx.fillStyle=C.acc;
   var dr=Math.min(W,H)*0.018+3.5;
   ctx.beginPath();ctx.arc(dx,dy,dr,0,6.2832);ctx.fill();
   ctx.shadowBlur=0;

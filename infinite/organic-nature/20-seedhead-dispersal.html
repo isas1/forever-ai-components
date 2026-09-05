@@ -5,11 +5,31 @@
 <meta name="description" content="Dandelion seedhead of golden-angle pappus parachutes releases cream filaments one by one to drift on a turbulent breeze, then regrows.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Seedhead Dispersal</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#101622;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. --sd-fil (pappus/stem/receptacle),
+     --sd-fil2 (receptacle mid stop) and --sd-fade (trail wash + gradient tail) are
+     "r,g,b" so every alpha in the script is untouched; light flips cream filaments on
+     night blue into sepia filaments on a pale sky, keeping the seed core the darkest
+     point of the parachute exactly as it is the brightest one in dark. --sd-am scales the
+     filament opacity: sepia on paper needs more body than cream glowing on night blue. */
+  :root{
+    --sd-bg:#101622; --sd-cap:#e8d9b0; --sd-cap-o:.34;
+    --sd-fade:16,22,34; --sd-fil:232,217,176; --sd-fil2:150,138,108; --sd-dot:#fff4d8; --sd-am:1;
+  }
+  :root[data-theme="light"]{
+    --sd-bg:#eef1f7; --sd-cap:#7a6a45; --sd-cap-o:.72;
+    --sd-fade:238,241,247; --sd-fil:122,106,69; --sd-fil2:120,110,84; --sd-dot:#443a1e; --sd-am:1.45;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--sd-bg);}
   #sd-c{display:block;width:100%;height:100%;}
   .sd-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.16em;color:#e8d9b0;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--sd-cap);opacity:var(--sd-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +39,22 @@
  "description": "150 dandelion seeds on a golden-angle spiral drift off one by one on a noise-field breeze; the receptacle slowly glows bare. Click triggers a gust.",
  "useWhen": "Nature or botanical hero backgrounds, ambient screensaver loops, organic brand aesthetics.",
  "avoidWhen": "Content-heavy layouts where continuous drift competes with reading. Low-end devices sensitive to per-frame canvas redraws.",
- "agentPrompt": "Change seed count to 80 by setting N=80, shift pappus color to pale lavender (#d8d0e8), slow release interval from 26 to 40 frames.",
+ "agentPrompt": "Change seed count to 80 by setting N=80, shift pappus color to pale lavender (#d8d0e8), slow release interval from 26 to 40 frames. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "seed count (N=150)",
   "release interval (timer>26)",
   "pappus filament color (#e8d9b0)",
   "background color (#101622)",
   "gust strength on click (gust=1.6)",
-  "breeze noise intensity (nz*0.10)"
+  "breeze noise intensity (nz*0.10)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback frame",
   "visibilitychange pause/resume",
-  "golden angle seed placement (GA constant)"
+  "golden angle seed placement (GA constant)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "pointermove also sets gust=1 so hovering accelerates dispersal on desktop",
@@ -45,7 +67,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "dandelion",
@@ -68,6 +91,22 @@
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const GA=Math.PI*(3-Math.sqrt(5)); // golden angle
   let W,H,DPR,cx,cy,R,raf=0,t=0,gust=0;
+  const root=document.documentElement;
+  // every colour the canvas draws with comes from the tokens, re-read once per switch
+  const C={bg:'',fade:'',fil:'',fil2:'',dot:'',stroke:''};
+  function syncTheme(){
+    const cs=getComputedStyle(root),get=k=>cs.getPropertyValue(k).trim();
+    C.bg=get('--sd-bg');C.fade=get('--sd-fade');C.fil=get('--sd-fil');
+    C.fil2=get('--sd-fil2');C.dot=get('--sd-dot');C.am=parseFloat(get('--sd-am'));
+    C.stroke='rgb('+C.fil+')';        // cached solid form of the filament colour
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce)still();
+    }
+  });
+  syncTheme();
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
@@ -92,7 +131,7 @@
   }
 
   function pappus(x,y,sz,al,rot){ // a parachute of fine filaments
-    ctx.globalAlpha=al;ctx.strokeStyle='#e8d9b0';ctx.lineWidth=Math.max(0.4,sz*0.05);
+    ctx.globalAlpha=Math.min(1,al*C.am);ctx.strokeStyle=C.stroke;ctx.lineWidth=Math.max(0.4,sz*0.05);
     for(let k=0;k<11;k++){
       const ang=rot+(k/11)*Math.PI*2, len=sz*(0.78+0.22*Math.sin(k*2.1));
       const ex=x+Math.cos(ang)*len, ey=y+Math.sin(ang)*len;
@@ -100,25 +139,25 @@
       ctx.quadraticCurveTo(x+Math.cos(ang)*len*0.5, y+Math.sin(ang)*len*0.5-sz*0.18, ex,ey);
       ctx.stroke();
     }
-    ctx.globalAlpha=al*0.9;ctx.fillStyle='#fff4d8';
+    ctx.globalAlpha=Math.min(1,al*0.9*C.am);ctx.fillStyle=C.dot;
     ctx.beginPath();ctx.arc(x,y,Math.max(0.6,sz*0.10),0,6.283);ctx.fill();
   }
 
   function frame(){
     t+=reduce?0:0.016;
     gust*=0.95;
-    ctx.fillStyle='rgba(16,22,34,0.20)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='rgba('+C.fade+',0.20)';ctx.fillRect(0,0,W,H);
 
     // bald receptacle revealed beneath, glowing softly
     const detached=seeds.filter(s=>s.attached<1).length;
     const reveal=detached/N;
     const g=ctx.createRadialGradient(cx,cy,2,cx,cy,R*0.62);
-    g.addColorStop(0,'rgba(232,217,176,'+(0.10+reveal*0.22)+')');
-    g.addColorStop(0.55,'rgba(150,138,108,'+(0.05+reveal*0.10)+')');
-    g.addColorStop(1,'rgba(16,22,34,0)');
+    g.addColorStop(0,'rgba('+C.fil+','+(0.10+reveal*0.22)+')');
+    g.addColorStop(0.55,'rgba('+C.fil2+','+(0.05+reveal*0.10)+')');
+    g.addColorStop(1,'rgba('+C.fade+',0)');
     ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*0.62,0,6.283);ctx.fill();
     // stem
-    ctx.strokeStyle='rgba(232,217,176,0.16)';ctx.lineWidth=Math.max(1,R*0.018);
+    ctx.strokeStyle='rgba('+C.fil+',0.16)';ctx.lineWidth=Math.max(1,R*0.018);
     ctx.beginPath();ctx.moveTo(cx,cy);
     ctx.quadraticCurveTo(cx-R*0.10,cy+R*1.4,cx-R*0.04,H+10);ctx.stroke();
 
@@ -136,7 +175,7 @@
         const q=reduce?0:Math.sin(t*1.6+s.phase)*0.6;
         const x=cx+Math.cos(s.a)*s.rr+q, y=cy+Math.sin(s.a)*s.rr*0.62+q*0.5;
         // attach filament line to centre (the seed shaft)
-        ctx.globalAlpha=0.22;ctx.strokeStyle='#e8d9b0';ctx.lineWidth=0.5;
+        ctx.globalAlpha=0.22*C.am;ctx.strokeStyle=C.stroke;ctx.lineWidth=0.5;
         ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();
         pappus(x,y,Math.max(2.4,R*0.075),0.55,s.base+t*0.1);
       } else {
@@ -167,22 +206,23 @@
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
 
-  if(reduce){
+  function still(){
     // single resting frame: full intact seedhead
-    ctx.fillStyle='#101622';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const g=ctx.createRadialGradient(cx,cy,2,cx,cy,R*0.62);
-    g.addColorStop(0,'rgba(232,217,176,0.12)');g.addColorStop(1,'rgba(16,22,34,0)');
+    g.addColorStop(0,'rgba('+C.fil+',0.12)');g.addColorStop(1,'rgba('+C.fade+',0)');
     ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*0.62,0,6.283);ctx.fill();
-    ctx.strokeStyle='rgba(232,217,176,0.16)';ctx.lineWidth=Math.max(1,R*0.018);
+    ctx.strokeStyle='rgba('+C.fil+',0.16)';ctx.lineWidth=Math.max(1,R*0.018);
     ctx.beginPath();ctx.moveTo(cx,cy);ctx.quadraticCurveTo(cx-R*0.10,cy+R*1.4,cx-R*0.04,H+10);ctx.stroke();
     for(const s of seeds){
       const x=cx+Math.cos(s.a)*s.rr, y=cy+Math.sin(s.a)*s.rr*0.62;
-      ctx.globalAlpha=0.22;ctx.strokeStyle='#e8d9b0';ctx.lineWidth=0.5;
+      ctx.globalAlpha=0.22*C.am;ctx.strokeStyle=C.stroke;ctx.lineWidth=0.5;
       ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();
       pappus(x,y,Math.max(2.4,R*0.075),0.55,s.base);
     }
     ctx.globalAlpha=1;
-  } else start();
+  }
+  if(reduce){ still(); } else start();
 })();
 </script>
 </body>

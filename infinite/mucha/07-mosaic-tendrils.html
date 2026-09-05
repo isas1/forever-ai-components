@@ -5,13 +5,19 @@
 <meta name="description" content="Mosaic Tendrils — Art Nouveau Ornamental Panels. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mosaic Tendrils</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   This tile's default palette is already light, so both themes render the same; the hook keeps it
+   on the canvas's light wall and lets it answer the forever:theme protocol. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   html,body{margin:0;height:100%;background:#f4ecd8;overflow:hidden}
   #muc07-stage{position:fixed;inset:0;width:100%;height:100%}
   .muc07-field{position:absolute;inset:0}
   .muc07-dot{position:absolute;border-radius:50%;transform:translate(-50%,-50%) scale(0);will-change:transform,opacity}
   @keyframes muc07-bloom{0%{transform:translate(-50%,-50%) scale(0);opacity:0}30%{opacity:1}100%{transform:translate(-50%,-50%) scale(1);opacity:.92}}
-  .muc07-link{position:absolute;height:1.5px;transform-origin:left center;background:linear-gradient(90deg,transparent,#c4a14e,transparent);will-change:transform,opacity}
+  .muc07-link{position:absolute;height:2px;transform-origin:left center;background:linear-gradient(90deg,transparent,#c4a14e,transparent);will-change:transform,opacity}
   .muc07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#5b4632;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -21,19 +27,22 @@
  "description": "Colored beads bloom and connect with gradient lines, branching into tendrils that slowly replace oldest nodes. Art Nouveau palette: gold, sage, rose, peach, teal.",
  "useWhen": "Art-nouveau or decorative hero backgrounds, ambient loading screens, botanical or filigree-themed brand presentations.",
  "avoidWhen": "Contexts requiring legible text overlays — growing dot network competes visually. Not suitable where motion must stop on demand.",
- "agentPrompt": "Change the palette to cooler tones by replacing PAL.sage with '#6b8fa3' and PAL.rose with '#a07db0', and slow growth by changing the interval threshold from 0.34 to 0.55.",
+ "agentPrompt": "Change the palette to cooler tones by replacing PAL.sage with '#6b8fa3' and PAL.rose with '#a07db0', and slow growth by changing the interval threshold from 0.26 to 0.55. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (PAL object — 5 named colors)",
   "max node count (MAX=64)",
-  "dot size range (4+Math.random()*7)",
-  "growth interval threshold (acc>0.34)",
-  "branch distance range (18+Math.random()*34)"
+  "dot size range (5+Math.random()*8)",
+  "growth interval threshold (acc>0.26)",
+  "mount pre-roll (22 tendrils grown before first paint)",
+  "branch distance range (18+Math.random()*34)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED)",
   "visibilitychange pause/resume",
-  "node cull loop (while nodes.length>MAX)"
+  "node cull loop (while nodes.length>MAX)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Growth is purely random — no directional bias, so tendrils can cluster in one area",
@@ -47,7 +56,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "mosaic",
@@ -75,18 +85,19 @@
   let nodes=[];
   const MAX=64;
   function dim(){const r=field.getBoundingClientRect();return {w:r.width,h:r.height};}
-  function addNode(x,y,parent){
+  function addNode(x,y,parent,pre){
     const d=dim();
     x=Math.max(6,Math.min(d.w-6,x)); y=Math.max(6,Math.min(d.h-6,y));
     const dot=document.createElement('div'); dot.className='muc07-dot';
-    const sz=4+Math.random()*7;
+    const sz=5+Math.random()*8;
     const col=cols[(Math.random()*cols.length)|0];
     dot.style.width=dot.style.height=sz+'px';
     dot.style.left=x+'px';dot.style.top=y+'px';
     dot.style.background=col;
     dot.style.boxShadow='0 0 0 1px rgba(91,70,50,.35)';
     if(REDUCED){dot.style.transform='translate(-50%,-50%) scale(1)';dot.style.opacity='.9';}
-    else dot.style.animation=`muc07-bloom ${(0.6+Math.random()*0.5).toFixed(2)}s ease-out forwards`;
+    else{ dot.style.animation=`muc07-bloom ${(0.6+Math.random()*0.5).toFixed(2)}s ease-out forwards`;
+      if(pre) dot.style.animationDelay=(-Math.random()*0.55).toFixed(2)+'s'; }   // pre-rolled beads are mid-bloom on frame one
     field.appendChild(dot);
     const node={el:dot,x,y};
     if(parent){
@@ -108,16 +119,18 @@
     }
     return node;
   }
-  function grow(from){
+  function grow(from,pre){
     if(!from) return;
     const ang=Math.random()*Math.PI*2;
     const dist=18+Math.random()*34;
-    addNode(from.x+Math.cos(ang)*dist,from.y+Math.sin(ang)*dist,from);
+    addNode(from.x+Math.cos(ang)*dist,from.y+Math.sin(ang)*dist,from,pre);
   }
   function seed(){
     nodes.forEach(n=>{n.el&&n.el.remove();n.link&&n.link.remove();}); nodes=[];
     const d0=dim();
     for(let i=0;i<3;i++) addNode(d0.w*(0.25+0.25*i),d0.h*(0.3+0.2*(i%2)),null);
+    // pre-roll: three lone seeds read as nothing on the wall, so mount ~22 tendrils in and keep growing
+    for(let i=0;i<22;i++) grow(nodes[(Math.random()*nodes.length)|0],true);
   }
   seed();
   let acc=0,last=performance.now();
@@ -126,7 +139,7 @@
     if(!running) return;
     const now=performance.now();const dt=(now-last)/1000;last=now;
     acc+=dt;
-    if(acc>0.34){acc=0; grow(nodes[(Math.random()*nodes.length)|0]); }
+    if(acc>0.26){acc=0; grow(nodes[(Math.random()*nodes.length)|0]); }
     raf=requestAnimationFrame(loop);
   }
   function start(){ if(running||REDUCED) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
@@ -137,5 +150,6 @@
   if(!REDUCED) start();
 })();
 </script>
+<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>

@@ -5,11 +5,25 @@
 <meta name="description" content="Concentric lobed color rings blooming outward from a glowing center in swirling pink-violet-cyan complementary hues.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Ripple Bloom</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  /* theme tokens — dark defaults; light = deepened poster inks on cream. --ps06-p1..p8 feed the JS ring palette as "r,g,b"; --ps06-blend drops the additive glow so rings read as ink on paper. */
+  :root{
+    --ps06-bg:#0a0612; --ps06-blend:lighter; --ps06-amul:.5; --ps06-cap:#fff; --ps06-cap-o:.42; --ps06-glow0:rgba(255,61,166,0.55); --ps06-glow1:rgba(124,72,224,0.22); --ps06-glow2:rgba(10,6,18,0);
+    --ps06-p1:255,61,166; --ps06-p2:214,52,201; --ps06-p3:124,72,224; --ps06-p4:58,168,224; --ps06-p5:82,224,148; --ps06-p6:212,224,58; --ps06-p7:255,142,58; --ps06-p8:255,61,120;
+  }
+  :root[data-theme="light"]{
+    --ps06-bg:#f6f1ea; --ps06-blend:source-over; --ps06-amul:.78; --ps06-cap:#2a1220; --ps06-cap-o:.62; --ps06-glow0:rgba(198,20,110,0.20); --ps06-glow1:rgba(124,72,224,0.10); --ps06-glow2:rgba(246,241,234,0);
+    --ps06-p1:198,20,110; --ps06-p2:168,28,158; --ps06-p3:86,50,175; --ps06-p4:24,110,165; --ps06-p5:26,140,86; --ps06-p6:130,140,20; --ps06-p7:190,95,10; --ps06-p8:180,20,72;
+  }
+  html,body{margin:0;height:100%;background:var(--ps06-bg);overflow:hidden}
   #ps06-stage{position:fixed;inset:0;width:100%;height:100%}
   #ps06-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ps06-cap);opacity:var(--ps06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +33,22 @@
  "description": "22 lobed color rings bloom outward from a glowing center in pink-magenta-violet-cyan hues, cycling with a slow organic wobble via additive blending.",
  "useWhen": "Dark-mode hero backgrounds, psychedelic or creative portfolio themes, ambient looping screensavers needing constant motion.",
  "avoidWhen": "Light-background layouts (background hardcoded #0a0612). Any context requiring legible text overlays or low-motion environments.",
- "agentPrompt": "Change NRINGS to 30, shift the palette first entry to [58,255,200] for a teal-dominant bloom, and slow the phase increment from 0.0011 to 0.0007.",
+ "agentPrompt": "Change NRINGS to 30, shift the palette first entry to [58,255,200] for a teal-dominant bloom, and slow the phase increment from 0.0011 to 0.0007. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ring count (NRINGS=22)",
   "palette (PAL array)",
   "phase speed (phase[k]+=0.0011)",
   "swirl intensity (Math.sin(t*0.25)*0.5)",
   "lobe count (5 + k%3)",
-  "max radius (MAXR = Math.hypot*0.62)"
+  "max radius (MAXR = Math.hypot*0.62)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback (drawOneFrame)",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and JS fillRect — must change both to alter background",
@@ -45,7 +61,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "psychedelic",
@@ -69,16 +86,15 @@
 (function(){
   "use strict";
   var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root = document.documentElement;
   var stage = document.getElementById('ps06-stage');
   var cv = document.getElementById('ps06-c');
   var ctx = cv.getContext('2d');
 
-  // Fillmore-style psychedelic ring palette: hot pink -> magenta -> violet ->
-  // cyan -> chartreuse -> tangerine. Complementary swirl around #ff3da6.
-  var PAL = [
-    [255,61,166],[214,52,201],[124,72,224],[58,168,224],
-    [82,224,148],[212,224,58],[255,142,58],[255,61,120]
-  ];
+  // Fillmore-style psychedelic ring palette: hot pink -> magenta -> violet -> cyan ->
+  // chartreuse -> tangerine; filled from --ps06-p1..p8 so CSS is the single colour source.
+  var PAL = [[255,61,166],[214,52,201],[124,72,224],[58,168,224],[82,224,148],[212,224,58],[255,142,58],[255,61,120]];
+  var BG='#0a0612', BLEND='lighter', AMUL=0.5, G0='', G1='', G2='';
   var TAU = Math.PI*2;
   var NRINGS = 22;          // capped ring count
   var phase = new Float32Array(NRINGS); // bloom progress 0..1 per ring
@@ -106,11 +122,19 @@
   var glow=null;
   function buildGlow(){
     glow = ctx.createRadialGradient(CX,CY,0,CX,CY,MAXR*0.42);
-    glow.addColorStop(0,'rgba(255,61,166,0.55)');
-    glow.addColorStop(0.35,'rgba(124,72,224,0.22)');
-    glow.addColorStop(1,'rgba(10,6,18,0)');
+    glow.addColorStop(0,G0); glow.addColorStop(0.35,G1); glow.addColorStop(1,G2);
   }
-  buildGlow();
+  // JS-drawn colours read the tokens at start + on each switch; the cached centre glow rebuilds here
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){return cs.getPropertyValue(n).trim();}, p, i;
+    for(i=0;i<8;i++){ p=g('--ps06-p'+(i+1)).split(','); PAL[i]=[+p[0],+p[1],+p[2]]; }
+    BG=g('--ps06-bg'); BLEND=g('--ps06-blend'); AMUL=+g('--ps06-amul');
+    G0=g('--ps06-glow0'); G1=g('--ps06-glow1'); G2=g('--ps06-glow2');
+    buildGlow(); if(reduce) drawOneFrame();
+  }
+  addEventListener('message',function(e){ var d=e.data; if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme); syncTheme(); }});
+  syncTheme();
 
   var t=0;
   function frame(now){
@@ -118,14 +142,14 @@
     t = now*0.001;
 
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle='#0a0612';
+    ctx.fillStyle=BG;
     ctx.fillRect(0,0,W,H);
 
     // static bloom glow
     ctx.fillStyle=glow;
     ctx.fillRect(0,0,W,H);
 
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=BLEND;
 
     // swirling wobble — slow, seizure-safe
     var swirl = Math.sin(t*0.25)*0.5;
@@ -137,7 +161,7 @@
       var r = p*MAXR;
       if(r<2) continue;
       var fade = Math.sin(p*Math.PI);       // bloom in, dissolve out
-      var a = fade*0.5;
+      var a = fade*AMUL;
       if(a<=0.004) continue;
 
       // melted, lobed ring — liquid distortion
@@ -167,17 +191,17 @@
   function drawOneFrame(){
     // calm static bloom for reduced-motion
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle='#0a0612';
+    ctx.fillStyle=BG;
     ctx.fillRect(0,0,W,H);
     ctx.fillStyle=glow;
     ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=BLEND;
     for(var k=0;k<NRINGS;k++){
       var p = seedT[k];
       var r = p*MAXR;
       if(r<2) continue;
       var fade = Math.sin(p*Math.PI);
-      var a = fade*0.5;
+      var a = fade*AMUL;
       if(a<=0.004) continue;
       var lobes = 5+(k%3), amp=(8+r*0.06)*(0.4+0.6*fade);
       ctx.beginPath();

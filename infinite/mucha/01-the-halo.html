@@ -5,11 +5,23 @@
 <meta name="description" content="The Halo — Art Nouveau Ornamental Panels. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>The Halo</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   This tile's default palette is already light, so both themes render the same; the hook keeps it
+   on the canvas's light wall and lets it answer the forever:theme protocol. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   html,body{margin:0;height:100%;background:#f4ecd8;overflow:hidden}
   #muc01-stage{position:fixed;inset:0;width:100%;height:100%}
   .muc01-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
-  .muc01-rot{position:absolute;width:78%;aspect-ratio:1;left:50%;top:50%;transform:translate(-50%,-50%)}
+  /* the rings spin from CSS (duration per ring via --muc01-dur); paused while the tab is hidden, off under reduced motion */
+  .muc01-rot{position:absolute;width:78%;aspect-ratio:1;left:50%;top:50%;transform:translate(-50%,-50%);animation:muc01-spin var(--muc01-dur,54s) linear infinite}
+  .muc01-rot.muc01-r{animation-name:muc01-spin-r}
+  .muc01-rot.muc01-core{width:28%;animation:muc01-breathe 7s ease-in-out infinite}
+  .muc01-paused .muc01-rot{animation-play-state:paused}
+  .muc01-still .muc01-rot{animation:none}
+  @media (prefers-reduced-motion:reduce){.muc01-rot{animation:none}}
   .muc01-rot svg{width:100%;height:100%;display:block}
   @keyframes muc01-spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
   @keyframes muc01-spin-r{to{transform:translate(-50%,-50%) rotate(-360deg)}}
@@ -23,22 +35,24 @@
  "description": "Three nested SVG rings of gilded beads and teardrops rotate on slow opposing axes around a breathing gold rosette, evoking Art Nouveau's decorative halos.",
  "useWhen": "Art-nouveau themed hero sections, cultural/museum contexts, ambient decorative backgrounds needing elegant slow motion.",
  "avoidWhen": "Dark backgrounds (palette hardcoded for warm cream). Contexts needing interactivity or content overlaid in the center.",
- "agentPrompt": "Change PAL.gold to '#d4af37' for brighter gilt, slow the outer ring to 80s duration, increase bead count on outer ring from 24 to 32.",
+ "agentPrompt": "Change PAL.gold to '#d4af37' for brighter gilt, slow the outer ring to 80s duration, increase bead count on outer ring from 24 to 32. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (PAL object)",
   "ring bead counts (n: 24/16/12)",
-  "rotation durations (dur: 54/40/30)",
+  "rotation durations (dur: 54/40/30 → --muc01-dur)",
   "rosette petal count (loop i<8)",
-  "core breathe scale (1.05 in keyframe)"
+  "core breathe scale (1.05 in keyframe)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
-  "REDUCED motion guard on all animations",
+  "reduced-motion guard (muc01-still class + media query)",
+  "visibilitychange pause (muc01-paused class)",
   "IIFE wrapper",
-  "role=img + aria-label on stage div"
+  "role=img + aria-label on stage div",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded to warm cream (#f4ecd8) — must edit CSS to change",
-  "CSS animations run continuously even when tab is hidden (no visibility pause)"
+  "Background color hardcoded to warm cream (#f4ecd8) — must edit CSS to change"
  ],
  "tier": "curated",
  "labels": [
@@ -47,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "ornamental",
@@ -102,10 +117,11 @@
       }
     }
     holder.appendChild(svg);
-    if(!REDUCED) holder.style.animation=`${rg.spin} ${rg.dur}s linear infinite`;
+    holder.style.setProperty('--muc01-dur',rg.dur+'s');
+    if(rg.spin==='muc01-spin-r') holder.classList.add('muc01-r');
     wrap.appendChild(holder);
   });
-  const core=document.createElement('div'); core.className='muc01-rot'; core.style.width='28%';
+  const core=document.createElement('div'); core.className='muc01-rot muc01-core';
   const svg=document.createElementNS(NS,'svg'); svg.setAttribute('viewBox','0 0 100 100');
   for(let i=0;i<8;i++){
     const a=(i/8)*Math.PI*2;
@@ -125,9 +141,11 @@
   mid2.setAttribute('cx','50');mid2.setAttribute('cy','50');mid2.setAttribute('r','4');
   mid2.setAttribute('fill',PAL.rose); svg.appendChild(mid2);
   core.appendChild(svg);
-  if(!REDUCED) core.style.animation='muc01-breathe 7s ease-in-out infinite';
   wrap.appendChild(core);
+  if(REDUCED) wrap.classList.add('muc01-still');
+  document.addEventListener('visibilitychange',()=>wrap.classList.toggle('muc01-paused',document.hidden));
 })();
 </script>
+<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>

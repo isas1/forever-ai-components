@@ -5,8 +5,24 @@
 <meta name="description" content="A twisting amber-to-slate Mobius strip slowly rotating with shimmering edge glints built from many CSS quads.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Möbius Ribbon</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0d1b2a;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Ribbon colours are bare
+     RGB triplets because the JS drives only their alphas (--a1..--e). */
+  :root{
+    --mob-bg:#0d1b2a; --mob-face:224,164,88; --mob-under:120,150,180;
+    --mob-edge:245,210,160; --mob-cap:#e0a458; --mob-cap-o:.36;
+  }
+  :root[data-theme="light"]{
+    --mob-bg:#eef4f9; --mob-face:155,99,29; --mob-under:46,74,110;
+    --mob-edge:112,66,10; --mob-cap:#9b631d; --mob-cap-o:.62;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--mob-bg);}
   .mob-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:clamp(440px,90vw,900px);perspective-origin:50% 46%;}
   .mob-rot{position:relative;width:1px;height:1px;transform-style:preserve-3d;
@@ -17,12 +33,12 @@
   .mob-q::before{content:"";position:absolute;left:50%;top:50%;
     width:var(--w);height:var(--h);transform:translate(-50%,-50%);
     background:linear-gradient(180deg,
-      rgba(224,164,88,var(--a1)) 0%,
-      rgba(224,164,88,var(--a2)) 42%,
-      rgba(120,150,180,var(--a3)) 100%);
-    border-top:1px solid rgba(245,210,160,var(--e));}
+      rgba(var(--mob-face),var(--a1)) 0%,
+      rgba(var(--mob-face),var(--a2)) 42%,
+      rgba(var(--mob-under),var(--a3)) 100%);
+    border-top:1px solid rgba(var(--mob-edge),var(--e));}
   .mob-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
-    letter-spacing:.14em;color:#e0a458;opacity:.36;text-transform:uppercase;
+    letter-spacing:.14em;color:var(--mob-cap);opacity:var(--mob-cap-o);text-transform:uppercase;
     pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -32,24 +48,26 @@
  "description": "60 CSS quads form a rotating Möbius strip with amber-to-slate gradient and shimmering edge glints. Pointer nudges the spin.",
  "useWhen": "Dark-mode hero backgrounds, geometric/mathematical themes, creative portfolio sections needing ambient 3D motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy). Contexts where continuous rotation competes with readable foreground content.",
- "agentPrompt": "Change ribbon color from amber to electric teal by replacing rgba(224,164,88,...) with rgba(64,220,200,...) and updating the edge glint border color to rgba(160,255,240,var(--e)).",
+ "agentPrompt": "Change ribbon color from amber to electric teal by replacing rgba(224,164,88,...) with rgba(64,220,200,...) and updating the edge glint border color to rgba(160,255,240,var(--e)). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ribbon color (rgba(224,164,88))",
   "quad count N=60",
   "radius multiplier (0.30)",
   "strip half-width (0.42)",
   "rotation speed (t += 0.0042)",
-  "tilt angle (rotateX(58deg))"
+  "tilt angle (rotateX(58deg))",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard",
   "visibilitychange pause/resume",
-  "resize handler rebuilding quads"
+  "resize handler rebuilding quads",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "60 divs with per-frame inline style writes — can strain low-end CPUs",
-  "Background color hardcoded dark navy",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Seam visible if N reduced below ~40"
  ],
  "tier": "curated",
@@ -59,7 +77,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "3d",
@@ -143,6 +162,11 @@
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
   addEventListener('resize',()=>{ radius=R(); build(); if(reduce){frame();} });
   addEventListener('pointermove',()=>{ nudge=1; });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // every colour is a CSS token, so flipping the attribute is the whole switch.
+  addEventListener('message',e=>{ const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme); });
 
   radius=R(); build();
   if(reduce){ frame(); } else start();

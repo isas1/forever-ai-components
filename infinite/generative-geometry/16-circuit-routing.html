@@ -5,11 +5,26 @@
 <meta name="description" content="Glowing green circuit traces auto-route between scattered grid pads at 45/90 degrees with travelling pulses on dark green.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Circuit Routing</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#020d08;}
+  /* theme tokens — dark defaults; light re-theme in the one [data-theme="light"] block. --cr-a/
+     --cr-b are the trace inks as rgb triples (alpha appended per-draw); light makes them dark
+     board greens/blues, so the wide glow pass reads as a soft halo. */
+  :root{ --cr-bg:#020d08; --cr-wash:rgba(2,13,8,0.20); --cr-acc:#5effb8; --cr-dot:rgba(94,255,184,0.05);
+    --cr-a:94,255,184; --cr-b:120,200,255; --cr-hot-a:rgba(180,255,220,0.9); --cr-hot-b:rgba(180,225,255,0.9);
+    --cr-glow-a:0.12; --cr-core-a:0.6; --cr-pad-a:0.9; --cr-ring-a:0.25; --cr-cap:#5effb8; --cr-cap-o:.34; }
+  :root[data-theme="light"]{ --cr-bg:#eef8f2; --cr-wash:rgba(238,248,242,0.22); --cr-acc:#00744a;
+    --cr-dot:rgba(0,106,68,0.16); --cr-a:0,106,68; --cr-b:16,74,146; --cr-hot-a:rgba(0,62,40,0.9);
+    --cr-hot-b:rgba(10,44,100,0.9); --cr-glow-a:0.10; --cr-core-a:0.85; --cr-pad-a:0.95;
+    --cr-ring-a:0.30; --cr-cap:#00744a; --cr-cap-o:.75; }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--cr-bg);}
   #cr-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.14em;color:#5effb8;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--cr-cap);opacity:var(--cr-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +34,23 @@
  "description": "Glowing green circuit traces auto-route between grid pads at 45/90 degrees with travelling light pulses; traces grow, hold, then fade in a continuous loop.",
  "useWhen": "Tech/electronics hero backgrounds, PCB or hardware product pages, dark-mode ambient displays needing a coded aesthetic.",
  "avoidWhen": "Light-background UIs (background hardcoded dark green). Contexts where constant trace spawning competes with foreground content.",
- "agentPrompt": "Change accent color from green to amber by setting ACC='#ffb830' and updating the rgba base strings in drawPath and the pad fill to match.",
+ "agentPrompt": "Change accent color from green to amber by setting ACC='#ffb830' and updating the rgba base strings in drawPath and the pad fill to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (ACC='#5effb8')",
   "grid cell size divisor (Math.min(W,H)/26)",
   "max active nets cap (16)",
   "pad density (cols*rows*0.10)",
   "pulse travel speed (cell*0.12)",
-  "trace grow speed (cell*0.16)"
+  "trace grow speed (cell*0.16)",
+  "routing cadence (new trace every ~0.5 s; 12-trace pre-roll)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause/resume",
-  "occ occupancy grid (prevents trace collisions)"
+  "occ occupancy grid (prevents trace collisions)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Greedy router can fail to complete long routes in dense grids, silently dropping the net",
@@ -45,7 +63,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "circuit",
@@ -67,27 +86,34 @@
 (function(){
   const cv=document.getElementById('cr-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ACC='#5effb8';
+  let ACC='#5effb8';
+  // theme: board colour, both trace inks, pulse heads, pad fills, the fade wash and the glow/core alphas all come from the CSS tokens — read once, and again on a theme flip.
+  const root=document.documentElement;
+  const C={bg:'#020d08',wash:'rgba(2,13,8,0.20)',dot:'rgba(94,255,184,0.05)',aBase:'rgba(94,255,184,',
+           bBase:'rgba(120,200,255,',hotA:'rgba(180,255,220,0.9)',hotB:'rgba(180,225,255,0.9)',glowA:0.12,coreA:0.6,padA:'0.9',ringA:'0.25'};
+  function syncTheme(){ const cs=getComputedStyle(root),s=n=>cs.getPropertyValue(n).trim();
+    C.bg=s('--cr-bg')||C.bg;C.wash=s('--cr-wash')||C.wash;C.dot=s('--cr-dot')||C.dot;ACC=s('--cr-acc')||ACC;
+    C.aBase='rgba('+(s('--cr-a')||'94,255,184')+',';C.bBase='rgba('+(s('--cr-b')||'120,200,255')+',';
+    C.hotA=s('--cr-hot-a')||C.hotA;C.hotB=s('--cr-hot-b')||C.hotB;C.padA=s('--cr-pad-a')||C.padA;C.ringA=s('--cr-ring-a')||C.ringA;
+    C.glowA=+(s('--cr-glow-a')||C.glowA);C.coreA=+(s('--cr-core-a')||C.coreA);}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      // fade-wash buffer: repaint flat so no dark frames survive the switch
+      if(W){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);if(reduce)render();}}});syncTheme();
   let W,H,DPR,cell,cols,rows,ox,oy,occ;
   let nets=[],pads=[],t=0,boost=0;
 
   function size(){
-    DPR=Math.min(devicePixelRatio||1,2);
-    W=cv.clientWidth;H=cv.clientHeight;
+    DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
-    cell=Math.max(11,Math.min(W,H)/26);
-    cols=Math.floor(W/cell);rows=Math.floor(H/cell);
+    cell=Math.max(11,Math.min(W,H)/26);cols=Math.floor(W/cell);rows=Math.floor(H/cell);
     ox=(W-cols*cell)/2+cell/2;oy=(H-rows*cell)/2+cell/2;
-    occ=new Uint8Array(cols*rows);
-    pads=[];
-    // scatter pads on grid nodes
-    const target=Math.round(cols*rows*0.10);
-    let tries=0;
-    while(pads.length<target&&tries<target*8){
-      tries++;
+    occ=new Uint8Array(cols*rows);pads=[];
+    const target=Math.round(cols*rows*0.10);let tries=0;   // scatter pads on grid nodes
+    while(pads.length<target&&tries<target*8){ tries++;
       const gx=1+Math.floor(Math.random()*(cols-2)),gy=1+Math.floor(Math.random()*(rows-2));
-      if(occ[gy*cols+gx])continue;
-      occ[gy*cols+gx]=1;pads.push({gx,gy});
+      if(!occ[gy*cols+gx]){occ[gy*cols+gx]=1;pads.push({gx,gy});}
     }
     nets=[];
   }
@@ -96,7 +122,8 @@
   // route between two grid pads turning at 90 & 45 deg, greedy maze-ish
   function route(a,b){
     let x=a.gx,y=a.gy;const path=[{x,y}];let guard=0,max=cols+rows+40;
-    const free=(nx,ny)=>nx>0&&ny>0&&nx<cols-1&&ny<rows-1&&!occ[idx(nx,ny)];
+    // pads are permanently occupied, so the destination pad has to stay steppable or no route ever lands
+    const free=(nx,ny)=>nx>0&&ny>0&&nx<cols-1&&ny<rows-1&&(!occ[idx(nx,ny)]||(nx===b.gx&&ny===b.gy));
     while((x!==b.gx||y!==b.gy)&&guard++<max){
       const sx=Math.sign(b.gx-x),sy=Math.sign(b.gy-y);
       let mv=null;
@@ -106,11 +133,8 @@
       else if(sy&&free(x,y+sy))mv=[0,sy];
       else if(free(x+sx,y))mv=[sx,0];
       else if(free(x,y+sy))mv=[0,sy];
-      else { // try perpendicular detour
-        const opts=[[0,1],[0,-1],[1,0],[-1,0]].filter(d=>free(x+d[0],y+d[1]));
-        if(!opts.length)break;
-        mv=opts[(Math.random()*opts.length)|0];
-      }
+      else { const opts=[[0,1],[0,-1],[1,0],[-1,0]].filter(d=>free(x+d[0],y+d[1])); // perpendicular detour
+        if(!opts.length)break; mv=opts[(Math.random()*opts.length)|0]; }
       x+=mv[0];y+=mv[1];occ[idx(x,y)]=1;path.push({x,y});
     }
     if(x!==b.gx||y!==b.gy)return null;
@@ -134,6 +158,11 @@
 
   function clearNet(n){for(const q of n.p)occ[idx(q.x,q.y)]=0;
     for(const pd of pads)occ[idx(pd.gx,pd.gy)]=1;}
+  // pre-roll: the board mounts mid-session — a dozen traces at assorted ages, the last few still routing
+  function preroll(){for(let i=0;i<12;i++){const k=nets.length;spawnNet();const n=nets[k];if(!n)continue;
+    n.fadeAt=120+Math.random()*160;
+    if(i<9){n.grow=n.len;n.life=Math.random()*n.fadeAt;n.pulse=Math.random()*n.len;}
+    else n.grow=n.len*(0.15+Math.random()*0.5);}}
 
   function drawPath(p,upto,col,wid,alpha){
     ctx.strokeStyle=col;ctx.lineWidth=wid;ctx.lineCap='round';ctx.lineJoin='round';
@@ -159,32 +188,32 @@
   cv.addEventListener('click',()=>{for(let i=0;i<3;i++)spawnNet();});
 
   function render(){
-    ctx.fillStyle='rgba(2,13,8,0.20)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.wash;ctx.fillRect(0,0,W,H);
     // faint grid dots
-    ctx.fillStyle='rgba(94,255,184,0.05)';
+    ctx.fillStyle=C.dot;
     for(let gy=1;gy<rows-1;gy+=2)for(let gx=1;gx<cols-1;gx+=2){
       ctx.fillRect(ox+gx*cell-0.5,oy+gy*cell-0.5,1,1);}
 
     for(const n of nets){
       const grown=Math.min(n.grow,n.len);
       const fade=n.life>n.fadeAt?Math.max(0,1-(n.life-n.fadeAt)/55):1;
-      const base=n.hue?'rgba(120,200,255,':'rgba(94,255,184,';
+      const base=n.hue?C.bBase:C.aBase;
       // trace glow + core
-      drawPath(n.p,grown,base+(0.12*fade)+')',6,1);
-      drawPath(n.p,grown,base+(0.6*fade)+')',1.6,1);
+      drawPath(n.p,grown,base+(C.glowA*fade)+')',6,1);
+      drawPath(n.p,grown,base+(C.coreA*fade)+')',1.6,1);
       // travelling pulse on completed nets
       if(n.grow>=n.len&&fade>0.3){
         const d=n.pulse%n.len;const[x,y]=ptAt(n.p,d);
         const g=ctx.createRadialGradient(x,y,0,x,y,cell*1.3);
-        g.addColorStop(0,n.hue?'rgba(180,225,255,0.9)':'rgba(180,255,220,0.9)');
-        g.addColorStop(1,'rgba(94,255,184,0)');
+        g.addColorStop(0,n.hue?C.hotB:C.hotA);
+        g.addColorStop(1,C.aBase+'0)');
         ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,cell*1.3,0,7);ctx.fill();
       }
     }
     // pads
     for(const pd of pads){const x=ox+pd.gx*cell,y=oy+pd.gy*cell;
-      ctx.fillStyle='rgba(94,255,184,0.9)';ctx.beginPath();ctx.arc(x,y,2.2,0,7);ctx.fill();
-      ctx.strokeStyle='rgba(94,255,184,0.25)';ctx.lineWidth=1;
+      ctx.fillStyle=C.aBase+C.padA+')';ctx.beginPath();ctx.arc(x,y,2.2,0,7);ctx.fill();
+      ctx.strokeStyle=C.aBase+C.ringA+')';ctx.lineWidth=1;
       ctx.beginPath();ctx.arc(x,y,4.5,0,7);ctx.stroke();}
   }
 
@@ -200,8 +229,8 @@
     // retire faded nets
     for(let i=nets.length-1;i>=0;i--){
       if(nets[i].fadeAt&&nets[i].life>nets[i].fadeAt+58){clearNet(nets[i]);nets.splice(i,1);}}
-    // lay new routes
-    if(nets.length<Math.min(16,Math.round(cols*rows*0.012))&&t%4===0)spawnNet();
+    // lay new routes: a fresh trace every ~0.5s while the oldest fade out under it
+    if(nets.length<Math.min(18,Math.round(cols*rows*0.024))&&t%30===0)spawnNet();
     render();
     raf=requestAnimationFrame(frame);
   }
@@ -212,8 +241,8 @@
   addEventListener('resize',()=>{size();});
   size();
   if(reduce){for(let i=0;i<10;i++)spawnNet();for(const n of nets)n.grow=n.len;
-    ctx.fillStyle='#020d08';ctx.fillRect(0,0,W,H);render();}
-  else{for(let i=0;i<5;i++)spawnNet();ctx.fillStyle='#020d08';ctx.fillRect(0,0,W,H);start();}
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);render();}
+  else{preroll();ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);start();}
 })();
 </script>
 </body>

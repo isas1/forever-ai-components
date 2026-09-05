@@ -2,16 +2,22 @@
 <meta name="description" content="A tick-marked ring fills as you press and hold; a center square rotates 45deg into a green check, or flashes a red cross on abort.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Hold to Confirm</title>
+<script>
+/* theme hook: ?theme=light|dark; before first paint. Default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0b0d12}
+  :root{--fb05-bg:#0b0d12;--fb05-ok:#34d399;--fb05-ab:#f43f5e;--fb05-tr:rgba(255,255,255,.06);--fb05-tk:rgba(255,255,255,.08);--fb05-id:rgba(255,255,255,.04);--fb05-oi:#06281f;--fb05-ai:#3a0d16;--fb05-lb:rgba(255,255,255,.55);--fb05-cp:#fff;--fb05-co:.42}
+  :root[data-theme="light"]{--fb05-bg:#f2f4f8;--fb05-ok:#1b7c59;--fb05-ab:#de0d31;--fb05-tr:rgba(0,0,0,.08);--fb05-tk:rgba(0,0,0,.1);--fb05-id:rgba(0,0,0,.04);--fb05-oi:#fff;--fb05-ai:#fff;--fb05-lb:rgba(0,0,0,.55);--fb05-cp:#182029;--fb05-co:.5}
+  html,body{margin:0;height:100%;background:var(--fb05-bg)}
   #fb05-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
   #fb05-btn{appearance:none;border:0;background:transparent;outline:none;cursor:pointer;
     display:grid;place-items:center;padding:0;-webkit-tap-highlight-color:transparent;touch-action:none}
-  #fb05-btn:focus-visible{outline:2px solid #34d399;outline-offset:6px;border-radius:50%}
+  #fb05-btn:focus-visible{outline:2px solid var(--fb05-ok);outline-offset:6px;border-radius:50%}
   #fb05-c{display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;
-    opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--fb05-cp);
+    opacity:var(--fb05-co);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   .fb05-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style><script type="application/json" id="forever-agent-meta">
@@ -21,20 +27,22 @@
  "description": "Press-and-hold fills a tick-marked ring; full hold rotates center square 45° into a green check; early release flashes red cross (cancelled).",
  "useWhen": "Destructive or irreversible actions (delete, submit, purchase) where accidental taps must be prevented. Replaces \"Are you sure?\" dialogs with a tactile hold gesture.",
  "avoidWhen": "Frequent or low-stakes actions where the hold delay frustrates users. Not suitable when pointer input is unavailable.",
- "agentPrompt": "Change HOLD_MS from 1100 to 2000 to require a longer press, and update all #34d399 occurrences in the draw function to #6366f1 to shift the confirmed state to indigo.",
+ "agentPrompt": "Change HOLD_MS from 1100 to 2000 to require a longer press, and update all #34d399 occurrences in the draw function to #6366f1 to shift the confirmed state to indigo. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "hold duration (HOLD_MS=1100)",
   "confirmed color (#34d399)",
   "abort color (#f43f5e)",
   "ring radius (R=W*0.30)",
   "tick mark count (i<24)",
-  "demo idle timeout (idle>3600)"
+  "demo idle timeout (idle>3600)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "state machine (ST_IDLE/ST_HOLD/ST_OK/ST_ABORT)",
   "visibilitychange pause/resume",
   "reduced-motion static frame fallback",
-  "aria-live region for screen-reader announcements"
+  "aria-live region for screen-reader announcements",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Hold physics blends spring + linear — changing HOLD_MS without tuning spring constants may feel off",
@@ -48,7 +56,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "hold",
@@ -77,6 +86,17 @@
   var c=document.getElementById('fb05-c'),ctx=c.getContext('2d');
   var btn=document.getElementById('fb05-btn'),live=document.getElementById('fb05-live'),stage=document.getElementById('fb05-stage');
   var DPR=Math.min(2,window.devicePixelRatio||1),W=0,H=0,S=0,cx=0,cy=0,R=0;
+
+  var root=document.documentElement, C={}, KS=['bg','ok','ab','tr','tk','id','oi','ai','lb'];
+  function hex(v){ v=v.trim().replace('#',''); if(v.length===3)v=v.replace(/./g,'$&$&'); var n=parseInt(v,16); return (n>>16&255)+','+(n>>8&255)+','+(n&255); }
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    for(var i=0;i<KS.length;i++) C[KS[i]]=cs.getPropertyValue('--fb05-'+KS[i]).trim();
+    C.okRgb=hex(C.ok); C.abRgb=hex(C.ab);
+  }
+  addEventListener('message',function(e){ var d=e.data; if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); draw(); } });
+  syncTheme();
+
   function size(){
     var w=stage.clientWidth,h=stage.clientHeight;S=Math.min(w,h);
     c.style.width=S+'px';c.style.height=S+'px';
@@ -84,17 +104,15 @@
     cx=W/2;cy=H/2;R=W*0.30;
   }
 
-  // state machine: idle -> holding -> committed | aborted
   var ST_IDLE=0,ST_HOLD=1,ST_OK=2,ST_ABORT=3;
   var state=ST_IDLE;
-  // progress with critically-damped spring toward target
-  var p=0,pv=0,target=0;            // ring fill 0..1
-  var flash=0;                      // result flash decay 0..1
-  var pulse=0;                      // committed breathing
-  var userHold=false;               // real pointer/key engaged
-  var demo=true,demoT=0,demoPhase=0;// autonomous demo
-  var idle=0;                       // ms since last real input
-  var HOLD_MS=1100;                 // time-to-commit
+  var p=0,pv=0,target=0;
+  var flash=0;
+  var pulse=0;
+  var userHold=false;
+  var demo=true,demoT=0,demoPhase=0;
+  var idle=0;
+  var HOLD_MS=1100;
   var last=0,running=true,raf=0;
   var TAU=Math.PI*2;
 
@@ -112,7 +130,6 @@
   function commit(){ state=ST_OK; target=1; flash=1; pulse=0; announce('Confirmed.'); }
   function reset(){ state=ST_IDLE; target=0; }
 
-  // ---- real input -> hand control to user, ease back to demo after idle ----
   function takeover(){ demo=false; idle=0; }
   function down(e){ takeover(); userHold=true; begin(); if(e&&e.cancelable)e.preventDefault(); }
   function up(){ if(userHold){ userHold=false; release(); } }
@@ -126,38 +143,33 @@
     if((e.key===' '||e.key==='Enter')&&userHold){ userHold=false; release(); e.preventDefault(); }
   });
 
-  // ---- autonomous self-demo: hold, commit, rest; occasionally abort ----
   function demoStep(dt){
     if(!demo){ idle+=dt; if(idle>3600){ demo=true; demoT=0; demoPhase=0; reset(); } return; }
     demoT+=dt;
-    if(demoPhase===0){ if(demoT>900){ demoPhase=1; demoT=0; begin(); } }
+    if(demoPhase===0){ if(demoT>400){ demoPhase=1; demoT=0; begin(); } }
     else if(demoPhase===1){
-      // holding; abort on every 3rd cycle for negative-state demo
       var willAbort=(Math.floor(performance.now()/9000)%3===2);
       if(willAbort && p>0.62){ state=ST_ABORT; target=0; flash=1; announce('Released early. Cancelled.'); demoPhase=3; demoT=0; }
       else if(p>=0.985){ commit(); demoPhase=2; demoT=0; }
     }
-    else if(demoPhase===2){ if(demoT>1400){ reset(); demoPhase=4; demoT=0; } }
-    else if(demoPhase===3){ if(demoT>1100){ reset(); demoPhase=4; demoT=0; } }
-    else if(demoPhase===4){ if(demoT>700){ demoPhase=0; demoT=0; } }
+    else if(demoPhase===2){ if(demoT>2100){ reset(); demoPhase=4; demoT=0; } }
+    else if(demoPhase===3){ if(demoT>1400){ reset(); demoPhase=4; demoT=0; } }
+    else if(demoPhase===4){ if(demoT>1300){ demoPhase=0; demoT=0; } }
   }
 
-  // ---- render ----
   function draw(){
     var lw=Math.max(3,W*0.018);
     ctx.clearRect(0,0,W,H);
-    ctx.fillStyle='#0b0d12';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
 
     var ok=state===ST_OK, ab=state===ST_ABORT;
-    var ringCol = ok?'#34d399' : ab?'#f43f5e' : '#34d399';
+    var ringCol = ab?C.ab:C.ok;
 
-    // static track
     ctx.lineWidth=lw;ctx.lineCap='round';
-    ctx.strokeStyle='rgba(255,255,255,0.06)';
+    ctx.strokeStyle=C.tr;
     ctx.beginPath();ctx.arc(cx,cy,R,0,TAU);ctx.stroke();
 
-    // tick marks (constructivist precision) - static, cheap
-    ctx.strokeStyle='rgba(255,255,255,0.08)';
+    ctx.strokeStyle=C.tk;
     ctx.lineWidth=Math.max(1,W*0.004);
     for(var i=0;i<24;i++){
       var a=i/24*TAU, r0=R+lw*0.95, r1=R+lw*1.7;
@@ -167,7 +179,6 @@
       ctx.stroke();
     }
 
-    // progress arc (compositor-safe: redrawn arc, not animated css)
     if(p>0.001){
       var start=-Math.PI/2, end=start+TAU*p;
       ctx.lineWidth=lw;ctx.lineCap='round';
@@ -175,7 +186,6 @@
       ctx.beginPath();ctx.arc(cx,cy,R,start,end);ctx.stroke();
     }
 
-    // center core: square that rotates 45deg on commit (De Stijl rotation)
     var coreR=R*0.50;
     var coreScale = 1 + (ok? Math.sin(pulse*TAU)*0.03 : 0) - (ab? flash*0.10 : 0) - (state===ST_HOLD? p*0.06:0);
     ctx.save();
@@ -183,58 +193,52 @@
     ctx.rotate(ok?Math.PI/4:0);
     ctx.scale(coreScale,coreScale);
     if(ok){
-      ctx.fillStyle='#34d399';
+      ctx.fillStyle=C.ok;
       roundRect(-coreR*0.62,-coreR*0.62,coreR*1.24,coreR*1.24,coreR*0.18);ctx.fill();
     } else if(ab){
-      ctx.fillStyle='#f43f5e';
+      ctx.fillStyle=C.ab;
       roundRect(-coreR*0.6,-coreR*0.6,coreR*1.2,coreR*1.2,coreR*0.16);ctx.fill();
     } else {
-      ctx.fillStyle='rgba(255,255,255,0.04)';
+      ctx.fillStyle=C.id;
       roundRect(-coreR*0.6,-coreR*0.6,coreR*1.2,coreR*1.2,coreR*0.16);ctx.fill();
-      ctx.strokeStyle='rgba(52,211,153,'+(0.25+p*0.5)+')';
+      ctx.strokeStyle='rgba('+C.okRgb+','+(0.25+p*0.5)+')';
       ctx.lineWidth=Math.max(1.5,W*0.006);
       roundRect(-coreR*0.6,-coreR*0.6,coreR*1.2,coreR*1.2,coreR*0.16);ctx.stroke();
     }
     ctx.restore();
 
-    // glyph inside core
     ctx.save();ctx.translate(cx,cy);
     ctx.lineWidth=Math.max(3,W*0.014);ctx.lineCap='round';ctx.lineJoin='round';
     if(ok){
-      // checkmark, drawn proportional to flash settle (no css)
-      ctx.strokeStyle='#06281f';
+      ctx.strokeStyle=C.oi;
       ctx.beginPath();
       ctx.moveTo(-coreR*0.30,coreR*0.02);
       ctx.lineTo(-coreR*0.06,coreR*0.26);
       ctx.lineTo(coreR*0.34,-coreR*0.24);
       ctx.stroke();
     } else if(ab){
-      // cross
-      ctx.strokeStyle='#3a0d16';var d=coreR*0.26;
+      ctx.strokeStyle=C.ai;var d=coreR*0.26;
       ctx.beginPath();ctx.moveTo(-d,-d);ctx.lineTo(d,d);ctx.moveTo(d,-d);ctx.lineTo(-d,d);ctx.stroke();
     } else {
-      // fingerprint-ish hold dot, grows with p
-      ctx.fillStyle='rgba(52,211,153,'+(0.45+p*0.4)+')';
+      ctx.fillStyle='rgba('+C.okRgb+','+(0.45+p*0.4)+')';
       ctx.beginPath();ctx.arc(0,0,coreR*(0.10+p*0.16),0,TAU);ctx.fill();
     }
     ctx.restore();
 
-    // result flash ring (single expanding stroke, opacity-decaying)
     if(flash>0.01){
       var fr=R*(1.0+(1-flash)*0.5);
       ctx.globalAlpha=flash*0.5;
       ctx.lineWidth=lw*0.6;
-      ctx.strokeStyle=ab?'#f43f5e':'#34d399';
+      ctx.strokeStyle=ab?C.ab:C.ok;
       ctx.beginPath();ctx.arc(cx,cy,fr,0,TAU);ctx.stroke();
       ctx.globalAlpha=1;
     }
 
-    // label
-    ctx.fillStyle='rgba(255,255,255,0.55)';
+    ctx.fillStyle=C.lb;
     ctx.font='600 '+Math.round(W*0.034)+'px ui-monospace,Menlo,monospace';
     ctx.textAlign='center';ctx.textBaseline='middle';
     var lbl = ok?'CONFIRMED' : ab?'CANCELLED' : (state===ST_HOLD? Math.round(p*100)+'%':'HOLD');
-    if(ok)ctx.fillStyle='#34d399'; else if(ab)ctx.fillStyle='#f43f5e';
+    if(ok)ctx.fillStyle=C.ok; else if(ab)ctx.fillStyle=C.ab;
     ctx.fillText(lbl,cx,cy+R+lw*4.2);
   }
 
@@ -250,13 +254,11 @@
 
   function step(dt){
     demoStep(dt);
-    // spring toward target (critically damped-ish)
     var k=0.016, d2=0.78;
     var force=(target-p)*k*dt;
     pv=(pv+force)*d2;
     p+=pv;
     if(p<0)p=0; if(p>1)p=1;
-    // hold ramp uses time-based fill for predictable HOLD_MS feel when engaged
     if(state===ST_HOLD){
       var rate=dt/HOLD_MS;
       p=Math.min(1,p+rate*0.65); // blend spring + linear for crisp control
@@ -283,7 +285,6 @@
 
   size();
   if(reduce){
-    // single static, legible, on-brand frame: a partially-filled ring at rest
     p=0.66;state=ST_IDLE;flash=0;draw();
     announce('Hold to confirm control.');
     return;

@@ -5,17 +5,28 @@
 <meta name="description" content="The Series — Symbolic Pastel Abstraction. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>The Series</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   This tile's default palette is already light, so both themes render the same; the hook keeps it
+   on the canvas's light wall and lets it answer the forever:theme protocol. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   html,body{margin:0;height:100%;background:#ece4d4;overflow:hidden}
   #afk06-stage{position:fixed;inset:0;width:100%;height:100%}
-  .afk06-card{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity 1.1s ease;}
+  .afk06-card{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .9s ease;}
   .afk06-card.on{opacity:1;}
-  .afk06-card svg{width:72%;height:72%;}
+  .afk06-card svg{width:78%;height:78%;}
+  /* every drawn line carries its own length in --l, so the sheet in view is always being traced */
+  .afk06-ink{stroke-dasharray:var(--l);stroke-dashoffset:0;}
+  .afk06-card.on .afk06-ink{animation:afk06-draw 1.5s cubic-bezier(.32,0,.24,1) both;}
+  @keyframes afk06-draw{from{stroke-dashoffset:var(--l)}to{stroke-dashoffset:0}}
   .afk06-dots{position:absolute;left:0;right:0;bottom:30px;display:flex;justify-content:center;gap:9px;z-index:3;}
   .afk06-dot{width:9px;height:9px;border-radius:50%;border:1px solid rgba(42,39,48,.45);background:transparent;transition:background .5s, transform .5s;}
   .afk06-dot.on{transform:scale(1.25);background:#e3a9bd;}
   .afk06-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#2a2730;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:4}
-  @media (prefers-reduced-motion: reduce){ .afk06-card{transition:opacity .4s ease;} }
+  @media (prefers-reduced-motion: reduce){ .afk06-card{transition:opacity .4s ease;}
+    .afk06-card.on .afk06-ink{animation:none;} }
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -24,19 +35,23 @@
  "description": "Five SVG diagrams — spiral, nested ovals, petals, vesica piscis, concentric circles — cross-fade on a 3.4s loop with dot indicators, in pastel symbolic-abstract palette.",
  "useWhen": "Art-inspired ambient displays, gallery intros, spiritual/geometric theme backgrounds, or wherever a slow meditative loop fits.",
  "avoidWhen": "Contexts requiring immediate user interaction; viewers sensitive to slow cross-fades on reduced-motion setups (loop halts entirely).",
- "agentPrompt": "Change the auto-advance interval from 3.4 to 5 seconds by editing the `autoT>3.4` threshold in the tick function, and swap the first palette color C[0] from '#a9c8e0' to '#b0d4c8'.",
+ "agentPrompt": "Change the auto-advance interval from 3.4 to 5 seconds by editing the `autoT>3.4` threshold in the tick function, and swap the first palette color C[0] from '#a9c8e0' to '#b0d4c8'. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (C array, 5 hex values)",
   "slide interval (autoT > 3.4)",
   "cross-fade duration (transition: opacity 1.1s)",
   "SVG shape parameters (spiral turns, oval counts, petal count N=8)",
-  "dot indicator active color (#e3a9bd)"
+  "dot indicator active color (#e3a9bd)",
+  "series cadence (next figure every 2.2 s; the spiral is traced progressively)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause/resume guard",
   "IIFE wrapper",
   "prefers-reduced-motion check (stops auto-loop)",
-  "aria-label on stage for screen readers"
+  "aria-label on stage for screen readers",
+  "idle series advance (progressive trace + pager dot)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-loop stops entirely under prefers-reduced-motion — no manual navigation fallback for those users",
@@ -49,7 +64,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "slideshow",
@@ -79,41 +95,45 @@
   if(!stack||!dotsWrap||!stage) return;
   stack.classList.remove('on');
   function rgbaHex(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
-  const C=['#a9c8e0','#e3a9bd','#ecd58a','#c3b3da','#a9c4a0'];
+  const C=['#a9c8e0','#e3a9bd','#ecd58a','#c3b3da','#a9c4a0'], INK='#2a2730';
+  // --l is the run of the line: the draw-in keyframe walks stroke-dashoffset from it down to 0
+  const ink=len=>` class="afk06-ink" style="--l:${Math.round(len)}"`;
+  const ellP=(rx,ry)=>{const h=(rx-ry)*(rx-ry)/((rx+ry)*(rx+ry));return Math.PI*(rx+ry)*(1+3*h/(10+Math.sqrt(4-3*h)));};
+  const core=r=>`<circle cx="150" cy="150" r="${r}" fill="${INK}"/>`;   // the ink nucleus each sheet turns about
   function spiralSVG(){
-    let d='M150 150';
+    let d='M150 150',len=0,px=150,py=150;
     for(let th=0;th<6.5*Math.PI;th+=0.25){
-      const r=4+th*9;
-      d+=` L${(150+Math.cos(th)*r).toFixed(1)} ${(150+Math.sin(th)*r).toFixed(1)}`;
+      const r=4+th*9,x=150+Math.cos(th)*r,y=150+Math.sin(th)*r;
+      len+=Math.hypot(x-px,y-py); px=x; py=y;
+      d+=` L${x.toFixed(1)} ${y.toFixed(1)}`;
     }
-    return `<path d="${d}" fill="none" stroke="${C[0]}" stroke-width="3" stroke-linecap="round"/>`;
+    return `<path d="${d}" fill="none" stroke="${C[0]}" stroke-width="5" stroke-linecap="round"${ink(len)}/>`+core(13);
   }
   function ovalSVG(){
     let s='';
     for(let i=5;i>=1;i--){
       const rx=30+i*22, ry=44+i*30;
-      s+=`<ellipse cx="150" cy="150" rx="${rx}" ry="${ry}" fill="none" stroke="${i%2?C[1]:C[3]}" stroke-width="2" opacity="${0.4+i*0.1}"/>`;
+      s+=`<ellipse cx="150" cy="150" rx="${rx}" ry="${ry}" fill="none" stroke="${i%2?C[1]:C[3]}" stroke-width="3" opacity="${0.4+i*0.1}"${ink(ellP(rx,ry))}/>`;
     }
-    s+=`<circle cx="150" cy="150" r="14" fill="${C[1]}"/>`; return s;
+    s+=`<circle cx="150" cy="150" r="16" fill="${C[1]}"/>`+core(9); return s;
   }
   function petalSVG(){
     let s=''; const N=8;
     for(let i=0;i<N;i++){
       const a=(i/N)*Math.PI*2;
       const x=150+Math.cos(a)*60, y=150+Math.sin(a)*60;
-      s+=`<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="20" ry="46" fill="${rgbaHex(i%2?C[4]:C[2],0.55)}" stroke="${C[2]}" stroke-width="1" transform="rotate(${(a*180/Math.PI+90).toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})"/>`;
+      s+=`<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="20" ry="46" fill="${rgbaHex(i%2?C[4]:C[2],0.55)}" stroke="${C[2]}" stroke-width="2" transform="rotate(${(a*180/Math.PI+90).toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})"${ink(ellP(20,46))}/>`;
     }
-    s+=`<circle cx="150" cy="150" r="20" fill="${C[4]}"/>`; return s;
+    s+=`<circle cx="150" cy="150" r="22" fill="${C[4]}"/>`+core(11); return s;
   }
   function vesicaSVG(){
-    return `<circle cx="118" cy="150" r="70" fill="${rgbaHex(C[0],0.4)}" stroke="${C[0]}" stroke-width="2"/>
-            <circle cx="182" cy="150" r="70" fill="${rgbaHex(C[1],0.4)}" stroke="${C[1]}" stroke-width="2"/>
-            <circle cx="150" cy="150" r="8" fill="#2a2730"/>`;
+    return `<circle cx="118" cy="150" r="70" fill="${rgbaHex(C[0],0.4)}" stroke="${C[0]}" stroke-width="3"${ink(440)}/>
+            <circle cx="182" cy="150" r="70" fill="${rgbaHex(C[1],0.4)}" stroke="${C[1]}" stroke-width="3"${ink(440)}/>`+core(13);
   }
   function concSVG(){
     let s='';
-    for(let i=6;i>=1;i--){ s+=`<circle cx="150" cy="150" r="${i*20}" fill="none" stroke="${i%2?C[3]:C[2]}" stroke-width="2" opacity="${0.35+i*0.1}"/>`; }
-    return s;
+    for(let i=6;i>=1;i--){ s+=`<circle cx="150" cy="150" r="${i*20}" fill="none" stroke="${i%2?C[3]:C[2]}" stroke-width="3" opacity="${0.35+i*0.1}"${ink(2*Math.PI*i*20)}/>`; }
+    return s+core(12);
   }
   const builders=[spiralSVG,ovalSVG,petalSVG,vesicaSVG,concSVG];
   const cards=[];
@@ -137,7 +157,7 @@
   function tick(now){
     if(!running) return;
     const dt=(now-last)/1000;last=now;
-    autoT+=dt; if(autoT>3.4){autoT=0; go((cur+1)%cards.length);}
+    autoT+=dt; if(autoT>2.2){autoT=0; go((cur+1)%cards.length);}
     raf=requestAnimationFrame(tick);
   }
   function start(){ if(running||REDUCED) return; running=true; last=performance.now(); raf=requestAnimationFrame(tick); }
@@ -146,5 +166,6 @@
   if(!REDUCED) start();
 })();
 </script>
+<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>

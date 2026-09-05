@@ -5,11 +5,32 @@
 <meta name="description" content="Sudden Shower on the Great Bridge — Ukiyo-e Wave &amp; Mountain. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sudden Shower on the Great Bridge</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#4d5f74;overflow:hidden}
+  /* theme tokens — dark values are the defaults (storm-grey sky);
+     the light re-theme is a pale washi downpour. syncTheme() re-reads every canvas colour. */
+  :root{
+    --hok04-bg:#4d5f74;
+    --hok04-sky0:#4d5f74; --hok04-sky1:#73849a; --hok04-sky2:#9aa7b2;
+    --hok04-bridge:#1f2c1c; --hok04-figure:#15391f;
+    --hok04-rain:rgba(20,28,40,0.55);
+    --hok04-cap:#f3ead6; --hok04-cap-o:.5;
+  }
+  :root[data-theme="light"]{
+    --hok04-bg:#f6f2ea;
+    --hok04-sky0:#c9d3de; --hok04-sky1:#e3e9ef; --hok04-sky2:#f6f2ea;
+    --hok04-bridge:#1f2c1c; --hok04-figure:#15391f;
+    --hok04-rain:rgba(27,58,107,0.42);
+    --hok04-cap:#1a1714; --hok04-cap-o:.6;
+  }
+  html,body{margin:0;height:100%;background:var(--hok04-bg);overflow:hidden}
   #hok04-stage{position:fixed;inset:0;width:100%;height:100%}
   #hok04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .hok04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3ead6;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .hok04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--hok04-cap);opacity:var(--hok04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +39,21 @@
  "description": "Diagonal sumi-ink rain streaks fall over a flat arched bridge silhouette; wind angle shifts slowly via sine wave, evoking ukiyo-e's woodblock print.",
  "useWhen": "Dark ambient backgrounds, art/culture themes, meditative screensaver-style displays.",
  "avoidWhen": "Light-background UIs (sky gradient hardcoded dark slate). Contexts where constant rain motion competes with foreground content.",
- "agentPrompt": "Increase rain density by changing `Math.floor(W*0.55)` to `Math.floor(W*0.9)`, shift rain color to blue-grey by changing `rgba(20,28,40,0.55)` to `rgba(30,60,120,0.5)`.",
+ "agentPrompt": "Increase rain density by changing `Math.floor(W*0.55)` to `Math.floor(W*0.9)`, shift rain color to blue-grey by changing `rgba(20,28,40,0.55)` to `rgba(30,60,120,0.5)`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "rain drop count (Math.floor(W*0.55), cap 220)",
   "wind oscillation range (0.35 amplitude, 0.18 frequency)",
   "rain color and opacity (rgba(20,28,40,0.55))",
   "bridge vertical position (H*0.62)",
-  "sky gradient color stops"
+  "sky gradient color stops",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background sky color hardcoded in CSS and canvas gradient — must edit both to retheme",
@@ -42,7 +65,8 @@
   "accessible",
   "mobile-ready",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "rain",
@@ -66,8 +90,22 @@
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var cv=document.getElementById('hok04-cv'); if(!cv) return;
   var ctx=cv.getContext('2d');
+  var root=document.documentElement;
   var W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
   var drops=[], wind=0.45, targetWind=0.45, t=0;
+  var C={};                                   // every colour the canvas draws with, read from tokens
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    C.sky0=g('--hok04-sky0'); C.sky1=g('--hok04-sky1'); C.sky2=g('--hok04-sky2');
+    C.bridge=g('--hok04-bridge'); C.figure=g('--hok04-figure'); C.rain=g('--hok04-rain');
+  }
+  syncTheme();
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme(); if(REDUCED) draw();
+    }
+  });
 
   function size(){
     var r=cv.getBoundingClientRect(); W=Math.max(2,r.width); H=Math.max(2,r.height);
@@ -83,10 +121,10 @@
     ctx.save();
     ctx.beginPath(); ctx.moveTo(0,by+30); ctx.quadraticCurveTo(W*0.5,by-40,W,by+30);
     ctx.lineTo(W,by+44); ctx.quadraticCurveTo(W*0.5,by-26,0,by+44); ctx.closePath();
-    ctx.fillStyle="#1f2c1c"; ctx.fill();
-    ctx.strokeStyle="#1f2c1c"; ctx.lineWidth=2.5;
+    ctx.fillStyle=C.bridge; ctx.fill();
+    ctx.strokeStyle=C.bridge; ctx.lineWidth=2.5;
     for(var i=0;i<=10;i++){ var u=i/10,x=u*W,yy=by-40*(1-Math.pow(2*u-1,2))+22; ctx.beginPath(); ctx.moveTo(x,yy); ctx.lineTo(x,yy-16); ctx.stroke(); }
-    for(var f=0;f<3;f++){ var fx=W*(0.22+f*0.28), fy=by-40*(1-Math.pow(2*(fx/W)-1,2))+18; ctx.fillStyle="#15391f"; ctx.beginPath(); ctx.moveTo(fx-7,fy-14); ctx.lineTo(fx+7,fy-14); ctx.lineTo(fx,fy-24); ctx.closePath(); ctx.fill(); ctx.fillRect(fx-3,fy-14,6,12); }
+    for(var f=0;f<3;f++){ var fx=W*(0.22+f*0.28), fy=by-40*(1-Math.pow(2*(fx/W)-1,2))+18; ctx.fillStyle=C.figure; ctx.beginPath(); ctx.moveTo(fx-7,fy-14); ctx.lineTo(fx+7,fy-14); ctx.lineTo(fx,fy-24); ctx.closePath(); ctx.fill(); ctx.fillRect(fx-3,fy-14,6,12); }
     ctx.restore();
   }
   function draw(){
@@ -95,10 +133,10 @@
     wind += (targetWind-wind)*0.04;
     ctx.clearRect(0,0,W,H);
     var g=ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0,"#4d5f74"); g.addColorStop(0.55,"#73849a"); g.addColorStop(1,"#9aa7b2");
+    g.addColorStop(0,C.sky0); g.addColorStop(0.55,C.sky1); g.addColorStop(1,C.sky2);
     ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
     bridge();
-    ctx.strokeStyle="rgba(20,28,40,0.55)"; ctx.lineWidth=1;
+    ctx.strokeStyle=C.rain; ctx.lineWidth=1;
     var dx=wind*-1;
     for(var i=0;i<drops.length;i++){
       var d=drops[i];

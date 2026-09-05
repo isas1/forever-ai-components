@@ -5,11 +5,27 @@
 <meta name="description" content="A swarm of lime-green triangular boids flocks with alignment, cohesion and separation, fleeing the cursor on a dark canvas.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Boids Flocking</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a0e0a}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --c08-fade is the per-frame
+     trail wash (must match the page bg) and --c08-s/--c08-l the boid hsl(). */
+  :root{
+    --c08-bg:#0a0e0a; --c08-cap:#a3e635; --c08-cap-o:.5;
+    --c08-fade:rgba(10,14,10,0.28); --c08-s:80; --c08-l:62;
+  }
+  :root[data-theme="light"]{
+    --c08-bg:#eff3ee; --c08-cap:#50780f; --c08-cap-o:.6;
+    --c08-fade:rgba(239,243,238,0.28); --c08-s:65; --c08-l:28;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c08-bg)}
   #c{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#a3e635;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--c08-cap);opacity:var(--c08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,25 +34,27 @@
  "description": "Up to 60 lime-green triangular boids flock using alignment, cohesion, and separation rules; they flee the cursor on a dark canvas with motion-trail fade.",
  "useWhen": "Ambient hero backgrounds, generative art demos, or any dark-theme context needing organic crowd motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark fill). Low-end mobile — O(n²) neighbor loop scales poorly above ~60 boids.",
- "agentPrompt": "Change boid color to electric blue (set h to 200 and adjust hsl saturation), increase max speed from maxS=2.6 to 3.5, and raise boid count cap from 60 to 100.",
+ "agentPrompt": "Change boid color to electric blue (set h to 200 and adjust hsl saturation), increase max speed from maxS=2.6 to 3.5, and raise boid count cap from 60 to 100. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "boid count cap (Math.min(60, ...))",
   "max speed (maxS=2.6)",
   "hue range (h: 90+Math.random()*60)",
   "flee radius from pointer (pd<90)",
   "trail fade opacity (rgba alpha 0.28)",
-  "neighbor radius (R=34)"
+  "neighbor radius (R=34)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/play",
   "prefers-reduced-motion guard (single static frame)",
-  "toroidal wrap-around boundary"
+  "toroidal wrap-around boundary",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "O(n²) neighbor search — scales poorly above ~80 boids on low-end devices",
   "No reduced-motion fallback beyond a single static step (boids still drawn but don't animate)",
-  "Background color hardcoded in CSS — must change #0a0e0a to use on light themes"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -44,7 +62,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "boids",
@@ -62,8 +81,18 @@
 <canvas id="c"></canvas>
 <div class="cap">Boids Flocking</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
 let W,H,DPR,b=[],reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const root=document.documentElement;
+let FADE='rgba(10,14,10,0.28)',BS=80,BL=62;   // trail wash + boid hsl saturation/lightness
+function syncTheme(){const cs=getComputedStyle(root);
+  FADE=cs.getPropertyValue('--c08-fade').trim();
+  BS=parseFloat(cs.getPropertyValue('--c08-s'));BL=parseFloat(cs.getPropertyValue('--c08-l'));}
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',e=>{const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
+syncTheme();
 function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);init();}
 function init(){b=[];const n=Math.min(60,Math.round(W*H/4200));
@@ -75,7 +104,7 @@ cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();pointer
 cv.addEventListener('pointerleave',()=>{pointer.x=-999;pointer.y=-999;});
 const R=34,Rs=18,maxS=2.6;
 function step(){
-  x.fillStyle='rgba(10,14,10,0.28)';x.fillRect(0,0,W,H);
+  x.fillStyle=FADE;x.fillRect(0,0,W,H);
   for(const o of b){
     let ax=0,ay=0,cx=0,cy=0,sx=0,sy=0,n=0;
     for(const p of b){if(p===o)continue;const dx=p.x-o.x,dy=p.y-o.y,d=Math.hypot(dx,dy);
@@ -90,7 +119,7 @@ function step(){
     if(o.x<0)o.x+=W;if(o.x>W)o.x-=W;if(o.y<0)o.y+=H;if(o.y>H)o.y-=H;
     const a=Math.atan2(o.vy,o.vx);
     x.save();x.translate(o.x,o.y);x.rotate(a);
-    x.fillStyle='hsl('+o.h+',80%,62%)';
+    x.fillStyle='hsl('+o.h+','+BS+'%,'+BL+'%)';
     x.beginPath();x.moveTo(5,0);x.lineTo(-3,3);x.lineTo(-3,-3);x.closePath();x.fill();
     x.restore();
   }
@@ -100,6 +129,7 @@ function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
 play();
+})();
 </script>
 </body>
 </html>

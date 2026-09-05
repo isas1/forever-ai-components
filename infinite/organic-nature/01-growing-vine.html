@@ -5,11 +5,28 @@
 <meta name="description" content="A sinuous green vine grows upward sprouting alternating leaves and a pale bud, then retracts in a loop on deep forest green; cursor wobbles">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Growing Vine</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0d2818}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --gv-stem/-leaf/-bud feed the canvas. */
+  :root{
+    --gv-bg:#0d2818; --gv-cap:#9fe6b8; --gv-cap-o:.32;
+    --gv-stem:#2f7a47; --gv-stem2:#6fd98e;
+    --gv-leaf0:#3aa55f; --gv-leaf1:#7fe6a0; --gv-bud:#bdf5c9;
+  }
+  :root[data-theme="light"]{
+    --gv-bg:#eef5ee; --gv-cap:#14532b; --gv-cap-o:.55;
+    --gv-stem:#5aa870; --gv-stem2:#14532b;
+    --gv-leaf0:#2e7d4b; --gv-leaf1:#69bd82; --gv-bud:#1f6b3f;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--gv-bg)}
   #c{display:block;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
-       letter-spacing:.08em;text-transform:uppercase;color:#9fe6b8;opacity:.32;user-select:none}
+       letter-spacing:.08em;text-transform:uppercase;color:var(--gv-cap);opacity:var(--gv-cap-o);user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +35,21 @@
  "description": "A sinuous green vine grows upward sprouting 14 alternating leaves and a pale bud tip, then retracts in a seamless loop on a dark forest background.",
  "useWhen": "Nature, botanical, or organic-themed hero sections. Ambient background for wellness, gardening, or eco brands.",
  "avoidWhen": "Light-background UIs (background hardcoded dark forest green). Contexts where continuous looping motion distracts from content.",
- "agentPrompt": "Change the vine color to deep purple by replacing '#2f7a47' with '#4a1a7a' and '#6fd98e' with '#c084fc', then slow the grow/retract cycle by changing t+=0.006 to t+=0.003.",
+ "agentPrompt": "Change the vine color to deep purple by replacing '#2f7a47' with '#4a1a7a' and '#6fd98e' with '#c084fc', then slow the grow/retract cycle by changing t+=0.006 to t+=0.003. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "vine grow speed (t += 0.006)",
   "stem colors (#2f7a47 / #6fd98e)",
   "leaf count (14 in loop)",
   "leaf size range (5 + random*5)",
-  "sway amplitude (W*0.18)"
+  "sway amplitude (W*0.18)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE-equivalent single script block",
   "prefers-reduced-motion guard (reduce flag)",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#0d2818) — must edit to change from dark forest green",
@@ -42,7 +61,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "easy-to-modify"
+  "easy-to-modify",
+  "light-ready"
  ],
  "tags": [
   "nature",
@@ -60,9 +80,27 @@
 <canvas id="c"></canvas>
 <div class="cap">Growing Vine</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
 let W,H,DPR,t=0,leaves=[];
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const root=document.documentElement;
+const C={stem:'',stem2:'',leaf0:'',leaf1:'',bud:''};
+function syncTheme(){            // every colour the canvas draws with comes from the tokens
+  const cs=getComputedStyle(root);
+  C.stem=cs.getPropertyValue('--gv-stem').trim();
+  C.stem2=cs.getPropertyValue('--gv-stem2').trim();
+  C.leaf0=cs.getPropertyValue('--gv-leaf0').trim();  // leaf gradient is rebuilt per leaf per frame
+  C.leaf1=cs.getPropertyValue('--gv-leaf1').trim();
+  C.bud=cs.getPropertyValue('--gv-bud').trim();
+}
+addEventListener('message',function(e){
+  const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme);syncTheme();
+  }
+});
+syncTheme();
 function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
 addEventListener('resize',size);size();
@@ -80,7 +118,7 @@ cv.addEventListener('pointerleave',()=>{mx=-1;});
 function leaf(px,py,ang,sz,g){
   x.save();x.translate(px,py);x.rotate(ang);
   const gr=x.createLinearGradient(0,0,sz*2,0);
-  gr.addColorStop(0,'#3aa55f');gr.addColorStop(1,'#7fe6a0');
+  gr.addColorStop(0,C.leaf0);gr.addColorStop(1,C.leaf1);
   x.fillStyle=gr;x.globalAlpha=g;
   x.beginPath();x.moveTo(0,0);
   x.quadraticCurveTo(sz*1.1,-sz*0.9,sz*2.1,0);
@@ -102,7 +140,7 @@ function frame(){
       const q=pt(s);
       if(!started){x.moveTo(q.x,q.y);started=true;}else x.lineTo(q.x,q.y);
     }
-    x.strokeStyle=pass?'#6fd98e':'#2f7a47';
+    x.strokeStyle=pass?C.stem2:C.stem;
     x.lineWidth=pass?2.5:6.5*(1-0.4);
     x.globalAlpha=pass?0.9:1;
     x.stroke();
@@ -121,7 +159,7 @@ function frame(){
     }
   }
   // bud at tip
-  if(p<1){const tip=pt(p);x.fillStyle='#bdf5c9';x.globalAlpha=0.9;
+  if(p<1){const tip=pt(p);x.fillStyle=C.bud;x.globalAlpha=0.9;
     x.beginPath();x.arc(tip.x,tip.y,3.5,0,7);x.fill();x.globalAlpha=1;}
   raf=requestAnimationFrame(frame);
 }
@@ -129,6 +167,7 @@ let raf=requestAnimationFrame(frame);
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
 });
+})();
 </script>
 </body>
 </html>

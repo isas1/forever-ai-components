@@ -5,6 +5,11 @@
 <meta name="description" content="Activity feed - a live audit stream where new events (approved an invoice, invited a teammate, deployed a service) slide in at the top with a colored initials avatar, actor, action and relative time as the oldest fades out.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Activity Feed</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
     --pro-bg:#0d1117;
@@ -19,6 +24,18 @@
     --pro-err:#f85149;
     --pro-radius:12px;
     --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  :root[data-theme="light"]{
+    --pro-bg:#f6f8fa;
+    --pro-surface:#fff;
+    --pro-border:rgba(0,0,0,.08);
+    --pro-text:#1f2328;
+    --pro-muted:#59636e;
+    --pro-accent:#4e7964;
+    --pro-accent-2:#986442;
+    --pro-ok:#4e7964;
+    --pro-warn:#906917;
+    --pro-err:#e21309;
   }
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
@@ -73,6 +90,9 @@
   </div>
   <div class="cap" aria-hidden="true">Activity Feed</div>
   <script>(function(){"use strict";
+    var root=document.documentElement;
+    addEventListener("message",function(e){var d=e.data;
+      if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))root.setAttribute("data-theme",d.theme);});
     var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
     var feed=document.getElementById("afd-feed");
     if(!feed)return;
@@ -149,19 +169,21 @@
  "description": "A live workspace audit stream: new events slide and fade in at the top with a colored initials avatar, an actor, an action (approved invoice, deployed api-gateway, invited a teammate) and a relative time, while the oldest event fades out — 7 visible at once.",
  "useWhen": "Dashboard sidebars, audit/activity logs, notification centers, admin overview panels, and team workspace feeds that need a sense of live recent activity.",
  "avoidWhen": "When events must reflect a real backend stream (these are simulated), or when full event detail, filtering, and pagination are required — use a real log table instead.",
- "agentPrompt": "Edit the people and acts arrays (actor names, action text, colour key, detail sub-line, and optional id number-base) to set your own event stream, and change the add interval (loop setTimeout 2800ms) or VISIBLE count. Colour keys (a/c/o/w/e/m) map avatar tints to the theme tokens. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "agentPrompt": "Edit the people and acts arrays (actor names, action text, colour key, detail sub-line, and optional id number-base) to set your own event stream, and change the add interval (loop setTimeout 2800ms) or VISIBLE count. Colour keys (a/c/o/w/e/m) map avatar tints to the theme tokens. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
   "event data (people array and acts array: action text, colour key, detail sub-line, id number-base)",
   "add-event interval (loop setTimeout 2800ms)",
-  "visible event count (VISIBLE=7) and avatar colour-to-token map (COL)"
+  "visible event count (VISIBLE=7) and avatar colour-to-token map (COL)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   ":root --pro-* token block (renaming breaks the shared pro theming API)",
   "role=img + aria-label on .afd-stage",
   "IIFE wrapper",
   "prefers-reduced-motion early return to the populated static stream",
-  "visibilitychange pause (running flag)"
+  "visibilitychange pause (running flag)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
@@ -176,7 +198,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "themeable"
+  "themeable",
+  "light-ready"
  ],
  "tags": [
   "activity-feed",

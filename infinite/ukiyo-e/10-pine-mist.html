@@ -5,11 +5,19 @@
 <meta name="description" content="Layered pine-covered ridges recede into drifting mist bands under a cream-indigo sky with passing cranes in woodblock style.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pine Mist</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  /* theme tokens: dark defaults, light = the washi-paper re-print */
+  :root{--uk10-bg:#0f1822;--uk10-sky-top:#1a2940;--uk10-sky-bot:#e8d5b0;--uk10-glow:#f4e4c4;--uk10-coral:#d96b54;--uk10-fog:#e8d5b0;--uk10-ridge1:#788caa;--uk10-ridge2:#546c94;--uk10-ridge3:#344c74;--uk10-ridge4:#1e3050;--uk10-pine:#0c121e;--uk10-crest:#0e1622;--uk10-crane:#141a28;--uk10-vig0:rgba(15,24,34,0);--uk10-vig1:rgba(15,24,34,0.40);--uk10-cap:#fff;--uk10-cap-o:.42}
+  :root[data-theme="light"]{--uk10-bg:#f4f0e6;--uk10-sky-top:#cfe0ec;--uk10-sky-bot:#f7efdd;--uk10-glow:#fff6e2;--uk10-coral:#b8462c;--uk10-fog:#fffaf0;--uk10-ridge1:#b9cbdb;--uk10-ridge2:#9db6cc;--uk10-ridge3:#7e9dba;--uk10-ridge4:#5f82a6;--uk10-pine:#2c4260;--uk10-crest:#26405c;--uk10-crane:#23374d;--uk10-vig0:rgba(205,191,164,0);--uk10-vig1:rgba(205,191,164,0.35);--uk10-cap:#26405c;--uk10-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--uk10-bg);overflow:hidden}
   #uk10-stage{position:fixed;inset:0;width:100%;height:100%;display:block}
   #uk10-c{position:absolute;inset:0;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--uk10-cap);opacity:var(--uk10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +27,22 @@
  "description": "Four pine-clad ridges recede into drifting mist under an indigo-to-cream bokashi sky with a coral sun and flapping cranes in woodblock style.",
  "useWhen": "Dark-mode hero backgrounds, Japanese or nature-themed UIs, ambient screensavers, or anywhere a calming painterly landscape is needed.",
  "avoidWhen": "Light-background layouts (background is hardcoded dark navy). Contexts requiring overlaid readable text — the mist animation competes with copy.",
- "agentPrompt": "Change the sun position to the left (set sunX=W*0.25), shift SKY_TOP to [80,40,60] for a rose-gold sky, and increase crane count NB to 9.",
+ "agentPrompt": "Change the sun position to the left (set sunX=W*0.25), shift SKY_TOP to [80,40,60] for a rose-gold sky, and increase crane count NB to 9. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "crane count (NB=5)",
   "ridge tints (RIDGES array col values)",
   "sun position (sunX=W*0.70, sunY=H*0.34)",
   "sky palette (SKY_TOP, SKY_BOT)",
   "fog opacity per ridge (R.fog values)",
-  "pine count per ridge (R.pines)"
+  "pine count per ridge (R.pines)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas resize + setTransform",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static-frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to dark navy in CSS — must change both CSS and SKY_TOP to retheme",
@@ -46,7 +56,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "ukiyo-e",
@@ -73,17 +84,30 @@
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var W=0,H=0,DPR=1,running=true,raf=0,t0=0;
 
-  // palette
-  var SKY_TOP=[26,41,64], SKY_BOT=[232,213,176];   // indigo -> cream bokashi
-  var GLOW=[244,228,196];                           // hazy sun band
-  // ridge tints, far (mistier/lighter) to near (deep indigo)
+  // palette — every colour comes from the CSS tokens, re-read on a theme switch
+  var root=document.documentElement, SKY_TOP,SKY_BOT,GLOW,CORAL,FOG,PINE,CREST,CRANE,VIG0,VIG1;
+  // ridge tints, far (mistier/lighter) to near (deep indigo); col refreshed by syncTheme()
   var RIDGES=[
-    {col:[120,140,170], y:0.50, amp:0.030, pines:7,  spd:0.011, fog:0.55},
-    {col:[ 84,108,148], y:0.60, amp:0.040, pines:9,  spd:0.016, fog:0.40},
-    {col:[ 52, 76,116], y:0.71, amp:0.052, pines:11, spd:0.022, fog:0.26},
-    {col:[ 30, 48, 80], y:0.84, amp:0.066, pines:13, spd:0.030, fog:0.12}
+    {col:null, y:0.50, amp:0.030, pines:7,  spd:0.011, fog:0.55},
+    {col:null, y:0.60, amp:0.040, pines:9,  spd:0.016, fog:0.40},
+    {col:null, y:0.71, amp:0.052, pines:11, spd:0.022, fog:0.26},
+    {col:null, y:0.84, amp:0.066, pines:13, spd:0.030, fog:0.12}
   ];
-  var CORAL=[217,107,84];
+  function hx(h){h=h.replace("#","");if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+  function rgba(c,a){return "rgba("+c[0]+","+c[1]+","+c[2]+","+a+")";}
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    SKY_TOP=hx(v("--uk10-sky-top")); SKY_BOT=hx(v("--uk10-sky-bot")); GLOW=hx(v("--uk10-glow"));
+    CORAL=hx(v("--uk10-coral")); FOG=hx(v("--uk10-fog")); PINE=hx(v("--uk10-pine"));
+    CREST=hx(v("--uk10-crest")); CRANE=hx(v("--uk10-crane"));
+    VIG0=v("--uk10-vig0"); VIG1=v("--uk10-vig1");
+    for(var r=0;r<RIDGES.length;r++) RIDGES[r].col=hx(v("--uk10-ridge"+(r+1)));
+  }
+  syncTheme();
+  addEventListener("message",function(e){ var d=e.data; // live re-theme from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce) draw(6); }
+  });
 
   // cranes — small typed pool (well under cap)
   var NB=5, bx=new Float32Array(NB), by=new Float32Array(NB), bs=new Float32Array(NB), bp=new Float32Array(NB);
@@ -139,7 +163,7 @@
     ctx.fill();
 
     // pines marching along this ridge crest
-    var pineCol=mix(col,[12,18,30],0.30);
+    var pineCol=mix(col,PINE,0.30);
     var pn=R.pines, ph2=ph;
     for(var p=0;p<pn;p++){
       var u2=(p+0.5)/pn;
@@ -151,7 +175,7 @@
     }
 
     // bold key-block edge stroke on the crest
-    ctx.strokeStyle="rgba(14,22,34,0.5)";
+    ctx.strokeStyle=rgba(CREST,0.5);
     ctx.lineWidth=Math.max(1,Math.min(W,H)*0.0035);
     ctx.lineJoin="round";
     ctx.beginPath();
@@ -169,9 +193,9 @@
     var drift=((time*spd+off)%1.4)-0.2;
     var cx=drift*W, w=W*0.55;
     var g=ctx.createLinearGradient(0,y-h,0,y+h);
-    g.addColorStop(0,"rgba(232,213,176,0)");
-    g.addColorStop(0.5,"rgba(232,213,176,"+alpha+")");
-    g.addColorStop(1,"rgba(232,213,176,0)");
+    g.addColorStop(0,rgba(FOG,0));
+    g.addColorStop(0.5,rgba(FOG,alpha));
+    g.addColorStop(1,rgba(FOG,0));
     ctx.fillStyle=g;
     ctx.beginPath();
     ctx.moveTo(cx-w,y);
@@ -195,17 +219,17 @@
     // hazy low sun glow — static radial, never repaints expensively
     var sunX=W*0.70, sunY=H*0.34, sr=Math.min(W,H)*0.30;
     var disc=ctx.createRadialGradient(sunX,sunY,1,sunX,sunY,sr);
-    disc.addColorStop(0,"rgba(244,228,196,0.85)");
-    disc.addColorStop(0.4,"rgba(244,228,196,0.30)");
-    disc.addColorStop(1,"rgba(244,228,196,0)");
+    disc.addColorStop(0,rgba(GLOW,0.85));
+    disc.addColorStop(0.4,rgba(GLOW,0.30));
+    disc.addColorStop(1,rgba(GLOW,0));
     ctx.fillStyle=disc;
     ctx.beginPath();ctx.arc(sunX,sunY,sr,0,6.2832);ctx.fill();
     // coral disc body
-    ctx.fillStyle="rgba(217,107,84,0.42)";
+    ctx.fillStyle=rgba(CORAL,0.42);
     ctx.beginPath();ctx.arc(sunX,sunY,Math.min(W,H)*0.052,0,6.2832);ctx.fill();
 
     // upper-air cranes (drawn before ridges so they sit in the sky)
-    ctx.strokeStyle="rgba(20,26,40,0.7)";
+    ctx.strokeStyle=rgba(CRANE,0.7);
     ctx.lineWidth=Math.max(1,Math.min(W,H)*0.004);
     ctx.lineCap="round";
     for(var b=0;b<NB;b++){
@@ -235,8 +259,8 @@
 
     // vignette
     var vg=ctx.createRadialGradient(W*0.5,H*0.42,Math.min(W,H)*0.28,W*0.5,H*0.55,Math.max(W,H)*0.72);
-    vg.addColorStop(0,"rgba(15,24,34,0)");
-    vg.addColorStop(1,"rgba(15,24,34,0.40)");
+    vg.addColorStop(0,VIG0);
+    vg.addColorStop(1,VIG1);
     ctx.fillStyle=vg;
     ctx.fillRect(0,0,W,H);
   }

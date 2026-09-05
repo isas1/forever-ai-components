@@ -5,17 +5,41 @@
 <meta name="description" content="Concentric lobed color rings melting inward through a perspective tunnel toward a glowing vanishing point.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Trip Tunnel</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
-  #ps10-stage{position:fixed;inset:0;width:100%;height:100%;background:#0a0612}
+  /* theme tokens — dark defaults; light = the same Fillmore clash printed on cream.
+     --ps10-p1..p5 feed the JS ring palette ("r,g,b"); --ps10-blend drops the additive
+     glow in light so the rings stack as ink instead of blowing out to white. */
+  :root{
+    --ps10-bg:#0a0612; --ps10-blend:lighter; --ps10-alpha:.85;
+    --ps10-p1:255,61,166; --ps10-p2:255,150,40; --ps10-p3:150,235,60; --ps10-p4:40,210,235; --ps10-p5:150,70,255;
+    --ps10-pip0:rgba(255,228,246,0.95); --ps10-pip1:rgba(255,61,166,0.55); --ps10-pip2:rgba(255,61,166,0);
+    --ps10-glow1:rgba(255,61,166,.20); --ps10-glow1b:rgba(255,61,166,0);
+    --ps10-glow2:rgba(20,8,30,0); --ps10-glow2b:rgba(6,3,11,.82);
+    --ps10-glow-blend:screen; --ps10-cap:#fff; --ps10-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --ps10-bg:#f7f0ee; --ps10-blend:source-over; --ps10-alpha:.72;
+    --ps10-p1:198,20,110; --ps10-p2:194,96,10; --ps10-p3:96,134,18; --ps10-p4:16,120,150; --ps10-p5:98,42,176;
+    --ps10-pip0:rgba(80,6,44,0.95); --ps10-pip1:rgba(198,20,110,0.55); --ps10-pip2:rgba(198,20,110,0);
+    --ps10-glow1:rgba(198,20,110,.12); --ps10-glow1b:rgba(198,20,110,0);
+    --ps10-glow2:rgba(247,240,238,0); --ps10-glow2b:rgba(168,140,150,.20);
+    --ps10-glow-blend:multiply; --ps10-cap:#2c1018; --ps10-cap-o:.62;
+  }
+  html,body{margin:0;height:100%;background:var(--ps10-bg);overflow:hidden}
+  #ps10-stage{position:fixed;inset:0;width:100%;height:100%;background:var(--ps10-bg)}
   #ps10-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* static glow vignette — painted once by gradient, never animated */
   #ps10-glow{position:absolute;inset:0;pointer-events:none;
     background:
-      radial-gradient(closest-side at 50% 50%, rgba(255,61,166,.20), rgba(255,61,166,0) 48%),
-      radial-gradient(closest-side at 50% 50%, rgba(20,8,30,0) 58%, rgba(6,3,11,.82) 100%);
-    mix-blend-mode:screen}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+      radial-gradient(closest-side at 50% 50%, var(--ps10-glow1), var(--ps10-glow1b) 48%),
+      radial-gradient(closest-side at 50% 50%, var(--ps10-glow2) 58%, var(--ps10-glow2b) 100%);
+    mix-blend-mode:var(--ps10-glow-blend)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ps10-cap);opacity:var(--ps10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -25,20 +49,22 @@
  "description": "26 lobed concentric rings recede into a glowing magenta vanishing point, cycling a Fillmore-poster palette across a slow inward perspective tunnel.",
  "useWhen": "Dark-mode hero backgrounds, music/festival visuals, ambient screensavers, psychedelic or retro-poster themed sections.",
  "avoidWhen": "Light backgrounds (dark navy hardcoded). Any context where constant motion competes with readable text overlays.",
- "agentPrompt": "Change LOBES from 7 to 5, swap PAL to a cool blue/green palette ([[40,180,255],[60,235,180],[120,255,80],[0,120,200],[80,220,255]]), and slow the tunnel cycle to 35 seconds by changing the /22 divisor.",
+ "agentPrompt": "Change LOBES from 7 to 5, swap PAL to a cool blue/green palette ([[40,180,255],[60,235,180],[120,255,80],[0,120,200],[80,220,255]]), and slow the tunnel cycle to 35 seconds by changing the /22 divisor. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ring count (RINGS=26)",
   "lobe count (LOBES=7)",
   "palette array (PAL)",
   "tunnel cycle speed (/22 divisor)",
   "lobe amplitude factor (0.16*z)",
-  "perspective compression (EXP=2.05)"
+  "perspective compression (EXP=2.05)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (staticFrame fallback)",
   "visibilitychange pause/resume",
-  "opaque wipe per frame (prevents trail accumulation)"
+  "opaque wipe per frame (prevents trail accumulation)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and canvas fillRect — must change both to retheme",
@@ -51,7 +77,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "tunnel",
@@ -78,6 +105,7 @@
   var cv=document.getElementById('ps10-c');
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root=document.documentElement;
   var dpr=Math.min(2,window.devicePixelRatio||1);
 
   var W=0,H=0,cx=0,cy=0,maxR=0;
@@ -92,6 +120,18 @@
   var TWO=Math.PI*2;
   // Fillmore palette: hot magenta, tangerine, acid lime, cyan, violet — complementary clash.
   var PAL=[[255,61,166],[255,150,40],[150,235,60],[40,210,235],[150,70,255]];
+  // every colour the loop draws with — filled from the tokens on each theme switch
+  var C={bg:'#0a0612',blend:'lighter',alpha:0.85,
+         p0:'rgba(255,228,246,0.95)',p1:'rgba(255,61,166,0.55)',p2:'rgba(255,61,166,0)'};
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){return cs.getPropertyValue(n).trim();}, p, i;
+    for(i=0;i<5;i++){ p=g('--ps10-p'+(i+1)).split(','); PAL[i]=[+p[0],+p[1],+p[2]]; }
+    C.bg=g('--ps10-bg'); C.blend=g('--ps10-blend'); C.alpha=+g('--ps10-alpha');
+    C.p0=g('--ps10-pip0'); C.p1=g('--ps10-pip1'); C.p2=g('--ps10-pip2');
+    if(reduce&&maxR) staticFrame();
+  }
+  addEventListener('message',function(e){ var d=e.data; if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme); syncTheme(); }});
 
   // per-ring static seeds (no per-frame alloc)
   var seedZ=new Float64Array(RINGS), seedPhase=new Float64Array(RINGS);
@@ -120,7 +160,7 @@
     var a=PAL[k], b=PAL[(k+1)%PAL.length];
     var rr=(a[0]+(b[0]-a[0])*t)|0, gg=(a[1]+(b[1]-a[1])*t)|0, bb=(a[2]+(b[2]-a[2])*t)|0;
     // fade in from vanishing point, fade out at rim → no hard pop, seizure-safe
-    var al=(z<0.10? z/0.10 : z>0.90? (1-z)/0.10 : 1)*0.85;
+    var al=(z<0.10? z/0.10 : z>0.90? (1-z)/0.10 : 1)*C.alpha;
     return 'rgba('+rr+','+gg+','+bb+','+al.toFixed(3)+')';
   }
 
@@ -128,8 +168,8 @@
   function frame(flow,warp,roll){
     // opaque wipe (no trail — keeps rings crisp & avoids accumulating bright flashes)
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle='#0a0612'; ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation=C.blend;
     ctx.lineJoin='round';
 
     var i,j;
@@ -163,9 +203,9 @@
     // calm glowing vanishing point — small static-feeling pip, never strobes
     var gr=maxR*0.045;
     var g=ctx.createRadialGradient(cx,cy,0,cx,cy,gr);
-    g.addColorStop(0,'rgba(255,228,246,0.95)');
-    g.addColorStop(0.5,'rgba(255,61,166,0.55)');
-    g.addColorStop(1,'rgba(255,61,166,0)');
+    g.addColorStop(0,C.p0);
+    g.addColorStop(0.5,C.p1);
+    g.addColorStop(1,C.p2);
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,gr,0,TWO); ctx.fill();
   }
 
@@ -189,7 +229,7 @@
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
   function init(){
-    buildUnit(); buildSeeds(); size();
+    syncTheme(); buildUnit(); buildSeeds(); size();
     if(reduce){ staticFrame(); return; }
     start();
   }

@@ -5,11 +5,31 @@
 <meta name="description" content="Swan Duality — Symbolic Pastel Abstraction. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Swan Duality</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#1d1a24;overflow:hidden}
+  /* theme tokens — dark values are the defaults; the light re-theme is the one
+     [data-theme="light"] block. Every colour the canvas draws with is read from
+     these in syncTheme(), so CSS stays the single source of truth. */
+  :root{
+    --afk03-bg:#1d1a24; --afk03-ink:#2a2730; --afk03-cream:#f3eee4;
+    --afk03-rose:#e3a9bd; --afk03-lav:#c3b3da;
+    --afk03-orbit-a:.18; --afk03-glow-a:.30; --afk03-edge-a:.5;
+    --afk03-cap:#f3eee4; --afk03-cap-o:.46;
+  }
+  :root[data-theme="light"]{
+    --afk03-bg:#ece4d4; --afk03-ink:#241f2c; --afk03-cream:#fffdf6;
+    --afk03-rose:#b13a63; --afk03-lav:#7853ac;
+    --afk03-orbit-a:.34; --afk03-glow-a:.20; --afk03-edge-a:.72;
+    --afk03-cap:#241f2c; --afk03-cap-o:.58;
+  }
+  html,body{margin:0;height:100%;background:var(--afk03-bg);overflow:hidden}
   #afk03-stage{position:fixed;inset:0;width:100%;height:100%}
   #afk03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .afk03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3eee4;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .afk03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--afk03-cap);opacity:var(--afk03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +38,21 @@
  "description": "Two organic forms — cream and ink — orbit a shared center with wobbling silhouettes and a rose radial glow, evoking symbolic-abstract's Swan duality symbolism.",
  "useWhen": "Dark-mode hero backgrounds, art/culture sites, ambient screensaver loops with a painterly or spiritual aesthetic.",
  "avoidWhen": "Light-background UIs (background hardcoded dark purple). Contexts with legible text overlays — constant motion competes with reading.",
- "agentPrompt": "Slow the orbit by changing `ang=t*0.3`, swap rose glow to gold by replacing `PAL.rose` with `'#d4a017'` in the radial gradient, and increase wobble depth from `0.16` to `0.26`.",
+ "agentPrompt": "Slow the orbit by changing `ang=t*0.3`, swap rose glow to gold by replacing `PAL.rose` with `'#d4a017'` in the radial gradient, and increase wobble depth from `0.16` to `0.26`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "orbit speed (t*0.5 in ang)",
   "wobble depth (0.16 and 0.09 in wob formula)",
   "form size (R = Math.min(W,H)*0.20)",
   "rose glow opacity (0.30 in addColorStop)",
-  "palette colors (PAL object)"
+  "palette colors (PAL object)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware fitCanvas() sizing",
   "visibilitychange pause/resume",
   "IIFE wrapper",
-  "prefers-reduced-motion guard"
+  "prefers-reduced-motion guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#1d1a24) — must edit to change from dark purple",
@@ -44,7 +66,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "canvas",
@@ -67,7 +90,9 @@
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('afk03-cv'); if(!cv) return;
+  const root=document.documentElement;
   const PAL={cream:'#f3eee4',ink:'#2a2730',rose:'#e3a9bd',lav:'#c3b3da',deep:'#1d1a24'};
+  let ORBIT_A=0.18, GLOW_A=0.30, EDGE_A=0.5;
   function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
@@ -78,6 +103,21 @@
     return {ctx,w,h,dpr};
   }
   let S=fitCanvas(cv), last=performance.now(), t=0;
+  function syncTheme(){            // re-read every JS-drawn colour; nothing is cached per frame
+    const cs=getComputedStyle(root), v=n=>cs.getPropertyValue(n).trim();
+    PAL.deep=v('--afk03-bg'); PAL.ink=v('--afk03-ink'); PAL.cream=v('--afk03-cream');
+    PAL.rose=v('--afk03-rose'); PAL.lav=v('--afk03-lav');
+    ORBIT_A=parseFloat(v('--afk03-orbit-a'))||0.18;
+    GLOW_A=parseFloat(v('--afk03-glow-a'))||0.30;
+    EDGE_A=parseFloat(v('--afk03-edge-a'))||0.5;
+    if(REDUCED) draw(performance.now());
+  }
+  addEventListener('message',function(e){   // live re-theme from the canvas
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
   function form(ctx,cx,cy,R,phase,fill,stroke){
     ctx.beginPath();const steps=80;
     for(let i=0;i<=steps;i++){
@@ -100,14 +140,14 @@
     const ang=t*0.5;
     const wx=cx+Math.cos(ang)*orbit, wy=cy+Math.sin(ang)*orbit*0.6;
     const bx=cx-Math.cos(ang)*orbit, by=cy-Math.sin(ang)*orbit*0.6;
-    ctx.strokeStyle=rgba(PAL.lav,0.18);ctx.lineWidth=1;
+    ctx.strokeStyle=rgba(PAL.lav,ORBIT_A);ctx.lineWidth=1;
     ctx.beginPath();ctx.ellipse(cx,cy,orbit+R*0.4,(orbit+R*0.4)*0.6,0,0,Math.PI*2);ctx.stroke();
-    form(ctx,wx,wy,R,t*1.1,rgba('#f3eee4',0.93),rgba(PAL.ink,0.5));
+    form(ctx,wx,wy,R,t*1.1,rgba(PAL.cream,0.93),rgba(PAL.ink,EDGE_A));
     eye(ctx,wx+R*0.22,wy-R*0.1,2.6,PAL.ink);
-    form(ctx,bx,by,R,-t*1.1+1.5,rgba(PAL.ink,0.96),rgba('#f3eee4',0.6));
+    form(ctx,bx,by,R,-t*1.1+1.5,rgba(PAL.ink,0.96),rgba(PAL.cream,0.6));
     eye(ctx,bx-R*0.22,by-R*0.1,2.6,PAL.cream);
     const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*0.9);
-    g.addColorStop(0,rgba(PAL.rose,0.30));g.addColorStop(1,rgba(PAL.rose,0));
+    g.addColorStop(0,rgba(PAL.rose,GLOW_A));g.addColorStop(1,rgba(PAL.rose,0));
     ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*0.9,0,Math.PI*2);ctx.fill();
   }
   let raf=0,running=false;
@@ -117,6 +157,7 @@
   let _rt;
   window.addEventListener('resize',()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); },{passive:true});
   document.addEventListener('visibilitychange',()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });
+  syncTheme();
   if(REDUCED){ draw(performance.now()); } else start();
 })();
 </script>

@@ -5,11 +5,19 @@
 <meta name="description" content="Primary red, blue and yellow blocks slide and recompose a 4x4 modular grid against off-white paper with black circle and triangle accents.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Color Blocks Slide</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
-  #bh09-stage{position:fixed;inset:0;background:#101012}
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme in [data-theme="light"]; JS reads both */
+  :root{--bh09-bg:#101012;--bh09-red:#e63329;--bh09-blu:#1f4ea1;--bh09-yel:#f4c20d;--bh09-ink:#15151a;--bh09-pap:#ece6da;--bh09-rule:rgba(21,21,26,0.14);--bh09-cap:#fff;--bh09-cap-o:.42}
+  :root[data-theme="light"]{--bh09-bg:#f6f2ea;--bh09-red:#cc2b1f;--bh09-blu:#1f4ea1;--bh09-yel:#ad7f08;--bh09-ink:#1b1b20;--bh09-pap:#fffdf7;--bh09-rule:rgba(27,27,32,0.16);--bh09-cap:#1b1b20;--bh09-cap-o:.5}
+  html,body{margin:0;height:100%;background:var(--bh09-bg);overflow:hidden}
+  #bh09-stage{position:fixed;inset:0;background:var(--bh09-bg)}
   #bh09-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--bh09-cap);opacity:var(--bh09-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +27,22 @@
  "description": "Six primary-color blocks slide between anchors on a 4x4 modular grid over off-white paper; a roving circle and static triangle add Bauhaus accent marks.",
  "useWhen": "Art/design-themed hero sections, Bauhaus or modernist aesthetic pages, ambient gallery backgrounds.",
  "avoidWhen": "Contexts requiring legible text overlays — sliding blocks compete visually. Light-background pages since background is hardcoded dark (#101012 outer stage).",
- "agentPrompt": "Change the cycle duration from 4200ms to 6000ms by editing the division in `var time=(ts-start)/4200`, and swap the primary palette to muted earth tones by updating RED, BLU, YEL constants.",
+ "agentPrompt": "Change the cycle duration from 4200ms to 6000ms by editing the division in `var time=(ts-start)/4200`, and swap the primary palette to muted earth tones by updating RED, BLU, YEL constants. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (RED, BLU, YEL, INK, PAP constants)",
   "cycle speed (divisor 4200 in time calc)",
   "grid cell size (GRID=4 and 0.84 margin factor)",
   "block positions/anchors (ax/ay/bx/by in B array)",
   "per-block speed factors (s field in B array)",
-  "roving circle travel speed (ease arg 0.6)"
+  "roving circle travel speed (ease arg 0.6)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform call",
   "IIFE wrapper",
   "visibilitychange stop/play guard",
-  "reduced-motion static fallback (drawFrame(0.5))"
+  "reduced-motion static fallback (drawFrame(0.5))",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Outer stage background hardcoded to #101012 — changing PAP paper color without matching outer bg creates a framed-box look",
@@ -45,7 +55,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bauhaus",
@@ -71,8 +82,20 @@
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  // Bauhaus primaries + ink on warm off-white module ground.
-  var RED="#e63329",BLU="#1f4ea1",YEL="#f4c20d",INK="#15151a",PAP="#ece6da";
+  // Bauhaus primaries + ink on a warm off-white module ground. Blocks store token KEYS,
+  // resolved through C at draw time, so one refill re-colours the composition on a theme switch.
+  var RED="red",BLU="blu",YEL="yel",INK="ink";
+  var docEl=document.documentElement;
+  var C={bg:"#101012",red:"#e63329",blu:"#1f4ea1",yel:"#f4c20d",ink:"#15151a",pap:"#ece6da",rule:"rgba(21,21,26,0.14)"};
+  function syncTheme(){
+    var cs=getComputedStyle(docEl), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    C.bg=g("--bh09-bg"); C.red=g("--bh09-red"); C.blu=g("--bh09-blu"); C.yel=g("--bh09-yel");
+    C.ink=g("--bh09-ink"); C.pap=g("--bh09-pap"); C.rule=g("--bh09-rule");
+    if(reduce && W) drawFrame(0.5);         // the static frame repaints on a theme switch
+  }
+  addEventListener("message",function(e){ var d=e.data;   // live re-theme broadcast from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ docEl.setAttribute("data-theme",d.theme); syncTheme(); }
+  });
 
   // Block model: each occupies a fractional cell in a 4x4 modular grid.
   // It "slides" between two grid anchors on its own phase — recomposing the frame.
@@ -106,13 +129,13 @@
   function blk(x,y,w,h){ ctx.fillRect(OX+x*CELL, OY+y*CELL, w*CELL, h*CELL); }
 
   function drawFrame(time){
-    ctx.fillStyle="#101012";ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     // off-white module ground (the "paper") with a static soft inset shadow baked once
-    ctx.fillStyle=PAP;
+    ctx.fillStyle=C.pap;
     blk(0,0,GRID,GRID);
 
     // thin ink registration lines on the grid (static rhythm)
-    ctx.strokeStyle="rgba(21,21,26,0.14)";ctx.lineWidth=1;
+    ctx.strokeStyle=C.rule;ctx.lineWidth=1;
     for(var i=1;i<GRID;i++){
       ctx.beginPath();ctx.moveTo(OX+i*CELL,OY);ctx.lineTo(OX+i*CELL,OY+CELL*GRID);ctx.stroke();
       ctx.beginPath();ctx.moveTo(OX,OY+i*CELL);ctx.lineTo(OX+CELL*GRID,OY+i*CELL);ctx.stroke();
@@ -123,7 +146,7 @@
       var t=ease(time*b.s+b.p);
       var x=b.ax+(b.bx-b.ax)*t;
       var y=b.ay+(b.by-b.ay)*t;
-      ctx.fillStyle=b.c;
+      ctx.fillStyle=C[b.c];
       blk(x,y,b.w,b.h);
     }
 
@@ -131,15 +154,15 @@
     var tc=ease(time*0.6+0.2);
     var cx=OX+(0.6+ (GRID-1.2)*tc)*CELL, cy=OY+(GRID-0.6-(GRID-1.2)*tc)*CELL;
     var rad=CELL*0.42;
-    ctx.fillStyle=INK;
+    ctx.fillStyle=C.ink;
     ctx.beginPath();ctx.arc(cx,cy,rad,0,Math.PI*2);ctx.fill();
     // small red dot inside circle — abstract tension
-    ctx.fillStyle=RED;
+    ctx.fillStyle=C.red;
     ctx.beginPath();ctx.arc(cx,cy,rad*0.32,0,Math.PI*2);ctx.fill();
 
     // pure triangle, static anchor, top-right module
     var tx=OX+CELL*GRID-CELL*1.4, ty=OY+CELL*0.25;
-    ctx.fillStyle=BLU;
+    ctx.fillStyle=C.blu;
     ctx.beginPath();
     ctx.moveTo(tx, ty+CELL*1.1);
     ctx.lineTo(tx+CELL*1.1, ty+CELL*1.1);
@@ -147,7 +170,7 @@
     ctx.closePath();ctx.fill();
 
     // outer ink keyline framing the whole module field
-    ctx.strokeStyle=INK;ctx.lineWidth=Math.max(2,CELL*0.05);
+    ctx.strokeStyle=C.ink;ctx.lineWidth=Math.max(2,CELL*0.05);
     ctx.strokeRect(OX,OY,CELL*GRID,CELL*GRID);
   }
 
@@ -164,6 +187,7 @@
 
   function init(){
     size();
+    syncTheme();
     if(reduce){ drawFrame(0.5); return; } // settled mid-slide static frame
     play();
   }

@@ -5,11 +5,30 @@
 <meta name="description" content="Concentric rings of pink gradient petals open and close around a luminous hub, depth-sorted in 3D on a deep plum background.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Depth-Sorted Petals</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#241327;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The canvas keeps the
+     depth-graded alpha ramp untouched and only swaps the RGB triplets: petal
+     gradient p1->p2->p3, spine rim, and the hub core. */
+  :root{
+    --dsp-bg:#241327; --dsp-p1:244,140,210; --dsp-p2:232,121,185;
+    --dsp-p3:124,58,118; --dsp-rim:255,210,240; --dsp-hub:255,235,248;
+    --dsp-cap:#e879b9; --dsp-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --dsp-bg:#faf0f6; --dsp-p1:214,94,168; --dsp-p2:205,35,133;
+    --dsp-p3:92,26,86; --dsp-rim:120,20,90; --dsp-hub:150,26,110;
+    --dsp-cap:#cd2385; --dsp-cap-o:.6;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--dsp-bg);}
   #dsp-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.16em;color:#e879b9;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--dsp-cap);opacity:var(--dsp-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +38,22 @@
  "description": "44 pink gradient petals arranged in 4 concentric rings open and close in 3D perspective, depth-sorted back-to-front around a glowing central hub.",
  "useWhen": "Dark-mode hero backgrounds, floral or organic themes, ambient looping art installations.",
  "avoidWhen": "Light backgrounds (hardcoded deep plum). Contexts needing legible foreground text — petals fill the viewport.",
- "agentPrompt": "Change petal color to blue-violet by replacing the rgba(232,121,185,...) gradient stops with rgba(139,92,246,...) and updating the hub gradient to match.",
+ "agentPrompt": "Change petal color to blue-violet by replacing the rgba(232,121,185,...) gradient stops with rgba(139,92,246,...) and updating the hub gradient to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ring count (RINGS=4)",
   "petals per ring (PER=11)",
   "perspective focal length (FOV=560)",
   "petal pitch oscillation amplitude (0.5)",
   "ring rotation speed (spin: 0.0016)",
-  "background color (#241327)"
+  "background color (#241327)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "manual back-to-front depth sort (quads.sort by zc)",
   "DPR-aware canvas sizing",
   "visibility pause/resume",
-  "reduced-motion static frame fallback"
+  "reduced-motion static frame fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and fillRect — must change both",
@@ -44,7 +65,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "3d",
@@ -73,6 +95,23 @@
     cx=W/2;cy=H/2;S=Math.min(W,H)/520;
   }
   addEventListener('resize',size);size();
+
+  // colours the canvas paints with are read from the CSS tokens once per theme,
+  // never per frame. Petal gradients are rebuilt every frame, so there is no
+  // cached gradient to invalidate beyond these strings.
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    C.bg=g('--dsp-bg'); C.p1=g('--dsp-p1'); C.p2=g('--dsp-p2');
+    C.p3=g('--dsp-p3'); C.rim=g('--dsp-rim'); C.hub=g('--dsp-hub');
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{ const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+      if(reduce) draw();    // static-frame path repaints on demand
+    } });
+  syncTheme();
 
   const RINGS=4, PER=11, FOV=560;       // perspective focal length
   const petals=[];
@@ -126,7 +165,7 @@
   }
 
   function draw(){
-    ctx.fillStyle='#241327';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const quads=build();
     let zmin=1e9,zmax=-1e9;
     for(const q of quads){if(q.zc<zmin)zmin=q.zc;if(q.zc>zmax)zmax=q.zc;}
@@ -136,9 +175,9 @@
       // graded opacity + petal gradient sells layered volume
       const g=ctx.createLinearGradient(q.pa[0],q.pa[1],q.tipx,q.tipy);
       const al=0.10+depth*0.34;
-      g.addColorStop(0,`rgba(244,140,210,${al*0.55})`);
-      g.addColorStop(0.55,`rgba(232,121,185,${al})`);
-      g.addColorStop(1,`rgba(124,58,118,${al*0.85})`);
+      g.addColorStop(0,`rgba(${C.p1},${al*0.55})`);
+      g.addColorStop(0.55,`rgba(${C.p2},${al})`);
+      g.addColorStop(1,`rgba(${C.p3},${al*0.85})`);
       ctx.fillStyle=g;
       ctx.beginPath();
       ctx.moveTo(q.pa[0],q.pa[1]);
@@ -146,16 +185,16 @@
       ctx.quadraticCurveTo(q.pd[0],q.pd[1],q.pa[0],q.pa[1]);
       ctx.fill();
       // bright depth-graded rim along the spine
-      ctx.strokeStyle=`rgba(255,210,240,${0.05+depth*0.30})`;
+      ctx.strokeStyle=`rgba(${C.rim},${0.05+depth*0.30})`;
       ctx.lineWidth=0.8+depth*0.8;
       ctx.beginPath();ctx.moveTo(q.pa[0],q.pa[1]);ctx.lineTo(q.tipx,q.tipy);ctx.stroke();
     }
     // luminous hub
     const hr=14*S+6;
     const hg=ctx.createRadialGradient(cx,cy,1,cx,cy,hr);
-    hg.addColorStop(0,'rgba(255,235,248,0.95)');
-    hg.addColorStop(0.4,'rgba(232,121,185,0.7)');
-    hg.addColorStop(1,'rgba(232,121,185,0)');
+    hg.addColorStop(0,'rgba('+C.hub+',0.95)');
+    hg.addColorStop(0.4,'rgba('+C.p2+',0.7)');
+    hg.addColorStop(1,'rgba('+C.p2+',0)');
     ctx.fillStyle=hg;ctx.beginPath();ctx.arc(cx,cy,hr,0,Math.PI*2);ctx.fill();
   }
 

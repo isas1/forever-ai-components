@@ -5,16 +5,38 @@
 <meta name="description" content="A lava-lamp field of glowing metaball blobs slowly rising, merging and splitting through violet-magenta-amber gradients.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Blob Lamp</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
+  /* theme tokens — dark values are the defaults; light = poster inks on cream.
+     --ps05-r0..r5 are the six stops of the JS metaball colour ramp ("r,g,b"):
+     dark climbs black -> violet -> magenta -> amber, light sinks cream -> ink. */
+  :root{
+    --ps05-bg:#0a0612; --ps05-s1:#2a0a3e; --ps05-s2:#150726; --ps05-s3:#0a0612;
+    --ps05-sh1:rgba(255,61,166,.10); --ps05-sh2:rgba(124,58,237,.28);
+    --ps05-vig:rgba(10,6,18,.62); --ps05-cap:#fff; --ps05-cap-o:.42;
+    --ps05-r0:10,6,18; --ps05-r1:60,18,92; --ps05-r2:124,58,237;
+    --ps05-r3:255,61,166; --ps05-r4:255,120,120; --ps05-r5:255,214,120;
+  }
+  :root[data-theme="light"]{
+    --ps05-bg:#f7f0f4; --ps05-s1:#e6d8f2; --ps05-s2:#f0e6f6; --ps05-s3:#f7f0f4;
+    --ps05-sh1:rgba(198,20,110,.10); --ps05-sh2:rgba(124,58,237,.18);
+    --ps05-vig:rgba(122,92,142,.26); --ps05-cap:#2a1030; --ps05-cap-o:.62;
+    --ps05-r0:247,241,245; --ps05-r1:222,205,238; --ps05-r2:158,120,220;
+    --ps05-r3:198,20,110; --ps05-r4:190,62,42; --ps05-r5:150,92,12;
+  }
+  html,body{margin:0;height:100%;background:var(--ps05-bg);overflow:hidden}
   #ps05-stage{position:fixed;inset:0;background:
-    radial-gradient(120% 90% at 50% 112%, #2a0a3e 0%, #150726 38%, #0a0612 72%);
+    radial-gradient(120% 90% at 50% 112%, var(--ps05-s1) 0%, var(--ps05-s2) 38%, var(--ps05-s3) 72%);
     /* static glow gradient frame — never repaints */
-    box-shadow:inset 0 0 90px 10px rgba(255,61,166,.10), inset 0 -60px 120px -30px rgba(124,58,237,.28);}
+    box-shadow:inset 0 0 90px 10px var(--ps05-sh1), inset 0 -60px 120px -30px var(--ps05-sh2);}
   #ps05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   .ps05-vig{position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(130% 80% at 50% 50%, transparent 52%, rgba(10,6,18,.62) 100%)}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    background:radial-gradient(130% 80% at 50% 50%, transparent 52%, var(--ps05-vig) 100%)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ps05-cap);opacity:var(--ps05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -24,23 +46,25 @@
  "description": "9 glowing metaballs slowly rise, sway, merge and split through a violet-magenta-amber color ramp on a dark canvas — lava lamp in canvas pixels.",
  "useWhen": "Dark-mode hero backgrounds, psychedelic/creative portfolio sections, ambient looping screensavers needing organic blob motion.",
  "avoidWhen": "Light-background layouts (background hardcoded dark). Low-end mobile — CPU-bound pixel loop runs every frame. Contexts needing legible overlaid text.",
- "agentPrompt": "Change blob count to 12 (N=12), shift the ramp amber stop to cool teal (#80ffea) at index 1.00, and slow rise speed range to 0.010–0.020.",
+ "agentPrompt": "Change blob count to 12 (N=12), shift the ramp amber stop to cool teal (#80ffea) at index 1.00, and slow rise speed range to 0.010–0.020. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "blob count (N=9)",
   "rise speed range (0.018–0.048 in bv[])",
   "color ramp stops array",
   "pixel block size (SC=4)",
-  "swirl warp amplitude (0.06)"
+  "swirl warp amplitude (0.06)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "low-res offscreen grid pattern (critical for perf)",
   "visibilitychange pause/start",
   "reduced-motion one-shot static frame",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound pixel loop — heavy on low-end devices at SC=4",
-  "Background color hardcoded dark navy in CSS and canvas ramp",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "No pointer interactivity — fully passive"
  ],
  "tier": "curated",
@@ -48,7 +72,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "metaball",
@@ -72,6 +97,7 @@
 (function(){
   "use strict";
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root=document.documentElement;
   var cv=document.getElementById('ps05-c'),ctx=cv.getContext('2d',{alpha:false});
   var W=0,H=0,DPR=1,GW=0,GH=0,SC=4; // SC: pixel block size for metaball field
   var field=null,gx=0,gy=0; // grid dims
@@ -89,18 +115,15 @@
     }
   })();
 
-  // psychedelic complementary ramp: deep violet -> magenta -> hot pink -> amber core
-  // precomputed 256-entry RGB lookup, built once
+  // psychedelic complementary ramp: deep violet -> magenta -> hot pink -> amber core.
+  // 256-entry RGB lookup; the six stop colours come from --ps05-r0..r5 so a theme
+  // switch just re-reads them and re-bakes the table (never per frame).
   var ramp=new Uint8Array(256*3);
-  (function buildRamp(){
-    var stops=[
-      [0.00, 10,  6, 18],
-      [0.42, 60, 18, 92],
-      [0.60,124, 58,237],
-      [0.74,255, 61,166],
-      [0.86,255,120,120],
-      [1.00,255,214,120]
-    ];
+  var RPOS=[0.00,0.42,0.60,0.74,0.86,1.00];
+  var RCOL=[[10,6,18],[60,18,92],[124,58,237],[255,61,166],[255,120,120],[255,214,120]];
+  function buildRamp(){
+    var stops=[],j;
+    for(j=0;j<6;j++) stops.push([RPOS[j],RCOL[j][0],RCOL[j][1],RCOL[j][2]]);
     for(var i=0;i<256;i++){
       var t=i/255,a=stops[0],b=stops[stops.length-1];
       for(var s=0;s<stops.length-1;s++){ if(t>=stops[s][0]&&t<=stops[s+1][0]){a=stops[s];b=stops[s+1];break;} }
@@ -109,7 +132,17 @@
       ramp[i*3+1]=(a[2]+(b[2]-a[2])*f)|0;
       ramp[i*3+2]=(a[3]+(b[3]-a[3])*f)|0;
     }
-  })();
+  }
+  function syncTheme(){
+    var cs=getComputedStyle(root), p, i;
+    for(i=0;i<6;i++){ p=cs.getPropertyValue('--ps05-r'+i).trim().split(','); RCOL[i]=[+p[0],+p[1],+p[2]]; }
+    buildRamp();
+    if(reduce&&field) render(0);               // repaint the settled static frame
+  }
+  addEventListener('message',function(e){ var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme(); }
+  });
 
   function size(){
     DPR=Math.min(2,window.devicePixelRatio||1);
@@ -179,7 +212,7 @@
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
   function init(){
-    size();
+    syncTheme(); size();
     if(reduce){ render(0); return; }   // settle one calm static frame
     start();
   }

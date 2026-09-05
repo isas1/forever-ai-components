@@ -5,11 +5,30 @@
 <meta name="description" content="Concentric Resonance — Abstract Geometric Improvisations. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Concentric Resonance</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#17151a;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. JS reads --kan04-c* / -alt */
+  :root{
+    --kan04-bg:#17151a;
+    --kan04-c1:#C43131; --kan04-c2:#f7c80b; --kan04-c3:#d8321b; --kan04-c4:#C08459; --kan04-c5:#1f7a4d;
+    --kan04-alt:#f4efe2;
+    --kan04-cap:#f4efe2; --kan04-cap-o:.46;
+  }
+  :root[data-theme="light"]{
+    --kan04-bg:#f4efe2;
+    --kan04-c1:#c43131; --kan04-c2:#836a04; --kan04-c3:#ca2f19; --kan04-c4:#945f38; --kan04-c5:#1f7a4d;
+    --kan04-alt:#16130f;
+    --kan04-cap:#16130f; --kan04-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;background:var(--kan04-bg);overflow:hidden}
   #kan04-stage{position:fixed;inset:0;width:100%;height:100%}
   #kan04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .kan04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f4efe2;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .kan04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--kan04-cap);opacity:var(--kan04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +37,22 @@
  "description": "Colored rings burst outward from random points on a dark field, fading as they expand — abstract's concentric forms in perpetual motion.",
  "useWhen": "Art-themed hero backgrounds, ambient displays, dark-mode canvases needing gentle generative motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark bg). Contexts requiring user interaction — it runs fully autonomously with no pointer response.",
- "agentPrompt": "Change the auto-strike interval from 1.4s to 0.8s, add PAL.green as a third ring color alternate, and increase ring count per strike from 4 to 6.",
+ "agentPrompt": "Change the auto-strike interval from 1.4s to 0.8s, add PAL.green as a third ring color alternate, and increase ring count per strike from 4 to 6. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "auto-strike interval (autoT > 1.4)",
   "ring count per strike (i < 4)",
   "ring speed range (sp: 60 + i*22)",
   "color palette (cols array)",
   "fade duration (g.t/2.4)",
-  "max rings cap (80)"
+  "max rings cap (80)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing (fitCanvas)",
   "visibilitychange pause/resume",
   "prefers-reduced-motion guard",
-  "ring cap splice (rings.length > 80)"
+  "ring cap splice (rings.length > 80)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No pointer/click interaction — rings only emit on auto-timer",
@@ -44,7 +65,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "rings",
@@ -66,8 +88,23 @@
 (function(){
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const PAL={paper:'#f4efe2',blue:'#C43131',yellow:'#f7c80b',red:'#d8321b',green:'#1f7a4d',violet:'#C08459'};
   const cv=document.getElementById('kan04-cv'); if(!cv) return;
+  const root=document.documentElement;
+  // ring colours live in tokens; rings store a palette index so a live theme flip
+  // recolours the rings already in flight instead of stranding stale strings
+  const cols=[]; let ALT='#f4efe2';
+  function syncTheme(){
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    cols.length=0; for(let i=1;i<=5;i++) cols.push(g('--kan04-c'+i));
+    ALT=g('--kan04-alt');
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
     const r=c.getBoundingClientRect();
@@ -78,10 +115,9 @@
   }
   let S=fitCanvas(cv);
   const rings=[];
-  const cols=[PAL.blue,PAL.yellow,PAL.red,PAL.violet,PAL.green];
   function strike(x,y){
-    const base=cols[(Math.random()*cols.length)|0];
-    for(let i=0;i<4;i++) rings.push({x,y,r:6+i*8,c:i%2?base:PAL.paper,t:0,sp:60+i*22});
+    const base=(Math.random()*cols.length)|0;
+    for(let i=0;i<4;i++) rings.push({x,y,r:6+i*8,k:base,alt:!(i%2),t:0,sp:60+i*22});
   }
   let last=performance.now(), autoT=0;
   function draw(now){
@@ -92,7 +128,7 @@
       if(!REDUCED){ g.t+=dt; g.r+=g.sp*dt; }
       const a=Math.max(0,1-g.t/2.4);
       if(a<=0){g.dead=true;continue;}
-      S.ctx.globalAlpha=a;S.ctx.strokeStyle=g.c;S.ctx.lineWidth=2.5;
+      S.ctx.globalAlpha=a;S.ctx.strokeStyle=g.alt?ALT:cols[g.k];S.ctx.lineWidth=2.5;
       S.ctx.beginPath();S.ctx.arc(g.x,g.y,g.r,0,7);S.ctx.stroke();
     }
     S.ctx.globalAlpha=1;

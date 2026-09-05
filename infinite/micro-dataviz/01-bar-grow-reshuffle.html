@@ -5,13 +5,30 @@
 <meta name="description" content="Seven rounded gradient bars with cap dots on a dark slate grid ease to new random heights every 1.6s, reshuffling like a live chart.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bar Grow + Reshuffle</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0e1726;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --c01-p0..p6 feed the canvas bars. */
+  :root{
+    --c01-bg:#0e1726; --c01-cap:#5ec8c2; --c01-cap-o:.4; --c01-axis:#ffffff14;
+    --c01-p0:#5ec8c2; --c01-p1:#7ad9c6; --c01-p2:#9be8b8; --c01-p3:#f2c14e;
+    --c01-p4:#f08a5d; --c01-p5:#e85d75; --c01-p6:#a06cd5;
+  }
+  :root[data-theme="light"]{
+    --c01-bg:#eef2f8; --c01-cap:#297874; --c01-cap-o:.62; --c01-axis:#0e172626;
+    --c01-p0:#297874; --c01-p1:#237b69; --c01-p2:#1d7c41; --c01-p3:#8f670a;
+    --c01-p4:#bf4712; --c01-p5:#d61e3e; --c01-p6:#7b45b4;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c01-bg);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
   canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
-    color:#5ec8c2;opacity:.4;text-transform:uppercase}
+    color:var(--c01-cap);opacity:var(--c01-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -20,20 +37,22 @@
  "description": "Seven rounded gradient bars ease to new random heights every 1.6s with glowing cap dots. Click triggers an immediate reshuffle.",
  "useWhen": "Dashboard hero widgets, loading states, or anywhere a live metric feel is needed without real data.",
  "avoidWhen": "Contexts requiring real data binding or axis labels — bars are decorative with no data semantics or accessible labels.",
- "agentPrompt": "Change bar count to 10, update pal array with blues/purples, slow reshuffle interval from 1600 to 2500ms.",
+ "agentPrompt": "Change bar count to 10, update pal array with blues/purples, slow reshuffle interval from 1600 to 2500ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "bar count (N=7)",
   "color palette (pal array)",
   "reshuffle interval (acc>1600)",
   "easing speed (b.cur += ... * 0.08)",
   "bar width ratio (slot*0.62)",
-  "cap area padding (W*0.1)"
+  "cap area padding (W*0.1)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause + last reset",
   "prefers-reduced-motion guard (b.cur=b.tgt snap)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No axis labels or values — purely decorative, not accessible as a real chart",
@@ -46,7 +65,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bar-chart",
@@ -67,9 +87,22 @@
 (function(){
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const root=document.documentElement;
   let W,H,DPR;
-  const N=7, pal=['#5ec8c2','#7ad9c6','#9be8b8','#f2c14e','#f08a5d','#e85d75','#a06cd5'];
+  const N=7, C={axis:''}; let pal=[];
   let bars=[];
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    pal=[];for(let i=0;i<N;i++)pal.push(cs.getPropertyValue('--c01-p'+i).trim());
+    C.axis=cs.getPropertyValue('--c01-axis').trim();
+    for(let i=0;i<bars.length;i++)bars[i].c=pal[i%pal.length];   // invalidate cached bar colours
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
   function rnd(){return Math.random()}
   function init(){
     bars=[];for(let i=0;i<N;i++)bars.push({cur:rnd(),tgt:rnd(),c:pal[i%pal.length]});
@@ -98,7 +131,7 @@
       rr(x,y,bw,h,Math.min(5,bw/2));ctx.fill();
       ctx.fillStyle=b.c;ctx.beginPath();ctx.arc(x+bw/2,y,bw*0.16,0,7);ctx.fill();
     }
-    ctx.strokeStyle='#ffffff14';ctx.lineWidth=1;
+    ctx.strokeStyle=C.axis;ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(pad*0.6,baseY+1);ctx.lineTo(W-pad*0.6,baseY+1);ctx.stroke();
     raf();
   }
@@ -108,7 +141,7 @@
   addEventListener('resize',resize);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
   cv.addEventListener('pointerdown',newTargets);
-  resize();init();raf();
+  syncTheme();resize();init();raf();
 })();
 </script>
 </body>

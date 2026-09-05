@@ -5,15 +5,33 @@
 <meta name="description" content="An algorithmic fern drawing itself branch by branch via an L-system rule, growing in warm brown-to-gold then restarting.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>L-System Fern</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#06070b;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the one [data-theme="light"] block. --fr05-p0..p7 are the by-depth
+     stroke palette: dark runs deep brown (near-invisible trunk) -> gold -> cream tips,
+     light runs the same warm hues inverted, so the tips are the deepest sepia ink and
+     the trunk sits just off the paper. Weight distribution is identical either way. */
+  :root{--fr05-bg:#06070b;--fr05-g1:rgba(178,146,52,.16);--fr05-g2:rgba(200,170,110,.05);
+    --fr05-cap:#fff;--fr05-cap-o:.42;--fr05-tip:#F7EFD9;
+    --fr05-p0:#2e2210;--fr05-p1:#6b4a1f;--fr05-p2:#C08459;--fr05-p3:#B29234;
+    --fr05-p4:#A19A87;--fr05-p5:#D9B878;--fr05-p6:#EAD9A8;--fr05-p7:#F7EFD9}
+  :root[data-theme="light"]{--fr05-bg:#f6f2ea;--fr05-g1:rgba(131,107,38,.13);--fr05-g2:rgba(140,120,80,.05);
+    --fr05-cap:#332813;--fr05-cap-o:.62;--fr05-tip:#66521b;
+    --fr05-p0:#eee4d4;--fr05-p1:#e6d0b4;--fr05-p2:#cfa98e;--fr05-p3:#c7ab5a;
+    --fr05-p4:#afaa9c;--fr05-p5:#b38a3b;--fr05-p6:#897028;--fr05-p7:#66521b}
+  html,body{margin:0;height:100%;background:var(--fr05-bg);overflow:hidden}
   #fr05-stage{position:fixed;inset:0;display:block;
     background:
-      radial-gradient(120% 90% at 50% 108%, rgba(178,146,52,.16), transparent 60%),
-      radial-gradient(60% 60% at 50% 40%, rgba(200,170,110,.05), transparent 70%),
-      #06070b;}
+      radial-gradient(120% 90% at 50% 108%, var(--fr05-g1), transparent 60%),
+      radial-gradient(60% 60% at 50% 40%, var(--fr05-g2), transparent 70%),
+      var(--fr05-bg);}
   #fr05-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--fr05-cap);opacity:var(--fr05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -23,23 +41,25 @@
  "description": "A fractal fern draws itself branch by branch via an L-system grammar, coloring segments brown-to-gold by depth; it holds then restarts.",
  "useWhen": "Nature-themed hero backgrounds, generative art showcases, algorithmic illustration demos.",
  "avoidWhen": "Contexts needing instant full visuals — 3.4s draw cycle means content appears progressively. Avoid on light backgrounds (hardcoded dark theme).",
- "agentPrompt": "Change the palette to warm amber/orange tones by replacing PAL with ['#7a2f0a','#b84b1a','#e06530','#ff9b5b','#ffcba0','#ffe0c7','#fff0e8','#ffffff'] and slow growth to 5 seconds by changing GROW_PER_SEC to SEGN/5.",
+ "agentPrompt": "Change the palette to warm amber/orange tones by replacing PAL with ['#7a2f0a','#b84b1a','#e06530','#ff9b5b','#ffcba0','#ffe0c7','#fff0e8','#ffffff'] and slow growth to 5 seconds by changing GROW_PER_SEC to SEGN/5. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "recursion depth (DEPTH=5)",
   "branch angle (ANG = 23 * Math.PI/180)",
   "palette array (PAL)",
   "grow duration (GROW_PER_SEC=SEGN/3.4)",
-  "hold pause (holdUntil=t+2200)"
+  "hold pause (holdUntil=t+2200)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "pre-computed typed Float32Array segments (critical for perf)",
   "IIFE wrapper",
   "visibilitychange pause/resume",
-  "reduced-motion static fallback (drawTo(SEGN) + return)"
+  "reduced-motion static fallback (drawTo(SEGN) + return)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "DEPTH=5 is near the cap of 9000 segments; increasing to 6+ will silently truncate at the hard cap",
-  "Background color is hardcoded dark navy — must edit both CSS and radial-gradient to change theme"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -48,7 +68,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "fractal",
@@ -148,12 +169,29 @@
   resize();
   window.addEventListener('resize',resize);
 
-  // palette: deep brown -> accent -> warm gold highlight by generation depth
+  // palette by generation depth + the growing-tip node, both re-read from the CSS
+  // tokens on every theme switch (the canvas clears to transparent, so the ground
+  // itself stays CSS-side and needs no colour read here).
   var PAL=['#2e2210','#6b4a1f','#C08459','#B29234','#A19A87','#D9B878','#EAD9A8','#F7EFD9'];
+  var TIP='#F7EFD9', root=document.documentElement, lastN=0;
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    for(var i=0;i<8;i++) PAL[i]=cs.getPropertyValue('--fr05-p'+i).trim()||PAL[i];
+    TIP=cs.getPropertyValue('--fr05-tip').trim()||TIP;
+    if(lastN>0) drawTo(lastN);       // repaint at once, reduced-motion still included
+  }
+  addEventListener('message',function(ev){
+    var d=ev.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
+  syncTheme();
 
   function drawTo(count){
     ctx.clearRect(0,0,W,H);
     var n = count|0; if(n>SEGN)n=SEGN;
+    lastN=n;
     var prevGen=-1;
     for(var i=0;i<n;i++){
       var g=segGen[i];
@@ -171,7 +209,7 @@
     // growing tip glow (static-radius, opacity-free): a single soft node at the frontier
     if(n>0 && n<SEGN){
       var tx=segX1[n-1]*scale+offx, ty=offy-segY1[n-1]*scale;
-      ctx.fillStyle='#F7EFD9';
+      ctx.fillStyle=TIP;
       ctx.beginPath(); ctx.arc(tx,ty,1.8,0,6.2832); ctx.fill();
     }
   }

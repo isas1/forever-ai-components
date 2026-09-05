@@ -5,8 +5,25 @@
 <meta name="description" content="Bold word SHIMMER with a rainbow gradient clipped to the text, sliding continuously for a glossy iridescent sweep on deep umber.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gradient Shimmer</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1B1712;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c04-bg:#1B1712;
+    --c04-g1:#E8AB30; --c04-g2:#ff8a00; --c04-g3:#ffe600; --c04-g4:#B37D1E; --c04-g5:#C09C59;
+    --c04-glow:rgba(232,171,48,.25); --c04-cap:#E8AB30; --c04-cap-o:.4;
+  }
+  :root[data-theme="light"]{
+    --c04-bg:#f6f2ea;
+    --c04-g1:#926710; --c04-g2:#a85b00; --c04-g3:#7a6e00; --c04-g4:#906518; --c04-g5:#856933;
+    --c04-glow:rgba(146,103,16,.18); --c04-cap:#2a1f0f; --c04-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c04-bg);}
   body{display:flex;align-items:center;justify-content:center;
        font-family:"Helvetica Neue",Arial,sans-serif;}
   #txt{
@@ -16,18 +33,18 @@
     line-height:.9;
     text-align:center;
     background:linear-gradient(100deg,
-      #E8AB30,#ff8a00,#ffe600,#B37D1E,#C09C59,#E8AB30);
+      var(--c04-g1),var(--c04-g2),var(--c04-g3),var(--c04-g4),var(--c04-g5),var(--c04-g1));
     background-size:300% 100%;
     -webkit-background-clip:text;background-clip:text;
     color:transparent;
     -webkit-text-fill-color:transparent;
     animation:shimmer 6s linear infinite;
-    filter:drop-shadow(0 0 18px rgba(232,171,48,.25));
+    filter:drop-shadow(0 0 18px var(--c04-glow));
   }
   @keyframes shimmer{to{background-position:300% 0;}}
   @media (prefers-reduced-motion: reduce){#txt{animation:none;}}
   .cap{position:absolute;left:10px;bottom:8px;font-size:11px;letter-spacing:.08em;
-       color:#E8AB30;opacity:.4;text-transform:uppercase;font-weight:600;}
+       color:var(--c04-cap);opacity:var(--c04-cap-o);text-transform:uppercase;font-weight:600;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -36,24 +53,26 @@
  "description": "Bold \"SHIMMER\" text with a rainbow gradient clipped to the letterforms, continuously panning for a glossy iridescent sweep on deep umber.",
  "useWhen": "Brand name displays, hero headlines, dark-mode splash screens needing vibrant ambient motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark umber body), body copy, or contexts where rainbow hues clash with brand palette.",
- "agentPrompt": "Change the word to 'GLOW', shift the gradient palette to warm sunset tones (#ff6b35, #f7c59f, #fffae3), and slow the cycle to 10s.",
+ "agentPrompt": "Change the word to 'GLOW', shift the gradient palette to warm sunset tones (#ff6b35, #f7c59f, #fffae3), and slow the cycle to 10s. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (SHIMMER text node)",
   "gradient stop colors (linear-gradient stops)",
   "animation duration (6s)",
   "background-size sweep width (300%)",
   "font-size clamp range",
-  "drop-shadow glow color"
+  "drop-shadow glow color",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "background-clip:text + color:transparent pattern",
   "prefers-reduced-motion guard (animation:none)",
   "visibilitychange pause handler",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "background-clip:text requires -webkit- prefix for full Safari support",
-  "Background color is hardcoded dark umber — must edit CSS to use on light backgrounds",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Single static word only; multiline layouts need line-height adjustment"
  ],
  "tier": "curated",
@@ -63,7 +82,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -85,6 +105,13 @@
   var txt=document.getElementById('txt');
   document.addEventListener('visibilitychange',function(){
     txt.style.animationPlayState=document.hidden?'paused':'running';
+  });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d = e.data;
+    if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) {
+      document.documentElement.setAttribute('data-theme', d.theme);
+    }
   });
 })();
 </script>

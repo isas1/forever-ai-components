@@ -1,23 +1,40 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="An ochre constellation drawn by a single continuous self-animating line, with anchor nodes blooming in then fading and redrawing in a loop.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Stroke Draw-On</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block */
+:root{
+  --ssa01-bg:#0b0d12; --ssa01-line:#A68D3F; --ssa01-glow:rgba(166,141,63,.55);
+  --ssa01-node:#BFA98C; --ssa01-ring:#A68D3F; --ssa01-ring-o:.10;
+  --ssa01-cap:#A68D3F; --ssa01-cap-o:.45;
+}
+:root[data-theme="light"]{
+  --ssa01-bg:#f6f3ea; --ssa01-line:#816e31; --ssa01-glow:rgba(129,110,49,.30);
+  --ssa01-node:#836a49; --ssa01-ring:#816e31; --ssa01-ring-o:.20;
+  --ssa01-cap:#816e31; --ssa01-cap-o:.6;
+}
 html,body{margin:0;height:100%;overflow:hidden}
-body{background:#0b0d12;display:grid;place-items:center}
+body{background:var(--ssa01-bg);display:grid;place-items:center}
 .ssa01-stage{width:min(86vmin,640px);height:min(86vmin,640px);position:relative}
 #ssa01-c{width:100%;height:100%;display:block}
 /* continuous self-drawing line */
 .ssa01-line{
-  fill:none;stroke:#A68D3F;stroke-width:1.6;
+  fill:none;stroke:var(--ssa01-line);stroke-width:1.6;
   stroke-linecap:round;stroke-linejoin:round;
-  filter:drop-shadow(0 0 6px rgba(166,141,63,.55));
+  filter:drop-shadow(0 0 6px var(--ssa01-glow));
 }
 /* node dots that pop in as the line passes */
-.ssa01-node{fill:#BFA98C;opacity:0}
+.ssa01-node{fill:var(--ssa01-node);opacity:0}
 /* faint construction grid ring */
-.ssa01-ring{fill:none;stroke:#A68D3F;stroke-width:.6;opacity:.10}
+.ssa01-ring{fill:none;stroke:var(--ssa01-ring);stroke-width:.6;opacity:var(--ssa01-ring-o)}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#A68D3F;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--ssa01-cap);opacity:var(--ssa01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 @media (prefers-reduced-motion:reduce){
   .ssa01-line{stroke-dashoffset:0!important;opacity:1!important;animation:none!important}
   .ssa01-node{opacity:.9!important;animation:none!important}
@@ -29,22 +46,24 @@ body{background:#0b0d12;display:grid;place-items:center}
  "description": "An ochre constellation draws itself via stroke-dashoffset, with anchor nodes blooming in as the line passes; the glyph holds then fades and redraws in a loop.",
  "useWhen": "Dark-mode hero backgrounds, data-viz intros, loading screens, or any ambient display needing elegant self-drawing line art.",
  "avoidWhen": "Light backgrounds (hardcoded dark body color). Contexts needing user interaction — it runs passively with no input handling.",
- "agentPrompt": "Change the stroke color to sage (#7D8570) by updating the stroke value on .ssa01-line and .ssa01-ring, set DRAW=3500 to slow the draw-on, and add two more anchor points to P to extend the constellation.",
+ "agentPrompt": "Change the stroke color to sage (#7D8570) by updating the stroke value on .ssa01-line and .ssa01-ring, set DRAW=3500 to slow the draw-on, and add two more anchor points to P to extend the constellation. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "stroke color (#A68D3F on .ssa01-line)",
   "draw/hold/fade timing (DRAW=2600, HOLD=1500, FADE=900)",
   "anchor points array (P)",
   "node dot radius (r=2.4)",
-  "easing function (ease / outBack)"
+  "easing function (ease / outBack)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static fallback)",
   "visibilitychange pause logic",
-  "getTotalLength() + strokeDasharray/strokeDashoffset pattern"
+  "getTotalLength() + strokeDasharray/strokeDashoffset pattern",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded in CSS — must change body background to use on light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "getTotalLength() requires the SVG to be in the DOM before calling; SSR or hidden elements will return 0"
  ],
  "tier": "curated",
@@ -54,7 +73,8 @@ body{background:#0b0d12;display:grid;place-items:center}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "svg",
@@ -76,6 +96,11 @@ body{background:#0b0d12;display:grid;place-items:center}
   var NS='http://www.w3.org/2000/svg';
   var svg=document.getElementById('ssa01-c');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // Every colour is a CSS token, so flipping the attribute is the whole job.
+  addEventListener('message',function(e){var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);});
 
   // A constellation as one continuous polyline through anchor stars, plus
   // outgoing "rays". Points chosen for a balanced, intentional asterism.

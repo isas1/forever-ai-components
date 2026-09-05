@@ -5,11 +5,35 @@
 <meta name="description" content="Golden-angle phyllotaxis spiral of amber-gold seed dots grows outward and rotates from a glowing nucleus; pointer speeds the spin.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Phyllotaxis Sunflower</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1a1206;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. The seed hsl ramp is tokenised as
+     hue=h0+f*h1, sat=s0+f*s1, lig=l0+(1-f)*l1 (crisp core adds sd/ld), so light can
+     run a dark-on-cream ramp; --phs-a scales seed opacity and --phs-blend turns the
+     additive glow stack into flat ink once the ground is pale. */
+  :root{
+    --phs-bg:#1a1206; --phs-cap:#ffc845; --phs-cap-o:.34;
+    --phs-g0:#241808; --phs-g1:#1a1206; --phs-g2:#120c04;
+    --phs-blend:lighter; --phs-a:1; --phs-nuc:rgba(255,200,69,.9);
+    --phs-h0:52; --phs-h1:-26; --phs-s0:70; --phs-s1:20; --phs-sd:8;
+    --phs-l0:46; --phs-l1:30; --phs-ld:14;
+  }
+  :root[data-theme="light"]{
+    --phs-bg:#f8f1e2; --phs-cap:#8f6500; --phs-cap-o:.72;
+    --phs-g0:#fdf8ec; --phs-g1:#f8f1e2; --phs-g2:#eee2ca;
+    --phs-blend:source-over; --phs-a:.72; --phs-nuc:rgba(143,101,0,.95);
+    --phs-h0:42; --phs-h1:-16; --phs-s0:78; --phs-s1:8; --phs-sd:6;
+    --phs-l0:50; --phs-l1:8; --phs-ld:-10;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--phs-bg);}
   #phs-c{display:block;width:100%;height:100%;}
   .phs-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 system-ui,sans-serif;
-       letter-spacing:.12em;color:#ffc845;opacity:.34;text-transform:uppercase;
+       letter-spacing:.12em;color:var(--phs-cap);opacity:var(--phs-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +43,21 @@
  "description": "620 amber-gold seeds grow outward in a Fermat spiral via the golden angle; parastichy arms rotate continuously and speed up on pointer or click.",
  "useWhen": "Nature/organic-themed hero backgrounds, generative art showcases, science or botany education contexts needing an ambient looping pattern.",
  "avoidWhen": "Contexts requiring legible text overlays — the rotating seeds compete visually. Avoid on low-end devices if many other canvas tiles run simultaneously.",
- "agentPrompt": "Change seed count to 400 by setting N=400, shift palette to blue-violet (hue base 240, rim hue 200), slow rotation by reducing phase increment from 0.0016 to 0.0008.",
+ "agentPrompt": "Change seed count to 400 by setting N=400, shift palette to blue-violet (hue base 240, rim hue 200), slow rotation by reducing phase increment from 0.0016 to 0.0008. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "seed count (N=620)",
   "rotation speed (phase += 0.0016)",
   "pointer boost strength (boost*0.01)",
   "hue range (52 core to 28 rim)",
-  "seed size formula (sz calculation)"
+  "seed size formula (sz calculation)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing with setTransform",
   "IIFE wrapper",
   "visibilitychange pause/resume",
-  "reduced-motion static fallback (draw(0))"
+  "reduced-motion static fallback (draw(0))",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Boost decays on pointermove but never fully resets to zero — tiny residual drift remains",
@@ -45,7 +71,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "phyllotaxis",
@@ -67,16 +94,38 @@
   const cv=document.getElementById('phs-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const GA=Math.PI*(3-Math.sqrt(5)); // golden angle ~137.5deg
-  let W,H,DPR,cx,cy,R;
+  let W,H,DPR,cx,cy,R,bgGrad;
+  const root=document.documentElement;
+  // every colour the canvas draws with is read from the tokens, once per theme switch
+  const C={g0:'',g1:'',g2:'',blend:'lighter',nuc:'',h0:52,h1:-26,s0:70,s1:20,sd:8,l0:46,l1:30,ld:14,a:1};
+  function mkGrad(){            // cached vignette holds token colours -> rebuild on switch
+    if(cx===undefined)return;
+    bgGrad=ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.25);
+    bgGrad.addColorStop(0,C.g0);bgGrad.addColorStop(.7,C.g1);bgGrad.addColorStop(1,C.g2);
+  }
+  function syncTheme(){
+    const cs=getComputedStyle(root),num=k=>parseFloat(cs.getPropertyValue(k));
+    C.g0=cs.getPropertyValue('--phs-g0').trim();C.g1=cs.getPropertyValue('--phs-g1').trim();
+    C.g2=cs.getPropertyValue('--phs-g2').trim();C.blend=cs.getPropertyValue('--phs-blend').trim();
+    C.nuc=cs.getPropertyValue('--phs-nuc').trim();
+    C.h0=num('--phs-h0');C.h1=num('--phs-h1');C.s0=num('--phs-s0');C.s1=num('--phs-s1');
+    C.sd=num('--phs-sd');C.l0=num('--phs-l0');C.l1=num('--phs-l1');C.ld=num('--phs-ld');C.a=num('--phs-a');
+    mkGrad();
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce)draw(0);
+    }
+  });
+  syncTheme();
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     cx=W/2;cy=H/2;R=Math.min(W,H)*0.46;
-    bgGrad=ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.25);
-    bgGrad.addColorStop(0,'#241808');bgGrad.addColorStop(.7,'#1a1206');bgGrad.addColorStop(1,'#120c04');
+    mkGrad();
   }
-  let bgGrad;
   addEventListener('resize',size);size();
   const N=620;          // florets on screen
   const c=R/Math.sqrt(N);// Fermat spacing so outermost seed sits near rim
@@ -96,30 +145,30 @@
   function draw(growth){
     // subtle radial vignette wash (gradient cached on resize)
     ctx.fillStyle=bgGrad;ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=C.blend;
     for(let i=N;i>=0;i--){
       const s=seed(i,growth);
       if(s.f>1.02)continue;
       const f=Math.max(0,Math.min(1,s.f));
       // size: small at core, swells mid, tapers at rim
       const sz=(1.4+ (1-Math.abs(f-0.55))*5.6)*Math.min(W,H)/420 + 1.2;
-      // hue: 52 (pale gold) core -> 28 (amber-orange) rim
-      const hue=52-f*26;
-      const sat=70+f*20;
-      const lig=46+(1-f)*30;
-      const a=0.22+0.6*(1-Math.abs(f-0.5)*1.1);
+      // hue: 52 (pale gold) core -> 28 (amber-orange) rim (light: deep amber on cream)
+      const hue=C.h0+f*C.h1;
+      const sat=C.s0+f*C.s1;
+      const lig=C.l0+(1-f)*C.l1;
+      const a=(0.22+0.6*(1-Math.abs(f-0.5)*1.1))*C.a;
       // soft glow halo
       ctx.beginPath();
       ctx.fillStyle='hsla('+hue+','+sat+'%,'+lig+'%,'+(a*0.5)+')';
       ctx.arc(s.x,s.y,sz*1.9,0,6.283);ctx.fill();
       // crisp seed core
       ctx.beginPath();
-      ctx.fillStyle='hsla('+hue+','+(sat+8)+'%,'+(lig+14)+'%,'+a+')';
+      ctx.fillStyle='hsla('+hue+','+(sat+C.sd)+'%,'+(lig+C.ld)+'%,'+a+')';
       ctx.arc(s.x,s.y,sz,0,6.283);ctx.fill();
     }
     // bright nucleus
     ctx.beginPath();
-    ctx.fillStyle='rgba(255,200,69,0.9)';
+    ctx.fillStyle=C.nuc;
     ctx.arc(cx,cy,Math.min(W,H)/120,0,6.283);ctx.fill();
     ctx.globalCompositeOperation='source-over';
   }

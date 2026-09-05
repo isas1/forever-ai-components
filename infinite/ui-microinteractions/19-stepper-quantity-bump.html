@@ -5,18 +5,36 @@
 <meta name="description" content="A lime quantity stepper with skeuomorphic plus/minus keys rolls digits on a spring with motion-blur as the count bumps up and down.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stepper Quantity Bump</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1C1917;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --sqb-bg:#1C1917; --acc:#A3E635;
+    --sqb-key-bg:#2A2724; --sqb-key-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 6px 0 #181513,0 10px 16px rgba(0,0,0,.4);
+    --sqb-icon-glow:rgba(163,230,53,.5); --sqb-text-glow:rgba(163,230,53,.35);
+    --sqb-cap:#A3E635; --sqb-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --sqb-bg:#f5f3f2; --acc:#50780f;
+    --sqb-key-bg:#ffffff; --sqb-key-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 6px 0 #d6d3cf,0 10px 16px rgba(15,23,42,.14);
+    --sqb-icon-glow:rgba(80,120,15,.35); --sqb-text-glow:rgba(80,120,15,.22);
+    --sqb-cap:#29231e; --sqb-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--sqb-bg);}
   body{display:flex;align-items:center;justify-content:center;
        font-family:ui-monospace,"SFMono-Regular","Courier New",monospace;}
   .sqb-wrap{display:flex;align-items:center;
-       gap:clamp(10px,4vw,26px);
-       --acc:#A3E635;}
+       gap:clamp(10px,4vw,26px);}
   .sqb-btn{
     position:relative;width:clamp(46px,17vw,96px);height:clamp(46px,17vw,96px);
     border-radius:26%;
-    background:#2A2724;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 6px 0 #181513,0 10px 16px rgba(0,0,0,.4);
+    background:var(--sqb-key-bg);
+    box-shadow:var(--sqb-key-shadow);
     display:flex;align-items:center;justify-content:center;
     cursor:pointer;user-select:none;
     transition:transform .07s ease;
@@ -24,7 +42,7 @@
   }
   .sqb-btn::before,.sqb-btn::after{
     content:"";position:absolute;background:var(--acc);border-radius:2px;
-    box-shadow:0 0 10px rgba(163,230,53,.5);
+    box-shadow:0 0 10px var(--sqb-icon-glow);
   }
   .sqb-btn::before{width:42%;height:11%;}
   .sqb-btn.sqb-plus::after{width:11%;height:42%;}
@@ -38,11 +56,11 @@
   .sqb-cell{height:clamp(82px,30vw,190px);display:flex;align-items:center;justify-content:center;
     color:var(--acc);font-weight:700;font-size:clamp(58px,21vw,140px);
     line-height:1;letter-spacing:.02em;
-    text-shadow:0 0 24px rgba(163,230,53,.35);}
+    text-shadow:0 0 24px var(--sqb-text-glow);}
   .sqb-base{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     pointer-events:none;}
   .sqb-cap{position:fixed;right:10px;bottom:8px;font-size:11px;letter-spacing:.08em;
-       color:#A3E635;opacity:.34;text-transform:uppercase;
+       color:var(--sqb-cap);opacity:var(--sqb-cap-o);text-transform:uppercase;
        font-family:monospace;pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -52,19 +70,21 @@
  "description": "Lime-green digit stepper with skeuomorphic ± keys; pressing rolls the number up or down with a spring overshoot and per-digit motion blur.",
  "useWhen": "Cart quantity selectors, seat pickers, or any numeric input needing satisfying tactile feedback.",
  "avoidWhen": "Large numeric ranges (only shows single digit 0–9 wrap); contexts where the auto-cycle demo loop would be distracting.",
- "agentPrompt": "Change the accent color from lime (#A3E635) to cyan (#22D3EE) and slow the roll animation to 700ms by editing the `dur` value in the `anim` object inside `trigger()`.",
+ "agentPrompt": "Change the accent color from lime (#A3E635) to cyan (#22D3EE) and slow the roll animation to 700ms by editing the `dur` value in the `anim` object inside `trigger()`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--acc: #A3E635)",
   "animation duration (dur: 520 in trigger())",
   "spring parameters (w=10, z=0.42 in easeSpring)",
   "auto-loop interval (autoT > 900)",
-  "button squash scale (.82,.82 in trigger())"
+  "button squash scale (.82,.82 in trigger())",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "three-cell roll structure (cells array)",
   "IIFE wrapper",
   "prefers-reduced-motion guard",
-  "visibilitychange stop/start"
+  "visibilitychange stop/start",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Only displays the last digit (0–9 mod 10) — wraps silently for values ≥ 10",
@@ -77,7 +97,8 @@
   "easy-to-modify",
   "mobile-ready",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "stepper",
@@ -101,6 +122,14 @@
 <script>
 (function(){
   var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // live re-theme: no JS-drawn colours here (CSS custom properties recascade on their own),
+  // just re-set data-theme so :root[data-theme="light"] takes over.
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
   var roll=document.getElementById('sqbRoll');
   var plus=document.getElementById('sqbPlus'), minus=document.getElementById('sqbMinus');
   var val=4, prev=4, raf=0;

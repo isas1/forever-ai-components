@@ -5,11 +5,26 @@
 <meta name="description" content="Dense offset black-and-white dot lattice whose sizes swell in phase waves, sending illusory diagonal moire bands traveling across the field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dot Grid Shift</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
-  #op08-stage{position:fixed;inset:0;background:#0a0a0a}
+  /* theme tokens — dark values are the defaults; light inverts the ground/ink pair
+     (ink dots on white paper), keeping the faint counter-lattice as a grey veil. */
+  :root{
+    --op08-bg:#0a0a0a; --op08-ink:#f2f2f2; --op08-ink-2:rgba(255,255,255,0.10);
+    --op08-cap:#fff; --op08-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --op08-bg:#f4f4f2; --op08-ink:#141414; --op08-ink-2:rgba(20,20,20,0.14);
+    --op08-cap:#141414; --op08-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--op08-bg);overflow:hidden}
+  #op08-stage{position:fixed;inset:0;background:var(--op08-bg)}
   #op08-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op08-cap);opacity:var(--op08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +34,22 @@
  "description": "Offset dot lattice with rows staggered half a cell; dot sizes swell in phase waves producing illusory diagonal moire bands that travel slowly across the field.",
  "useWhen": "Dark-mode hero backgrounds, op-art or generative-art showcases, ambient looping screensavers needing a hypnotic geometric pattern.",
  "avoidWhen": "Light-background UIs (background hardcoded near-black). Contexts with legible text overlays — shifting bands compete with reading.",
- "agentPrompt": "Change the travel speed from 0.6 to 0.3 for a slower drift, swap dot color to warm amber by setting ctx.fillStyle to '#f5c842', and increase MAXCELLS to 3600 for a denser grid.",
+ "agentPrompt": "Change the travel speed from 0.6 to 0.3 for a slower drift, swap dot color to warm amber by setting ctx.fillStyle to '#f5c842', and increase MAXCELLS to 3600 for a denser grid. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "travel speed (t*0.6)",
   "primary dot color (#f2f2f2)",
   "secondary lattice opacity (0.10)",
   "diagonal band slope k (0.55)",
   "cell size range (11..22 logical px)",
-  "phase frequency multipliers (0.9 and 1.18)"
+  "phase frequency multipliers (0.9 and 1.18)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "MAXCELLS budget + auto-coarsen loop (critical for perf)",
   "typed Float32Array px/py/ph pre-computation",
   "visibility pause/resume guards",
-  "prefers-reduced-motion single-frame fallback"
+  "prefers-reduced-motion single-frame fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background hardcoded near-black — must edit CSS to change",
@@ -45,7 +62,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "op-art",
@@ -71,6 +89,23 @@
   var c=document.getElementById("op08-c");
   var ctx=c.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var root=document.documentElement;
+
+  // colours the canvas draws with — read once from the tokens, once per switch
+  var C={bg:"#0a0a0a",ink:"#f2f2f2",ink2:"rgba(255,255,255,0.10)"};
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue("--op08-bg").trim();
+    C.ink=cs.getPropertyValue("--op08-ink").trim();
+    C.ink2=cs.getPropertyValue("--op08-ink-2").trim();
+    if(reduce&&nCells)drawOneFrame();   // static fallback must repaint on a live switch
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme();
+    }
+  });
 
   // cached geometry (recomputed on resize only)
   var W=0,H=0,dpr=1;
@@ -126,9 +161,9 @@
 
   // draw the lattice for a given global phase (radians of travel)
   function draw(travel){
-    ctx.fillStyle="#0a0a0a";
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
-    ctx.fillStyle="#f2f2f2";
+    ctx.fillStyle=C.ink;
     var i,rr,s,a;
     var TWO=6.283185307179586;
     // single batched path keeps it allocation-free + one fill call
@@ -145,7 +180,7 @@
 
     // a second, finer counter-traveling lattice in faint grey creates the moire
     // interference against the first without a second full repaint cost.
-    ctx.fillStyle="rgba(255,255,255,0.10)";
+    ctx.fillStyle=C.ink2;
     ctx.beginPath();
     for(i=0;i<nCells;i++){
       s=0.5+0.5*Math.sin(ph[i]*1.18+travel*0.83);
@@ -191,6 +226,7 @@
   });
 
   build();
+  syncTheme();
   if(reduce){drawOneFrame();return;}
   start();
 })();

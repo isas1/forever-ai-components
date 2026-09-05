@@ -7,27 +7,42 @@
 <title>Morphing Action FAB</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
+    --c03-bg:#08090d; --c03-glow-a:rgba(232,171,48,0.12);
     --bg-surface:#1c2030; --text-1:#c7ccdb;
     --accent-cyan:#E8AB30;
     --border-mid:rgba(255,255,255,0.12); --border-glow:rgba(232,171,48,0.45);
     --grad-iris-cyan:linear-gradient(120deg,#E8AB30,#C09C59);
-    --glow-cyan:0 0 32px -6px rgba(232,171,48,0.5);
+    --glow-cyan:0 0 32px -6px rgba(232,171,48,0.5); --glow-cyan-hover:0 0 44px -4px rgba(232,171,48,0.7);
+    --cap:#fff; --cap-o:.28;
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1); --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
     --dur-fast:160ms; --dur-base:280ms;
     --font-display:"Space Grotesk",system-ui,sans-serif;
   }
+  :root[data-theme="light"]{
+    --c03-bg:#f2f4f8; --c03-glow-a:rgba(146,103,16,0.10);
+    --bg-surface:#ffffff; --text-1:#4a5168;
+    --accent-cyan:#926710;
+    --border-mid:rgba(0,0,0,0.12); --border-glow:rgba(146,103,16,0.55);
+    --glow-cyan:0 0 32px -6px rgba(146,103,16,0.35); --glow-cyan-hover:0 0 44px -4px rgba(146,103,16,0.5);
+    --cap:#1b2130; --cap-o:.5;
+  }
   html,body{margin:0;height:100%;overflow:hidden}
-  body{background:#08090d;display:grid;place-items:center;
-    background-image:radial-gradient(60vw 50vw at 50% 0%,rgba(232,171,48,0.12),transparent 60%);}
+  body{background:var(--c03-bg);display:grid;place-items:center;
+    background-image:radial-gradient(60vw 50vw at 50% 0%,var(--c03-glow-a),transparent 60%);}
   #stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c03-fab{position:relative;width:168px;height:168px;}
   .c03-fab__main{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:60px;height:60px;border:0;border-radius:50%;cursor:pointer;
     background:var(--grad-iris-cyan);box-shadow:var(--glow-cyan);z-index:3;
     transition:transform var(--dur-base) var(--ease-spring),box-shadow var(--dur-base) var(--ease-out-soft);}
-  .c03-fab__main:hover{box-shadow:0 0 44px -4px rgba(232,171,48,0.7);}
+  .c03-fab__main:hover{box-shadow:var(--glow-cyan-hover);}
   .c03-fab__plus{position:absolute;left:50%;top:50%;width:22px;height:22px;transform:translate(-50%,-50%);transition:transform var(--dur-base) var(--ease-spring);}
   .c03-fab__plus::before,.c03-fab__plus::after{content:"";position:absolute;background:#fff;border-radius:2px;}
   .c03-fab__plus::before{left:50%;top:0;width:2.5px;height:100%;transform:translateX(-50%);}
@@ -48,7 +63,7 @@
   .c03-fab--open .c03-fab__item:nth-child(6){transform:translate(-55px,32px) scale(1);transition-delay:200ms;}
   .c03-fab--open .c03-fab__item:nth-child(7){transform:translate(-55px,-32px) scale(1);transition-delay:250ms;}
 
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;font-family:var(--font-display)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c03-fab__item,.c03-fab__plus{transition-duration:.001ms}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -58,23 +73,26 @@
  "description": "Gradient FAB whose plus icon rotates 135° to an X on click, fanning six icon buttons outward in a staggered radial spring animation. Auto-cycles in demo mode.",
  "useWhen": "Mobile-style action menus, dashboard toolbars, or any context needing quick access to 4–6 secondary actions from a single trigger button.",
  "avoidWhen": "Layouts where the FAB overlaps critical content. Remove the auto-cycle loop before shipping in production — it fires every ~2.6 s regardless of user intent.",
- "agentPrompt": "Change the gradient from marigold-tan to amber-rose by updating --grad-iris-cyan to linear-gradient(120deg,#f97316,#e11d48), and increase the radial spread radius from 64px/55px to 80px/68px.",
+ "agentPrompt": "Change the gradient from marigold-tan to amber-rose by updating --grad-iris-cyan to linear-gradient(120deg,#f97316,#e11d48), and increase the radial spread radius from 64px/55px to 80px/68px. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gradient color (--grad-iris-cyan)",
   "radial spread distances (64px / 55px in nth-child transforms)",
   "stagger delay per item (0ms..250ms)",
   "item count (add/remove .c03-fab__item buttons)",
-  "auto-cycle timing (2600ms open / 1700ms closed)",
-  "FAB size (60px main / 42px items)"
+  "FAB size (60px main / 42px items)",
+  "idle demo cadence (OPEN_MS=1800 open / CLOSED_MS=1600 closed, first open after 500 ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce var + transition-duration override)",
   "visibilitychange stop/loop pattern",
-  "aria-expanded + tabindex management in setOpen()"
+  "aria-expanded + tabindex management in setOpen()",
+  "idle demo cycle driving setOpen() + takeover on real pointer/key input",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Auto-cycles by default — call stop() and remove the loop bootstrap before production use",
+  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
   "Six items at 64px/55px spread; adding more items requires manually computing new translate() positions",
   "tabindex='-1' on items means keyboard nav is absent when closed — Escape closes but Arrow keys not wired"
  ],
@@ -85,7 +103,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "fab",
@@ -129,17 +148,30 @@
   document.addEventListener("click", function(e){ if(!fab.contains(e.target)) setOpen(false); });
   fab.addEventListener("keydown", function(e){ if(e.key==="Escape") setOpen(false); });
 
-  // autonomous idle: open and close the radial menu on a loop
-  var timer=null, open=false;
-  function loop(){
-    if(reduce) return;
-    open=!open;
-    setOpen(open);
-    timer=setTimeout(loop, open?2600:1700);
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message", function(e){
+    var d=e.data; if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);
+  });
+
+  // idle demo: nothing on the wall ever taps a FAB, so it fans itself open through the very
+  // same setOpen() a real click runs — first open ~0.5 s after mount, then OPEN_MS open /
+  // CLOSED_MS closed. Real input takes over; the demo resumes after IDLE_RESUME ms of quiet.
+  var TICK=100, OPEN_MS=1800, CLOSED_MS=1600, IDLE_RESUME=3600, LEAD=500;
+  var demo=true, phase=CLOSED_MS-LEAD, idle=0, clock=null;
+  function tick(){
+    if(!demo){ idle+=TICK; if(idle>=IDLE_RESUME){ demo=true; idle=0; phase=CLOSED_MS-LEAD; setOpen(false); } return; }
+    phase+=TICK;
+    var isOpen=fab.classList.contains("c03-fab--open");
+    if(phase >= (isOpen?OPEN_MS:CLOSED_MS)){ phase=0; setOpen(!isOpen); }
   }
-  function stop(){ clearTimeout(timer); }
-  document.addEventListener("visibilitychange", function(){ document.hidden?stop():loop(); });
-  setTimeout(loop, 900);
+  function takeover(){ demo=false; idle=0; }   // any real pointer/key input ends the idle demo
+  document.addEventListener("pointerdown", takeover, true);
+  document.addEventListener("keydown", takeover, true);
+  function start(){ if(!clock && !reduce) clock=setInterval(tick, TICK); }
+  function stop(){ clearInterval(clock); clock=null; }
+  document.addEventListener("visibilitychange", function(){ document.hidden ? stop() : start(); });
+  if(reduce) setOpen(true);                    // reduced motion: one static open state, no loop
+  else start();
 })();
 </script>
 </body>

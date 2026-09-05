@@ -5,11 +5,28 @@
 <meta name="description" content="Green-to-slate squarified treemap whose rounded tiles smoothly resize and re-pack as underlying values shift each cycle.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Treemap Subdivide</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#181D1B;}
+  /* theme tokens — dark values are the defaults; the numeric tokens feed the JS hsl() ramps:
+     tile fill (sat/lit base+range), edge highlight (es/el), area tick (ts/tl) */
+  :root{
+    --tms-bg:#181D1B; --tms-cap:#5A8C73; --tms-cap-o:.36;
+    --tms-sat:72; --tms-lit:22; --tms-litr:30; --tms-es:95; --tms-el:72;
+    --tms-th:25; --tms-ts:100; --tms-tl:70;
+  }
+  :root[data-theme="light"]{
+    --tms-bg:#f0f4f2; --tms-cap:#4c7661; --tms-cap-o:.7;
+    --tms-sat:46; --tms-lit:72; --tms-litr:-24; --tms-es:55; --tms-el:26;
+    --tms-th:25; --tms-ts:95; --tms-tl:36;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--tms-bg);}
   #tms-c{display:block;width:100%;height:100%;}
   .tms-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:#5A8C73;opacity:.36;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--tms-cap);opacity:var(--tms-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +36,22 @@
  "description": "11 green-to-slate rounded tiles fill the canvas as a squarified treemap; values shift each cycle and tiles smoothly interpolate to new sizes and positions.",
  "useWhen": "Ambient data dashboards, portfolio backgrounds, or any context needing a living layout visualization without specific data labels.",
  "avoidWhen": "Contexts requiring readable labels or precise data — tiles carry no text. Low-end devices with many resize events may stutter during re-layout.",
- "agentPrompt": "Change leaf count to 8 (N=8), shift hue band to teal (start at 160), and slow the morph transition by changing the t increment from 0.012 to 0.007.",
+ "agentPrompt": "Change leaf count to 8 (N=8), shift hue band to teal (start at 160), and slow the morph transition by changing the t increment from 0.012 to 0.007. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "leaf count (N=11)",
   "hue band start and range (110–190, green→slate)",
   "hold duration between morphs (130 frames)",
   "t increment speed (0.012 + boost*0.02)",
   "gap between tiles (W*H*0.008)",
-  "padding (pad = W*H*0.045)"
+  "padding (pad = W*H*0.045)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "squarify() recursive layout function",
   "IIFE wrapper",
   "prefers-reduced-motion static draw guard",
-  "visibilitychange stop/start"
+  "visibilitychange stop/start",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Click triggers immediate morph but only when t>=1 (mid-transition clicks are ignored)",
@@ -46,7 +65,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "treemap",
@@ -136,7 +156,7 @@
 
   function draw(){
     ctx.clearRect(0,0,W,H);
-    ctx.fillStyle='#181D1B';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const e=ease(t),gap=Math.max(1.4,Math.min(W,H)*0.008);
     for(let i=0;i<N;i++){
       if(!from[i]||!to[i])continue;
@@ -145,21 +165,21 @@
       if(w<=0||h<=0)continue;
       const area=w*h,big=Math.min(1,area/(W*H*0.18));
       const hue=hues[i];
-      const light=22+big*30;
-      const g=ctx.createLinearGradient(x,y,x,y+h);
-      g.addColorStop(0,`hsl(${hue} 72% ${light+10}%)`);
-      g.addColorStop(1,`hsl(${hue-8} 70% ${light}%)`);
+      const light=C.lit+big*C.litr;
+      const g=ctx.createLinearGradient(x,y,x,y+h);   // rebuilt per tile per frame — nothing cached
+      g.addColorStop(0,`hsl(${hue} ${C.sat}% ${light+10}%)`);
+      g.addColorStop(1,`hsl(${hue-8} ${C.sat-2}% ${light}%)`);
       const rr=Math.min(5,w*0.18,h*0.18);
       rrect(x,y,w,h,rr);
       ctx.fillStyle=g;ctx.fill();
       // accent top edge — sparkline-thin highlight
-      ctx.strokeStyle=`hsl(${hue} 95% 72% / ${0.25+big*0.45})`;
+      ctx.strokeStyle=`hsl(${hue} ${C.es}% ${C.el}% / ${0.25+big*0.45})`;
       ctx.lineWidth=1;
       rrect(x+.5,y+.5,w-1,h-1,Math.max(0,rr-1));ctx.stroke();
       // tiny area tick mark (truth-per-pixel, no number) bottom-left
       if(w>14&&h>10){
         const tl=Math.min(w*0.32,4+big*14);
-        ctx.strokeStyle=`hsl(25 100% 70% / ${0.3+big*0.5})`;
+        ctx.strokeStyle=`hsl(${C.th} ${C.ts}% ${C.tl}% / ${0.3+big*0.5})`;
         ctx.lineWidth=1.4;ctx.beginPath();
         ctx.moveTo(x+4,y+h-4);ctx.lineTo(x+4+tl,y+h-4);ctx.stroke();
       }
@@ -171,6 +191,30 @@
     ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
     ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
   }
+
+  // theme: every colour the canvas draws with is read from the tokens, once per switch
+  const root=document.documentElement, C={};
+  let ready=0;
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--tms-bg').trim();
+    C.sat=parseFloat(cs.getPropertyValue('--tms-sat'));
+    C.lit=parseFloat(cs.getPropertyValue('--tms-lit'));
+    C.litr=parseFloat(cs.getPropertyValue('--tms-litr'));
+    C.es=parseFloat(cs.getPropertyValue('--tms-es'));
+    C.el=parseFloat(cs.getPropertyValue('--tms-el'));
+    C.th=parseFloat(cs.getPropertyValue('--tms-th'));
+    C.ts=parseFloat(cs.getPropertyValue('--tms-ts'));
+    C.tl=parseFloat(cs.getPropertyValue('--tms-tl'));
+    if(reduce&&ready)draw();                    // running loop repaints itself
+  }
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
+  syncTheme();
 
   let raf=0;
   function frame(){
@@ -185,6 +229,7 @@
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  ready=1;
   if(reduce){from=layout(vals).map(c=>({...c}));to=from;t=1;draw();}
   else start();
 })();

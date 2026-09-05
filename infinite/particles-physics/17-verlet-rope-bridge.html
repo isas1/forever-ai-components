@@ -5,11 +5,28 @@
 <meta name="description" content="A glowing amber rope sags and sways under invisible rolling weights on dark brown, simulated with verlet physics; drag to disturb it.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Verlet Rope Bridge</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#161108;}
+  /* theme tokens — dark values are the defaults; light palette in the [data-theme] block.
+     --vrb-r0/-rd are the rope ramp (base rgb + per-speed delta), read back by syncTheme. */
+  :root{
+    --vrb-bg:#161108; --vrb-fade:rgba(22,17,8,0.30); --vrb-accent:#f0c248; --vrb-cap-o:.34;
+    --vrb-under:rgba(240,194,72,0.10); --vrb-ring:rgba(240,194,72,0.35);
+    --vrb-r0:240,194,72; --vrb-rd:0,-60,30; --vrb-node:rgba(255,238,190,0.9); --vrb-node0:rgba(240,194,72,0);
+  }
+  :root[data-theme="light"]{
+    --vrb-bg:#f7f1e4; --vrb-fade:rgba(247,241,228,0.30); --vrb-accent:#89660b; --vrb-cap-o:.62;
+    --vrb-under:rgba(137,102,11,0.16); --vrb-ring:rgba(137,102,11,0.40);
+    --vrb-r0:150,110,20; --vrb-rd:-55,-40,-8; --vrb-node:rgba(92,62,0,0.85); --vrb-node0:rgba(137,102,11,0);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--vrb-bg);}
   #vrb-c{display:block;width:100%;height:100%;cursor:crosshair;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.16em;color:#f0c248;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--vrb-accent);opacity:var(--vrb-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +36,22 @@
  "description": "Amber glowing rope sags between two pegs under invisible rolling weights via Verlet physics; pointer disturbs it, clicks launch new loads.",
  "useWhen": "Physics demo backgrounds, portfolio heroes, ambient canvases with tactile interaction.",
  "avoidWhen": "Layouts needing legible text overlays; low-end mobile where 14-iteration constraint relaxation per frame may stutter.",
- "agentPrompt": "Change rope color to electric blue by setting r=72, g=194, bl=240 in the velocity-tint segment loop, and raise GRAV from 0.32 to 0.55 for heavier sag.",
+ "agentPrompt": "Change rope color to electric blue by setting r=72, g=194, bl=240 in the velocity-tint segment loop, and raise GRAV from 0.32 to 0.55 for heavier sag. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gravity constant (GRAV=0.32)",
   "damping factor (DAMP=0.985)",
   "constraint iterations (ITER=14)",
   "rope color base (r=240,g=194,bl=72)",
   "rolling weight mass range (1.6+random*2.6)",
-  "weight spawn interval (120+random*150)"
+  "weight spawn interval (120+random*150)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static-settle branch",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "14 constraint-relaxation iterations per frame — CPU-bound on low-end devices",
@@ -46,7 +65,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "rope",
@@ -70,6 +90,20 @@
   let W,H,DPR,N,pts,rest,pegL,pegR;
   const GRAV=0.32, ITER=14, DAMP=0.985;
   const weights=[]; // invisible rolling loads
+  // rope + peg colours come from the tokens; a theme flip re-reads them once
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    C.bg=g('--vrb-bg');C.fade=g('--vrb-fade');C.accent=g('--vrb-accent');C.under=g('--vrb-under');
+    C.ring=g('--vrb-ring');C.node=g('--vrb-node');C.node0=g('--vrb-node0');
+    C.r0=g('--vrb-r0').split(',').map(Number);C.rd=g('--vrb-rd').split(',').map(Number);
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);draw();}
+    }});
+  syncTheme();
 
   function build(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -131,11 +165,11 @@
 
   function draw(){
     // trail fade
-    ctx.fillStyle='rgba(22,17,8,0.30)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.fade;ctx.fillRect(0,0,W,H);
     // rope as glowing strand + shadow
     ctx.lineCap='round';ctx.lineJoin='round';
     // soft under-glow
-    ctx.strokeStyle='rgba(240,194,72,0.10)';ctx.lineWidth=7;
+    ctx.strokeStyle=C.under;ctx.lineWidth=7;
     ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
     for(let i=1;i<N;i++){const m=(pts[i-1].x+pts[i].x)/2,n=(pts[i-1].y+pts[i].y)/2;ctx.quadraticCurveTo(pts[i-1].x,pts[i-1].y,m,n);}
     ctx.stroke();
@@ -143,8 +177,8 @@
     for(let i=1;i<N;i++){
       const a=pts[i-1],b=pts[i];
       const sp=Math.min(1,(Math.abs(b.y-b.py)+Math.abs(a.y-a.py))*0.16);
-      const r=240, g=194-sp*60, bl=72+sp*30;
-      ctx.strokeStyle='rgb('+r+','+(g|0)+','+(bl|0)+')';
+      const r=C.r0[0]+sp*C.rd[0], g=C.r0[1]+sp*C.rd[1], bl=C.r0[2]+sp*C.rd[2];
+      ctx.strokeStyle='rgb('+(r|0)+','+(g|0)+','+(bl|0)+')';
       ctx.globalAlpha=0.55+sp*0.45;
       ctx.lineWidth=2+sp*1.6;
       ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();
@@ -152,15 +186,15 @@
     ctx.globalAlpha=1;
     // pegs
     for(const pg of [pegL,pegR]){
-      ctx.fillStyle='#f0c248';ctx.beginPath();ctx.arc(pg.x,pg.y,4.5,0,7);ctx.fill();
-      ctx.strokeStyle='rgba(240,194,72,0.35)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(pg.x,pg.y,8,0,7);ctx.stroke();
+      ctx.fillStyle=C.accent;ctx.beginPath();ctx.arc(pg.x,pg.y,4.5,0,7);ctx.fill();
+      ctx.strokeStyle=C.ring;ctx.lineWidth=1;ctx.beginPath();ctx.arc(pg.x,pg.y,8,0,7);ctx.stroke();
     }
     // bright node where a weight presses
     for(const w of weights){
       if(w.i<1||w.i>=N-1)continue;
       const p=pts[w.i];
       const gr=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,10);
-      gr.addColorStop(0,'rgba(255,238,190,0.9)');gr.addColorStop(1,'rgba(240,194,72,0)');
+      gr.addColorStop(0,C.node);gr.addColorStop(1,C.node0);
       ctx.fillStyle=gr;ctx.beginPath();ctx.arc(p.x,p.y,10,0,7);ctx.fill();
     }
   }
@@ -181,7 +215,7 @@
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{if(reduce)return;document.hidden?stop():start();});
   if(reduce){
-    ctx.fillStyle='#161108';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     for(let s=0;s<260;s++)tick(); // settle to a resting sag
     weights.length=0; for(let s=0;s<40;s++)tick();
     draw();

@@ -5,6 +5,12 @@
 <meta name="description" content="Whiplash Vines — Art Nouveau Ornamental Panels. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Whiplash Vines</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   This tile's default palette is already light, so both themes render the same; the hook keeps it
+   on the canvas's light wall and lets it answer the forever:theme protocol. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   html,body{margin:0;height:100%;background:#f4ecd8;overflow:hidden}
   #muc02-stage{position:fixed;inset:0;width:100%;height:100%}
@@ -18,20 +24,23 @@
  "description": "Sinuous sage and teal tendrils grow and curl on parchment; each vine ends in a rose or gold bezier-petal bloom, fades, and the cycle restarts.",
  "useWhen": "Art Nouveau hero backgrounds, editorial pages, or decorative ambient loops where organic growth motion fits the brand.",
  "avoidWhen": "Content-heavy layouts where moving vines compete with text, or low-end devices where continuous canvas redraws are costly.",
- "agentPrompt": "Change vine palette to burgundy and forest green by setting PAL.sage to '#6b2d3e' and PAL.teal to '#2d5a27', and raise the vine cap from 5 to 7.",
+ "agentPrompt": "Change vine palette to burgundy and forest green by setting PAL.sage to '#6b2d3e' and PAL.teal to '#2d5a27', and raise the vine cap from 5 to 7. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "vine color palette (PAL object)",
   "max concurrent vines (vines.length < 5)",
-  "vine growth speed (dt*22)",
+  "vine growth speed (dt*30 segments/s) and spawn interval (acc>1.2 s)",
+  "vine step (S.w/70 × 1–1.6 px: scales with the canvas) and mount pre-roll (initial vines at 10/18/26 segments)",
   "curl intensity (0.5 + Math.random()*0.7)",
   "bloom petal count (5 + random*3)",
-  "bloom size range (6 + random*8)"
+  "bloom size range (6 + random*8)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware fitCanvas with setTransform",
   "visibilitychange stop/start guard",
   "prefers-reduced-motion static draw path",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and canvas fillRect — must change both to recolor",
@@ -43,7 +52,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "art-nouveau",
@@ -90,11 +100,11 @@
       y:fromBottom?S.h+6:-6,
       ang:fromBottom?-Math.PI/2+(Math.random()-0.5)*0.6:Math.PI/2+(Math.random()-0.5)*0.6,
       curl:(Math.random()<0.5?1:-1)*(0.5+Math.random()*0.7),
-      len:0,max:40+Math.random()*40,step:6+Math.random()*4,
+      len:0,max:40+Math.random()*40,step:S.w/70*(1+Math.random()*0.6),   // step scales with the canvas: at 6–10 px a tendril left a 264 px tile within a second and sat still
       col:[PAL.sage,PAL.sageDeep,PAL.teal][(Math.random()*3)|0],
-      t:0,life:7+Math.random()*3,done:false};
+      t:0,life:5+Math.random()*2,done:false};   // shorter life keeps the five-vine cap turning over, so something is always growing
   }
-  function reset(){vines=[];blooms=[];for(let i=0;i<3;i++) spawn();}
+  function reset(){vines=[];blooms=[];for(let i=0;i<3;i++) spawn(); vines.forEach((v,i)=>v.lenF=10+i*8);}   // the garden begins part-grown: three tendrils at 10/18/26 segments
   function spawn(){if(vines.length<5) vines.push(newVine());}
   function bloom(x,y,col){blooms.push({x,y,col,t:0,life:3.5,sz:6+Math.random()*8,petals:5+((Math.random()*3)|0),rot:Math.random()*7});}
   let last=performance.now(), acc=0;
@@ -103,12 +113,14 @@
     S.ctx.clearRect(0,0,S.w,S.h);
     S.ctx.fillStyle='#f4ecd8';S.ctx.fillRect(0,0,S.w,S.h);
     S.ctx.fillStyle='rgba(138,154,91,0.04)';S.ctx.fillRect(0,0,S.w,S.h);
-    acc+=dt; if(acc>1.6){acc=0; spawn();}
+    acc+=dt; if(acc>1.2){acc=0; spawn();}
     for(const v of vines){
       v.t+=dt;
       if(!v.done){
-        const grow=REDUCED?v.max:Math.min(v.max,v.len+dt*22);
-        while(v.len<grow){
+        // growth target accumulates fractionally (v.lenF): with an integer len the loop advanced a
+        // whole segment every frame, so vines grew at 60/s instead of 30/s and finished within a second
+        const grow=REDUCED?v.max:Math.min(v.max,(v.lenF=(v.lenF||0)+dt*30));
+        while(v.len<Math.floor(grow)){
           v.len++;
           v.ang+=v.curl*0.10+Math.sin(v.len*0.18)*0.04;
           v.x+=Math.cos(v.ang)*v.step; v.y+=Math.sin(v.ang)*v.step;
@@ -121,7 +133,7 @@
       const fade=v.t>v.life-1.2?Math.max(0,(v.life-v.t)/1.2):1;
       if(v.pts.length>1){
         S.ctx.strokeStyle=v.col;S.ctx.globalAlpha=0.85*fade;
-        S.ctx.lineWidth=2.4;S.ctx.lineJoin='round';S.ctx.lineCap='round';
+        S.ctx.lineWidth=2.8;S.ctx.lineJoin='round';S.ctx.lineCap='round';
         S.ctx.beginPath();
         v.pts.forEach((p,i)=>i?S.ctx.lineTo(p.x,p.y):S.ctx.moveTo(p.x,p.y));
         S.ctx.stroke();
@@ -168,5 +180,6 @@
   else start();
 })();
 </script>
+<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>

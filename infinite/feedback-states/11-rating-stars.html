@@ -5,12 +5,10 @@
 <meta name="description" content="A row of five stars fills green from a clipped well with spring stagger, with success, denied-shake, and empty states and a status readout.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Star Rating</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  :root{
-    --fb11-bg:#0b0d12; --fb11-ac:#34d399; --fb11-ac2:#10b981;
-    --fb11-empty:#1b2230; --fb11-edge:#283142;
-    --fb11-err:#f0556a; --fb11-dim:#5a6678;
-  }
+  :root{--fb11-bg:#0b0d12;--fb11-ac:#34d399;--fb11-ac2:#10b981;--fb11-empty:#1b2230;--fb11-edge:#283142;--fb11-err:#f0556a;--fb11-dim:#5a6678;--fb11-good-glow:52,211,153;--fb11-bad-glow:240,85,106;--fb11-cap:#fff;--fb11-cap-o:.42}
+  :root[data-theme="light"]{--fb11-bg:#f2f4f8;--fb11-ac:#1b7c59;--fb11-ac2:#0b7c56;--fb11-empty:#e4e8ef;--fb11-edge:#dde1e8;--fb11-err:#dc132f;--fb11-good-glow:27,124,89;--fb11-bad-glow:220,19,47;--fb11-cap:#182029;--fb11-cap-o:.5}
   *{box-sizing:border-box}
   html,body{height:100%;margin:0}
   body{background:var(--fb11-bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
@@ -43,9 +41,9 @@
     width:8px;height:8px;border-radius:50%;background:var(--fb11-dim);
     box-shadow:0 0 16px 1px transparent;transition:transform .3s cubic-bezier(.34,1.56,.64,1);
   }
-  .fb11-good #fb11-dot{background:var(--fb11-ac);box-shadow:0 0 16px 1px rgba(52,211,153,.55);transform:scale(1.25)}
+  .fb11-good #fb11-dot{background:var(--fb11-ac);box-shadow:0 0 16px 1px rgba(var(--fb11-good-glow),.55);transform:scale(1.25)}
   .fb11-good #fb11-tag{color:var(--fb11-ac)}
-  .fb11-bad #fb11-dot{background:var(--fb11-err);box-shadow:0 0 16px 1px rgba(240,85,106,.5)}
+  .fb11-bad #fb11-dot{background:var(--fb11-err);box-shadow:0 0 16px 1px rgba(var(--fb11-bad-glow),.5)}
   .fb11-bad #fb11-tag{color:var(--fb11-err)}
   /* shake for denied */
   @keyframes fb11-shake{
@@ -54,7 +52,7 @@
     58%{transform:translateX(-4px)}78%{transform:translateX(3px)}
   }
   .fb11-shake{animation:fb11-shake .5s cubic-bezier(.36,.07,.19,.97)}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--fb11-cap);opacity:var(--fb11-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition:none!important}
     .fb11-fillg{transform:translateY(0)!important}
@@ -67,21 +65,23 @@
  "description": "Five SVG stars fill green from a clipped well with spring stagger on hover and commit; shake animation and red flash for denied state, status readout below.",
  "useWhen": "Review forms, product ratings, feedback widgets needing tactile feel with success/error state communication.",
  "avoidWhen": "Read-only display contexts or anywhere the auto-demo loop would conflict with real user state — remove the SEQ demo timer before shipping.",
- "agentPrompt": "Change accent color from green to amber by setting --fb11-ac to #f59e0b and --fb11-ac2 to #d97706, and increase star count N to 10.",
+ "agentPrompt": "Change accent color from green to amber by setting --fb11-ac to #f59e0b and --fb11-ac2 to #d97706, and increase star count N to 10. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "star count (N=5)",
   "accent color (--fb11-ac, --fb11-ac2)",
   "error color (--fb11-err)",
   "spring stagger step (STEP=0.07)",
   "demo sequence timings (SEQ[].t values)",
-  "idle timeout before demo resumes (3200ms)"
+  "idle timeout before demo resumes (3200ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "SVG clipPath per star (critical for fill-from-bottom illusion)",
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause",
-  "aria-valuenow updates + role=slider"
+  "aria-valuenow updates + role=slider",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-demo loop restarts after 3.2s idle — must be removed for production use",
@@ -95,7 +95,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "star-rating",
@@ -126,6 +127,8 @@
       txt=document.getElementById("fb11-txt"),
       reduce=matchMedia("(prefers-reduced-motion:reduce)").matches,
       N=5, stars=[], fills=[], val=0;
+
+  addEventListener("message",function(e){ var d=e.data; if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme",d.theme); });
 
   // 5-point star path, viewBox 0..100, base at bottom
   function starPath(){

@@ -5,8 +5,16 @@
 <meta name="description" content="Rounded dark hamburger button whose three lines spring-morph into a glowing teal X when toggled.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Hamburger Morph</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
+    --bg:#0d0f16; --glow-a:rgba(34,174,195,0.16);
     --bg-surface:#1c2030;
     --text-0:#f4f6fb;
     --accent-iris:#22AEC3;
@@ -17,12 +25,24 @@
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
     --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
     --dur-fast:160ms;--dur-base:280ms;
+    --cap:#fff; --cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow-a:rgba(23,120,134,0.12);
+    --bg-surface:#ffffff;
+    --text-0:#1b2130;
+    --accent-iris:#177886;
+    --border-soft:rgba(0,0,0,0.08);
+    --border-mid:rgba(0,0,0,0.14);
+    --border-glow:rgba(23,120,134,0.5);
+    --glow-iris:0 0 0 1px var(--border-glow),0 8px 40px -8px rgba(23,120,134,0.28);
+    --cap:#152026; --cap-o:.5;
   }
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden}
   body{
-    background:#0d0f16;
-    background-image:radial-gradient(60vw 40vw at 15% -10%,rgba(34,174,195,0.16),transparent 60%);
+    background:var(--bg);
+    background-image:radial-gradient(60vw 40vw at 15% -10%,var(--glow-a),transparent 60%);
     display:grid;place-items:center;
   }
   .c02-burger{
@@ -45,7 +65,7 @@
   .c02-burger--on .c02-burger__line:nth-child(1){transform:translate(-50%,-50%) rotate(45deg)}
   .c02-burger--on .c02-burger__line:nth-child(2){opacity:0;transform:translate(-50%,-50%) scaleX(0.3)}
   .c02-burger--on .c02-burger__line:nth-child(3){transform:translate(-50%,-50%) rotate(-45deg)}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;font-family:system-ui,sans-serif}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:system-ui,sans-serif}
   @media (prefers-reduced-motion:reduce){*{transition-duration:.001ms!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -55,24 +75,26 @@
  "description": "Three-line hamburger button spring-morphs into a glowing teal X on click; button border gains teal glow when open. Auto-cycles as demo.",
  "useWhen": "Nav bars, sidebars, mobile menus — any context needing a tactile open/close toggle with clear visual state change.",
  "avoidWhen": "Production use without removing the auto-cycle loop; layouts where the teal accent conflicts with brand colors.",
- "agentPrompt": "Change accent color to #00c896 (update --accent-iris and --border-glow), increase button size to 100px, slow spring duration to 400ms (--dur-base).",
+ "agentPrompt": "Change accent color to #00c896 (update --accent-iris and --border-glow), increase button size to 100px, slow spring duration to 400ms (--dur-base). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--accent-iris)",
   "button size (width/height 84px)",
   "spring easing (--ease-spring)",
   "animation duration (--dur-base: 280ms)",
   "line dimensions (width: 36px, height: 3px)",
-  "auto-cycle interval (1900ms)"
+  "idle demo cadence (DEMO_EVERY=3500 ms, OPEN_AT=300 / CLOSE_AT=2000)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "aria-pressed attribute update in set()",
-  "prefers-reduced-motion guard in loop()",
   "visibilitychange stop/start",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "idle demo clock (setInterval tick() + demo/idle takeover on real click)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Auto-cycles by default — remove loop() call before shipping in production",
-  "Background color hardcoded dark — must retheme for light-mode contexts"
+  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -81,7 +103,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "hamburger",
@@ -107,23 +130,35 @@
   var b=document.getElementById('c02-burger');
   if(!b)return;
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
   function set(on){
     b.classList.toggle('c02-burger--on',on);
     b.setAttribute('aria-pressed',on?'true':'false');
   }
-  b.addEventListener('click',function(){set(!b.classList.contains('c02-burger--on'));});
-  /* autonomous idle: toggle open/closed on a calm cadence */
-  var timer;
-  function loop(){
-    if(reduce)return;
-    timer=setTimeout(function(){
-      set(!b.classList.contains('c02-burger--on'));
-      loop();
-    },1900);
+  /* idle demo: nobody clicks a tile on the wall, so the button works itself - the lines
+     morph to an X at ~0.4s, hold ~1.7s, snap back, and the cycle repeats every DEMO_EVERY
+     ms. A real click takes over; the demo resumes after RESUME ms without input. */
+  var TICK=100,DEMO_EVERY=3500,OPEN_AT=300,CLOSE_AT=2000,RESUME=3600;
+  var demo=!reduce,t=0,idle=0,timer=0;
+  b.addEventListener('click',function(){
+    demo=false;idle=0;set(!b.classList.contains('c02-burger--on'));
+  });
+  function tick(){
+    if(!demo){idle+=TICK;if(idle>=RESUME){demo=true;t=0;}return;}
+    var want=t>=OPEN_AT&&t<CLOSE_AT;
+    if(want!==b.classList.contains('c02-burger--on'))set(want);
+    t+=TICK;if(t>=DEMO_EVERY)t=0;
   }
-  function stop(){clearTimeout(timer);}
-  document.addEventListener('visibilitychange',function(){document.hidden?stop():loop();});
-  loop();
+  function start(){if(!timer&&!reduce)timer=setInterval(tick,TICK);}
+  function stop(){clearInterval(timer);timer=0;}
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  start();   /* reduced motion: no demo loop - the button rests closed */
 })();
 </script>
 </body>

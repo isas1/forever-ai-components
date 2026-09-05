@@ -5,11 +5,25 @@
 <meta name="description" content="Four-item checklist whose rings draw and ticks snap in sequence as a progress bar fills to 100%, ending with a popped Done approval stamp.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Checklist</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
     --pg12-bg:#0b0d12; --pg12-accent:#A68D3F; --pg12-red:#e84a3c;
     --pg12-yellow:#f5c451; --pg12-ink:#e8e9f0; --pg12-mute:#5b5f72;
     --pg12-line:#1c2030; --pg12-row:#12151f;
+    --pg12-stamp-bg:rgba(166,141,63,.08);
+    --pg12-cap:#fff; --pg12-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --pg12-bg:#f2f4f8; --pg12-accent:#816e31; --pg12-red:#d32819;
+    --pg12-yellow:#916808; --pg12-ink:#1b2130; --pg12-mute:#5b5f72;
+    --pg12-line:#dde1eb; --pg12-row:#e8ebf2;
+    --pg12-stamp-bg:rgba(129,110,49,.12);
+    --pg12-cap:#1b2130; --pg12-cap-o:.5;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -61,7 +75,7 @@
     pointer-events:none}
   #pg12-stampInner{display:flex;align-items:center;gap:12px;
     padding:10px 22px;border:3px solid var(--pg12-accent);border-radius:99px;
-    background:rgba(166,141,63,.08);
+    background:var(--pg12-stamp-bg);
     transform:scale(.4) rotate(-8deg);opacity:0;will-change:transform,opacity}
   #pg12-stampInner.pg12-pop{animation:pg12-pop .6s cubic-bezier(.2,1.5,.4,1) forwards}
   @keyframes pg12-pop{0%{transform:scale(.4) rotate(-8deg);opacity:0}
@@ -70,7 +84,7 @@
   #pg12-stampTxt{font:700 clamp(13px,4vw,20px)/1 var(--font,inherit);
     letter-spacing:.14em;text-transform:uppercase;color:var(--pg12-accent)}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--pg12-cap);opacity:var(--pg12-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;
     animation-iteration-count:1!important}}
 </style>
@@ -81,19 +95,21 @@
  "description": "Four rows tick off in sequence — SVG rings draw, checkmarks snap in — while a progress bar eases to 100% and a \"Done\" stamp pops. Loops automatically.",
  "useWhen": "Progress dashboards, onboarding flows, task completion screens needing ambient looping feedback.",
  "avoidWhen": "Contexts requiring real user-driven interaction — this auto-cycles and does not accept input. Remove the loop for production use.",
- "agentPrompt": "Change N to 5 to add a fifth checklist row, set --pg12-accent to #00e5a0 for a teal color, and increase CHECK to 1100 for slower per-item timing.",
+ "agentPrompt": "Change N to 5 to add a fifth checklist row, set --pg12-accent to #00e5a0 for a teal color, and increase CHECK to 1100 for slower per-item timing. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "item count (N=4)",
   "accent color (--pg12-accent)",
   "per-check duration (CHECK=900)",
   "gap between checks (GAP=140)",
-  "stamp hold time (HOLD=1100)"
+  "stamp hold time (HOLD=1100)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce branch)",
   "visibilitychange pause/resume",
-  "aria progressbar attributes on #pg12-pct"
+  "aria progressbar attributes on #pg12-pct",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles — remove rAF loop and drive row.classList manually for production use",
@@ -107,7 +123,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "checklist",
@@ -143,6 +160,11 @@
 (function(){
   "use strict";
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message", function(e){
+    var d=e.data; if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);
+  });
   var list=document.getElementById("pg12-list");
   var fill=document.getElementById("pg12-fill");
   var pctEl=document.getElementById("pg12-pct");

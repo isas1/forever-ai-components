@@ -5,11 +5,28 @@
 <meta name="description" content="Thousands of scattered colored dots converge to assemble a sun rising over a hill, then dissolve and loop.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dot Assemble</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d0f14}
-  #po01-stage{position:fixed;inset:0;background:#0d0f14}
+  /* theme tokens — dark values are the defaults; the light re-theme is the one
+     [data-theme="light"] block. syncTheme() reads --po01-bg / --po01-pal. */
+  :root{
+    --po01-bg:#0d0f14; --po01-cap:#fff; --po01-cap-o:.42;
+    /* divisionist palette: 4 warm sun / 4 cool sky / 4 earth, as RGB triples */
+    --po01-pal:240 168 48/247 201 108/230 120 60/214 76 74/60 86 140/92 120 176/40 58 104/150 170 210/70 120 96/44 92 72/120 150 90/180 170 80;
+  }
+  :root[data-theme="light"]{
+    /* canvas-linen ground; the same hues deepened so each dot reads as pigment */
+    --po01-bg:#f4efe3; --po01-cap:#2b2418; --po01-cap-o:.55;
+    --po01-pal:150 92 6/168 118 30/140 54 18/128 30 32/40 60 104/56 80 132/26 38 72/86 106 148/42 86 66/26 62 46/78 104 52/118 108 34;
+  }
+  html,body{margin:0;height:100%;background:var(--po01-bg)}
+  #po01-stage{position:fixed;inset:0;background:var(--po01-bg)}
   #po01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .po01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .po01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--po01-cap);opacity:var(--po01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +36,23 @@
  "description": "Thousands of colored dots scatter from off-screen and converge to paint a pointillist sunrise scene — hill, sky, and sun disc — then dissolve and loop.",
  "useWhen": "Hero backgrounds, art/creative portfolio sections, ambient loading screens with a generative art aesthetic.",
  "avoidWhen": "Contexts requiring legible text overlays or low-end mobile — the pixel-loop dot rasterizer is CPU-intensive at high DPR.",
- "agentPrompt": "Change the sun color to deep red by swapping PAL indices 0–2 to [200,60,40], move the sun position to the center by setting sunX=W2*0.5 and sunY=H2*0.35, and slow assembly to 5 seconds by changing the 3.4 divisor to 5.",
+ "agentPrompt": "Change the sun color to deep red by swapping PAL indices 0–2 to [200,60,40], move the sun position to the center by setting sunX=W2*0.5 and sunY=H2*0.35, and slow assembly to 5 seconds by changing the 3.4 divisor to 5. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
-  "dot count cap (Math.min(9000, ...))",
+  "dot density (one dot per ~140 css px²: W2*H2/140, cap 9000)",
   "sun position (sunX=W2*0.62, sunY=H2*0.40)",
   "sun radius (sunR=Math.min(W2,H2)*0.17)",
   "palette colors (PAL array)",
   "cycle timing (cyc=6.4, assemble 3.4s, hold 4.9s)",
-  "scatter ring radius (0.55+Math.random()*0.6 multiplier)"
+  "mount offset (t0=ts-1700: starts half-assembled)",
+  "scatter ring radius (0.55+Math.random()*0.6 multiplier)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "low-res ImageData pixel loop (core perf pattern)",
   "IIFE wrapper",
   "visibilitychange stop/start guard",
-  "reduced-motion static fallback (t=1; draw())"
+  "reduced-motion static fallback (t=1; draw())",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound inner pixel loop — heavy on low-end devices at 2x DPR",
@@ -45,7 +65,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "pointillism",
@@ -72,16 +93,12 @@
   var ctx=cv.getContext('2d',{alpha:false});
   var W=0,H=0,DPR=1,running=false,raf=0,t0=0;
 
-  // Divisionist palette: warm sun, cool sky, green earth, accent #f0a830.
-  var PAL=[
-    [240,168,48],[247,201,108],[230,120,60],[214,76,74],   // sun / warm
-    [60,86,140],[92,120,176],[40,58,104],[150,170,210],     // sky / cool
-    [70,120,96],[44,92,72],[120,150,90],[180,170,80]        // earth
-  ];
-  var BG=[13,15,20]; // #0d0f14 — ImageData background fill
+  // Palette + ground live in the CSS tokens; syncTheme() reads them into these.
+  var root=document.documentElement, PAL=[], BG=[13,15,20];
 
   var N=0, px,py,qx,qy; // current px/py, target qx/qy (all in DEVICE pixels)
   var col32; // Uint32Array: per-dot pre-packed 0xAABBGGRR color (brightness baked in)
+  var pidx;  // per-dot palette index, kept so a theme flip re-bakes col32 in place
   var img=null, buf32=null, bw=0, bh=0; // ImageData + Uint32 view + device dims
   var t=0; // 0..1 progress
 
@@ -94,13 +111,14 @@
     bw=cv.width; bh=cv.height;
     img=ctx.createImageData(bw,bh);
     buf32=new Uint32Array(img.data.buffer);
-    // target = a scene: hill (lower third), sun disc, sky. Density scales with area;
+    // target = a scene: hill (lower third), sun disc, sky. Density scales with area
+    // (one dot per ~140 css px² — ~500 dots in a 264px wall tile, 9000 cap from ~1100px);
     // hard count is irrelevant to the cap because rendering is a single ImageData blit.
-    var W2=bw, H2=bh, cap=Math.min(9000,(W2*H2/(520*DPR*DPR))|0);
+    var W2=bw, H2=bh, cap=Math.min(9000,(W2*H2/(140*DPR*DPR))|0);
     N=cap<1?1:cap;
     px=new Float32Array(N); py=new Float32Array(N);
     qx=new Float32Array(N); qy=new Float32Array(N);
-    col32=new Uint32Array(N);
+    col32=new Uint32Array(N); pidx=new Uint8Array(N);
     var horizon=H2*0.66, sunX=W2*0.62, sunY=H2*0.40, sunR=Math.min(W2,H2)*0.17;
     for(var i=0;i<N;i++){
       var x,y,tries=0,col;
@@ -117,13 +135,20 @@
         }
       } while(tries<6);
       if(col===undefined) col=4+(Math.random()*4|0);
-      qx[i]=x; qy[i]=y;
-      // bake per-dot brightness jitter into the packed color once (optical mixing)
-      var c=PAL[col], k=0.78+((i*2654435761)>>>0)%100/100*0.42;
-      col32[i]=pack(c[0]*k,c[1]*k,c[2]*k);
+      qx[i]=x; qy[i]=y; pidx[i]=col;
       // start scattered from a turbulent ring outside the frame center
       var a=Math.random()*6.2832, rr=Math.max(W2,H2)*(0.55+Math.random()*0.6);
       px[i]=W2*0.5+Math.cos(a)*rr; py[i]=H2*0.5+Math.sin(a)*rr;
+    }
+    recolor();
+  }
+
+  // Bake per-dot brightness jitter into the packed color (optical mixing). Cached,
+  // so a theme switch has to re-run it — the field itself is left untouched.
+  function recolor(){
+    for(var i=0;i<N;i++){
+      var c=PAL[pidx[i]], k=0.78+((i*2654435761)>>>0)%100/100*0.42;
+      col32[i]=pack(c[0]*k,c[1]*k,c[2]*k);
     }
   }
 
@@ -145,7 +170,7 @@
     b.fill(bgp);
     var e=ease(t);
     // disc radius in device pixels; grows slightly while scattered
-    var dotR=Math.max(1.0,Math.min(w,h)*0.0045)*(1+(1-e)*0.6);
+    var dotR=Math.max(1.2,Math.min(w,h)*0.0055)*(1+(1-e)*0.6);
     var R=dotR|0; if(R<1)R=1; var R2=dotR*dotR;
     var spread=(1-e)*Math.max(w,h)*0.06;
     for(var i=0;i<n;i++){
@@ -171,7 +196,7 @@
 
   function frame(ts){
     if(!running)return;
-    if(!t0)t0=ts;
+    if(!t0)t0=ts-1700;   // mount half-assembled: the scene reads at once, the full scatter comes round each cycle
     var el=(ts-t0)/1000;
     // assemble over ~3.4s, hold, then gently re-scatter and loop
     var cyc=6.4, p=el%cyc;
@@ -185,11 +210,23 @@
   function start(){ if(running||reduce)return; running=true; t0=0; raf=requestAnimationFrame(frame); }
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
+  // JS-drawn colors read the tokens, so CSS stays the single source of truth.
+  function syncTheme(){
+    var cs=getComputedStyle(root), h=cs.getPropertyValue('--po01-bg').trim().replace('#','');
+    BG=[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];
+    PAL=cs.getPropertyValue('--po01-pal').trim().split('/').map(function(q){return q.trim().split(/\s+/).map(Number);});
+    if(N){ recolor(); draw(); }   // invalidate the baked per-dot colors
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
+
   window.addEventListener('resize',resize,{passive:true});
   document.addEventListener('visibilitychange',function(){
     if(document.hidden) stop(); else { t0=0; start(); }
   });
 
+  syncTheme();
   resize();
   if(reduce){ draw(); return; }
   start();

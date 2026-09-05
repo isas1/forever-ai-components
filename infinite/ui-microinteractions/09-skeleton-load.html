@@ -5,32 +5,53 @@
 <meta name="description" content="Dark profile card whose shimmering skeleton placeholders sweep, then resolve into avatar, image and text content on a loop.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Skeleton Load</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1B1712;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light re-theme is
+     the [data-theme="light"] block. Avatar/image reveal gradients stay constant across themes —
+     they read as photographic content once loaded, not page chrome. */
+  :root{
+    --c09-bg:#1B1712; --c09-card-bg:#221c14; --c09-border:#332a1c; --c09-shadow:rgba(0,0,0,.4);
+    --c09-ph-bg:#2c2419; --c09-shimmer:rgba(232,171,48,.18);
+    --c09-name:#f0ebe0; --c09-sub:#A19887; --c09-txt:#b3a998;
+    --c09-av-a:#E8AB30; --c09-av-b:#C09C59; --c09-img-a:#ff8e5c; --c09-img-b:#ff5c9d;
+    --c09-cap:#fff; --c09-cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --c09-bg:#f6f2ea; --c09-card-bg:#ffffff; --c09-border:#e6ddd0; --c09-shadow:rgba(40,30,15,.14);
+    --c09-ph-bg:#e3dccf; --c09-shimmer:rgba(255,255,255,.85);
+    --c09-name:#2a1f1a; --c09-sub:#756d5c; --c09-txt:#786d59;
+    --c09-cap:#2a1f1a; --c09-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c09-bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   #wrap{position:fixed;inset:0;display:grid;place-items:center}
-  #card{width:66%;max-width:210px;background:#221c14;border:1px solid #332a1c;border-radius:16px;padding:14px;box-shadow:0 14px 34px rgba(0,0,0,.4)}
+  #card{width:66%;max-width:210px;background:var(--c09-card-bg);border:1px solid var(--c09-border);border-radius:16px;padding:14px;box-shadow:0 14px 34px var(--c09-shadow)}
   .top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-  .ph{position:relative;overflow:hidden;background:#2c2419;border-radius:8px}
+  .ph{position:relative;overflow:hidden;background:var(--c09-ph-bg);border-radius:8px}
   .av{width:38px;height:38px;border-radius:50%;flex:none}
   .lines{flex:1;display:flex;flex-direction:column;gap:7px}
   .l1{height:11px;width:70%}.l2{height:9px;width:45%}
   .img{height:64px;width:100%;margin-bottom:10px}
   .p{height:9px;margin-bottom:7px}.p1{width:100%}.p2{width:92%}.p3{width:60%}
-  .shimmer::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,rgba(232,171,48,.18),transparent);animation:sh 1.3s infinite}
+  .shimmer::after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,var(--c09-shimmer),transparent);animation:sh 1.3s infinite}
   @keyframes sh{100%{transform:translateX(100%)}}
   /* loaded state */
   #card.loaded .ph{background:transparent;animation:none}
   #card.loaded .ph::after{display:none}
-  #card.loaded .av{background:linear-gradient(135deg,#E8AB30,#C09C59)}
-  #card.loaded .img{background:linear-gradient(135deg,#ff8e5c,#ff5c9d)}
+  #card.loaded .av{background:linear-gradient(135deg,var(--c09-av-a),var(--c09-av-b))}
+  #card.loaded .img{background:linear-gradient(135deg,var(--c09-img-a),var(--c09-img-b))}
   #card.loaded .real{opacity:1}
   .real{opacity:0;transition:opacity .4s}
-  .name{font-size:12px;color:#f0ebe0;font-weight:600;position:absolute;left:0;top:0}
-  .sub{font-size:10px;color:#A19887;position:absolute;left:0;top:16px}
+  .name{font-size:12px;color:var(--c09-name);font-weight:600;position:absolute;left:0;top:0}
+  .sub{font-size:10px;color:var(--c09-sub);position:absolute;left:0;top:16px}
   .lines{position:relative}
-  .txt{font-size:10px;line-height:1.5;color:#b3a998;position:absolute;inset:0;padding:0}
+  .txt{font-size:10px;line-height:1.5;color:var(--c09-txt);position:absolute;inset:0;padding:0}
   .pwrap{position:relative}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--c09-cap);opacity:var(--c09-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -39,23 +60,25 @@
  "description": "Dark profile card cycles shimmering placeholders then resolves into avatar, image, and text. CSS shimmer sweep plus a JS class toggle drive the reveal.",
  "useWhen": "Demonstrating loading states, onboarding screens, or any UI that fetches remote data and needs a graceful placeholder before content arrives.",
  "avoidWhen": "Production data-fetch wiring — remove the auto-cycle loop and drive `.loaded` class from your actual fetch promise instead.",
- "agentPrompt": "Change the revealed name to 'Sam Park', set avatar gradient to #00d4aa/#A19887, and extend the skeleton delay from 1300ms to 2000ms.",
+ "agentPrompt": "Change the revealed name to 'Sam Park', set avatar gradient to #00d4aa/#A19887, and extend the skeleton delay from 1300ms to 2000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "shimmer speed (@keyframes sh 1.3s)",
   "skeleton-to-content delay (setTimeout 1300ms)",
   "cycle interval (setInterval 3000ms)",
   "avatar gradient colors (#E8AB30, #C09C59)",
-  "revealed name and subtitle text"
+  "revealed name and subtitle text",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause + clearInterval",
   "prefers-reduced-motion guard (jumps to loaded state)",
   ".shimmer::after pseudo-element pattern",
-  ".loaded class toggle driving all reveal states"
+  ".loaded class toggle driving all reveal states",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles indefinitely — replace cycle loop with real fetch callback before shipping",
-  "Background hardcoded to dark #0d1117 — needs CSS override for light-mode contexts"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -64,7 +87,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "skeleton",
@@ -110,6 +134,8 @@ function cycle(){
 }
 function loop(){clearInterval(timer);cycle();if(reduce){card.classList.add('loaded');return;}timer=setInterval(cycle,3000);}
 document.addEventListener('visibilitychange',()=>{document.hidden?clearInterval(timer):loop();});
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',(e)=>{const d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))document.documentElement.setAttribute('data-theme',d.theme);});
 loop();
 </script>
 </body>

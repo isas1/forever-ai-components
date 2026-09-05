@@ -1,22 +1,41 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="A routed circuit board of orthogonal traces with powder-blue light pulses flowing left-to-right like current and junction pads sparking.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Dash Flow</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block */
+:root{
+  --ssa06-bg:#0b0d12; --ssa06-trace:#1b2336;
+  --ssa06-pad:#0b0d12; --ssa06-pad-line:#2a3654;
+  --ssa06-pulse:#B0D4DD; --ssa06-spark:#C4DFE6;
+  --ssa06-cap:#B0D4DD; --ssa06-cap-o:.45;
+}
+:root[data-theme="light"]{
+  --ssa06-bg:#f1f4f8; --ssa06-trace:#c2ccdd;
+  --ssa06-pad:#f1f4f8; --ssa06-pad-line:#9aa9c1;
+  --ssa06-pulse:#3a7887; --ssa06-spark:#2d6675;
+  --ssa06-cap:#3a7887; --ssa06-cap-o:.62;
+}
 html,body{margin:0;height:100%;overflow:hidden}
-body{background:#0b0d12;display:grid;place-items:center}
+body{background:var(--ssa06-bg);display:grid;place-items:center}
 .ssa06-stage{position:relative;width:100%;height:100%}
 #ssa06-c{position:absolute;inset:0;width:100%;height:100%;display:block}
 /* base traces: faint circuit substrate */
-.ssa06-trace{fill:none;stroke:#1b2336;stroke-width:1.4;stroke-linecap:round}
+.ssa06-trace{fill:none;stroke:var(--ssa06-trace);stroke-width:1.4;stroke-linecap:round}
 /* nodes: junction pads */
-.ssa06-node{fill:#0b0d12;stroke:#2a3654;stroke-width:1.4}
+.ssa06-node{fill:var(--ssa06-pad);stroke:var(--ssa06-pad-line);stroke-width:1.4}
 /* pulse lines: animated current */
-.ssa06-pulse{fill:none;stroke:#B0D4DD;stroke-width:2;stroke-linecap:round;
+.ssa06-pulse{fill:none;stroke:var(--ssa06-pulse);stroke-width:2;stroke-linecap:round;
   filter:url(#ssa06-glow)}
 /* live junction dots flare as current passes */
-.ssa06-spark{fill:#C4DFE6}
+.ssa06-spark{fill:var(--ssa06-spark)}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#B0D4DD;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--ssa06-cap);opacity:var(--ssa06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/svg-animations/06-dash-flow.html",
@@ -24,19 +43,21 @@ body{background:#0b0d12;display:grid;place-items:center}
  "description": "Orthogonal circuit traces with powder-blue light pulses travelling via stroke-dashoffset; junction pads flicker as current passes. Dark navy background.",
  "useWhen": "Tech/hardware hero backgrounds, data-flow visualizations, dark-mode dashboards needing ambient network motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy). Contexts where constant motion competes with text readability.",
- "agentPrompt": "Change pulse color from powder-blue to cyan (#00ffcc) by updating stroke in .ssa06-pulse and slow speed range from R(38,72) to R(20,45).",
+ "agentPrompt": "Change pulse color from powder-blue to cyan (#00ffcc) by updating stroke in .ssa06-pulse and slow speed range from R(38,72) to R(20,45). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "pulse color (#B0D4DD in .ssa06-pulse stroke)",
   "pulse speed range (R(38,72) px/sec)",
   "segment length ratio (len*0.22)",
   "grid column/row arrays (cols/rows)",
-  "node density threshold (0.42)"
+  "node density threshold (0.42)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback",
   "visibilitychange stop/start handlers",
-  "SVG glow filter (feGaussianBlur + feMerge)"
+  "SVG glow filter (feGaussianBlur + feMerge)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Layout is randomly generated each load — no two renders are identical",
@@ -49,7 +70,8 @@ body{background:#0b0d12;display:grid;place-items:center}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "circuit",
@@ -86,6 +108,11 @@ body{background:#0b0d12;display:grid;place-items:center}
   var gNodes=document.getElementById('ssa06-nodes');
   var gSparks=document.getElementById('ssa06-sparks');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // Every colour is a CSS token, so flipping the attribute is the whole job.
+  addEventListener('message',function(e){var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);});
   var SVGNS='http://www.w3.org/2000/svg';
 
   // ---- Build a structured circuit on a loose grid (orthogonal traces) ----

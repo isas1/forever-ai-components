@@ -5,6 +5,11 @@
 <meta name="description" content="Release changelog feed: dated semver cards streaming in at the top of a vertical timeline rail, each listing Feature, Fix and Perf changes on small colored chips.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Release Changelog</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
     --pro-bg:#0d1117;
@@ -18,6 +23,7 @@
     --pro-radius:12px;
     --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   }
+  :root[data-theme="light"]{--pro-bg:#f6f8fa;--pro-surface:#fff;--pro-border:rgba(0,0,0,.08);--pro-text:#1f2328;--pro-muted:#59636e;--pro-accent:#a75d44;--pro-ok:#2c8037;--pro-warn:#906917}
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
   .rcl-stage{position:fixed;inset:0;display:flex;flex-direction:column;gap:2.6vmin;
@@ -59,12 +65,16 @@
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--pro-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;
     user-select:none;pointer-events:none}
+  .rcl-entry:first-child .rcl-chg{animation:rcl-chg-in .45s ease-out both}
+  .rcl-entry:first-child .rcl-chg:nth-child(2){animation-delay:.13s}
+  .rcl-entry:first-child .rcl-chg:nth-child(3){animation-delay:.26s}
+  @keyframes rcl-chg-in{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}
   @keyframes rcl-blink{0%,100%{opacity:1}50%{opacity:.3}}
   @keyframes rcl-ring{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--pro-accent) 45%,transparent)}
     70%,100%{box-shadow:0 0 0 1.4vmin color-mix(in srgb,var(--pro-accent) 0%,transparent)}}
   @media (prefers-reduced-motion:reduce){
     .rcl-entry{transition:none}
-    .rcl-pulse,.rcl-entry:first-child .rcl-dot{animation:none}
+    .rcl-pulse,.rcl-entry:first-child .rcl-dot,.rcl-entry:first-child .rcl-chg{animation:none}
   }
 </style>
 </head>
@@ -79,6 +89,9 @@
   </div>
   <div class="cap" aria-hidden="true">Release Changelog</div>
   <script>(function(){"use strict";
+    var root=document.documentElement;
+    addEventListener("message",function(e){var d=e.data;
+      if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))root.setAttribute("data-theme",d.theme);});
     var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
     var feed=document.getElementById('rcl-feed');
     if(!feed)return;
@@ -124,7 +137,10 @@
     if(reduce)return;
     var running=true;
     document.addEventListener('visibilitychange',function(){running=!document.hidden;});
-    setInterval(function(){if(running)add(true);},3400);
+    setTimeout(function(){                     // first release lands well inside the first second
+      if(running)add(true);
+      setInterval(function(){if(running)add(true);},2300);
+    },520);
   })();</script>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -133,19 +149,23 @@
  "description": "A release changelog feed: dated semver cards stream in at the top of a thin vertical timeline rail with connecting dots, each listing Feature (green), Fix (amber) and Perf (rust) changes on small colored chips, looping with plausible invented copy.",
  "useWhen": "Product update panels, \"What's new\" widgets, dev/ops status pages, release or deploy dashboards, and changelog sidebars that need a live, self-animating timeline.",
  "avoidWhen": "When you need a full paginated/searchable release history, real commit or deploy data wiring, or a static single release note — the entries here are synthesized invented copy on a loop.",
- "agentPrompt": "Edit the TPL array (change lines as [kind,text] where kind is feat/fix/perf) and the CHIP map to set your own changelog copy; nextVer() and the day counter drive the semver badges and dates, and the setInterval (3400ms) sets how often a new release slides in. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match.",
+ "agentPrompt": "Edit the TPL array (change lines as [kind,text] where kind is feat/fix/perf) and the CHIP map to set your own changelog copy; nextVer() and the day counter drive the semver badges and dates, and the setInterval (3400ms) sets how often a new release slides in. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "theme tokens (:root --pro-bg, --pro-surface, --pro-border, --pro-text, --pro-muted, --pro-accent)",
   "changelog copy (TPL array of [kind,text] change lines; CHIP kind→label/color map)",
   "version + date roll (nextVer() start maj/mnr/pat, day counter)",
-  "release cadence (setInterval 3400ms) and visible count (MAX=4)"
+  "release cadence (setInterval 3400ms) and visible count (MAX=4)",
+  "entry cadence (setInterval add(), 2300 ms; list capped and recycled)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   ":root --pro-* token block (renaming breaks the shared pro theming API)",
   "role=img + aria-label on .rcl-stage",
   "IIFE wrapper",
   "prefers-reduced-motion early return to the seeded populated feed",
-  "visibilitychange pause"
+  "visibilitychange pause",
+  "ambient changelog feed (capped list; paused on visibilitychange)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
@@ -160,7 +180,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "changelog",

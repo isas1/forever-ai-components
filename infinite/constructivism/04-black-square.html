@@ -5,18 +5,36 @@
 <meta name="description" content="A large tilted black square plus red and off-white bars, squares and a dot drift in slow suprematist suspension on near-black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Floating Forms</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0c0d}
-  #cv04-stage{position:fixed;inset:0;overflow:hidden;background:#0c0c0d;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Light = the suprematist
+     black square and its red halo on poster cream; the off-white forms flip to ink. */
+  :root{
+    --c04-bg:#0c0c0d; --c04-blk:#111114; --c04-red:#d11f1f; --c04-wht:#e8e4d8;
+    --c04-glow:rgba(209,31,31,.34); --c04-glow-0:rgba(209,31,31,0);
+    --c04-cap:#ffffff; --c04-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --c04-bg:#f4efe4; --c04-blk:#17171a; --c04-red:#d11f1f; --c04-wht:#2b2721;
+    --c04-glow:rgba(209,31,31,.20); --c04-glow-0:rgba(209,31,31,0);
+    --c04-cap:#1b1a17; --c04-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--c04-bg)}
+  #cv04-stage{position:fixed;inset:0;overflow:hidden;background:var(--c04-bg);
     contain:layout paint size}
   /* static suprematist field; only transform/opacity animate */
   .cv04-f{position:absolute;will-change:transform,opacity;
     transform:translate3d(0,0,0) rotate(var(--r,0deg));
     transform-origin:center;backface-visibility:hidden}
-  .cv04-blk{background:#111114}
-  .cv04-red{background:#d11f1f}
-  .cv04-wht{background:#e8e4d8}
-  .cv04-line{background:#d11f1f}
+  .cv04-blk{background:var(--c04-blk)}
+  .cv04-red{background:var(--c04-red)}
+  .cv04-wht{background:var(--c04-wht)}
+  .cv04-line{background:var(--c04-red)}
   /* drift cycles — each form gets its own duration/offset, pure transform */
   @keyframes cv04-drift{
     0%  {transform:translate3d(0,0,0) rotate(var(--r,0deg))}
@@ -55,10 +73,10 @@
   /* static red glow under the anchor — does NOT animate (no repaint) */
   #cv04-glow{position:absolute;left:30%;top:26%;width:42%;height:42%;
     border-radius:50%;
-    background:radial-gradient(circle,rgba(209,31,31,.34),rgba(209,31,31,0) 68%);
+    background:radial-gradient(circle,var(--c04-glow),var(--c04-glow-0) 68%);
     pointer-events:none}
   .cv04-cap{position:fixed;left:8px;bottom:7px;
-    font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;
+    font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--c04-cap);opacity:var(--c04-cap-o);
     letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:5}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
@@ -72,19 +90,21 @@
  "description": "Suprematist field: tilted black square anchors red and off-white bars, squares, and a dot drifting in slow staggered CSS cycles on near-black.",
  "useWhen": "Art/design portfolio heroes, dark-mode ambient backgrounds, editorial splash screens with a modernist or Bauhaus aesthetic.",
  "avoidWhen": "Light-background layouts (background hardcoded near-black). Contexts requiring full motion stop — reduced-motion collapses animations but shapes stay tilted.",
- "agentPrompt": "Change the accent color from red (#d11f1f) to cobalt blue (#1a4fd1) on all .cv04-red and #cv04-glow elements, and slow the anchor drift to --dur:18s.",
+ "agentPrompt": "Change the accent color from red (#d11f1f) to cobalt blue (#1a4fd1) on all .cv04-red and #cv04-glow elements, and slow the anchor drift to --dur:18s. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "red accent color (#d11f1f on .cv04-red and #cv04-glow)",
   "anchor drift speed and travel (--dur:13s, --dx:14px, --dy:-18px)",
   "background color (#0c0c0d)",
   "individual shape sizes and positions (left/top/width per ID)",
-  "breathe opacity floor (0.62 in cv04-breathe keyframe)"
+  "breathe opacity floor (0.62 in cv04-breathe keyframe)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper with visibilitychange pause",
   "prefers-reduced-motion guard (CSS + JS setState paused)",
   "CSS custom properties driving per-shape drift (--r, --dx, --dy, --dr, --dur, --del)",
-  "role=img + aria-label on stage"
+  "role=img + aria-label on stage",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color is hardcoded in both html/body and #cv04-stage — must edit two places to change it",
@@ -97,7 +117,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "constructivism",
@@ -131,6 +152,12 @@
   if(!stage)return;
   var forms=stage.getElementsByClassName("cv04-f");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  // live re-theme: colours are pure CSS vars, so flipping data-theme is all it takes
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))
+      document.documentElement.setAttribute("data-theme",d.theme);
+  });
   function setState(s){
     for(var i=0;i<forms.length;i++){forms[i].style.animationPlayState=s;}
   }

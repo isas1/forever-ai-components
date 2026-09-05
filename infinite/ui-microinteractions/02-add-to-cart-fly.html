@@ -5,18 +5,36 @@
 <meta name="description" content="E-commerce Add button flings a product tile in an arc into a cart icon, bumping a count badge each time.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Add to Cart</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0e1726;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c02-bg:#0e1726; --c02-surface:#13243a; --c02-border:#2a4a66; --c02-accent:#5cc8ff;
+    --c02-badge-ink:#0e1726; --c02-grad-a:#ff9d5c; --c02-grad-b:#ff5c8a; --c02-shadow:rgba(0,0,0,.35);
+    --c02-cap:#fff; --c02-cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --c02-bg:#eef3f9; --c02-surface:#ffffff; --c02-border:#c7d7e6; --c02-accent:#0073ad;
+    --c02-badge-ink:#ffffff; --c02-shadow:rgba(20,40,60,.16);
+    --c02-cap:#16202c; --c02-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c02-bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   #wrap{position:fixed;inset:0;display:grid;place-items:center}
   #stage{position:relative;width:78%;max-width:240px;aspect-ratio:1.1}
-  .prod{position:absolute;left:6%;top:12%;width:34%;aspect-ratio:1;border-radius:14px;background:linear-gradient(135deg,#ff9d5c,#ff5c8a);display:grid;place-items:center;box-shadow:0 8px 20px rgba(0,0,0,.35)}
+  .prod{position:absolute;left:6%;top:12%;width:34%;aspect-ratio:1;border-radius:14px;background:linear-gradient(135deg,var(--c02-grad-a),var(--c02-grad-b));display:grid;place-items:center;box-shadow:0 8px 20px var(--c02-shadow)}
   .prod span{font-size:26px}
   .cart{position:absolute;right:8%;bottom:10%;width:30%;aspect-ratio:1;display:grid;place-items:center}
-  .cart svg{width:90%;fill:none;stroke:#5cc8ff;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-  .badge{position:absolute;right:4%;bottom:34%;min-width:16px;height:16px;padding:0 3px;border-radius:9px;background:#5cc8ff;color:#0e1726;font-size:11px;font-weight:700;display:grid;place-items:center}
-  .btn{position:absolute;left:6%;bottom:10%;font-size:11px;letter-spacing:.05em;color:#5cc8ff;border:1px solid #2a4a66;border-radius:8px;padding:5px 9px;background:#13243a}
-  .fly{position:absolute;width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,#ff9d5c,#ff5c8a);pointer-events:none}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  .cart svg{width:90%;fill:none;stroke:var(--c02-accent);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .badge{position:absolute;right:4%;bottom:34%;min-width:16px;height:16px;padding:0 3px;border-radius:9px;background:var(--c02-accent);color:var(--c02-badge-ink);font-size:11px;font-weight:700;display:grid;place-items:center;transition:transform .25s cubic-bezier(.2,1.5,.4,1)}
+  .badge.empty{transform:scale(0)}   /* empty cart: no badge, so the first add reads */
+  .btn{position:absolute;left:6%;bottom:10%;font-size:11px;letter-spacing:.05em;color:var(--c02-accent);border:1px solid var(--c02-border);border-radius:8px;padding:5px 9px;background:var(--c02-surface)}
+  .fly{position:absolute;width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,var(--c02-grad-a),var(--c02-grad-b));pointer-events:none}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--c02-cap);opacity:var(--c02-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -25,25 +43,27 @@
  "description": "Product tile flings a mini clone in a bezier arc into a cart icon on click; badge count bumps with a spring bounce. Auto-cycles as demo.",
  "useWhen": "E-commerce product cards, shopping cart add actions, any buy/collect CTA needing tactile feedback.",
  "avoidWhen": "Passive display contexts — remove the auto-cycle loop before shipping. Avoid on pages with many simultaneous cart actions (no queue).",
- "agentPrompt": "Change the product emoji to '👟', set the accent color to #a855f7 (update .fly gradient and stroke color), and slow the fly animation to 900ms duration.",
+ "agentPrompt": "Change the product emoji to '👟', set the accent color to #a855f7 (update .fly gradient and stroke color), and slow the fly animation to 900ms duration. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "fly animation duration (680ms)",
   "arc height offset (-50px)",
   "product emoji (🎧)",
   "accent color (#5cc8ff)",
-  "auto-cycle interval (1700ms)",
-  "badge bounce scale (1.6)"
+  "badge bounce scale (1.6)",
+  "idle demo cadence (FIRST=400 / DEMO_EVERY=2800 / IDLE_BACK=3600 ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause/resume",
   "reduced-motion guard (if reduce return)",
   "Web Animations API animate() calls",
-  "IIFE-equivalent scoping via const declarations"
+  "IIFE wrapper",
+  "empty-cart badge state (.badge.empty) — the demo's first-add cue",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Auto-cycles by default — remove loop() call before shipping in production",
-  "No queue: rapid clicks spawn multiple fly elements simultaneously",
-  "Badge resets to 0 silently after 5 items with no visual cue"
+  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
+  "No queue: rapid clicks spawn multiple fly elements simultaneously"
  ],
  "tier": "curated",
  "labels": [
@@ -52,7 +72,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "ecommerce",
@@ -72,11 +93,12 @@
     <div class="prod" id="prod"><span>🎧</span></div>
     <div class="btn" id="btn">Add</div>
     <div class="cart" id="cart"><svg viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.2 12h11l2-8H6"/></svg></div>
-    <div class="badge" id="badge">0</div>
+    <div class="badge empty" id="badge">0</div>
   </div>
 </div>
 <div class="cap">Add to cart</div>
 <script>
+(()=>{
 const stage=document.getElementById('stage'),prod=document.getElementById('prod'),cart=document.getElementById('cart'),badge=document.getElementById('badge'),btn=document.getElementById('btn');
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;let count=0;
 function fly(){
@@ -88,14 +110,35 @@ function fly(){
     {transform:'translate(0,0) scale(1)',opacity:1},
     {transform:'translate('+(x1-x0)*.5+'px,'+((y1-y0)*.5-50)+'px) scale(.8)',opacity:1,offset:.5},
     {transform:'translate('+(x1-x0)+'px,'+(y1-y0)+'px) scale(.2)',opacity:.3}
-  ],{duration:680,easing:'cubic-bezier(.5,-.2,.4,1)'}).onfinish=()=>{f.remove();count++;badge.textContent=count;badge.animate([{transform:'scale(1.6)'},{transform:'scale(1)'}],{duration:300,easing:'cubic-bezier(.2,1.5,.4,1)'});cart.animate([{transform:'scale(1)'},{transform:'scale(.85)'},{transform:'scale(1)'}],{duration:260});};
+  ],{duration:680,easing:'cubic-bezier(.5,-.2,.4,1)'}).onfinish=()=>{
+    f.remove();const wasEmpty=badge.classList.contains('empty');count++;badge.textContent=count;badge.classList.remove('empty');
+    badge.animate(wasEmpty?[{transform:'scale(0)'},{transform:'scale(1.6)'},{transform:'scale(1)'}]:[{transform:'scale(1.6)'},{transform:'scale(1)'}],{duration:300,easing:'cubic-bezier(.2,1.5,.4,1)'});
+    cart.animate([{transform:'scale(1)'},{transform:'scale(.85)'},{transform:'scale(1)'}],{duration:260});};
   btn.animate([{transform:'scale(1)'},{transform:'scale(.9)'},{transform:'scale(1)'}],{duration:240});
 }
-btn.addEventListener('click',fly);
-let timer;
-function loop(){if(reduce)return;timer=setTimeout(()=>{if(count>=5){count=0;badge.textContent=0;}else fly();loop();},1700);}
-document.addEventListener('visibilitychange',()=>{document.hidden?clearTimeout(timer):loop();});
-loop();
+/* Idle demo: nobody clicks a tile on the wall, so the Add button presses itself — the first add
+   lands ~FIRST ms after mount, then one every DEMO_EVERY ms, through the same fly() a real click
+   runs, so demo and real interaction look identical. A real click takes over (demo off) and the
+   demo comes back after IDLE_BACK ms of quiet. setInterval keeps the cadence honest. */
+const TICK=100,FIRST=400,DEMO_EVERY=2800,IDLE_BACK=3600;
+let demo=true,t=0,idle=0,timer=0,firstRun=true;
+function takeover(){demo=false;idle=0;}
+btn.addEventListener('click',()=>{takeover();fly();});
+function tick(){
+  if(!demo){idle+=TICK;if(idle>=IDLE_BACK){demo=true;t=0;firstRun=true;}return;}
+  t+=TICK;if(t<(firstRun?FIRST:DEMO_EVERY))return;
+  t=0;firstRun=false;
+  if(count>=5){count=0;badge.classList.add('empty');}   // cart empties, then fills again
+  fly();
+}
+function start(){if(!timer&&!reduce)timer=setInterval(tick,TICK);}
+function stop(){clearInterval(timer);timer=0;}
+document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',(e)=>{const d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))document.documentElement.setAttribute('data-theme',d.theme);});
+if(reduce){count=2;badge.textContent='2';badge.classList.remove('empty');}   // reduced motion: one static, representative state
+else start();
+})();
 </script>
 </body>
 </html>

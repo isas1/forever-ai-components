@@ -5,11 +5,30 @@
 <meta name="description" content="Five glowing gravitational bodies orbit and sling each other on deep space, trailing colored comet tails; pointer perturbs the dance.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>N-Body Waltz</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#211A17;}
+  /* theme tokens — dark values are the defaults; light palette in the [data-theme] block.
+     --nbw-p1..p5 are "core,glow" pairs; --nbw-blend drops additive glow on a light ground. */
+  :root{
+    --nbw-bg:#211A17; --nbw-fade:rgba(33,26,23,0.30); --nbw-accent:#D345A4; --nbw-cap-o:.34;
+    --nbw-blend:lighter; --nbw-halo:rgba(0,0,0,0); --nbw-ta:0.5; --nbw-ga:0.85;
+    --nbw-p1:#ffd0ec,#D345A4; --nbw-p2:#ffd9a8,#ff9d4d; --nbw-p3:#a8ffe6,#39d6a8;
+    --nbw-p4:#fff0c2,#C0B459; --nbw-p5:#ffb4c8,#ff5e86;
+  }
+  :root[data-theme="light"]{
+    --nbw-bg:#f7f1ee; --nbw-fade:rgba(247,241,238,0.30); --nbw-accent:#c12e91; --nbw-cap-o:.62;
+    --nbw-blend:source-over; --nbw-halo:rgba(247,241,238,0); --nbw-ta:0.42; --nbw-ga:0.5;
+    --nbw-p1:#7d1a5c,#c12e91; --nbw-p2:#7d4106,#cf7a1c; --nbw-p3:#0b5040,#1d8a6b;
+    --nbw-p4:#5c5410,#8d7e26; --nbw-p5:#7d1029,#c33a5c;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--nbw-bg);}
   #nbw-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.16em;color:#D345A4;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--nbw-accent);opacity:var(--nbw-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +38,22 @@
  "description": "Five glowing gravitational bodies orbit and sling each other in deep space, trailing colored comet tails; pointer perturbs the dance, click reseeds.",
  "useWhen": "Dark-mode hero backgrounds, space/science themes, generative art displays where constant motion is welcome.",
  "avoidWhen": "Low-end devices (O(N²) physics loop per frame with 3 substeps). Any context requiring legible text overlays or light backgrounds.",
- "agentPrompt": "Increase body count to 7 by changing N=5 to N=7 and add two palette entries to PAL, then slow trails by reducing TLEN from 46 to 30.",
+ "agentPrompt": "Increase body count to 7 by changing N=5 to N=7 and add two palette entries to PAL, then slow trails by reducing TLEN from 46 to 30. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "body count (N=5)",
   "gravitational constant (G=1400)",
   "trail length (TLEN=46)",
   "color palette (PAL array)",
   "pointer repulsion strength (f=2600/d2)",
-  "substep count (sub=3)"
+  "substep count (sub=3)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and ctx.setTransform",
   "visibilitychange pause/start guard",
   "reduced-motion static fallback (draw after 140 steps)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "O(N²) gravity loop runs 3 substeps per frame — heavy on low-end CPUs as N grows",
@@ -45,7 +66,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "physics",
@@ -75,14 +97,21 @@
   }
   addEventListener('resize',size);size();
 
-  // colour palette around accent #D345A4
-  const PAL=[
-    {c:'#ffd0ec',g:'#D345A4'},
-    {c:'#ffd9a8',g:'#ff9d4d'},
-    {c:'#a8ffe6',g:'#39d6a8'},
-    {c:'#fff0c2',g:'#C0B459'},
-    {c:'#ffb4c8',g:'#ff5e86'}
-  ];
+  // colour palette around accent #D345A4 — filled from the --nbw-p* tokens
+  const PAL=[{},{},{},{},{}];
+  const root=document.documentElement, C={};
+  function syncTheme(){          // re-read on every theme flip; the bodies keep their PAL refs
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    C.bg=g('--nbw-bg');C.fade=g('--nbw-fade');C.halo=g('--nbw-halo');C.blend=g('--nbw-blend');
+    C.ta=+g('--nbw-ta');C.ga=+g('--nbw-ga');
+    for(let i=0;i<5;i++){const p=g('--nbw-p'+(i+1)).split(',');PAL[i].c=p[0].trim();PAL[i].g=p[1].trim();}
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);draw();}
+    }});
+  syncTheme();
   const N=5, G=1400, SOFT=900, TLEN=46;
   let B=[];
   function seed(){
@@ -153,9 +182,9 @@
   }
 
   function draw(){
-    ctx.fillStyle='rgba(33,26,23,0.30)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.fade;ctx.fillRect(0,0,W,H);
     ctx.save();ctx.translate(cx,cy);ctx.scale(S,S);
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=C.blend;
     // tails
     ctx.lineCap='round';
     for(let i=0;i<N;i++){
@@ -163,7 +192,7 @@
       for(let k=1;k<n;k++){
         const t=k/n;
         ctx.strokeStyle=b.pal.g;
-        ctx.globalAlpha=t*t*0.5;
+        ctx.globalAlpha=t*t*C.ta;
         ctx.lineWidth=(0.4+t*2.2);
         ctx.beginPath();
         ctx.moveTo(tr[(k-1)*2],tr[(k-1)*2+1]);
@@ -178,8 +207,8 @@
       const gr=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.rad*5.5);
       gr.addColorStop(0,b.pal.c);
       gr.addColorStop(0.28,b.pal.g);
-      gr.addColorStop(1,'rgba(0,0,0,0)');
-      ctx.fillStyle=gr;ctx.globalAlpha=0.85;
+      gr.addColorStop(1,C.halo);
+      ctx.fillStyle=gr;ctx.globalAlpha=C.ga;
       ctx.beginPath();ctx.arc(b.x,b.y,b.rad*5.5,0,6.2832);ctx.fill();
       ctx.fillStyle=b.pal.c;ctx.globalAlpha=1;
       ctx.beginPath();ctx.arc(b.x,b.y,b.rad,0,6.2832);ctx.fill();
@@ -199,7 +228,7 @@
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){
-    ctx.fillStyle='#211A17';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     for(let s=0;s<140;s++)step(0.55);
     draw();
   }else start();

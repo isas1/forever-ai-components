@@ -5,11 +5,26 @@
 <meta name="description" content="8x8 grid of rainbow Truchet quarter-arc tiles that flip orientation in waves, weaving shifting interlocked curves.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Truchet Tiles</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1a1224}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The arc numbers feed the JS hsl(). */
+  :root{
+    --gg03-bg:#1a1224; --gg03-cap:#ffb3e6; --gg03-cap-o:.45;
+    --gg03-arc-s:80; --gg03-arc-l:65;
+  }
+  :root[data-theme="light"]{
+    --gg03-bg:#f6f1f7; --gg03-cap:#d1008c; --gg03-cap-o:.8;
+    --gg03-arc-s:62; --gg03-arc-l:42;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--gg03-bg)}
   #c{display:block;width:100%;height:100%}
   #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
-       color:#ffb3e6;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+       color:var(--gg03-cap);opacity:var(--gg03-cap-o);letter-spacing:.5px;pointer-events:none;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +33,21 @@
  "description": "8x8 grid of rainbow quarter-arc Truchet tiles that flip orientation in slow sine waves, weaving shifting interlocked curves across a dark background.",
  "useWhen": "Generative art backgrounds, creative portfolio heroes, or anywhere a hypnotic geometric pattern is needed without heavy compute.",
  "avoidWhen": "Contexts needing legible text overlaid — rainbow hues and constant flipping compete with copy. Not suited to light backgrounds without restyling.",
- "agentPrompt": "Change the grid size to 12x12 by setting n=12 in build(), shift the color to cool blues by changing the hue formula to (t*0.02+x*12+y*12+200)%360, and thicken the stroke to cell*0.22.",
+ "agentPrompt": "Change the grid size to 12x12 by setting n=12 in build(), shift the color to cool blues by changing the hue formula to (t*0.02+x*12+y*12+200)%360, and thicken the stroke to cell*0.22. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid size (n=8 in build())",
   "hue animation formula (t*0.02+x*16+y*16)",
   "stroke width (cell*0.16)",
   "flip speed per cell (c.sp range 0.4..1.2)",
-  "background color (#1a1224)"
+  "background color (#1a1224)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause guard",
   "prefers-reduced-motion static draw fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and JS fillStyle — must change both",
@@ -44,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "truchet",
@@ -66,6 +84,20 @@
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   let W,H,DPR,cells,n,cell,ox,oy,mouse=null;
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  // theme: every canvas colour is read from the CSS tokens, once at start and once per switch
+  const root=document.documentElement;
+  const C={bg:'#1a1224',arcS:80,arcL:65};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--gg03-bg').trim()||C.bg;
+    C.arcS=parseFloat(cs.getPropertyValue('--gg03-arc-s'))||80;
+    C.arcL=parseFloat(cs.getPropertyValue('--gg03-arc-l'))||65;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce&&cells)draw(0);}
+  });
+  syncTheme();
   function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);build();}
   function build(){
@@ -73,13 +105,13 @@
     cells=[];for(let i=0;i<n*n;i++)cells.push({r:Math.random()<.5?0:1,a:Math.random()*Math.PI*2,sp:0.4+Math.random()*0.8,fl:Math.random()*6});
   }
   function draw(t){
-    ctx.fillStyle='#1a1224';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     ctx.lineWidth=Math.max(2,cell*0.16);ctx.lineCap='round';
     for(let y=0;y<n;y++)for(let x=0;x<n;x++){
       const c=cells[y*n+x];
       const X=ox+x*cell,Y=oy+y*cell,r=cell/2;
       const hue=(t*0.02+x*16+y*16)%360;
-      ctx.strokeStyle='hsl('+hue+',80%,65%)';
+      ctx.strokeStyle='hsl('+hue+','+C.arcS+'%,'+C.arcL+'%)';
       const flip=Math.sin(t*0.0007*c.sp+c.fl)>0?c.r:1-c.r;
       ctx.beginPath();
       if(flip===0){

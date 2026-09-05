@@ -2,11 +2,19 @@
 <meta name="description" content="Three stacked koi-nobori carp streamers ripple in the wind on a pole above stylised waves, a cream sun, and a distant indigo cone.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Carp Banner</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  /* theme tokens: dark defaults, light = the washi-paper re-print */
+  :root{--uk09-bg:#0f1822;--uk09-sky1:#0c1420;--uk09-sky2:#13263c;--uk09-sky3:#1b3a59;--uk09-indigo:#1d3a5f;--uk09-indigo2:#27517f;--uk09-indigo3:#5d86b0;--uk09-teal:#2f6f6a;--uk09-cream:#e8d5b0;--uk09-sun:#e8d5b0;--uk09-white:#f3ead6;--uk09-coral:#d65a4a;--uk09-coral2:#e8845f;--uk09-ink:#0a1018;--uk09-ink2:#22303f;--uk09-notch:#0f1822;--uk09-cap:#fff;--uk09-cap-o:.42}
+  :root[data-theme="light"]{--uk09-bg:#f6f0e2;--uk09-sky1:#bcd4e8;--uk09-sky2:#d8e6ef;--uk09-sky3:#eee6d2;--uk09-indigo:#4d7ba5;--uk09-indigo2:#4a7fae;--uk09-indigo3:#8fb4d4;--uk09-teal:#5f9c92;--uk09-cream:#fffaf0;--uk09-sun:#b8402a;--uk09-white:#fffdf6;--uk09-coral:#bc4128;--uk09-coral2:#dd7a52;--uk09-ink:#1c2b3b;--uk09-ink2:#40566b;--uk09-notch:#dfe9f2;--uk09-cap:#1c2b3b;--uk09-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--uk09-bg);overflow:hidden}
   #uk09-stage{position:fixed;inset:0;display:block}
   #uk09-c{position:absolute;inset:0;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--uk09-cap);opacity:var(--uk09-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){#uk09-c{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -15,20 +23,22 @@
  "description": "Three koi-nobori carp streamers ripple on a pole above stylised waves, a cream sun, and an indigo Fuji-like cone. Classic woodblock flat-color planes.",
  "useWhen": "Ambient backgrounds for Japanese-themed or cultural content, hero sections needing calm looping motion with a painterly aesthetic.",
  "avoidWhen": "Light or colorful backgrounds — sky and waves are hardcoded dark navy. Contexts needing user interaction or text legibility over the canvas.",
- "agentPrompt": "Change the three carp colors to gold, green, and white by editing the col/col2 arguments in the three carp() calls in drawScene(), e.g. replace CORAL with \"#c8a830\".",
+ "agentPrompt": "Change the three carp colors to gold, green, and white by editing the col/col2 arguments in the three carp() calls in drawScene(), e.g. replace CORAL with \"#c8a830\". Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "carp colors (col/col2 args in drawScene)",
   "ripple speed (t+=0.016)",
   "wave amplitude multiplier (0.42)",
   "number of scale rows (rows=4)",
   "carp lengths (L*0.98, L*0.86, L*0.72)",
-  "pole x position (px=W*0.10)"
+  "pole x position (px=W*0.10)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "Float32Array segment buffers (topY/botY/midY) — allocated once for perf",
   "visibilitychange pause guard",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and palette — must change both BG var and CSS to retheme",
@@ -41,7 +51,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "ukiyo-e",
@@ -68,10 +79,19 @@
   var g=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  // palette
-  var BG="#0f1822", INDIGO="#1d3a5f", INDIGO2="#27517f",
-      CREAM="#e8d5b0", CORAL="#d65a4a", CORAL2="#e8845f",
-      INK="#0a1018", WHITE="#f3ead6", TEAL="#2f6f6a";
+  // palette — read from the CSS tokens, re-read on a theme switch
+  var root=document.documentElement, BG,INDIGO,INDIGO2,INDIGO3,CREAM,SUN,CORAL,CORAL2,INK,INK2,WHITE,TEAL,NOTCH,SKY1,SKY2,SKY3;
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    BG=v("--uk09-bg"); INDIGO=v("--uk09-indigo"); INDIGO2=v("--uk09-indigo2"); INDIGO3=v("--uk09-indigo3");
+    CREAM=v("--uk09-cream"); SUN=v("--uk09-sun"); CORAL=v("--uk09-coral"); CORAL2=v("--uk09-coral2");
+    INK=v("--uk09-ink"); INK2=v("--uk09-ink2"); WHITE=v("--uk09-white"); TEAL=v("--uk09-teal");
+    NOTCH=v("--uk09-notch"); SKY1=v("--uk09-sky1"); SKY2=v("--uk09-sky2"); SKY3=v("--uk09-sky3");
+  }
+  syncTheme();
+  addEventListener("message",function(e){ var d=e.data; // live re-theme from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce) drawScene(); }
+  });
 
   var W=0,H=0,DPR=1,t=0,running=true,raf=0;
 
@@ -91,11 +111,11 @@
   // ---- static backdrop: bokashi sky, sun, distant cone, wave bands ----
   function backdrop(){
     var sky=g.createLinearGradient(0,0,0,H);
-    sky.addColorStop(0,"#0c1420"); sky.addColorStop(.55,"#13263c"); sky.addColorStop(1,"#1b3a59");
+    sky.addColorStop(0,SKY1); sky.addColorStop(.55,SKY2); sky.addColorStop(1,SKY3);
     g.fillStyle=sky; g.fillRect(0,0,W,H);
     // cream sun disc (flat plane), static
     var cx=W*0.72, cy=H*0.27, r=Math.min(W,H)*0.14;
-    g.fillStyle=CREAM; g.beginPath(); g.arc(cx,cy,r,0,6.2832); g.fill();
+    g.fillStyle=SUN; g.beginPath(); g.arc(cx,cy,r,0,6.2832); g.fill();
     // distant indigo cone (Fuji-like), bokashi by two flat planes
     var bx=W*0.22, by=H*0.46, bw=Math.min(W,H)*0.5, bh=Math.min(W,H)*0.30;
     g.fillStyle=INDIGO; g.beginPath();
@@ -159,7 +179,7 @@
     for(i=segs;i>=0;i--) g.lineTo(ax+i*dx,botY[i]);
     g.closePath(); g.fillStyle=col2; g.fill();
     // tail fork notch
-    g.fillStyle=BG; g.beginPath();
+    g.fillStyle=NOTCH; g.beginPath();
     g.moveTo(ax+L,topY[segs]); g.lineTo(ax+L-dx*1.3,midY[segs]); g.lineTo(ax+L,botY[segs]);
     g.closePath(); g.fill();
     // bold outline
@@ -196,9 +216,9 @@
     pole(px);
     var L=W*0.74, ax=px+W*0.03;
     // three carp stacked, big to small, classic koi-nobori order
-    carp(ax, H*0.20, L*0.98, H*0.16, INK,      "#22303f", 0.0, 0.30);  // black father
-    carp(ax, H*0.44, L*0.86, H*0.135, CORAL,   CORAL2,    1.7, 0.34);  // red mother
-    carp(ax, H*0.63, L*0.72, H*0.105, INDIGO2, "#5d86b0", 3.4, 0.40);  // blue child
+    carp(ax, H*0.20, L*0.98, H*0.16, INK,      INK2,    0.0, 0.30);  // black father
+    carp(ax, H*0.44, L*0.86, H*0.135, CORAL,   CORAL2,  1.7, 0.34);  // red mother
+    carp(ax, H*0.63, L*0.72, H*0.105, INDIGO2, INDIGO3, 3.4, 0.40);  // blue child
   }
 
   function frame(){

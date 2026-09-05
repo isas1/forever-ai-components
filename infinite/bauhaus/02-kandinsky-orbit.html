@@ -5,9 +5,24 @@
 <meta name="description" content="Concentric red, blue and yellow arcs, scattered dots, a tilted bar and a breathing core counter-rotate in abstract-style orbit on a dark fi">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Orbiting Arcs</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#101012}
-  #bh02-stage{position:fixed;inset:0;width:100%;height:100%;display:block;background:#101012}
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme in [data-theme="light"] */
+  :root{--bh02-bg:#101012;--bh02-vig-a:#1a1a1f;--bh02-vig-b:#0c0c0e;--bh02-void:#0c0c0e;--bh02-tick:#2a2a30;--bh02-ring:#1f1f25;--bh02-ring2:#2f2f36;--bh02-red:#e63329;--bh02-blu:#1f5fd1;--bh02-yel:#f4c20d;--bh02-chalk:#f4f1ea;--bh02-cap:#fff;--bh02-cap-o:.42}
+  :root[data-theme="light"]{--bh02-bg:#f6f2ea;--bh02-vig-a:#fdfbf6;--bh02-vig-b:#efe8da;--bh02-void:#efe8da;--bh02-tick:#cdc4b2;--bh02-ring:#e2dbcc;--bh02-ring2:#cdc4b2;--bh02-red:#cc2b1f;--bh02-blu:#1f5fd1;--bh02-yel:#ad7f08;--bh02-chalk:#4a4640;--bh02-cap:#1b1b20;--bh02-cap-o:.5}
+  /* SVG paint moved off presentation attributes so the tokens drive both themes */
+  .bh02-f-red{fill:var(--bh02-red)}.bh02-f-blu{fill:var(--bh02-blu)}.bh02-f-yel{fill:var(--bh02-yel)}
+  .bh02-f-chalk{fill:var(--bh02-chalk)}.bh02-f-void{fill:var(--bh02-void)}
+  .bh02-s-red{stroke:var(--bh02-red)}.bh02-s-blu{stroke:var(--bh02-blu)}.bh02-s-yel{stroke:var(--bh02-yel)}
+  .bh02-s-chalk{stroke:var(--bh02-chalk)}.bh02-s-tick{stroke:var(--bh02-tick)}
+  .bh02-s-ring{stroke:var(--bh02-ring)}.bh02-s-ring2{stroke:var(--bh02-ring2)}
+  .bh02-v0{stop-color:var(--bh02-vig-a)}.bh02-v1{stop-color:var(--bh02-vig-b)}
+  html,body{margin:0;height:100%;background:var(--bh02-bg)}
+  #bh02-stage{position:fixed;inset:0;width:100%;height:100%;display:block;background:var(--bh02-bg)}
   #bh02-svg{position:absolute;inset:0;width:100%;height:100%}
   /* rotating groups — compositor transform only */
   #bh02-arcs{animation:bh02-spin 26s linear infinite;transform-origin:200px 200px}
@@ -32,7 +47,7 @@
   }
   .bh02-paused #bh02-arcs,.bh02-paused #bh02-dots,.bh02-paused #bh02-bar,
   .bh02-paused #bh02-tri,.bh02-paused #bh02-core{animation-play-state:paused}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--bh02-cap);opacity:var(--bh02-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -42,20 +57,22 @@
  "description": "Concentric red, blue, and yellow arcs counter-rotate around a breathing core; scattered dots and a tilted segmented bar orbit in abstract Bauhaus style.",
  "useWhen": "Art/design portfolio heroes, Bauhaus or geometric-themed UI, ambient gallery backdrops needing primary-color motion.",
  "avoidWhen": "Contexts requiring text legibility over the center — the orbiting elements fill the canvas. Light-background layouts (background hardcoded dark).",
- "agentPrompt": "Change the core fill to yellow (#f4c20d), slow the arc rotation to 40s (change bh02-spin duration from 26s to 40s), and increase the blue arc stroke-width from 22 to 30.",
+ "agentPrompt": "Change the core fill to yellow (#f4c20d), slow the arc rotation to 40s (change bh02-spin duration from 26s to 40s), and increase the blue arc stroke-width from 22 to 30. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "arc rotation speed (26s on #bh02-arcs)",
   "dot ring reverse speed (17s on #bh02-dots)",
   "bar easing speed (11s on #bh02-bar)",
   "stroke widths on arc paths",
   "primary palette colors (#e63329, #1f5fd1, #f4c20d)",
-  "core beat scale (1.14 at 50%)"
+  "core beat scale (1.14 at 50%)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "bh02-paused class pause mechanism",
   "visibilitychange listener",
   "prefers-reduced-motion guard that freezes to static frame",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "All animations are CSS-only with fixed viewBox 400x400 — arc geometry does not adapt to viewport aspect ratio",
@@ -68,7 +85,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bauhaus",
@@ -89,15 +107,15 @@
        aria-label="Orbiting Arcs: concentric red, blue and yellow arcs, scattered dots and a tilted black bar rotating in counterpoint on a dark field, in the Bauhaus geometric style.">
     <defs>
       <radialGradient id="bh02-vig" cx="42%" cy="38%" r="75%">
-        <stop offset="0%" stop-color="#1a1a1f"/>
-        <stop offset="100%" stop-color="#0c0c0e"/>
+        <stop class="bh02-v0" offset="0%"/>
+        <stop class="bh02-v1" offset="100%"/>
       </radialGradient>
     </defs>
 
     <rect x="0" y="0" width="400" height="400" fill="url(#bh02-vig)"/>
 
     <!-- thin modular grid ticks, static rhythm -->
-    <g stroke="#2a2a30" stroke-width="1">
+    <g class="bh02-s-tick" stroke-width="1">
       <line x1="200" y1="14" x2="200" y2="46"/>
       <line x1="200" y1="354" x2="200" y2="386"/>
       <line x1="14" y1="200" x2="46" y2="200"/>
@@ -106,43 +124,43 @@
 
     <!-- concentric arcs in counter-rotation, primary palette -->
     <g id="bh02-arcs" fill="none" stroke-linecap="round">
-      <circle cx="200" cy="200" r="160" stroke="#1f1f25" stroke-width="2"/>
-      <path d="M200 60 A140 140 0 0 1 340 200" stroke="#e63329" stroke-width="14"/>
-      <path d="M200 60 A140 140 0 0 0 60 200" stroke="#2a2a30" stroke-width="3"/>
-      <path d="M88 312 A140 140 0 0 1 312 312" stroke="#f4c20d" stroke-width="9"/>
-      <path d="M60 200 A140 140 0 0 0 200 340" stroke="#1f5fd1" stroke-width="22"/>
-      <path d="M310 110 A155 155 0 0 1 360 230" stroke="#e63329" stroke-width="4"/>
+      <circle class="bh02-s-ring" cx="200" cy="200" r="160" stroke-width="2"/>
+      <path class="bh02-s-red" d="M200 60 A140 140 0 0 1 340 200" stroke-width="14"/>
+      <path class="bh02-s-tick" d="M200 60 A140 140 0 0 0 60 200" stroke-width="3"/>
+      <path class="bh02-s-yel" d="M88 312 A140 140 0 0 1 312 312" stroke-width="9"/>
+      <path class="bh02-s-blu" d="M60 200 A140 140 0 0 0 200 340" stroke-width="22"/>
+      <path class="bh02-s-red" d="M310 110 A155 155 0 0 1 360 230" stroke-width="4"/>
     </g>
 
     <!-- mid arc ring, reverse spin -->
     <g id="bh02-dots">
-      <circle cx="200" cy="200" r="104" fill="none" stroke="#2f2f36" stroke-width="1.5"/>
-      <path d="M120 138 A104 104 0 0 1 280 138" fill="none" stroke="#1f5fd1" stroke-width="7"/>
-      <circle cx="200" cy="96" r="9" fill="#f4c20d"/>
-      <circle cx="293" cy="245" r="6" fill="#e63329"/>
-      <circle cx="108" cy="245" r="13" fill="#1f5fd1"/>
-      <circle cx="200" cy="304" r="4.5" fill="#f4f1ea"/>
-      <circle cx="262" cy="138" r="5.5" fill="#e63329"/>
+      <circle class="bh02-s-ring2" cx="200" cy="200" r="104" fill="none" stroke-width="1.5"/>
+      <path class="bh02-s-blu" d="M120 138 A104 104 0 0 1 280 138" fill="none" stroke-width="7"/>
+      <circle class="bh02-f-yel" cx="200" cy="96" r="9"/>
+      <circle class="bh02-f-red" cx="293" cy="245" r="6"/>
+      <circle class="bh02-f-blu" cx="108" cy="245" r="13"/>
+      <circle class="bh02-f-chalk" cx="200" cy="304" r="4.5"/>
+      <circle class="bh02-f-red" cx="262" cy="138" r="5.5"/>
     </g>
 
     <!-- tilted bar — the counterpoint accent -->
     <g id="bh02-bar">
-      <rect x="196" y="40" width="8" height="320" rx="4" fill="#0c0c0e"/>
-      <rect x="196" y="40" width="8" height="118" rx="4" fill="#e63329"/>
-      <rect x="196" y="246" width="8" height="74" rx="4" fill="#f4c20d"/>
-      <circle cx="200" cy="40" r="11" fill="#1f5fd1"/>
+      <rect class="bh02-f-void" x="196" y="40" width="8" height="320" rx="4"/>
+      <rect class="bh02-f-red" x="196" y="40" width="8" height="118" rx="4"/>
+      <rect class="bh02-f-yel" x="196" y="246" width="8" height="74" rx="4"/>
+      <circle class="bh02-f-blu" cx="200" cy="40" r="11"/>
     </g>
 
     <!-- pulsing triangle, Bauhaus/abstract energy -->
     <g id="bh02-tri">
-      <path d="M200 150 L236 214 L164 214 Z" fill="none" stroke="#f4f1ea" stroke-width="2.5"/>
+      <path class="bh02-s-chalk" d="M200 150 L236 214 L164 214 Z" fill="none" stroke-width="2.5"/>
     </g>
 
     <!-- breathing core -->
     <g id="bh02-core">
-      <circle cx="200" cy="200" r="26" fill="#e63329"/>
-      <circle cx="200" cy="200" r="11" fill="#0c0c0e"/>
-      <circle cx="200" cy="200" r="4.5" fill="#f4c20d"/>
+      <circle class="bh02-f-red" cx="200" cy="200" r="26"/>
+      <circle class="bh02-f-void" cx="200" cy="200" r="11"/>
+      <circle class="bh02-f-yel" cx="200" cy="200" r="4.5"/>
     </g>
   </svg>
 </div>
@@ -155,6 +173,10 @@
   var stage=document.getElementById("bh02-stage");
   if(!svg||!stage)return;
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} — CSS tokens do the rest
+  addEventListener("message",function(e){ var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme",d.theme);
+  });
   if(reduce){
     // settle to one static, balanced, on-brand frame
     stage.classList.add("bh02-paused");

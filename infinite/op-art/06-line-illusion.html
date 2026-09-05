@@ -5,11 +5,26 @@
 <meta name="description" content="Parallel horizontal white lines kink at a central crease, faking a sharp 3D fold of two tilting sheets that breathes.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Line Illusion</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a;overflow:hidden}
-  #op06-stage{position:fixed;inset:0;background:#0a0a0a}
+  /* theme tokens — dark values are the defaults; light inverts the ground/ink pair
+     (ink lines on white paper). --op06-ink-rgb feeds the JS shading alphas. */
+  :root{
+    --op06-bg:#0a0a0a; --op06-ink-rgb:255,255,255; --op06-seam:rgba(255,255,255,0.10);
+    --op06-cap:#fff; --op06-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --op06-bg:#f4f4f2; --op06-ink-rgb:20,20,20; --op06-seam:rgba(20,20,20,0.12);
+    --op06-cap:#141414; --op06-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--op06-bg);overflow:hidden}
+  #op06-stage{position:fixed;inset:0;background:var(--op06-bg)}
   #op06-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op06-cap);opacity:var(--op06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +34,21 @@
  "description": "64 horizontal lines kink at a center crease with differential shading, creating a breathing 3D fold illusion of two angled sheets.",
  "useWhen": "Dark-mode hero backgrounds, geometric/architectural themes, or anywhere a calm optical illusion adds depth without distracting from content.",
  "avoidWhen": "Light backgrounds (hardcoded dark fill). Contexts needing text legibility over the animation, or where any motion is unwanted.",
- "agentPrompt": "Change line count to 80 by setting LINES=80, slow the breathing to t*0.3, and tint lines amber by replacing rgba(255,255,255,…) with rgba(255,200,80,…).",
+ "agentPrompt": "Change line count to 80 by setting LINES=80, slow the breathing to t*0.3, and tint lines amber by replacing rgba(255,255,255,…) with rgba(255,200,80,…). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "line count (LINES=64)",
   "breathe speed (t*0.55)",
   "fold depth (H*0.085)",
   "traveling wave speed (t*0.7)",
-  "line color (rgba 255,255,255)"
+  "line color (rgba 255,255,255)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause",
   "reduced-motion static fallback (draw(0) + return)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded (#0a0a0a) in both CSS and fillStyle — must edit both to change",
@@ -44,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "op-art",
@@ -69,6 +87,23 @@
   var cv = document.getElementById("op06-c");
   var ctx = cv.getContext("2d", { alpha:false });
   var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
+  var root = document.documentElement;
+
+  // colours the canvas draws with (it paints its own bg: alpha:false context)
+  var C={bg:"#0a0a0a",ink:"255,255,255",seam:"rgba(255,255,255,0.10)"};
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue("--op06-bg").trim();
+    C.ink=cs.getPropertyValue("--op06-ink-rgb").trim();
+    C.seam=cs.getPropertyValue("--op06-seam").trim();
+    if(reduce&&W)draw(0);   // static fallback must repaint on a live switch
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme();
+    }
+  });
 
   var W=0, H=0, DPR=1;
   // geometry cache (recomputed on resize only)
@@ -101,7 +136,7 @@
     t=time*0.001;
     var cx=W*0.5, cy=H*0.5;
 
-    ctx.fillStyle="#0a0a0a";
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
 
     // fold amplitude eases (slow, seizure-safe): 0.55..1.0 of max
@@ -129,23 +164,24 @@
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(cx, y+depth);
-      ctx.strokeStyle="rgba(255,255,255,"+shadeL.toFixed(3)+")";
+      ctx.strokeStyle="rgba("+C.ink+","+shadeL.toFixed(3)+")";
       ctx.stroke();
 
       // RIGHT sheet: crease back up to edge
       ctx.beginPath();
       ctx.moveTo(cx, y+depth);
       ctx.lineTo(W, y);
-      ctx.strokeStyle="rgba(255,255,255,"+shadeR.toFixed(3)+")";
+      ctx.strokeStyle="rgba("+C.ink+","+shadeR.toFixed(3)+")";
       ctx.stroke();
     }
 
     // crease seam — a single subtle vertical accent where sheets meet,
     // static contrast, no flashing.
-    ctx.fillStyle="rgba(255,255,255,0.10)";
+    ctx.fillStyle=C.seam;
     ctx.fillRect(cx-lw*0.5, 0, lw, H);
   }
 
+  syncTheme();
   if(reduce){ draw(0); return; }
 
   var running=true, raf=0;

@@ -1,19 +1,43 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="A faceted hex-prism wireframe on near-black, raked by a rotating spectral gradient band whose hue drifts as it sweeps the line-art.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Gradient Sweep</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block. --ssa07-s/--ssa07-l feed
+   the JS hue loop that paints the two travelling band stops. */
+:root{
+  --ssa07-bg:#0b0d12; --ssa07-wire:#2a3050;
+  --ssa07-accent:#B1CCA4; --ssa07-hot:#ffffff; --ssa07-s:92%; --ssa07-l:66%;
+  --ssa07-dot:#C5D9BB; --ssa07-dot-o:.7;
+  --ssa07-cap:#B1CCA4; --ssa07-cap-o:.45;
+}
+:root[data-theme="light"]{
+  --ssa07-bg:#f2f4f8; --ssa07-wire:#b9c0d4;
+  --ssa07-accent:#557944; --ssa07-hot:#1b2130; --ssa07-s:72%; --ssa07-l:32%;
+  --ssa07-dot:#557944; --ssa07-dot-o:.85;
+  --ssa07-cap:#557944; --ssa07-cap-o:.62;
+}
 html,body{margin:0;height:100%;overflow:hidden}
-body{background:#0b0d12;display:grid;place-items:center}
+body{background:var(--ssa07-bg);display:grid;place-items:center}
 .ssa07-stage{width:min(86vmin,640px);height:min(86vmin,640px);position:relative}
 #ssa07-c{width:100%;height:100%;display:block}
 /* base wireframe: cool dim line-art, always visible for legibility */
-.ssa07-wire{fill:none;stroke:#2a3050;stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
+.ssa07-wire{fill:none;stroke:var(--ssa07-wire);stroke-width:1.1;stroke-linecap:round;stroke-linejoin:round}
 /* the lit copy on top, painted by the sweeping gradient + bright glow */
 .ssa07-lit{fill:none;stroke:url(#ssa07-grad);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;
   filter:url(#ssa07-glow)}
-.ssa07-dot{fill:#C5D9BB;opacity:.7}
+.ssa07-dot{fill:var(--ssa07-dot);opacity:var(--ssa07-dot-o)}
+/* the transparent shoulders + the hot core of the sweep band (the two travelling
+   stops either side are painted by JS from --ssa07-s/--ssa07-l) */
+.ssa07-fade{stop-color:var(--ssa07-accent)}
+#ssa07-s2{stop-color:var(--ssa07-hot)}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#B1CCA4;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--ssa07-cap);opacity:var(--ssa07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 @media (prefers-reduced-motion:reduce){#ssa07-sweep{display:none}}
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -22,19 +46,21 @@ body{background:#0b0d12;display:grid;place-items:center}
  "description": "A faceted hex-prism wireframe raked by a rotating spectral gradient band; the lit slice shifts hue continuously via rAF while SMIL drives the sweep rotation.",
  "useWhen": "Dark-mode hero backgrounds, tech/sci-fi themes, ambient loading screens needing a focused geometric focal point.",
  "avoidWhen": "Light backgrounds (dark navy hardcoded). Contexts requiring legible text overlays — the glow filter competes with content.",
- "agentPrompt": "Change the sweep speed by setting dur=\"4s\" on the animateTransform, and shift the base hue from 100 to 30 (amber) by editing the hue variable and the hsl stop-colors.",
+ "agentPrompt": "Change the sweep speed by setting dur=\"4s\" on the animateTransform, and shift the base hue from 100 to 30 (amber) by editing the hue variable and the hsl stop-colors. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "sweep rotation speed (dur='7s' on animateTransform)",
   "base hue start (hue=210)",
   "hue drift rate (dt*0.05)",
   "gradient band width (stop offsets .47/.53)",
-  "wireframe stroke colors (#2a3050 base, #B1CCA4 accents)"
+  "wireframe stroke colors (#2a3050 base, #B1CCA4 accents)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback branch",
   "visibilitychange pause (svg.pauseAnimations/unpauseAnimations + rAF cancel)",
-  "SVG glow filter (feGaussianBlur + feMerge)"
+  "SVG glow filter (feGaussianBlur + feMerge)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS — must edit to use on non-dark surfaces",
@@ -48,7 +74,8 @@ body{background:#0b0d12;display:grid;place-items:center}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "svg",
@@ -82,13 +109,13 @@ body{background:#0b0d12;display:grid;place-items:center}
     '</filter>'+
     '<linearGradient id="ssa07-grad" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox" '+
       'gradientTransform="rotate(0 .5 .5)">'+
-      '<stop offset="0"     stop-color="#B1CCA4" stop-opacity="0"/>'+
-      '<stop offset=".40"   stop-color="#B1CCA4" stop-opacity="0"/>'+
-      '<stop offset=".47" id="ssa07-s1" stop-color="#B1CCA4" stop-opacity="1"/>'+
-      '<stop offset=".50" id="ssa07-s2" stop-color="#ffffff" stop-opacity="1"/>'+
-      '<stop offset=".53" id="ssa07-s3" stop-color="#D8B297" stop-opacity="1"/>'+
-      '<stop offset=".60"  stop-color="#B1CCA4" stop-opacity="0"/>'+
-      '<stop offset="1"    stop-color="#B1CCA4" stop-opacity="0"/>'+
+      '<stop class="ssa07-fade" offset="0"    stop-opacity="0"/>'+
+      '<stop class="ssa07-fade" offset=".40"  stop-opacity="0"/>'+
+      '<stop offset=".47" id="ssa07-s1" stop-opacity="1"/>'+
+      '<stop offset=".50" id="ssa07-s2" stop-opacity="1"/>'+
+      '<stop offset=".53" id="ssa07-s3" stop-opacity="1"/>'+
+      '<stop class="ssa07-fade" offset=".60" stop-opacity="0"/>'+
+      '<stop class="ssa07-fade" offset="1"   stop-opacity="0"/>'+
       '<animateTransform id="ssa07-sweep" attributeName="gradientTransform" type="rotate" '+
         'from="0 .5 .5" to="360 .5 .5" dur="7s" repeatCount="indefinite" calcMode="linear"/>'+
     '</linearGradient>';
@@ -131,7 +158,21 @@ body{background:#0b0d12;display:grid;place-items:center}
   // a tiny rAF handles the hue so the band feels like living light.
   var s1=document.getElementById('ssa07-s1'),s2=document.getElementById('ssa07-s2'),
       s3=document.getElementById('ssa07-s3');
-  function hsl(h){return 'hsl('+((h%360+360)%360).toFixed(0)+',92%,66%)';}
+  var root=document.documentElement, HS='92%', HL='66%';
+  function hsl(h){return 'hsl('+((h%360+360)%360).toFixed(0)+','+HS+','+HL+')';}
+  // JS paints the two travelling band stops, so it re-reads its tokens once per
+  // theme change (never per frame) — the rest of the palette is plain CSS.
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    HS=(cs.getPropertyValue('--ssa07-s')||'92%').trim();
+    HL=(cs.getPropertyValue('--ssa07-l')||'66%').trim();
+    if(reduce){s1.setAttribute('stop-color',hsl(100));s3.setAttribute('stop-color',hsl(25));}
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();}});
+  syncTheme();
 
   if(reduce){
     // static legible frame: a fixed diagonal lit edge, no animation.

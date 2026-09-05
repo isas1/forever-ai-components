@@ -5,11 +5,26 @@
 <meta name="description" content="Warm ochre chord diagram of six labeled nodes whose ribbon flows continuously rebalance, growing and shrinking arcs around the ring.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Chord Rebalance</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1d1606;}
+  /* theme tokens — dark values are the defaults; --cr-sat/-lit (+ranges) feed the JS col()
+     ramp and --cr-am lifts ribbon alpha so thin flows survive on a light ground */
+  :root{
+    --cr-bg:#1d1606; --cr-acc:#c8a23a; --cr-sat:58; --cr-satr:8;
+    --cr-lit:34; --cr-litr:22; --cr-am:1; --cr-cap-o:.36;
+  }
+  :root[data-theme="light"]{
+    --cr-bg:#f7f2e6; --cr-acc:#826924; --cr-sat:62; --cr-satr:8;
+    --cr-lit:30; --cr-litr:12; --cr-am:1.45; --cr-cap-o:.66;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--cr-bg);}
   #cr-c{display:block;width:100%;height:100%;}
   .cr-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
-       letter-spacing:.14em;color:#c8a23a;opacity:.36;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--cr-acc);opacity:var(--cr-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +34,22 @@
  "description": "Six warm-ochre nodes on a ring with ribbon flows that continuously lerp toward random targets, making arc spans and chord widths breathe in organic cycles.",
  "useWhen": "Data dashboards, network flow visualizations, ambient background for analytics UIs, portfolio showcases needing organic motion.",
  "avoidWhen": "Contexts requiring legible data labels or precise values — flow weights are randomized and not tied to real data by default.",
- "agentPrompt": "Change node count to 8 by setting N=8 and extending HUE array with two more hue values, or swap palette to cool blues by changing HUE to [200,210,220,195,215,205].",
+ "agentPrompt": "Change node count to 8 by setting N=8 and extending HUE array with two more hue values, or swap palette to cool blues by changing HUE to [200,210,220,195,215,205]. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "node count (N=6)",
   "hue palette (HUE array)",
   "retarget interval (retarget>150)",
   "lerp speed (k=0.045)",
   "ring radius scale (R=Math.min*0.34)",
-  "ribbon thickness (rib=Math.min*0.052)"
+  "ribbon thickness (rib=Math.min*0.052)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/start guards",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Node labels are hardcoded A-F via charCode; adding nodes requires extending HUE array",
@@ -46,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "chord-diagram",
@@ -67,10 +85,31 @@
 (function(){
   const cv=document.getElementById('cr-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const N=6, ACC='#c8a23a';
+  const N=6;
   // warm ochre family, distinct hue per node
   const HUE=[44,30,52,38,22,48];
-  function col(i,l,a){return 'hsla('+HUE[i]+','+(58+l*8)+'%,'+(34+l*22)+'%,'+a+')';}
+  function col(i,l,a){return 'hsla('+HUE[i]+','+(C.sat+l*C.satr)+'%,'+(C.lit+l*C.litr)+'%,'+a+')';}
+  // theme: every colour the canvas draws with is read from the tokens, once per switch
+  const root=document.documentElement, C={};
+  let ready=0;
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--cr-bg').trim();
+    C.acc=cs.getPropertyValue('--cr-acc').trim();
+    C.sat=parseFloat(cs.getPropertyValue('--cr-sat'));
+    C.satr=parseFloat(cs.getPropertyValue('--cr-satr'));
+    C.lit=parseFloat(cs.getPropertyValue('--cr-lit'));
+    C.litr=parseFloat(cs.getPropertyValue('--cr-litr'));
+    C.am=parseFloat(cs.getPropertyValue('--cr-am'));
+    if(reduce&&ready){frame();stop();}          // running loop repaints itself
+  }
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
+  syncTheme();
   let W,H,DPR,cx,cy,R,rib;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -102,7 +141,7 @@
     const k=0.045+boost*0.04;
     for(let i=0;i<cur.length;i++)cur[i]+=(tgt[i]-cur[i])*k;
     layout();
-    ctx.fillStyle='#1d1606';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     // running offsets along each node arc so ribbons pack without overlap
     const sum=new Float64Array(N);pairs.forEach((p,m)=>{sum[p[0]]+=cur[m];sum[p[1]]+=cur[m];});
     const off=new Float64Array(N);
@@ -115,7 +154,7 @@
       const A0=ptOnArc(i,off[i]),A1=ptOnArc(i,off[i]+wi);
       const B0=ptOnArc(j,off[j]),B1=ptOnArc(j,off[j]+wj);
       off[i]+=wi;off[j]+=wj;
-      const al=0.16+Math.min(v,1)*0.5;
+      const al=(0.16+Math.min(v,1)*0.5)*C.am;
       const g=ctx.createLinearGradient(A0[0],A0[1],B0[0],B0[1]);
       g.addColorStop(0,col(i,Math.min(v,1),al));
       g.addColorStop(1,col(j,Math.min(v,1),al));
@@ -132,7 +171,7 @@
       ctx.beginPath();ctx.arc(cx,cy,R,ang[i]-span[i]/2,ang[i]+span[i]/2);ctx.stroke();
       // tick + value
       const lr=R+rib*0.5+6,[lx,ly]=[cx+Math.cos(ang[i])*lr,cy+Math.sin(ang[i])*lr];
-      ctx.fillStyle=ACC;ctx.globalAlpha=0.85;
+      ctx.fillStyle=C.acc;ctx.globalAlpha=0.85;
       ctx.font='600 '+Math.max(9,rib*0.62)+'px ui-monospace,monospace';
       ctx.textAlign='center';ctx.textBaseline='middle';
       ctx.fillText(String.fromCharCode(65+i),lx,ly);ctx.globalAlpha=1;
@@ -143,6 +182,7 @@
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  ready=1;
   if(reduce){for(let i=0;i<cur.length;i++)cur[i]=tgt[i];frame();stop();}else start();
 })();
 </script>

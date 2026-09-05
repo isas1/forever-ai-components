@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Collapsible department tree - an indented hierarchy of divisions and teams with rotating chevrons, guide rails and headcount pills; branches open and close on a loop, children sliding in one after another.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Collapsible Tree</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#5A8C73;
+    --pro-radius:8px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --ctr-row:clamp(19px,6.2vmin,38px);
+    --ctr-rowb:clamp(26px,8.6vmin,52px);
+    --ctr-row3:clamp(17px,5.4vmin,33px);
+    --ctr-gap:clamp(2px,.7vmin,5px);
+    --ctr-rail:color-mix(in srgb,var(--pro-text) 13%,transparent);
+  }
+  :root[data-theme="light"]{--pro-bg:#f6f8fa;--pro-surface:#fff;--pro-border:rgba(0,0,0,.08);--pro-text:#1f2328;--pro-muted:#59636e;--pro-accent:#3c6650;--ctr-rail:color-mix(in srgb,var(--pro-text) 24%,transparent)}
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .ctr-stage{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;
+    padding:3.6vmin 3.6vmin clamp(16px,3vmin,24px);font-family:var(--pro-font);color:var(--pro-text)}
+  .ctr-head{display:flex;align-items:baseline;gap:1.6vmin;flex:none;min-width:0;
+    padding-bottom:1.8vmin;border-bottom:1px solid var(--pro-border)}
+  .ctr-title{font-size:clamp(10px,2.4vmin,14px);font-weight:700;white-space:nowrap}
+  .ctr-sub{margin-left:auto;font-size:clamp(7px,1.6vmin,10px);color:var(--pro-muted);
+    font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .ctr-body{flex:1;min-height:0;padding-top:1.8vmin;display:flex;flex-direction:column;
+    justify-content:center}
+  /* fixed row height is what makes open/close animatable without measuring anything */
+  .ctr-row{height:var(--ctr-row);margin-bottom:var(--ctr-gap);display:flex;align-items:center;
+    gap:clamp(3px,1.1vmin,8px);padding:0 clamp(5px,1.4vmin,10px);cursor:pointer;overflow:hidden;
+    background:var(--pro-surface);border:1px solid var(--pro-border);border-radius:var(--pro-radius);
+    transition:height .34s cubic-bezier(.22,1,.36,1),margin-bottom .34s,opacity .3s,
+      border-color .3s,border-width .34s,background .3s;}
+  .ctr-row.shut{height:0;margin-bottom:0;opacity:0;border-color:transparent;border-width:0}
+  .ctr-row.open{border-color:color-mix(in srgb,var(--pro-accent) 42%,var(--pro-border))}
+  .ctr-kids{margin-left:clamp(7px,2.2vmin,15px);padding-left:clamp(6px,1.8vmin,13px);
+    border-left:1px solid transparent;transition:border-color .3s}
+  .ctr-kids.on{border-color:var(--ctr-rail)}
+  .ctr-chev{flex:none;width:clamp(8px,2.2vmin,13px);color:var(--pro-muted);
+    display:grid;place-items:center;transition:transform .34s cubic-bezier(.22,1,.36,1),color .3s}
+  .ctr-chev svg{width:100%;height:auto;display:block}
+  .ctr-row.open .ctr-chev{transform:rotate(90deg);color:var(--pro-accent)}
+  .ctr-dot{flex:none;width:clamp(4px,1.2vmin,7px);height:clamp(4px,1.2vmin,7px);border-radius:2px;
+    background:color-mix(in srgb,var(--pro-accent) 45%,transparent)}
+  .ctr-nm{font-size:clamp(7px,1.8vmin,11px);font-weight:600;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+  .ctr-row.d0{height:var(--ctr-rowb)}
+  .ctr-row.d2{height:var(--ctr-row3);background:color-mix(in srgb,var(--pro-surface) 76%,transparent)}
+  .ctr-row.shut{height:0}
+  .ctr-role{margin-left:auto;flex:none;font-size:clamp(6px,1.4vmin,9px);font-weight:600;
+    color:var(--pro-muted);white-space:nowrap}
+  .ctr-txt{display:flex;flex-direction:column;gap:clamp(1px,.5vmin,3px);min-width:0}
+  .ctr-mt{font-size:clamp(6px,1.4vmin,9px);line-height:1.2;color:var(--pro-muted);font-weight:600;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ctr-pill{margin-left:auto;flex:none;font-size:clamp(6px,1.4vmin,9px);font-weight:700;
+    color:var(--pro-muted);background:color-mix(in srgb,var(--pro-text) 6%,transparent);
+    border-radius:999px;padding:clamp(1px,.4vmin,3px) clamp(4px,1.2vmin,8px);
+    font-variant-numeric:tabular-nums;white-space:nowrap;transition:color .3s,background .3s}
+  .ctr-row.open .ctr-pill{color:var(--pro-accent);
+    background:color-mix(in srgb,var(--pro-accent) 16%,transparent)}
+  .cap{position:fixed;left:8px;bottom:6px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.45;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @media (max-width:320px){ .ctr-row.d2,.ctr-kids.k2{display:none} }
+  @media (prefers-reduced-motion:reduce){ .ctr-row,.ctr-chev,.ctr-pill{transition:none!important} }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/hierarchy-trees/02-collapsible-tree.html",
+ "title": "Collapsible Tree",
+ "description": "An indented three-level company tree — divisions, teams, then people — with rotating chevrons, guide rails and headcount pills; on a loop one division opens and drills into its first team, children sliding in one after another as the previous branch collapses.",
+ "useWhen": "Department or file explorers, nested settings, category pickers, any deep hierarchy that must stay compact until asked — and org structures too tall to draw as boxes and lines.",
+ "avoidWhen": "When every level must be visible at once, or when the tree is so deep that indentation runs out of horizontal room (past ~4 levels on a narrow tile).",
+ "agentPrompt": "Edit the tree array — nested {n name, m count, t sub-label, k children} to any depth; rows, rails, chevrons and stagger all derive from it. Change the beat with setInterval(advance,2400) and the drill-in delay (440ms), or delete both and keep the row click handlers for a plain interactive tree. Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "theme tokens (:root --pro-* dark defaults + the :root[data-theme=\"light\"] overrides)",
+  "the hierarchy itself (nested tree array: n, m, t, k children — any depth)",
+  "row heights (--ctr-row, --ctr-rowb, --ctr-row3) — these are what make open/close animatable",
+  "cycle beat (setInterval(advance,2400) — short enough that the mount audit sees the wall tile move) and drill-in delay (440ms)",
+  "child stagger step (i*80ms in toggle())",
+  "guide rail colour (--ctr-rail) and indent (.ctr-kids margin/padding)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .ctr-stage",
+  "IIFE wrapper",
+  "fixed row-height tokens — height:0 to var(--ctr-row) is what animates; height:auto cannot be transitioned",
+  "prefers-reduced-motion early return with the first division and team open",
+  "visibilitychange pause (halt/play on the interval)",
+  "border-width in the .ctr-row transition list, so collapsed rows really reach zero height",
+  "theme hook (?theme= pre-paint bootstrap + forever:theme message listener + the two-palette token block)"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Rows are a fixed height per depth, so a long label ellipsizes rather than wrapping to a second line",
+  "Depth-3 rows are hidden below 320px (media query) — small tiles show two levels",
+  "Only one branch is open at a time by design; multi-open needs the only() call replaced with a plain toggle"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "tree",
+  "hierarchy",
+  "collapsible",
+  "accordion",
+  "explorer",
+  "org-chart",
+  "nested",
+  "disclosure"
+ ]
+}
+</script>
+</head>
+<body>
+  <div class="ctr-stage" role="img"
+       aria-label="Collapsible company tree: Acme Robotics with 142 people, opening into Engineering, Revenue and Operations divisions, each expanding to its teams and headcount. Branches open and close on a loop, with chevrons rotating and child rows sliding in.">
+    <div class="ctr-head">
+      <span class="ctr-title">Acme Robotics</span>
+      <span class="ctr-sub">142 people · 3 divisions</span>
+    </div>
+    <div class="ctr-body" id="ctrBody"></div>
+  </div>
+  <div class="cap" aria-hidden="true">Collapsible Tree</div>
+  <script>(function(){"use strict";
+    var root=document.documentElement;
+    addEventListener("message",function(e){var d=e.data;
+      if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))root.setAttribute("data-theme",d.theme);});
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Nested data in, tree out — this array is the whole component. Any depth works.
+    var tree=[
+      {n:"Engineering", m:"58 people", t:"3 teams · 2 open roles", k:[
+        {n:"Platform", m:"21", k:[{n:"Iris M.",r:"Lead"},{n:"Bo T.",r:"Infrastructure"}]},
+        {n:"Product",  m:"24", k:[{n:"Kofi A.",r:"Lead"},{n:"Wei L.",r:"Web"}]},
+        {n:"Quality",  m:"13", k:[{n:"Noor S.",r:"Lead"},{n:"Sam H.",r:"Mobile QA"}]}]},
+      {n:"Revenue", m:"47 people", t:"2 teams · 1 open role", k:[
+        {n:"Sales",        m:"29", k:[{n:"Mira D.",r:"Lead"},{n:"Otto B.",r:"Enterprise"}]},
+        {n:"Partnerships", m:"18", k:[{n:"Lena V.",r:"Lead"},{n:"Raj S.",r:"Channel"}]}]},
+      {n:"Operations", m:"37 people", t:"3 teams · fully staffed", k:[
+        {n:"Finance",      m:"12", k:[{n:"Tom E.",r:"Lead"},{n:"Ida N.",r:"Payroll"}]},
+        {n:"People Ops",   m:"9",  k:[{n:"Hana Y.",r:"Lead"},{n:"Cole R.",r:"Recruiting"}]},
+        {n:"Legal & Risk", m:"16", k:[{n:"Ayo T.",r:"Lead"},{n:"Ines P.",r:"Compliance"}]}]}
+    ];
+    var body=document.getElementById("ctrBody");
+    if(!body)return;
+    var CHEV='<span class="ctr-chev"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true">'+
+             '<path d="M4.5 2.5L8 6l-3.5 3.5" stroke="currentColor" stroke-width="1.8" '+
+             'stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+
+    function build(nodes,host,depth){
+      return nodes.map(function(nd){
+        var kids=!!nd.k, row=document.createElement("div");
+        row.className="ctr-row d"+depth+(depth?" shut":"");
+        row.innerHTML=(kids?CHEV:'<span class="ctr-dot"></span>')+
+          '<span class="ctr-txt"><span class="ctr-nm">'+nd.n+'</span>'+
+          (nd.t?'<span class="ctr-mt">'+nd.t+'</span>':'')+'</span>'+
+          (nd.m?'<span class="ctr-pill">'+nd.m+'</span>':'')+
+          (nd.r?'<span class="ctr-role">'+nd.r+'</span>':'');
+        host.appendChild(row);
+        var box=null,ch=[];
+        if(kids){
+          box=document.createElement("div"); box.className="ctr-kids k"+depth;
+          host.appendChild(box); ch=build(nd.k,box,depth+1);
+        }
+        var node={row:row,box:box,kids:ch,open:false};
+        row.addEventListener("click",function(){ toggle(node,!node.open); halt(); play(); });
+        return node;
+      });
+    }
+    var roots=build(tree,body,0);
+
+    function toggle(n,on){
+      if(!n.kids.length||n.open===on)return;
+      n.open=on;
+      n.row.classList.toggle("open",on);
+      n.box.classList.toggle("on",on);
+      n.kids.forEach(function(c,i){
+        // stagger the children so a branch unfolds rather than snapping open
+        setTimeout(function(){ c.row.classList.toggle("shut",!on); }, reduce?0:(on?i*80:0));
+        if(!on) toggle(c,false);
+      });
+    }
+    function only(list,keep){ list.forEach(function(x){ toggle(x,x===keep); }); }
+
+    if(reduce){ toggle(roots[0],true); toggle(roots[0].kids[0],true); return; }
+
+    var i=0,timer=null,drill=0;
+    function advance(){
+      var d=roots[i];
+      only(roots,d);                                  // one division open at a time
+      clearTimeout(drill);
+      drill=setTimeout(function(){ only(d.kids,d.kids[0]); },440);  // then drill one level in
+      i=(i+1)%roots.length;
+    }
+    function play(){ if(!timer) timer=setInterval(advance,2400); }
+    function halt(){ clearInterval(timer); timer=null; clearTimeout(drill); }
+    document.addEventListener("visibilitychange",function(){ document.hidden?halt():play(); });
+    advance(); play();
+  })();
+  </script>
+</body>
+</html>

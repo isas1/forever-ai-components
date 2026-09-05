@@ -5,11 +5,26 @@
 <meta name="description" content="Hundreds of hot-pink particles trace a slowly rotating Aizawa strange attractor in 3D, glowing where fast; pointer spins and boosts.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Strange Attractor Swarm</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#120010;}
+  /* theme tokens — dark values are the defaults; light palette in the [data-theme] block.
+     --sas-c0/-cd are the speed ramp (base rgb + delta); --sas-blend drops additive glow. */
+  :root{
+    --sas-bg:#120010; --sas-fade:rgba(18,0,16,0.16); --sas-accent:#ff5fa0; --sas-cap-o:.36;
+    --sas-blend:lighter; --sas-c0:255,95,160; --sas-cd:0,120,-40; --sas-ak:1;
+  }
+  :root[data-theme="light"]{
+    --sas-bg:#f8eef4; --sas-fade:rgba(248,238,244,0.16); --sas-accent:#d60057; --sas-cap-o:.62;
+    --sas-blend:source-over; --sas-c0:186,32,96; --sas-cd:-70,-20,-40; --sas-ak:2.1;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--sas-bg);}
   #sas-c{display:block;width:100%;height:100%;}
   .sas-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.14em;color:#ff5fa0;opacity:.36;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--sas-accent);opacity:var(--sas-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +34,22 @@
  "description": "560 hot-pink particles trace the Aizawa strange attractor in 3D, glowing with additive blend; pointer spins the view and boosts simulation speed.",
  "useWhen": "Dark-mode hero backgrounds, generative art displays, math/science visualizations needing ambient complexity.",
  "avoidWhen": "Low-end mobile (per-frame N-body loop at 560 particles). Light backgrounds — hardcoded dark purple canvas.",
- "agentPrompt": "Change particle count from N=560 to N=300, shift color ramp to cyan (set cr2=0, cg=200, cb=255), and slow rotation by changing rot+=0.0016 to rot+=0.0008.",
+ "agentPrompt": "Change particle count from N=560 to N=300, shift color ramp to cyan (set cr2=0, cg=200, cb=255), and slow rotation by changing rot+=0.0016 to rot+=0.0008. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "particle count (N=560)",
   "attractor params (A,B,C,D,E,F)",
   "rotation speed (rot += 0.0016)",
   "color ramp (cr2, cg, cb expressions)",
   "perspective strength (1.7/(1.7+tz+1.3))",
-  "time step (DT=0.0085)"
+  "time step (DT=0.0085)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static-frame fallback",
   "visibilitychange stop/start guards",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound per-frame velocity loop — can drop frames on low-end devices at full particle count",
@@ -45,7 +62,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "attractor",
@@ -67,6 +85,19 @@
   const cv=document.getElementById('sas-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,cx,cy,scale;
+  // the swarm's colours live in tokens; a flip re-reads them (never per frame)
+  const root=document.documentElement, TH={};
+  function syncTheme(){
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    TH.bg=g('--sas-bg');TH.fade=g('--sas-fade');TH.blend=g('--sas-blend');TH.ak=+g('--sas-ak');
+    TH.c0=g('--sas-c0').split(',').map(Number);TH.cd=g('--sas-cd').split(',').map(Number);
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      if(reduce)still();               // static frame: repaint in the new palette
+    }});
+  syncTheme();
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
@@ -105,12 +136,12 @@
   }
 
   function frame(){
-    ctx.fillStyle='rgba(18,0,16,0.16)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=TH.fade;ctx.fillRect(0,0,W,H);
     boost*=0.93; pull*=0.9;
     if(!reduce) rot+=0.0016+pull*0.004;
     const sr=Math.sin(rot),cr=Math.cos(rot);
     const steps=reduce?1:(2+(boost>0.05?2:0));
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=TH.blend;
     for(let i=0;i<N;i++){
       const p=P[i];
       for(let s=0;s<steps;s++){
@@ -123,9 +154,9 @@
       const spd=Math.min(1,(p.x*p.x+p.y*p.y)*0.18);   // speed → hue toward white/hot pink
       const a=(0.10+q.d*0.5);
       const r=(0.5+q.d*1.7);
-      // colour ramp: deep magenta dust → hot pink → near-white crest
-      const cr2=255, cg= 95 + spd*120, cb=160 - spd*40;
-      ctx.fillStyle='rgba('+cr2+','+(cg|0)+','+(cb|0)+','+(a*(0.55+spd*0.6)).toFixed(3)+')';
+      // colour ramp: deep magenta dust → hot pink → near-white crest (inverted in light)
+      const cr2=TH.c0[0]+spd*TH.cd[0], cg=TH.c0[1]+spd*TH.cd[1], cb=TH.c0[2]+spd*TH.cd[2];
+      ctx.fillStyle='rgba('+(cr2|0)+','+(cg|0)+','+(cb|0)+','+(a*(0.55+spd*0.6)*TH.ak).toFixed(3)+')';
       ctx.beginPath();ctx.arc(q.sx,q.sy,r,0,6.2832);ctx.fill();
     }
     ctx.globalCompositeOperation='source-over';
@@ -135,16 +166,19 @@
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){
-    ctx.fillStyle='#120010';ctx.fillRect(0,0,W,H);
-    // settle the swarm onto the attractor, then draw one static frame
-    for(let w=0;w<700;w++)for(let i=0;i<N;i++){const p=P[i],v=vel(p);p.x+=v.x*DT;p.y+=v.y*DT;p.z+=v.z*DT;if(Math.abs(p.x)>3)seed(p);}
+  function still(){
+    ctx.fillStyle=TH.bg;ctx.fillRect(0,0,W,H);
     const sr=Math.sin(rot),cr=Math.cos(rot);
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=TH.blend;
     for(let i=0;i<N;i++){const p=P[i],q=project(p,sr,cr);const spd=Math.min(1,(p.x*p.x+p.y*p.y)*0.18);
-      ctx.fillStyle='rgba(255,'+((95+spd*120)|0)+','+((160-spd*40)|0)+','+(0.18+q.d*0.5).toFixed(3)+')';
+      ctx.fillStyle='rgba('+((TH.c0[0]+spd*TH.cd[0])|0)+','+((TH.c0[1]+spd*TH.cd[1])|0)+','+((TH.c0[2]+spd*TH.cd[2])|0)+','+((0.18+q.d*0.5)*TH.ak).toFixed(3)+')';
       ctx.beginPath();ctx.arc(q.sx,q.sy,(0.5+q.d*1.7),0,6.2832);ctx.fill();}
     ctx.globalCompositeOperation='source-over';
+  }
+  if(reduce){
+    // settle the swarm onto the attractor, then draw one static frame
+    for(let w=0;w<700;w++)for(let i=0;i<N;i++){const p=P[i],v=vel(p);p.x+=v.x*DT;p.y+=v.y*DT;p.z+=v.z*DT;if(Math.abs(p.x)>3)seed(p);}
+    still();
   } else start();
 })();
 </script>

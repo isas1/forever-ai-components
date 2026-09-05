@@ -4,11 +4,39 @@
 <meta charset="utf-8">
 <meta name="description" content="Orrery — Clockwork &amp; Mechanical. A self-contained, zero-dependency animated web component.">
 <title>Orrery</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#141414}
+  /* theme tokens — dark values are the defaults; light = brass and steel on cream card stock. */
+  :root{
+    --or-bg:#141414;--or-plate:#1a1408;--or-edge:#5a3c10;--or-engrave:#3a2808;
+    --or-sun0:#ffe066;--or-sun1:#e8a020;--or-sun2:#a05010;--or-br0:#d4a755;--or-br1:#7a5420;
+    --or-brass:#b5813a;--or-brass2:#c49030;--or-arm:#8a6030;--or-arm2:#7a5420;
+    --or-steelbg:#2c2c2c;--or-steel:#8a8a96;--or-body2:#1e1810;--or-body3:#141414;--or-hi:#e8dcc8;
+    --or-cap:#b5813a;--or-cap-o:.45;
+  }
+  :root[data-theme="light"]{
+    --or-bg:#f6f0e4;--or-plate:#ece0c8;--or-edge:#8a6a2e;--or-engrave:#b39c6c;
+    --or-sun0:#ffd633;--or-sun1:#e08a12;--or-sun2:#95500f;--or-br0:#c08b2a;--or-br1:#6b4718;
+    --or-brass:#8a6a2e;--or-brass2:#96701f;--or-arm:#9a7844;--or-arm2:#8a6a2e;
+    --or-steelbg:#dfd7c4;--or-steel:#6f7885;--or-body2:#e6dcc2;--or-body3:#efe7d4;--or-hi:#3a3226;
+    --or-cap:#8e652e;--or-cap-o:.8;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--or-bg)}
   .or-root{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
   .or-svg{width:min(100%,100vmin);height:min(100%,100vmin)}
-  .or-caption{position:fixed;left:8px;bottom:7px;font:11px/1 monospace;color:#b5813a;opacity:.45;pointer-events:none}
+  .or-caption{position:fixed;left:8px;bottom:7px;font:11px/1 monospace;color:var(--or-cap);opacity:var(--or-cap-o);pointer-events:none}
+  /* plate / brass / steel colours on classes so both palettes share one drawing */
+  .fpl{fill:var(--or-plate)}.feg{fill:var(--or-engrave)}.fsb{fill:var(--or-steelbg)}.fst{fill:var(--or-steel)}
+  .fbr{fill:var(--or-brass)}.fb2{fill:var(--or-body2)}.fb3{fill:var(--or-body3)}.fbz{fill:var(--or-br0)}.fhi{fill:var(--or-hi)}
+  .sed{stroke:var(--or-edge)}.seg{stroke:var(--or-engrave)}.ssn{stroke:var(--or-sun0)}.sbr{stroke:var(--or-brass)}
+  .sbz{stroke:var(--or-br0)}.sb2{stroke:var(--or-brass2)}.sar{stroke:var(--or-arm)}.sa2{stroke:var(--or-arm2)}
+  .os0{stop-color:var(--or-sun0)}.os1{stop-color:var(--or-sun1)}.os2{stop-color:var(--or-sun2)}
+  .ob0{stop-color:var(--or-br0)}.ob1{stop-color:var(--or-br1)}
+  feDropShadow{flood-color:var(--or-brass)}
 
   #or-ring1{transform-origin:50% 50%;animation:or-r1 12s linear infinite}
   #or-ring2{transform-origin:50% 50%;animation:or-r2 8s linear infinite}
@@ -30,18 +58,20 @@
  "description": "Four planetary arms orbit a glowing brass sun at staggered speeds; a counter-rotating dashed ring and crosshair armature give a steampunk orrery feel.",
  "useWhen": "Dark-mode hero backgrounds, science/space themes, steampunk or mechanical UI aesthetics, ambient looping decorations.",
  "avoidWhen": "Light backgrounds (hardcoded dark plate). Contexts where constant rotational motion competes with foreground content.",
- "agentPrompt": "Change the outermost planet speed to 18s by editing #or-ring1 animation duration, and recolor the sun gradient stops to deep red (#ff4400 → #880000).",
+ "agentPrompt": "Change the outermost planet speed to 18s by editing #or-ring1 animation duration, and recolor the sun gradient stops to deep red (#ff4400 → #880000). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "orbit arm speeds (animation durations 12s/8s/5s/3s/20s)",
   "planet fill colors (cx/cy circle fills)",
   "sun gradient stops (#ffe066, #e8a020, #a05010)",
   "ring track radii (r=72/56/40/25)",
-  "counter-rotation direction (reverse keyword on or-ring5)"
+  "counter-rotation direction (reverse keyword on or-ring5)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper with prefers-reduced-motion guard",
   "visibilitychange pause handler",
-  "transform-origin:50% 50% on all rotating groups"
+  "transform-origin:50% 50% on all rotating groups",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to #141414 — must edit CSS to change",
@@ -55,7 +85,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "orrery",
@@ -74,87 +105,87 @@
   <svg class="or-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <radialGradient id="or-sun" cx="35%" cy="30%">
-        <stop offset="0%" stop-color="#ffe066"/>
-        <stop offset="60%" stop-color="#e8a020"/>
-        <stop offset="100%" stop-color="#a05010"/>
+        <stop class="os0" offset="0%"/>
+        <stop class="os1" offset="60%"/>
+        <stop class="os2" offset="100%"/>
       </radialGradient>
       <radialGradient id="or-brass" cx="35%" cy="30%">
-        <stop offset="0%" stop-color="#d4a755"/>
-        <stop offset="100%" stop-color="#7a5420"/>
+        <stop class="ob0" offset="0%"/>
+        <stop class="ob1" offset="100%"/>
       </radialGradient>
       <filter id="or-glow">
         <feGaussianBlur stdDeviation="3" result="blur"/>
         <feComposite in="SourceGraphic" in2="blur" operator="over"/>
       </filter>
       <filter id="or-drop">
-        <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#b5813a" flood-opacity=".3"/>
+        <feDropShadow dx="0" dy="0" stdDeviation="2" flood-opacity=".3"/>
       </filter>
     </defs>
 
     <!-- Base plate -->
-    <circle cx="100" cy="100" r="92" fill="#1a1408" stroke="#5a3c10" stroke-width="1.5"/>
-    <circle cx="100" cy="100" r="88" fill="none" stroke="#3a2808" stroke-width=".5" stroke-dasharray="4 4"/>
+    <circle class="fpl sed" cx="100" cy="100" r="92" stroke-width="1.5"/>
+    <circle class="seg" cx="100" cy="100" r="88" fill="none" stroke-width=".5" stroke-dasharray="4 4"/>
 
     <!-- Orbital ring tracks (static, engraved look) -->
-    <circle cx="100" cy="100" r="72" fill="none" stroke="#3a2808" stroke-width=".8"/>
-    <circle cx="100" cy="100" r="56" fill="none" stroke="#3a2808" stroke-width=".8"/>
-    <circle cx="100" cy="100" r="40" fill="none" stroke="#3a2808" stroke-width=".8"/>
-    <circle cx="100" cy="100" r="25" fill="none" stroke="#3a2808" stroke-width=".8"/>
+    <circle class="seg" cx="100" cy="100" r="72" fill="none" stroke-width=".8"/>
+    <circle class="seg" cx="100" cy="100" r="56" fill="none" stroke-width=".8"/>
+    <circle class="seg" cx="100" cy="100" r="40" fill="none" stroke-width=".8"/>
+    <circle class="seg" cx="100" cy="100" r="25" fill="none" stroke-width=".8"/>
 
     <!-- Sun at centre -->
     <circle cx="100" cy="100" r="12" fill="url(#or-sun)" filter="url(#or-glow)"/>
-    <circle cx="100" cy="100" r="9" fill="none" stroke="#ffe066" stroke-width=".4" opacity=".5"/>
+    <circle class="ssn" cx="100" cy="100" r="9" fill="none" stroke-width=".4" opacity=".5"/>
 
     <!-- Outer decorative ring (counter-rotating) -->
     <g id="or-ring5">
-      <circle cx="100" cy="100" r="88" fill="none" stroke="#b5813a" stroke-width="1.5" stroke-dasharray="3 6"/>
+      <circle class="sbr" cx="100" cy="100" r="88" fill="none" stroke-width="1.5" stroke-dasharray="3 6"/>
     </g>
 
     <!-- Ring 1: outermost orbit arm + planet -->
     <g id="or-ring1">
-      <line x1="100" y1="100" x2="172" y2="100" stroke="#8a6030" stroke-width=".8" opacity=".6"/>
+      <line class="sar" x1="100" y1="100" x2="172" y2="100" stroke-width=".8" opacity=".6"/>
       <!-- Gear at orbit radius for visual interest -->
-      <circle cx="172" cy="100" r="7" fill="#2c2c2c" stroke="#b5813a" stroke-width="1"/>
-      <circle cx="172" cy="100" r="4.5" fill="#8a8a96"/>
-      <circle cx="172" cy="100" r="1.5" fill="#b5813a"/>
+      <circle class="fsb sbr" cx="172" cy="100" r="7" stroke-width="1"/>
+      <circle class="fst" cx="172" cy="100" r="4.5"/>
+      <circle class="fbr" cx="172" cy="100" r="1.5"/>
       <!-- Teeth suggestion -->
-      <circle cx="172" cy="100" r="7" fill="none" stroke="#b5813a" stroke-width="1.5" stroke-dasharray="1.5 2.5"/>
+      <circle class="sbr" cx="172" cy="100" r="7" fill="none" stroke-width="1.5" stroke-dasharray="1.5 2.5"/>
     </g>
 
     <!-- Ring 2 -->
     <g id="or-ring2">
-      <line x1="100" y1="100" x2="156" y2="100" stroke="#8a6030" stroke-width=".7" opacity=".6"/>
-      <circle cx="156" cy="100" r="6" fill="#3a2808" stroke="#d4a755" stroke-width=".8"/>
-      <circle cx="156" cy="100" r="3.5" fill="#b5813a"/>
-      <circle cx="156" cy="100" r="1" fill="#e8dcc8"/>
+      <line class="sar" x1="100" y1="100" x2="156" y2="100" stroke-width=".7" opacity=".6"/>
+      <circle class="feg sbz" cx="156" cy="100" r="6" stroke-width=".8"/>
+      <circle class="fbr" cx="156" cy="100" r="3.5"/>
+      <circle class="fhi" cx="156" cy="100" r="1"/>
     </g>
 
     <!-- Ring 3 -->
     <g id="or-ring3">
-      <line x1="100" y1="100" x2="140" y2="100" stroke="#8a6030" stroke-width=".7" opacity=".6"/>
-      <circle cx="140" cy="100" r="5" fill="#1e1810" stroke="#c49030" stroke-width=".8"/>
-      <circle cx="140" cy="100" r="3" fill="#8a8a96"/>
-      <circle cx="140" cy="100" r="1" fill="#d4a755"/>
+      <line class="sar" x1="100" y1="100" x2="140" y2="100" stroke-width=".7" opacity=".6"/>
+      <circle class="fb2 sb2" cx="140" cy="100" r="5" stroke-width=".8"/>
+      <circle class="fst" cx="140" cy="100" r="3"/>
+      <circle class="fbz" cx="140" cy="100" r="1"/>
     </g>
 
     <!-- Ring 4: inner fast orbit -->
     <g id="or-ring4">
-      <line x1="100" y1="100" x2="125" y2="100" stroke="#7a5420" stroke-width=".6" opacity=".6"/>
-      <circle cx="125" cy="100" r="4" fill="#141414" stroke="#b5813a" stroke-width=".8"/>
-      <circle cx="125" cy="100" r="2" fill="#d4a755"/>
+      <line class="sa2" x1="100" y1="100" x2="125" y2="100" stroke-width=".6" opacity=".6"/>
+      <circle class="fb3 sbr" cx="125" cy="100" r="4" stroke-width=".8"/>
+      <circle class="fbz" cx="125" cy="100" r="2"/>
     </g>
 
     <!-- Armature crossbar (structural, rotates with outer orbit) -->
     <g id="or-armature">
-      <line x1="28" y1="100" x2="172" y2="100" stroke="#5a3c10" stroke-width=".5" opacity=".3"/>
-      <line x1="100" y1="28" x2="100" y2="172" stroke="#5a3c10" stroke-width=".5" opacity=".3"/>
+      <line class="sed" x1="28" y1="100" x2="172" y2="100" stroke-width=".5" opacity=".3"/>
+      <line class="sed" x1="100" y1="28" x2="100" y2="172" stroke-width=".5" opacity=".3"/>
     </g>
 
     <!-- Centre pivot -->
-    <circle cx="100" cy="100" r="3" fill="url(#or-brass)" stroke="#5a3c10" stroke-width=".5"/>
+    <circle class="sed" cx="100" cy="100" r="3" fill="url(#or-brass)" stroke-width=".5"/>
 
     <!-- Degree ring -->
-    <g stroke="#5a3c10" stroke-width=".4" opacity=".5">
+    <g class="sed" stroke-width=".4" opacity=".5">
       <line x1="100" y1="10" x2="100" y2="14"/>
       <line x1="100" y1="186" x2="100" y2="190"/>
       <line x1="10" y1="100" x2="14" y2="100"/>
@@ -173,6 +204,13 @@
 <div class="or-caption">orrery · nested orbits</div>
 <script>
 (()=>{
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // Every colour is a CSS token, so re-setting the attribute is the whole switch.
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);
+  });
   const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
   const ids = ['or-ring1','or-ring2','or-ring3','or-ring4','or-ring5','or-armature'];
   if(reduce){

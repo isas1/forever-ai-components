@@ -8,8 +8,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
+    --bg:#0d0f16; --glow-a:rgba(192,132,89,0.16);
     --text-0:#f4f6fb;
     --text-2:#8a91a8;
     --accent-iris:#2BAB6B;
@@ -17,12 +25,21 @@
     --grad-iris-cyan:linear-gradient(120deg,var(--accent-iris),var(--accent-cyan));
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
     --dur-base:280ms;
+    --cap:#fff; --cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow-a:rgba(152,97,58,0.12);
+    --text-0:#1b2130;
+    --text-2:#5b6178;
+    --accent-iris:#207e4f;
+    --accent-cyan:#98613a;
+    --cap:#182118; --cap-o:.5;
   }
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden}
   body{
-    background:#0d0f16;
-    background-image:radial-gradient(50vw 40vw at 90% 0%,rgba(192,132,89,0.16),transparent 55%);
+    background:var(--bg);
+    background-image:radial-gradient(50vw 40vw at 90% 0%,var(--glow-a),transparent 55%);
     font-family:"Inter",system-ui,sans-serif;
     display:grid;place-items:center;
   }
@@ -40,7 +57,7 @@
     transform:translateX(0);width:0;
     transition:transform 420ms var(--ease-out-soft),width 420ms var(--ease-out-soft);
   }
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
   @media (prefers-reduced-motion:reduce){.c06-nav__ink{transition-duration:.001ms!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -50,19 +67,21 @@
  "description": "A glowing emerald-to-tan gradient underline slides and resizes to follow hovered nav links; wanders idly across links when unhovered.",
  "useWhen": "Portfolio or app nav bars needing a polished active-state indicator with ambient motion between interactions.",
  "avoidWhen": "Nav bars with more than 6 items where the idle wander may feel restless; or any context requiring a truly static nav indicator.",
- "agentPrompt": "Change the underline gradient to gold-to-orange by setting --accent-iris:#f59e0b and --accent-cyan:#f97316, and slow the idle cycle to 2400ms.",
+ "agentPrompt": "Change the underline gradient to gold-to-orange by setting --accent-iris:#f59e0b and --accent-cyan:#f97316, and slow the idle cycle to 2400ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent colors (--accent-iris, --accent-cyan)",
   "transition duration (420ms on .c06-nav__ink)",
   "idle wander interval (1600ms in setTimeout)",
   "underline height (height:2px on .c06-nav__ink)",
-  "gap between nav items (gap:6px)"
+  "gap between nav items (gap:6px)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "prefers-reduced-motion guard (kills idle loop)",
   "visibilitychange stop/loop guard",
   "IIFE wrapper",
-  "mouseleave return-to-active logic"
+  "mouseleave return-to-active logic",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Idle wander uses offsetLeft/offsetWidth — breaks if nav is not laid out when loop starts",
@@ -76,7 +95,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "navigation",
@@ -108,6 +128,13 @@
   var active=links[0];
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var hovering=false;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
   function to(el){
     ink.style.width=el.offsetWidth+'px';
     ink.style.transform='translateX('+el.offsetLeft+'px)';

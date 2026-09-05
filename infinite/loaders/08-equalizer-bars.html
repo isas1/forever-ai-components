@@ -5,26 +5,43 @@
 <meta name="description" content="Seven rounded vermillion-to-tan gradient bars bounce up and down at staggered offsets like an audio equalizer.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Equalizer Bars</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block */
 :root{
   --bg-900:#08090d;
   --accent-iris:#E04729; --accent-cyan:#C08459;
   --grad-iris-cyan:linear-gradient(120deg,var(--accent-iris),var(--accent-cyan));
+  --glow-a:rgba(224,71,41,.16); --glow-b:rgba(192,132,89,.16);
+  --bar-glow:rgba(192,132,89,.6);
+  --cap:#C08459; --cap-o:.45;
   --r-pill:999px;
+}
+:root[data-theme="light"]{
+  --bg-900:#f2f4f8;
+  --accent-iris:#cd3a1e; --accent-cyan:#98613a;
+  --glow-a:rgba(224,71,41,.18); --glow-b:rgba(192,132,89,.18);
+  --bar-glow:rgba(152,97,58,.3);
+  --cap:#1b2130; --cap-o:.5;
 }
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden}
 body{
   background:var(--bg-900);
   background-image:
-    radial-gradient(60vw 40vw at 15% -10%,rgba(224,71,41,.16),transparent 60%),
-    radial-gradient(50vw 40vw at 90% 0%,rgba(192,132,89,.16),transparent 55%);
+    radial-gradient(60vw 40vw at 15% -10%,var(--glow-a),transparent 60%),
+    radial-gradient(50vw 40vw at 90% 0%,var(--glow-b),transparent 55%);
   display:grid;place-items:center;
 }
 .c08-eq{display:flex;align-items:flex-end;gap:clamp(5px,1.6vmin,9px);height:min(34vmin,130px)}
 .c08-eq__bar{width:clamp(7px,2vmin,11px);border-radius:var(--r-pill);background:var(--grad-iris-cyan);
   transform-origin:bottom;animation:c08-eq-bounce 1.1s cubic-bezier(.65,0,.35,1) infinite;
-  box-shadow:0 0 12px -2px rgba(192,132,89,.6)}
+  box-shadow:0 0 12px -2px var(--bar-glow)}
 .c08-eq__bar:nth-child(1){height:60%;animation-delay:-.9s}
 .c08-eq__bar:nth-child(2){height:90%;animation-delay:-.2s}
 .c08-eq__bar:nth-child(3){height:45%;animation-delay:-.5s}
@@ -34,7 +51,7 @@ body{
 .c08-eq__bar:nth-child(7){height:50%;animation-delay:-.8s}
 @keyframes c08-eq-bounce{0%,100%{transform:scaleY(.28)}50%{transform:scaleY(1)}}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#C08459;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms!important;animation-iteration-count:1!important}
   .c08-eq__bar{transform:scaleY(.7)}
@@ -47,19 +64,21 @@ body{
  "description": "Seven pill-shaped vermillion-to-tan gradient bars bounce at staggered offsets, mimicking an audio equalizer. Pure CSS scaleY animation.",
  "useWhen": "Music apps, audio players, loading states, or any context where an audio/media metaphor fits the brand.",
  "avoidWhen": "Static content pages or contexts where looping motion distracts from primary content; reduced-motion users get a near-static fallback only.",
- "agentPrompt": "Change bar count to 5 by removing 2 span elements, set --accent-iris to #ff3b6b and --accent-cyan to #ff9f43, slow the bounce to 1.6s.",
+ "agentPrompt": "Change bar count to 5 by removing 2 span elements, set --accent-iris to #ff3b6b and --accent-cyan to #ff9f43, slow the bounce to 1.6s. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "bar count (number of .c08-eq__bar spans)",
   "animation duration (1.1s in animation shorthand)",
   "gradient colors (--accent-iris, --accent-cyan)",
   "bar height percentages per nth-child",
-  "gap between bars (clamp gap value)"
+  "gap between bars (clamp gap value)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause in IIFE",
   "prefers-reduced-motion guard",
   "c08- namespaced class prefix (avoids conflicts)",
-  "transform-origin:bottom on bars"
+  "transform-origin:bottom on bars",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Reduced-motion fallback freezes bars mid-animation rather than removing them — not fully static",
@@ -72,7 +91,8 @@ body{
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "equalizer",
@@ -99,9 +119,17 @@ body{
 <div class="cap">Equalizer Bars</div>
 <script>
 (function(){
+  var root=document.documentElement;
   var bars=document.querySelectorAll('.c08-eq__bar');
   function vis(){var s=document.hidden?'paused':'running';bars.forEach(function(n){n.style.animationPlayState=s;});}
   document.addEventListener('visibilitychange',vis);vis();
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);
+    }
+  });
 })();
 </script>
 </body>

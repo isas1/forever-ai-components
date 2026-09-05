@@ -5,13 +5,28 @@
 <meta name="description" content="Plum-to-teal neon-glow range slider with a glowing knob and a floating value bubble that tracks the handle.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Glow Slider</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1E1A1C;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  :root{
+    --c02-bg:#1E1A1C; --c02-cap:#925D78; --c02-cap-o:.4;
+    --c02-track-bg:#2b2226; --c02-grad-a:#5E7A78; --c02-grad-b:#925D78;
+    --c02-bub-ink:#fff; --c02-knob:#fff;
+  }
+  :root[data-theme="light"]{
+    --c02-bg:#f6f1f7; --c02-cap:#925D78; --c02-cap-o:.5;
+    --c02-track-bg:#e7dde3; --c02-grad-a:#5a7472; --c02-grad-b:#925D78;
+    --c02-bub-ink:#fff; --c02-knob:#794d64;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c02-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   .wrap{height:100%;display:flex;align-items:center;justify-content:center}
   .stage{width:min(74vmin,340px)}
   svg{width:100%;height:auto;overflow:visible}
-  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:#925D78;opacity:.4;text-transform:uppercase}
-  .bub{font:700 16px ui-sans-serif,system-ui,sans-serif;fill:#fff}
+  .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c02-cap);opacity:var(--c02-cap-o);text-transform:uppercase}
+  .bub{font:700 16px ui-sans-serif,system-ui,sans-serif;fill:var(--c02-bub-ink)}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -20,24 +35,26 @@
  "description": "SVG range slider with a plum-to-teal gradient fill, glowing knob, and a floating value bubble that tracks the handle; auto-oscillates when idle.",
  "useWhen": "Settings panels, volume/brightness controls, or any numeric input needing a high-contrast neon aesthetic on dark backgrounds.",
  "avoidWhen": "Light-background UIs (background hardcoded dark plum). Production use requires wiring a real value-change callback and removing the auto-oscillation loop.",
- "agentPrompt": "Change the gradient from plum-teal to amber-gold by updating the two stop-color values in #fill to #A68D3F and #BFA98C, and slow the oscillation by changing t*0.018 to t*0.010.",
+ "agentPrompt": "Change the gradient from plum-teal to amber-gold by updating the two stop-color values in #fill to #A68D3F and #BFA98C, and slow the oscillation by changing t*0.018 to t*0.010. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gradient colors (stop-color in #fill linearGradient)",
   "oscillation speed (t*0.018)",
   "oscillation amplitude (0.42)",
   "glow blur radius (feGaussianBlur stdDeviation)",
-  "knob radius (r=9)"
+  "knob radius (r=9)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard",
   "visibilitychange pause",
-  "bubble clamp logic (Math.min/Math.max on bx)"
+  "bubble clamp logic (Math.min/Math.max on bx)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-oscillates by default — remove the !manual sine loop for production use",
   "Not keyboard accessible (no input[type=range] underneath)",
-  "Background color hardcoded dark purple in CSS"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -46,7 +63,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "slider",
@@ -64,16 +82,16 @@
 <div class="wrap"><div class="stage">
 <svg viewBox="0 0 200 120" role="img" aria-label="Glowing slider">
   <defs>
-    <linearGradient id="fill" x1="0" x2="1"><stop offset="0" stop-color="#5E7A78"/><stop offset="1" stop-color="#925D78"/></linearGradient>
+    <linearGradient id="fill" x1="0" x2="1"><stop offset="0" style="stop-color:var(--c02-grad-a)"/><stop offset="1" style="stop-color:var(--c02-grad-b)"/></linearGradient>
     <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
   </defs>
-  <rect x="20" y="78" width="160" height="8" rx="4" fill="#2b2226"/>
+  <rect x="20" y="78" width="160" height="8" rx="4" fill="var(--c02-track-bg)"/>
   <rect id="prog" x="20" y="78" width="40" height="8" rx="4" fill="url(#fill)" filter="url(#glow)"/>
   <g id="bubg" filter="url(#glow)">
     <path id="bubp" d="" fill="url(#fill)"/>
     <text id="bubt" class="bub" x="60" y="40" text-anchor="middle">40</text>
   </g>
-  <circle id="knob" cx="60" cy="82" r="9" fill="#fff" filter="url(#glow)"/>
+  <circle id="knob" cx="60" cy="82" r="9" fill="var(--c02-knob)" filter="url(#glow)"/>
 </svg>
 </div></div>
 <div class="cap">Glow Slider</div>
@@ -105,6 +123,11 @@
   svg.addEventListener('pointermove',e=>{if(manual&&e.buttons)set(e);});
   window.addEventListener('pointerup',()=>{setTimeout(()=>manual=false,1400);});
   document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
   bubp.setAttribute('d',bubblePath(60));
   if(!reduce)requestAnimationFrame(frame);
 })();

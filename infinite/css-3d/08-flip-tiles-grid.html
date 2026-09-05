@@ -5,8 +5,27 @@
 <meta name="description" content="A 4x4 grid of tiles flipping in a diagonal wave between powder-blue and tan gradient faces on a tilted plane.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Flip Tiles Grid</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#191B1D;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c08-bg:#191B1D; --c08-drop:rgba(0,0,0,.35);
+    --c08-face-a:linear-gradient(135deg,#B0D4DD,#D8B297);
+    --c08-face-b:linear-gradient(135deg,#D8B297,#B0D4DD);
+    --c08-cap:#B0D4DD; --c08-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --c08-bg:#f1f3f5; --c08-drop:rgba(40,55,65,.2);
+    --c08-face-a:linear-gradient(135deg,#397584,#986139);
+    --c08-face-b:linear-gradient(135deg,#986139,#397584);
+    --c08-cap:#1c2429; --c08-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c08-bg);
     font-family:system-ui,-apple-system,sans-serif;}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:800px;}
@@ -14,10 +33,10 @@
   .tile{width:10vmin;height:10vmin;position:relative;transform-style:preserve-3d;
     transition:none;}
   .face{position:absolute;inset:0;border-radius:6px;backface-visibility:hidden;
-    box-shadow:0 4px 10px rgba(0,0,0,.35);}
-  .a{background:linear-gradient(135deg,#B0D4DD,#D8B297);}
-  .b{background:linear-gradient(135deg,#D8B297,#B0D4DD);transform:rotateY(180deg);}
-  .cap{position:fixed;left:10px;bottom:8px;color:#B0D4DD;opacity:.34;
+    box-shadow:0 4px 10px var(--c08-drop);}
+  .a{background:var(--c08-face-a);}
+  .b{background:var(--c08-face-b);transform:rotateY(180deg);}
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--c08-cap);opacity:var(--c08-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -27,20 +46,22 @@
  "description": "A 4x4 grid of tiles on a tilted plane flip in a diagonal sine wave, alternating between powder-blue and tan gradient faces.",
  "useWhen": "Hero backgrounds, loading screens, or decorative grid displays where rhythmic 3D motion sets a premium aesthetic.",
  "avoidWhen": "Contexts where users may have vestibular sensitivities — though a reduced-motion fallback exists, the static state may look odd. Avoid behind dense text overlays.",
- "agentPrompt": "Change grid size to 5x5 by setting N=5, swap face A's gradient to a deeper slate (#A9B8BC → #7c8a90), and slow the wave by changing t+=0.02 to t+=0.01.",
+ "agentPrompt": "Change grid size to 5x5 by setting N=5, swap face A's gradient to a deeper slate (#A9B8BC → #7c8a90), and slow the wave by changing t+=0.02 to t+=0.01. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid size (N=4)",
   "wave speed (t += 0.02)",
   "diagonal phase offset (o.d * 0.35)",
   "face A gradient colors (#B0D4DD, #D8B297)",
   "face B gradient colors (#D8B297, #B0D4DD)",
-  "tile size (10vmin) and gap (1.4vmin)"
+  "tile size (10vmin) and gap (1.4vmin)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "transform-style: preserve-3d on .tile",
   "backface-visibility: hidden on .face",
   "visibilitychange pause/resume",
-  "prefers-reduced-motion guard"
+  "prefers-reduced-motion guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "No click or hover interactivity — purely decorative",
@@ -54,7 +75,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "css-3d",
@@ -72,6 +94,7 @@
 <div id="stage"><div id="grid"></div></div>
 <div class="cap">Flip Tiles Grid</div>
 <script>
+(function(){
   const grid=document.getElementById('grid');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const N=4;grid.style.gridTemplateColumns=`repeat(${N},auto)`;
@@ -94,8 +117,13 @@
   function start(){if(!raf&&!reduce)loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);});
   if(reduce){tiles.forEach(o=>o.el.style.transform=`rotateY(${(o.d%2)*180}deg)`);}
   else start();
+})();
 </script>
 </body>
 </html>

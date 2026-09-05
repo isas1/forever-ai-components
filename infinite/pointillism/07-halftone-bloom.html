@@ -5,11 +5,30 @@
 <meta name="description" content="A halftone grid of dots swells from the center, blooming into a glowing amber flower on a deep blue field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Halftone Bloom</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d0f14}
-  #po07-stage{position:fixed;inset:0;background:#0d0f14;overflow:hidden}
+  /* theme tokens — dark values are the defaults; the light re-theme is the one
+     [data-theme="light"] block. --po07-pal is the radius-banded dot palette,
+     --po07-glow the central highlight wash. */
+  :root{
+    --po07-bg:#0d0f14; --po07-cap:#fff; --po07-cap-o:.42;
+    --po07-pal:#f0a830 #ff6f3c #e8472e #c0307a #7a2a8c #2d5fa6 #1f8a8a #f6d24b;
+    --po07-glow:246 210 75;
+  }
+  :root[data-theme="light"]{
+    /* canvas-linen ground; the same bands deepened so each dot reads as pigment */
+    --po07-bg:#f4efe3; --po07-cap:#2b2418; --po07-cap-o:.55;
+    --po07-pal:#b47a08 #cc4a12 #b32a16 #8f1f57 #5a1a68 #1f4478 #14615f #a68a10;
+    --po07-glow:212 150 32;
+  }
+  html,body{margin:0;height:100%;background:var(--po07-bg)}
+  #po07-stage{position:fixed;inset:0;background:var(--po07-bg);overflow:hidden}
   #po07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--po07-cap);opacity:var(--po07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +38,22 @@
  "description": "Colored dots bloom radially from center, optically mixing amber, magenta, and teal into a glowing flower. Slow ripple breathes through the dot grid.",
  "useWhen": "Dark-mode hero backgrounds, loading screens, or ambient art tiles needing organic radial motion without user interaction.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy). Layouts needing legible text overlay — dot field competes with copy.",
- "agentPrompt": "Change the palette to cool blues by replacing PAL values and slow the bloom cycle by setting PERIOD to 8000.",
+ "agentPrompt": "Change the palette to cool blues by replacing PAL values and slow the bloom cycle by setting PERIOD to 8000. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "palette (PAL array)",
   "bloom cycle duration (PERIOD=5200)",
+  "mount offset (t0=ts-1500: bloom starts a quarter in)",
   "dot count cap (N<110)",
   "grid pitch divisor (minSide/9.2)",
-  "bloom radius fraction (maxR=minSide*0.46)"
+  "bloom radius fraction (maxR=minSide*0.46)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback (render(1,0.0))",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and canvas fillRect — must change in two places",
@@ -44,7 +66,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "halftone",
@@ -71,11 +94,10 @@
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 
-  // Divisionist palette: warm amber core, magenta + violet shadows, cyan/teal complements.
-  // Each dot picks a hue by radius band so colors optically mix toward amber.
-  var PAL=['#f0a830','#ff6f3c','#e8472e','#c0307a','#7a2a8c','#2d5fa6','#1f8a8a','#f6d24b'];
-  var rgb=[];
-  for(var i=0;i<PAL.length;i++){var h=PAL[i];rgb.push([parseInt(h.substr(1,2),16),parseInt(h.substr(3,2),16),parseInt(h.substr(5,2),16)]);}
+  // Divisionist palette: warm amber core, magenta + violet shadows, cyan/teal
+  // complements. Each dot picks a hue by radius band so colors optically mix
+  // toward amber. Values live in --po07-pal; rgb[] is the parsed cache.
+  var root=document.documentElement, rgb=[], BG='#0d0f14', GS='rgba(246,210,75,';
 
   var W=0,H=0,dpr=1,cx=0,cy=0,maxR=0,pitch=0;
   // Halftone grid cells (capped). Built on resize.
@@ -123,7 +145,7 @@
 
   // Render one frame. p = bloom phase 0..1 (eased), breathe 0..1
   function render(p,breathe){
-    ctx.fillStyle='#0d0f14';
+    ctx.fillStyle=BG;
     ctx.fillRect(0,0,W,H);
     // bloom front radius in canvas units
     var front=p*(maxR+pitch);
@@ -148,14 +170,29 @@
     }
     // static central highlight as a pre-baked radial — drawn each frame but no layout/filter
     var g=ctx.createRadialGradient(cx,cy,0,cx,cy,maxR*0.55);
-    g.addColorStop(0,'rgba(246,210,75,'+(0.22*p)+')');
-    g.addColorStop(1,'rgba(246,210,75,0)');
+    g.addColorStop(0,GS+(0.22*p)+')');
+    g.addColorStop(1,GS+'0)');
     ctx.fillStyle=g;
     ctx.beginPath();ctx.arc(cx,cy,maxR*0.55,0,twoPi);ctx.fill();
   }
 
   function ease(t){return t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
 
+  // JS-drawn colors read the tokens, so CSS stays the single source of truth.
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    BG=cs.getPropertyValue('--po07-bg').trim();
+    GS='rgba('+cs.getPropertyValue('--po07-glow').trim().split(/\s+/).join(',')+',';
+    rgb=cs.getPropertyValue('--po07-pal').trim().split(/\s+/).map(function(h){
+      return [parseInt(h.substr(1,2),16),parseInt(h.substr(3,2),16),parseInt(h.substr(5,2),16)];
+    });                                  // parsed palette cache — rebuilt on a flip
+    if(N&&reduce) render(1,0.0);
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
+
+  syncTheme();
   build();
 
   if(reduce){
@@ -169,7 +206,7 @@
 
   function loop(ts){
     if(!running)return;
-    if(!t0)t0=ts;
+    if(!t0)t0=ts-1500;                 // mount a quarter into the bloom: the eased start shows nothing for ~1 s
     var el=(ts-t0)%PERIOD;
     var cyc=(ts-t0)/PERIOD;
     // bloom: grow 0..1 over 70% then hold/exhale

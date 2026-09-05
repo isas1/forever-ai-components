@@ -5,10 +5,29 @@
 <meta name="description" content="A purple gradient bar fills left-to-right under a large percent readout with a glowing leading head, tick scale and status dot.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Linear Progress</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
     --bg:#0b0d12; --accent:#75894D; --accent2:#5C6670;
     --track:#1b1f2b; --ink:#eef0f7; --mute:#6f768c;
+    --track-inset:rgba(255,255,255,.05);
+    --fill-glow:rgba(117,137,77,.6); --dot-glow:rgba(117,137,77,.7);
+    --head-glow:rgba(92,102,112,.7); --tick-strong:#2a3042;
+    --success:#3ddc97; --success-glow:rgba(61,220,151,.7); --success-ink:#8ff0c4;
+    --cap:#fff; --cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --accent:#647542; --accent2:#5c6670;
+    --track:#e2e5ee; --ink:#1b2130; --mute:#686f83;
+    --track-inset:rgba(0,0,0,.08);
+    --fill-glow:rgba(100,117,66,.35); --dot-glow:rgba(100,117,66,.4);
+    --head-glow:rgba(92,102,112,.3); --tick-strong:#c3c8d6;
+    --success:#177e51; --success-glow:rgba(23,126,81,.3); --success-ink:#177e51;
+    --cap:#1b2130; --cap-o:.5;
   }
   *{margin:0;box-sizing:border-box}
   html,body{height:100%}
@@ -42,13 +61,13 @@
   #pg01-bar{
     position:relative; height:clamp(10px,3vmin,16px); border-radius:999px;
     background:var(--track);
-    box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);
+    box-shadow:inset 0 0 0 1px var(--track-inset);
   }
   #pg01-fill{
     position:absolute; inset:0; border-radius:inherit; transform-origin:left center;
     transform:scaleX(0);
     background:linear-gradient(90deg,var(--accent) 0%,var(--accent2) 100%);
-    box-shadow:0 0 18px -2px rgba(117,137,77,.6);
+    box-shadow:0 0 18px -2px var(--fill-glow);
     will-change:transform;
   }
   /* the leading head marker — rides the fill edge, compositor transform only */
@@ -56,7 +75,7 @@
     position:absolute; top:50%; left:0; width:2px; height:200%;
     margin-top:-100%; border-radius:2px;
     background:var(--accent2);
-    box-shadow:0 0 10px 1px rgba(92,102,112,.7);
+    box-shadow:0 0 10px 1px var(--head-glow);
     transform:translateX(0); will-change:transform;
   }
   /* tick scale under the bar — static, Swiss-functional */
@@ -67,7 +86,7 @@
   }
   #pg01-ticks i{position:relative; width:1px; height:6px; background:var(--track); display:block}
   .pg01-tk{display:flex; flex-direction:column; align-items:center; gap:5px}
-  .pg01-tk:nth-child(odd) i{height:9px; background:#2a3042}
+  .pg01-tk:nth-child(odd) i{height:9px; background:var(--tick-strong)}
   /* status line */
   #pg01-status{
     display:flex; align-items:center; gap:8px; min-height:1em;
@@ -76,11 +95,11 @@
   }
   #pg01-dot{
     width:7px; height:7px; border-radius:50%; background:var(--accent);
-    box-shadow:0 0 8px 1px rgba(117,137,77,.7); flex:0 0 auto;
+    box-shadow:0 0 8px 1px var(--dot-glow); flex:0 0 auto;
   }
-  #pg01-status.done #pg01-dot{background:#3ddc97; box-shadow:0 0 8px 1px rgba(61,220,151,.7)}
-  #pg01-status.done{color:#8ff0c4}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  #pg01-status.done #pg01-dot{background:var(--success); box-shadow:0 0 8px 1px var(--success-glow)}
+  #pg01-status.done{color:var(--success-ink)}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
     #pg01-fill{transform:scaleX(.68)}
@@ -94,24 +113,26 @@
  "description": "Olive-to-slate gradient bar fills left-to-right with a glowing leading edge, live percent readout, tick scale, and status dot; cycles fill → hold → reset automatically.",
  "useWhen": "Upload/download status, task progress indicators, onboarding flows where a looping demo of determinate progress is needed.",
  "avoidWhen": "Indeterminate loading states (bar simulates known progress); contexts where motion competes with dense UI content.",
- "agentPrompt": "Change accent color to a deeper rust by setting --accent:#A57855 and --accent2:#5C6670, and slow the fill phase to 4000ms by updating FILL=4000.",
+ "agentPrompt": "Change accent color to a deeper rust by setting --accent:#A57855 and --accent2:#5C6670, and slow the fill phase to 4000ms by updating FILL=4000. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent colors (--accent, --accent2)",
   "fill phase duration (FILL=2600ms)",
   "hold phase duration (HOLD=900ms)",
   "reset phase duration (RESET=700ms)",
   "label text (.pg01-label content)",
-  "status text (stxt.textContent)"
+  "status text (stxt.textContent)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static 68% fallback",
   "visibilitychange pause/resume",
-  "aria-valuenow update on bar element"
+  "aria-valuenow update on bar element",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Leading head position relies on cached barW from clientWidth — resize triggers re-measure but there is a one-frame lag",
-  "Background hardcoded dark (#0b0d12) — requires CSS var edit for light themes"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -120,7 +141,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "progress-bar",
@@ -190,6 +212,11 @@
     }
   }
   var lastPct = -1;
+
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data; if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
 
   if(reduce){ measure(); paint(0.68); pctEl.textContent='68'; bar.setAttribute('aria-valuenow',68); return; }
 

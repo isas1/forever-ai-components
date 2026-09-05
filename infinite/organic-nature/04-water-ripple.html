@@ -5,11 +5,30 @@
 <meta name="description" content="Concentric blue ripple rings expand across a deep teal water surface with shimmering caustics; tap anywhere to drop a new ripple.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Water Ripple</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#06222e}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. --wr-w0/-w1 are the water gradient stops,
+     --wr-caustic/-ring are "r,g,b" (alpha stays per-band/per-ripple), --wr-blend keeps the
+     additive shimmer on deep water and turns it into plain white sheen on daylight water. */
+  :root{
+    --wr-bg:#06222e; --wr-cap:#9fe2ff; --wr-cap-o:.34;
+    --wr-w0:#0a3a4d; --wr-w1:#052430;
+    --wr-blend:lighter; --wr-caustic:120,210,255; --wr-ring:170,230,255;
+  }
+  :root[data-theme="light"]{
+    --wr-bg:#eaf4f8; --wr-cap:#0e5f7d; --wr-cap-o:.62;
+    --wr-w0:#e2f1f7; --wr-w1:#c2ddea;
+    --wr-blend:source-over; --wr-caustic:140,185,215; --wr-ring:11,91,120;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--wr-bg)}
   #c{display:block;width:100%;height:100%;cursor:crosshair}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
-       letter-spacing:.08em;text-transform:uppercase;color:#9fe2ff;opacity:.34;user-select:none}
+       letter-spacing:.08em;text-transform:uppercase;color:var(--wr-cap);opacity:var(--wr-cap-o);user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,30 +37,33 @@
  "description": "Concentric ripple rings expand across a deep teal water surface with shimmering caustic bands; tap anywhere to drop a new ripple. Auto-drops periodically.",
  "useWhen": "Nature or ambient backgrounds, spa/wellness UIs, loading screens needing calm organic motion.",
  "avoidWhen": "Light-background layouts (background hardcoded dark teal). Contexts where click events must not be intercepted by the canvas.",
- "agentPrompt": "Change ripple color from rgba(170,230,255) to a warm gold rgba(255,210,120), increase expansion speed from 2.4 to 3.5, and raise max concurrent ripples from 16 to 24.",
+ "agentPrompt": "Change ripple color from rgba(170,230,255) to a warm gold rgba(255,210,120), increase expansion speed from 2.2 to 3.5, and raise max concurrent ripples from 16 to 24. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ripple color (rgba(170,230,255,...))",
-  "expansion speed (p.r += 2.4)",
+  "expansion speed (p.r += 2.2)",
   "max ripple pool size (R.length > 16)",
-  "auto-drop interval (70 + random*60)",
-  "caustic shimmer opacity (0.05 + 0.03*sin)"
+  "auto-drop interval (42 + random*55)",
+  "mount pre-seed (3 ripples at staggered ages)",
+  "caustic shimmer opacity (0.05 + 0.03*sin)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing with setTransform",
   "visibilitychange pause/resume",
-  "prefers-reduced-motion guard (slower decay, no auto-drops)"
+  "prefers-reduced-motion guard (slower decay, no auto-drops)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded as dark teal in CSS — must edit to change theme",
-  "Auto-cycles by default; remove auto-drop block for purely on-demand interaction",
-  "No IIFE wrapper — globals (cv, x, R, t) could conflict in multi-component pages"
+  "Auto-cycles by default; remove auto-drop block for purely on-demand interaction"
  ],
  "tier": "curated",
  "labels": [
   "mobile-ready",
   "accessible",
   "minimal-deps",
-  "copy-paste-safe"
+  "copy-paste-safe",
+  "light-ready"
  ],
  "tags": [
   "water",
@@ -59,43 +81,64 @@
 <canvas id="c"></canvas>
 <div class="cap">Water Ripple · tap</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
 let W,H,DPR,t=0,raf,R=[];
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const root=document.documentElement;
+const C={w0:'',w1:'',blend:'lighter',caustic:'',ring:''};
+function syncTheme(){            // every colour the canvas draws with comes from the tokens
+  const cs=getComputedStyle(root);
+  C.w0=cs.getPropertyValue('--wr-w0').trim();        // water gradient is rebuilt every frame
+  C.w1=cs.getPropertyValue('--wr-w1').trim();
+  C.blend=cs.getPropertyValue('--wr-blend').trim();
+  C.caustic=cs.getPropertyValue('--wr-caustic').trim();
+  C.ring=cs.getPropertyValue('--wr-ring').trim();
+}
+addEventListener('message',function(e){
+  const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme);syncTheme();
+  }
+});
+syncTheme();
 function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
 addEventListener('resize',size);size();
-function drop(px,py){R.push({x:px,y:py,r:0,life:1});if(R.length>16)R.shift();}
+function drop(px,py,age){R.push({x:px,y:py,r:(age||0)*2.2,life:1-(age||0)*0.01});if(R.length>16)R.shift();}
 cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();drop(e.clientX-r.left,e.clientY-r.top);});
-let auto=0;
+// mount with three ripples already spreading (a lone ring fades in ~2 s and the wall read as an empty
+// gradient between drops); then a drop every 0.7–1.6 s so two or three rings overlap
+if(!reduce)for(let i=0;i<3;i++)drop(W*(0.2+Math.random()*0.6),H*(0.2+Math.random()*0.6),15+i*25);
+let auto=40;
 function frame(){
   t+=0.016;
   // water gradient base
   const g=x.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,'#0a3a4d');g.addColorStop(1,'#052430');
+  g.addColorStop(0,C.w0);g.addColorStop(1,C.w1);
   x.fillStyle=g;x.fillRect(0,0,W,H);
   // shimmer caustics
-  x.globalCompositeOperation='lighter';
+  x.globalCompositeOperation=C.blend;
   for(let i=0;i<5;i++){
     const yy=(i/5)*H+Math.sin(t*0.7+i)*20;
     const gr=x.createLinearGradient(0,yy-30,0,yy+30);
-    gr.addColorStop(0,'rgba(120,210,255,0)');
-    gr.addColorStop(0.5,`rgba(120,210,255,${0.05+0.03*Math.sin(t+i)})`);
-    gr.addColorStop(1,'rgba(120,210,255,0)');
+    gr.addColorStop(0,`rgba(${C.caustic},0)`);
+    gr.addColorStop(0.5,`rgba(${C.caustic},${0.05+0.03*Math.sin(t+i)})`);
+    gr.addColorStop(1,`rgba(${C.caustic},0)`);
     x.fillStyle=gr;x.fillRect(0,yy-30,W,60);
   }
   x.globalCompositeOperation='source-over';
   // auto drops
-  if(!reduce){auto-=1;if(auto<=0){drop(Math.random()*W,Math.random()*H);auto=70+Math.random()*60;}}
+  if(!reduce){auto-=1;if(auto<=0){drop(Math.random()*W,Math.random()*H);auto=42+Math.random()*55;}}
   // ripples
   for(let i=R.length-1;i>=0;i--){
     const p=R[i];
-    if(!reduce){p.r+=2.4;p.life-=0.012;}else p.life-=0.05;
+    if(!reduce){p.r+=2.2;p.life-=0.01;}else p.life-=0.05;
     if(p.life<=0){R.splice(i,1);continue;}
     for(let k=0;k<3;k++){
       const rr=p.r-k*9; if(rr<=0)continue;
       x.beginPath();x.arc(p.x,p.y,rr,0,7);
-      x.strokeStyle=`rgba(170,230,255,${p.life*0.5*(1-k*0.3)})`;
+      x.strokeStyle=`rgba(${C.ring},${p.life*0.6*(1-k*0.3)})`;
       x.lineWidth=2-k*0.5;x.stroke();
     }
   }
@@ -105,6 +148,7 @@ raf=requestAnimationFrame(frame);
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
 });
+})();
 </script>
 </body>
 </html>

@@ -5,18 +5,35 @@
 <meta name="description" content="A rotating teal wireframe globe of longitude and latitude rings with a soft glow, steerable by the pointer.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Wireframe Globe</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#04101a;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c07-bg:#04101a; --c07-lon:rgba(60,230,200,.55); --c07-lon-glow:rgba(60,230,200,.2);
+    --c07-lat:rgba(60,160,230,.45); --c07-core:rgba(60,230,200,.28);
+    --c07-cap:#3ce6c8; --c07-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --c07-bg:#eef4f9; --c07-lon:#107967; --c07-lon-glow:rgba(16,121,103,.12);
+    --c07-lat:rgba(23,116,180,.75); --c07-core:rgba(16,121,103,.13);
+    --c07-cap:#0c2230; --c07-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c07-bg);
     font-family:system-ui,-apple-system,sans-serif;}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:900px;}
   #globe{position:relative;width:40vmin;height:40vmin;transform-style:preserve-3d;will-change:transform;}
   .ring{position:absolute;inset:0;border-radius:50%;
-    border:1px solid rgba(60,230,200,.55);box-shadow:0 0 8px rgba(60,230,200,.2);}
-  .lat{border-color:rgba(60,160,230,.45);}
+    border:1px solid var(--c07-lon);box-shadow:0 0 8px var(--c07-lon-glow);}
+  .lat{border-color:var(--c07-lat);}
   #glow{position:absolute;inset:14%;border-radius:50%;
-    background:radial-gradient(circle at 40% 35%,rgba(60,230,200,.28),transparent 65%);}
-  .cap{position:fixed;left:10px;bottom:8px;color:#3ce6c8;opacity:.34;
+    background:radial-gradient(circle at 40% 35%,var(--c07-core),transparent 65%);}
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--c07-cap);opacity:var(--c07-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -26,21 +43,23 @@
  "description": "A teal wireframe globe of 6 longitude and 5 latitude rings rotates in CSS 3D perspective; pointer steers spin speed and tilt angle.",
  "useWhen": "Dark hero backgrounds, data/tech branding, space or network-themed landing pages needing ambient 3D motion.",
  "avoidWhen": "Light backgrounds (color hardcoded dark navy). Contexts where pointer hijacking disrupts scrolling UX on mobile.",
- "agentPrompt": "Change ring color to gold (rgba(255,200,60,.55)), increase longitude ring count from 6 to 10, and slow the auto-spin from ry+=0.5 to ry+=0.25.",
+ "agentPrompt": "Change ring color to gold (rgba(255,200,60,.55)), increase longitude ring count from 6 to 10, and slow the auto-spin from ry+=0.5 to ry+=0.25. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "longitude ring count (LON=6)",
   "latitude ring positions (LAT array)",
   "ring border color (rgba(60,230,200,.55))",
   "auto-spin speed (ry+=0.5)",
-  "pointer tilt range (30deg multiplier)"
+  "pointer tilt range (30deg multiplier)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "prefers-reduced-motion guard + static fallback",
   "visibilitychange pause/resume",
-  "transform-style:preserve-3d on #globe"
+  "transform-style:preserve-3d on #globe",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded in CSS — must edit to use on light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Latitude rings use vmin-based translateZ so scaling the globe size requires updating both CSS and JS values"
  ],
  "tier": "curated",
@@ -50,7 +69,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "globe",
@@ -68,6 +88,7 @@
 <div id="stage"><div id="globe"><div id="glow"></div></div></div>
 <div class="cap">Wireframe Globe</div>
 <script>
+(function(){
   const globe=document.getElementById('globe');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   // longitude rings: rotate around Y at evenly spaced angles
@@ -94,7 +115,12 @@
   function start(){if(!raf&&!reduce)loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);});
   if(reduce){globe.style.transform='rotateX(-18deg) rotateY(30deg)';}else start();
+})();
 </script>
 </body>
 </html>

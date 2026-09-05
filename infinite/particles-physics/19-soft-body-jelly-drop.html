@@ -5,11 +5,30 @@
 <meta name="description" content="A glossy green pressurized jelly blob repeatedly drops, squashes on the floor and bounces back up; click to nudge it sideways.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Soft-Body Jelly Drop</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a1208;}
+  /* theme tokens — dark values are the defaults; light palette in the [data-theme] block.
+     The canvas clears to transparent, so the page background is the only ground. */
+  :root{
+    --jd-bg:#0a1208; --jd-accent:#9be65a; --jd-cap-o:.34;
+    --jd-sheen:rgba(155,230,90,0.10); --jd-sheen0:rgba(10,18,8,0); --jd-floor:rgba(155,230,90,0.22);
+    --jd-g0:#d8ff9e; --jd-g1:#9be65a; --jd-g2:#3f7a23;
+    --jd-shadow:rgba(155,230,90,0.5); --jd-edge:rgba(216,255,158,0.65); --jd-spec:rgba(255,255,255,0.45);
+  }
+  :root[data-theme="light"]{
+    --jd-bg:#eef6e8; --jd-accent:#447c13; --jd-cap-o:.62;
+    --jd-sheen:rgba(68,124,19,0.14); --jd-sheen0:rgba(238,246,232,0); --jd-floor:rgba(68,124,19,0.32);
+    --jd-g0:#b6e57a; --jd-g1:#6aa82c; --jd-g2:#2c5c14;
+    --jd-shadow:rgba(68,124,19,0.35); --jd-edge:rgba(32,68,10,0.55); --jd-spec:rgba(255,255,255,0.55);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--jd-bg);}
   #jd-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
-       letter-spacing:.14em;color:#9be65a;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--jd-accent);opacity:var(--jd-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +38,22 @@
  "description": "A glossy green jelly blob simulated with 22 Verlet nodes and pressure-volume constraints repeatedly drops, squashes on impact, and bounces back up.",
  "useWhen": "Physics demo backgrounds, playful loading screens, or game UIs needing a tactile bouncy character.",
  "avoidWhen": "Low-end mobile or contexts requiring text legibility — constant animation and dark background limit composability.",
- "agentPrompt": "Change the jelly color to electric blue by replacing '#9be65a' with '#38bdf8', '#d8ff9e' with '#bae6fd', and '#3f7a23' with '#0369a1', then set the background to '#050d1a'.",
+ "agentPrompt": "Change the jelly color to electric blue by replacing '#9be65a' with '#38bdf8', '#d8ff9e' with '#bae6fd', and '#3f7a23' with '#0369a1', then set the background to '#050d1a'. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "node count (N=22)",
   "rest radius (R0=S*0.17)",
   "gas constant / pressure (GAS=R0*R0*Math.PI*1.18)",
   "gravity strength (GRAV=S*0.00055)",
   "floor position (floorY=H*0.80)",
-  "jelly color gradient stops"
+  "jelly color gradient stops",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "Verlet integration + pressure-normal loop",
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
-  "prefers-reduced-motion static fallback (260-step settle)"
+  "prefers-reduced-motion static fallback (260-step settle)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Click/drag nudges blob sideways but direction always fans from center — no left/right targeting",
@@ -45,7 +66,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "soft-body",
@@ -67,6 +89,20 @@
   const cv=document.getElementById('jd-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,S,floorY;
+  // the jelly's gradient stops and sheen come from the tokens; a flip re-reads them once
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    C.sheen=g('--jd-sheen');C.sheen0=g('--jd-sheen0');C.floor=g('--jd-floor');
+    C.g0=g('--jd-g0');C.g1=g('--jd-g1');C.g2=g('--jd-g2');
+    C.shadow=g('--jd-shadow');C.edge=g('--jd-edge');C.spec=g('--jd-spec');
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      if(reduce)draw({cx:W/2,cy:floorY-R0*0.5,area:1});   // static frame repaint
+    }});
+  syncTheme();
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
@@ -136,9 +172,9 @@
     ctx.clearRect(0,0,W,H);
     // floor wet sheen
     const fg=ctx.createLinearGradient(0,floorY,0,H);
-    fg.addColorStop(0,'rgba(155,230,90,0.10)');fg.addColorStop(1,'rgba(10,18,8,0)');
+    fg.addColorStop(0,C.sheen);fg.addColorStop(1,C.sheen0);
     ctx.fillStyle=fg;ctx.fillRect(0,floorY,W,H-floorY);
-    ctx.strokeStyle='rgba(155,230,90,0.22)';ctx.lineWidth=1;
+    ctx.strokeStyle=C.floor;ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(0,floorY);ctx.lineTo(W,floorY);ctx.stroke();
     // soft-body silhouette via Catmull-Rom smoothing
     const len=N;
@@ -152,14 +188,14 @@
     }
     ctx.closePath();
     const g=ctx.createRadialGradient(c.cx,c.cy-R0*0.4,R0*0.1,c.cx,c.cy,R0*1.5);
-    g.addColorStop(0,'#d8ff9e');g.addColorStop(0.45,'#9be65a');g.addColorStop(1,'#3f7a23');
-    ctx.fillStyle=g;ctx.shadowColor='rgba(155,230,90,0.5)';ctx.shadowBlur=S*0.04;ctx.fill();
+    g.addColorStop(0,C.g0);g.addColorStop(0.45,C.g1);g.addColorStop(1,C.g2);
+    ctx.fillStyle=g;ctx.shadowColor=C.shadow;ctx.shadowBlur=S*0.04;ctx.fill();
     ctx.shadowBlur=0;
-    ctx.lineWidth=1.4;ctx.strokeStyle='rgba(216,255,158,0.65)';ctx.stroke();
+    ctx.lineWidth=1.4;ctx.strokeStyle=C.edge;ctx.stroke();
     // specular highlight blob
     ctx.beginPath();
     ctx.ellipse(c.cx-R0*0.28,c.cy-R0*0.42,R0*0.22,R0*0.12,-0.5,0,Math.PI*2);
-    ctx.fillStyle='rgba(255,255,255,0.45)';ctx.fill();
+    ctx.fillStyle=C.spec;ctx.fill();
   }
 
   let raf=0;

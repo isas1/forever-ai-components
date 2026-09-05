@@ -5,42 +5,61 @@
 <meta name="description" content="A performant infinity loop loader tracing path strokes with CSS.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Infinity Loop</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#08090d}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c17-bg:#08090d; --c17-glow-a:rgba(124,92,255,.16); --c17-glow-b:rgba(34,211,238,.16);
+    --c17-track:rgba(255,255,255,0.05);
+    --c17-pink:#ff5ca8; --c17-pink-sh:rgba(255,92,168,0.7);
+    --c17-cyan:#22d3ee; --c17-cyan-sh:rgba(34,211,238,0.7); --c17-cap-o:.45;
+  }
+  :root[data-theme="light"]{
+    --c17-bg:#f2f4f8; --c17-glow-a:rgba(124,92,255,.18); --c17-glow-b:rgba(34,211,238,.18);
+    --c17-track:rgba(27,33,48,0.1);
+    --c17-pink:#db0066; --c17-pink-sh:rgba(219,0,102,0.3);
+    --c17-cyan:#0b7a8b; --c17-cyan-sh:rgba(11,122,139,0.3); --c17-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c17-bg)}
   body{
     display:grid;place-items:center;
     background-image:
-      radial-gradient(60vw 40vw at 15% -10%,rgba(124,92,255,.16),transparent 60%),
-      radial-gradient(50vw 40vw at 90% 0%,rgba(34,211,238,.16),transparent 55%);
+      radial-gradient(60vw 40vw at 15% -10%,var(--c17-glow-a),transparent 60%),
+      radial-gradient(50vw 40vw at 90% 0%,var(--c17-glow-b),transparent 55%);
   }
   .c17-svg {
     width: 140px; height: 100px;
   }
   .c17-track {
     fill: none;
-    stroke: rgba(255, 255, 255, 0.05);
+    stroke: var(--c17-track);
     stroke-width: 5;
   }
   .c17-trace {
     fill: none;
-    stroke: #ff5ca8;
+    stroke: var(--c17-pink);
     stroke-width: 5;
     stroke-linecap: round;
     stroke-dasharray: 22 78;
     stroke-dashoffset: 0;
-    filter: drop-shadow(0 0 6px rgba(255,92,168,0.7));
+    filter: drop-shadow(0 0 6px var(--c17-pink-sh));
     animation: c17-trace-loop 2s linear infinite;
   }
   .c17-trace--cyan {
-    stroke: #22d3ee;
-    filter: drop-shadow(0 0 6px rgba(34,211,238,0.7));
+    stroke: var(--c17-cyan);
+    filter: drop-shadow(0 0 6px var(--c17-cyan-sh));
     animation-delay: -1s;
   }
   @keyframes c17-trace-loop {
     to { stroke-dashoffset: -100; }
   }
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 "Space Grotesk",ui-monospace,monospace;
-    color:#ff5ca8;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--c17-pink);opacity:var(--c17-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     .c17-trace {
       animation: none !important;
@@ -55,20 +74,22 @@
  "description": "Two glowing traces (pink and cyan) chase each other around a lemniscate path using stroke-dashoffset animation; a near-invisible track marks the full path beneath.",
  "useWhen": "Elegant loading indicators for dark-theme apps. AI/processing metaphors, infinite-process indicators, anywhere the infinity symbol resonates with the product.",
  "avoidWhen": "Light backgrounds (hardcoded dark fill). Very small sizes — trace detail degrades below ~80px width.",
- "agentPrompt": "Make single-color by removing the .c17-trace--cyan path element and its CSS rule. Adjust trace length with the first dasharray value (22 = short, 50 = half-path). Speed up by reducing 2s on c17-trace-loop. Thicken by increasing stroke-width from 5 to 7.",
+ "agentPrompt": "Make single-color by removing the .c17-trace--cyan path element and its CSS rule. Adjust trace length with the first dasharray value (22 = short, 50 = half-path). Speed up by reducing 2s on c17-trace-loop. Thicken by increasing stroke-width from 5 to 7. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "trace colors (#ff5ca8 and #22d3ee on .c17-trace and .c17-trace--cyan)",
   "trace length (22 — first value in stroke-dasharray; max 100 due to pathLength)",
   "animation speed (2s on c17-trace-loop)",
   "stroke width (5 on .c17-trace)",
-  "track visibility (0.05 rgba — increase to show the full path)"
+  "track visibility (0.05 rgba — increase to show the full path)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "pathLength='100' on all path elements — makes dasharray values path-percentage not pixels; removing it breaks all animation math",
   "animation-delay: -1s on .c17-trace--cyan — creates the chase offset at exactly half-cycle",
   "degenerate close segment 'C 35 20, 35 40, 35 40' at path end — needed for smooth loop with no jump",
   "visibilitychange pause handler",
-  "c17- namespace on all classes"
+  "c17- namespace on all classes",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "pathLength='100' is intentional and must not be changed — see preserveElements",
@@ -81,7 +102,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "infinity",
@@ -116,6 +138,10 @@
   }
   document.addEventListener('visibilitychange', vis);
   vis();
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data; if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
 })();
 </script>
 </body>

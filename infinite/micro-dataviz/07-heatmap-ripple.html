@@ -5,12 +5,28 @@
 <meta name="description" content="12x6 grid of rounded cells in a magma color ramp rippling from a moving source, follows the cursor for the wave origin.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Heatmap Ripple</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#120a18;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block.
+     --c07-ramp holds the 5 colour-ramp stops as "r g b" triples, cold -> hot. */
+  :root{
+    --c07-bg:#120a18; --c07-cap:#ff7ac6; --c07-cap-o:.45;
+    --c07-ramp:20 12 40, 120 30 110, 230 60 110, 255 150 80, 255 230 150;
+  }
+  :root[data-theme="light"]{
+    --c07-bg:#f6f1f7; --c07-cap:#d6007a; --c07-cap-o:.7;
+    --c07-ramp:250 246 250, 245 223 240, 237 187 217, 222 139 181, 196 80 138;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c07-bg);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
-    color:#ff7ac6;opacity:.45;text-transform:uppercase}
+    color:var(--c07-cap);opacity:var(--c07-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -19,22 +35,24 @@
  "description": "12x6 grid of rounded cells colored via a magma ramp, with a sine-wave ripple emanating from a point that orbits and follows the cursor.",
  "useWhen": "Data dashboard accents, ambient background panels, or any context needing a living heatmap visualization with pointer interactivity.",
  "avoidWhen": "Contexts requiring actual data binding — values are procedural, not driven by real datasets. Avoid on low-contrast light backgrounds (dark canvas hardcoded).",
- "agentPrompt": "Change COLS to 16 and ROWS to 8 to increase grid density, then shift the magma ramp's hottest stop from [255,230,150] to [255,255,255] for a white-hot peak.",
+ "agentPrompt": "Change COLS to 16 and ROWS to 8 to increase grid density, then shift the magma ramp's hottest stop from [255,230,150] to [255,255,255] for a white-hot peak. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid dimensions (COLS=12, ROWS=6)",
   "magma color stops (stops array)",
   "ripple speed (phase += 0.05)",
   "orbit amplitude (0.32, 0.3)",
-  "ripple frequency (d*9)"
+  "ripple frequency (d*9)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce flag stops phase advance and orbit)",
   "visibilitychange pause",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded to #120a18 — must edit CSS to use on light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Ripple is purely decorative, not data-driven"
  ],
  "tier": "curated",
@@ -44,7 +62,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "heatmap",
@@ -65,12 +84,23 @@
 (function(){
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const root=document.documentElement;
   let W,H,DPR;
   const COLS=12, ROWS=6; let phase=0;
-  // magma-ish ramp
+  // magma-ish ramp — stops come from --c07-ramp so both themes drive the same code
+  let stops=[[20,12,40],[120,30,110],[230,60,110],[255,150,80],[255,230,150]];
+  function syncTheme(){            // re-read the ramp; every cell colour is derived from it
+    stops=getComputedStyle(root).getPropertyValue('--c07-ramp').trim()
+      .split(',').map(s=>s.trim().split(/\s+/).map(Number));
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
   function ramp(v){
     v=Math.max(0,Math.min(1,v));
-    const stops=[[20,12,40],[120,30,110],[230,60,110],[255,150,80],[255,230,150]];
     const f=v*(stops.length-1),i=Math.floor(f),fr=f-i;
     const a=stops[i],b=stops[Math.min(stops.length-1,i+1)];
     return 'rgb('+Math.round(a[0]+(b[0]-a[0])*fr)+','+Math.round(a[1]+(b[1]-a[1])*fr)+','+Math.round(a[2]+(b[2]-a[2])*fr)+')';
@@ -102,7 +132,7 @@
   addEventListener('resize',resize);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
   cv.addEventListener('pointermove',e=>{const b=cv.getBoundingClientRect();cx=(e.clientX-b.left)/b.width;cy=(e.clientY-b.top)/b.height;});
-  resize();raf();
+  syncTheme();resize();raf();
 })();
 </script>
 </body>

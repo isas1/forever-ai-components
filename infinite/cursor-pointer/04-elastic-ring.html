@@ -1,12 +1,24 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="A glowing pink ring trails the pointer with damped-spring momentum, stretching and squashing along its velocity with an echo and dotted reti">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Elastic Ring</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults; light re-theme is the [data-theme="light"] block. */
+:root{
+  --ccp04-bg:#0a0a0f; --ccp04-acc:#ff5ca8; --ccp04-trail-a:.30; --cap-o:.45;
+}
+:root[data-theme="light"]{
+  --ccp04-bg:#f2f2f6; --ccp04-acc:#d60064; --cap-o:.55;
+}
 html,body{margin:0;height:100%;overflow:hidden}
-body{background:#0a0a0f;display:grid;place-items:center}
+body{background:var(--ccp04-bg);display:grid;place-items:center}
 #ccp04-c{display:block;width:100%;height:100%;touch-action:none;cursor:none}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#ff5ca8;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--ccp04-acc);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/cursor-pointer/04-elastic-ring.html",
@@ -14,19 +26,21 @@ body{background:#0a0a0f;display:grid;place-items:center}
  "description": "Glowing pink ring trails the pointer with damped-spring physics, stretching along velocity and squashing across it. Auto-demos on a Lissajous path when idle.",
  "useWhen": "Creative portfolio heroes, cursor-replacement effects, interactive showcases where pointer physics add tactile feel.",
  "avoidWhen": "Utility UIs where a hidden cursor frustrates users. Touch-only devices where pointermove never fires.",
- "agentPrompt": "Change ACC to '#00eaff', increase base ring size from Math.min(W,H)*0.085 to 0.12, and slow the spring by changing the acceleration factor from 0.14 to 0.08.",
+ "agentPrompt": "Change ACC to '#00eaff', increase base ring size from Math.min(W,H)*0.085 to 0.12, and slow the spring by changing the acceleration factor from 0.14 to 0.08. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (ACC = '#ff5ca8')",
   "ring base size (Math.min(W,H)*0.085)",
   "spring stiffness (ax=(tx-rx)*0.14)",
   "damping factor ((vx+ax)*0.80)",
   "idle timeout before demo resumes (2600ms)",
-  "Lissajous radius scale (R*0.30)"
+  "Lissajous radius scale (R*0.30)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange pause guard",
-  "prefers-reduced-motion static fallback render"
+  "prefers-reduced-motion static fallback render",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Cursor is hidden (cursor:none) — must restore for production if replacing only part of a page",
@@ -39,7 +53,8 @@ body{background:#0a0a0f;display:grid;place-items:center}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "cursor",
@@ -58,8 +73,29 @@ body{background:#0a0a0f;display:grid;place-items:center}
 <script>(function(){
 var cv=document.getElementById('ccp04-c'),ctx=cv.getContext('2d');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var root=document.documentElement;
 var W=0,H=0,DPR=1,raf=0,running=true,t=0;
-var ACC='#ff5ca8';
+
+// colours JS draws with — read from tokens, re-read + invalidated on theme switch
+var C={};
+function hex2rgb(h){h=h.replace('#','');var n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255];}
+function syncTheme(){
+  var cs=getComputedStyle(root);
+  C.bg=cs.getPropertyValue('--ccp04-bg').trim();
+  C.bgRgb=hex2rgb(C.bg);
+  C.acc=cs.getPropertyValue('--ccp04-acc').trim();
+  C.trailA=parseFloat(cs.getPropertyValue('--ccp04-trail-a'))||.30;
+}
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',function(e){
+  var d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme);syncTheme();
+    if(reduce)render();    // no rAF loop in reduced motion — force a recolor
+  }
+});
+syncTheme();
+
 // pointer state: target (where we steer toward) and ring (lagging follower)
 var tx=0,ty=0,rx=0,ry=0,vx=0,vy=0; // ring pos + velocity
 var px=0,py=0; // raw pointer for spring target when real
@@ -92,13 +128,13 @@ function drawRing(cx,cy,base,sx,sy,ang,glow,alpha,lw){
   ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);ctx.scale(sx,sy);
   ctx.beginPath();ctx.arc(0,0,base,0,Math.PI*2);ctx.restore();
   ctx.lineWidth=lw;ctx.globalAlpha=alpha;
-  ctx.shadowBlur=glow;ctx.shadowColor=ACC;ctx.strokeStyle=ACC;ctx.stroke();
+  ctx.shadowBlur=glow;ctx.shadowColor=C.acc;ctx.strokeStyle=C.acc;ctx.stroke();
 }
 
 function render(){
   // trailing fade clears canvas + leaves faint motion trail
   ctx.globalAlpha=1;ctx.shadowBlur=0;
-  ctx.fillStyle='rgba(10,10,15,0.30)';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba('+C.bgRgb+','+C.trailA+')';ctx.fillRect(0,0,W,H);
 
   var base=Math.max(10,Math.min(W,H)*0.085);
 
@@ -136,7 +172,7 @@ function render(){
   // main elastic ring
   drawRing(rx,ry,base,sx,sy,ang,18,0.95,3);
   // inner core dot, scales subtly with speed
-  ctx.globalAlpha=0.9;ctx.shadowBlur=14;ctx.shadowColor=ACC;ctx.fillStyle=ACC;
+  ctx.globalAlpha=0.9;ctx.shadowBlur=14;ctx.shadowColor=C.acc;ctx.fillStyle=C.acc;
   ctx.beginPath();ctx.arc(rx,ry,Math.max(1.5,base*0.10*(1+k*0.5)),0,Math.PI*2);ctx.fill();
 
   // velocity streak from echo to head
@@ -157,7 +193,7 @@ function start(){
   if(reduce){
     var d=demoPath(0);tx=d.x;ty=d.y;rx=tx-40;ry=ty-26;
     vx=8;vy=5; // frozen mid-flight so deformation is visible
-    ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     render();return;
   }
   loop();

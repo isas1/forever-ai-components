@@ -5,11 +5,21 @@
 <meta name="description" content="Bold sine-wave squiggle ribbons with marching beads drift across a confetti field of dots, zigzags and terrazzo flecks on deep indigo.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Squiggle Parade</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#141019;overflow:hidden}
+  /* theme tokens — dark defaults, light re-theme below; --mp01-p0..p6 feed the canvas via syncTheme() */
+  :root{--mp01-bg:#141019;--mp01-shadow:rgba(0,0,0,0.32);--mp01-cap:#fff;--mp01-cap-o:.42;
+    --mp01-p0:#36d6c3;--mp01-p1:#ff5d8f;--mp01-p2:#ffd23f;--mp01-p3:#7b5cff;--mp01-p4:#ff7a3c;--mp01-p5:#f4f0e6;--mp01-p6:#2bb7e8}
+  :root[data-theme="light"]{--mp01-bg:#f6f2f8;--mp01-shadow:rgba(43,39,51,0.20);--mp01-cap:#2b2733;--mp01-cap-o:.5;
+    --mp01-p0:#18776b;--mp01-p1:#db0044;--mp01-p2:#8a6900;--mp01-p3:#5a33ff;--mp01-p4:#c73f00;--mp01-p5:#2b2733;--mp01-p6:#11789c}
+  html,body{margin:0;height:100%;background:var(--mp01-bg);overflow:hidden}
   #mp01-stage{position:fixed;inset:0;width:100%;height:100%}
   #mp01-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--mp01-cap);opacity:var(--mp01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +29,22 @@
  "description": "Six bold sine-wave ribbons with marching color beads drift across a confetti field of dots, zigzags, crosses, and terrazzo flecks on deep indigo.",
  "useWhen": "Memphis/80s-retro hero backgrounds, section dividers, or ambient loops needing bold geometric energy without user interaction.",
  "avoidWhen": "Content-heavy layouts where high-contrast ribbons compete with text. Light backgrounds — BG is hardcoded deep indigo.",
- "agentPrompt": "Change SQ_N to 8, set the accent color PAL[0] to '#ff00cc', and increase sqAmp range to 0.08+r()*0.10 for taller squiggles.",
+ "agentPrompt": "Change SQ_N to 8, set the accent color PAL[0] to '#ff00cc', and increase sqAmp range to 0.08+r()*0.10 for taller squiggles. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "squiggle count (SQ_N=6)",
   "color palette (PAL array)",
   "amplitude range (sqAmp: 0.05+r()*0.06)",
   "confetti element count (CONF_N=104)",
   "bead count per squiggle (beads=5)",
-  "background color (BG)"
+  "background color (BG)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "mulberry PRNG seeding (consistent layout across reloads)",
   "DPR-aware canvas sizing",
   "visibilitychange pause/play",
-  "reduced-motion static frame fallback"
+  "reduced-motion static frame fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and JS — must change both",
@@ -46,7 +58,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "memphis",
@@ -73,9 +86,19 @@
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  // Memphis palette around accent #36d6c3.
+  // Memphis palette around accent #36d6c3 — read from theme tokens so light recolours the parade.
+  var root=document.documentElement;
   var PAL=["#36d6c3","#ff5d8f","#ffd23f","#7b5cff","#ff7a3c","#f4f0e6","#2bb7e8"];
-  var BG="#141019";
+  var BG="#141019", SHADOW="rgba(0,0,0,0.32)";
+  function syncTheme(){
+    var cs=getComputedStyle(root),i;
+    for(i=0;i<PAL.length;i++)PAL[i]=cs.getPropertyValue("--mp01-p"+i).trim();
+    BG=cs.getPropertyValue("--mp01-bg").trim(); SHADOW=cs.getPropertyValue("--mp01-shadow").trim();
+  }
+  addEventListener("message",function(e){ // live re-theme broadcast by the canvas
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme();if(reduce)frame(1.4);}
+  });
 
   var W=0,H=0,DPR=1,S=1; // S = min dimension, the layout scale
   function size(){
@@ -158,7 +181,7 @@
     var col=PAL[sqCol[i]];
     // shadow bead is a static dark offset drawn under the ribbon (not animated as box-shadow)
     ctx.lineCap="round";ctx.lineJoin="round";
-    ctx.strokeStyle="rgba(0,0,0,0.32)";ctx.lineWidth=w;
+    ctx.strokeStyle=SHADOW;ctx.lineWidth=w;
     ctx.beginPath();
     for(n=0;n<=steps;n++){
       var u=n/steps, x=u*W;
@@ -203,7 +226,7 @@
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
   function init(){
-    size(); seedConfetti(); seedSquiggles();
+    syncTheme(); size(); seedConfetti(); seedSquiggles();
     if(reduce){ frame(1.4); return; } // one settled, legible, on-brand frame
     play();
   }

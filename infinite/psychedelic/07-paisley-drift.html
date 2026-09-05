@@ -5,11 +5,25 @@
 <meta name="description" content="Drifting psychedelic paisley teardrops morphing and rotating across a near-black field in green, sage and gold.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Paisley Drift</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
-  #ps07-stage{position:fixed;inset:0;background:#0a0612}
+  /* theme tokens — dark defaults; light = deepened poster inks on cream. --ps07-p1..p8 is the JS paisley palette, --ps07-blend drops the additive glow in light. */
+  :root{
+    --ps07-bg:#0a0612; --ps07-blend:lighter; --ps07-wash:rgba(10,6,18,0.16); --ps07-seed:#0a0612; --ps07-cap:#fff; --ps07-cap-o:.42;
+    --ps07-p1:#7ABE37; --ps07-p2:#4E8020; --ps07-p3:#B4C2A8; --ps07-p4:#D9BE87; --ps07-p5:#ffd23d; --ps07-p6:#ffa03d; --ps07-p7:#94A187; --ps07-p8:#C09C59;
+  }
+  :root[data-theme="light"]{
+    --ps07-bg:#f4f2e6; --ps07-blend:source-over; --ps07-wash:rgba(244,242,230,0.16); --ps07-seed:#f7f5ec; --ps07-cap:#25301a; --ps07-cap-o:.62;
+    --ps07-p1:#5c8f1c; --ps07-p2:#33570f; --ps07-p3:#8fa07f; --ps07-p4:#a8873f; --ps07-p5:#b8890c; --ps07-p6:#a85d10; --ps07-p7:#5f6c4e; --ps07-p8:#7f6528;
+  }
+  html,body{margin:0;height:100%;background:var(--ps07-bg);overflow:hidden}
+  #ps07-stage{position:fixed;inset:0;background:var(--ps07-bg)}
   #ps07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ps07-cap);opacity:var(--ps07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +33,21 @@
  "description": "30 psychedelic paisley teardrops drift and morph across a near-black field in green, sage, and gold using additive blending and a trail-wash smear effect.",
  "useWhen": "Ambient psychedelic backgrounds, music/festival branding, hero sections needing organic, hypnotic motion without user interaction.",
  "avoidWhen": "Contexts needing legible text overlays — the bright additive blending competes strongly. Low-end devices running many simultaneous canvas tiles.",
- "agentPrompt": "Change N to 20, replace PAL with warm-only colors ['#ff6600','#ffaa00','#ff3300','#ffcc00'], and slow drift by changing time*0.06 to time*0.03 in drawAgent.",
+ "agentPrompt": "Change N to 20, replace PAL with warm-only colors ['#ff6600','#ffaa00','#ff3300','#ffcc00'], and slow drift by changing time*0.06 to time*0.03 in drawAgent. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "agent count (N=30)",
   "color palette (PAL array)",
   "drift speed multipliers (time*0.06 / time*0.05)",
   "paisley scale (MIN*0.085*scl)",
-  "trail wash opacity (rgba(10,6,18,0.16))"
+  "trail wash opacity (rgba(10,6,18,0.16))",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause/resume",
   "reduced-motion static fallback (drawOneFrame)",
   "globalCompositeOperation 'lighter' additive blend",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and canvas fill — must change in two places",
@@ -43,7 +59,8 @@
   "accessible",
   "mobile-ready",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "paisley",
@@ -65,12 +82,22 @@
 <script>
 (function(){
   var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root = document.documentElement;
   var cv = document.getElementById('ps07-c');
   var ctx = cv.getContext('2d');
   var W=0,H=0,DPR=1,MIN=0,running=true,raf=0,t0=0;
 
-  // Fillmore-poster palette around #7ABE37
+  // Fillmore-poster palette around #7ABE37 — filled from --ps07-p1..p8 by syncTheme
   var PAL = ['#7ABE37','#4E8020','#B4C2A8','#D9BE87','#ffd23d','#ffa03d','#94A187','#C09C59'];
+  var BG='#0a0612', WASH='rgba(10,6,18,0.16)', SEED='#0a0612', BLEND='lighter';
+  function syncTheme(){                 // every colour the loop draws with, re-read per switch
+    var cs=getComputedStyle(root), g=function(n){return cs.getPropertyValue(n).trim();};
+    for(var i=0;i<8;i++) PAL[i]=g('--ps07-p'+(i+1));
+    BG=g('--ps07-bg'); WASH=g('--ps07-wash'); SEED=g('--ps07-seed'); BLEND=g('--ps07-blend');
+    if(reduce) drawOneFrame();
+  }
+  addEventListener('message',function(e){ var d=e.data; if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme); syncTheme(); }});
   var N = 30;            // paisley agents (cap << 110)
   var seed = new Float32Array(N*6); // phx,phy,phr,phm,scl,hue
   for(var i=0;i<N;i++){
@@ -141,7 +168,7 @@
     ctx.stroke();
 
     // seed dot row tracing the curl — classic paisley detail
-    ctx.fillStyle = '#0a0612';
+    ctx.fillStyle = SEED;
     var k, ang, rr;
     for(k=0;k<5;k++){
       ang = -1.05 + k*0.42;
@@ -158,26 +185,26 @@
     var time = (now - t0)/1000;
     // trail wash instead of clear — liquid lava-lamp smear, stays cheap
     ctx.globalAlpha = 1;
-    ctx.fillStyle = 'rgba(10,6,18,0.16)';
+    ctx.fillStyle = WASH;
     ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalCompositeOperation = BLEND;
     for(var i=0;i<N;i++) drawAgent(i, time);
     ctx.globalCompositeOperation = 'source-over';
     raf = requestAnimationFrame(frame);
   }
 
   function drawOneFrame(){
-    ctx.fillStyle = '#0a0612';
+    ctx.fillStyle = BG;
     ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalCompositeOperation = BLEND;
     for(var i=0;i<N;i++) drawAgent(i, 8.0); // a composed, settled instant
     ctx.globalCompositeOperation = 'source-over';
   }
 
   function start(){
-    size();
+    size(); syncTheme();
     if(reduce){ drawOneFrame(); return; }
-    ctx.fillStyle = '#0a0612';
+    ctx.fillStyle = BG;
     ctx.fillRect(0,0,W,H);
     t0 = performance.now();
     running = true;

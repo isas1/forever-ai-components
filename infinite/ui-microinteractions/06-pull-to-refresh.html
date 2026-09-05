@@ -5,18 +5,35 @@
 <meta name="description" content="Mobile list frame you drag down to trigger a rotating arc spinner that refreshes and flashes skeleton rows.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pull to Refresh</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0f1a24;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c06-bg:#0f1a24; --c06-frame-bg:#16252f; --c06-shadow:rgba(0,0,0,.4);
+    --c06-accent:#3ad6c5; --c06-row-bg:#22404e; --c06-hint:#5a7585;
+    --c06-cap:#fff; --c06-cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --c06-bg:#eef4f9; --c06-frame-bg:#ffffff; --c06-shadow:rgba(20,40,60,.14);
+    --c06-accent:#1a7c71; --c06-row-bg:#dbe7ef; --c06-hint:#5a7585;
+    --c06-cap:#1b2130; --c06-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c06-bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   #wrap{position:fixed;inset:0;display:grid;place-items:center;cursor:ns-resize;touch-action:none}
-  #frame{position:relative;width:62%;max-width:200px;aspect-ratio:.82;background:#16252f;border-radius:20px;overflow:hidden;box-shadow:0 14px 34px rgba(0,0,0,.4)}
+  #frame{position:relative;width:62%;max-width:200px;aspect-ratio:.82;background:var(--c06-frame-bg);border-radius:20px;overflow:hidden;box-shadow:0 14px 34px var(--c06-shadow)}
   #spinarea{position:absolute;top:0;left:0;right:0;height:46px;display:grid;place-items:center}
   #spin{width:24px;height:24px}
-  #spin circle{fill:none;stroke:#3ad6c5;stroke-width:3;stroke-linecap:round;stroke-dasharray:60;stroke-dashoffset:60}
+  #spin circle{fill:none;stroke:var(--c06-accent);stroke-width:3;stroke-linecap:round;stroke-dasharray:60;stroke-dashoffset:60}
   #list{position:absolute;top:0;left:0;right:0;padding:12px;will-change:transform}
-  .row{height:14px;border-radius:7px;background:#22404e;margin-bottom:9px}
+  .row{height:14px;border-radius:7px;background:var(--c06-row-bg);margin-bottom:9px}
   .row:nth-child(odd){width:80%}.row:nth-child(even){width:60%}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
-  .hint{position:absolute;top:14px;left:0;right:0;text-align:center;font-size:9px;color:#5a7585;letter-spacing:.1em}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--c06-cap);opacity:var(--c06-cap-o);text-transform:uppercase}
+  .hint{position:absolute;top:14px;left:0;right:0;text-align:center;font-size:9px;color:var(--c06-hint);letter-spacing:.1em}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -25,20 +42,22 @@
  "description": "A phone-frame mockup with draggable list rows; pulling down reveals a teal arc spinner that fills and rotates, then triggers a skeleton-row flash on release.",
  "useWhen": "Demoing mobile pull-to-refresh patterns, onboarding flows showing gesture affordances, or UI kit showcases.",
  "avoidWhen": "Production refresh logic — the auto-cycle timer and demo frame must be removed; also skip in contexts where cursor/touch drag conflicts with page scroll.",
- "agentPrompt": "Change the spinner color from teal (#3ad6c5) to coral (#ff6b6b), increase MAX pull distance to 90, and slow the auto-cycle timer from 2400ms to 4000ms.",
+ "agentPrompt": "Change the spinner color from teal (#3ad6c5) to coral (#ff6b6b), increase MAX pull distance to 90, and slow the auto-cycle timer from 2400ms to 4000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "MAX pull distance (MAX=60)",
   "spinner stroke color (#3ad6c5)",
   "auto-cycle delay (2400ms)",
   "row count (7)",
   "refresh spin duration (700ms / 1400ms)",
-  "ease duration (260ms)"
+  "ease duration (260ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause + clearTimeout guard",
   "prefers-reduced-motion guard (reduce check stops auto-loop)",
   "touch/mouse unified event handlers",
-  "IIFE-less but scoped const declarations"
+  "IIFE-less but scoped const declarations",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "touchmove is passive:true so calling preventDefault to block page scroll is not possible — may conflict with scrollable parent containers",
@@ -52,7 +71,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "pull-to-refresh",
@@ -93,6 +113,8 @@ wrap.addEventListener('touchstart',down,{passive:true});wrap.addEventListener('t
 let timer;
 function loop(){clearTimeout(timer);if(reduce)return;timer=setTimeout(()=>{if(!dragging&&!refreshing)refresh();},2400);}
 document.addEventListener('visibilitychange',()=>{document.hidden?(stop(),clearTimeout(timer)):loop();});
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',(e)=>{const d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))document.documentElement.setAttribute('data-theme',d.theme);});
 render();loop();
 </script>
 </body>

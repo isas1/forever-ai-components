@@ -5,11 +5,25 @@
 <meta name="description" content="The Endless Net — Infinitude. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>The Endless Net</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#9c0d20;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. JS reads these in syncTheme().
+     Light flips the weave: cadmium-red netting painted on a pale ground. */
+  :root{
+    --dot04-bg:#9c0d20; --dot04-net-rgb:251,246,239; --dot04-cap:#fbf6ef; --dot04-cap-o:.5;
+  }
+  :root[data-theme="light"]{
+    --dot04-bg:#fbeeec; --dot04-net-rgb:156,13,32; --dot04-cap:#2b1416; --dot04-cap-o:.62;
+  }
+  html,body{margin:0;height:100%;background:var(--dot04-bg);overflow:hidden}
   #dot04-stage{position:fixed;inset:0;width:100%;height:100%}
   #dot04-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .dot04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fbf6ef;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .dot04-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--dot04-cap);opacity:var(--dot04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +32,22 @@
  "description": "A grid of scalloped double-arc loops drawn on deep red canvas, each cell pulsing in brightness on its own sine-wave phase, evoking woven netting.",
  "useWhen": "Dark-themed hero backgrounds, textile or pattern aesthetics, ambient looping decoration for brand with bold color.",
  "avoidWhen": "Light-background layouts (background hardcoded #9c0d20 red). Contexts where high cell count causes perf issues on very large screens.",
- "agentPrompt": "Change background to deep navy (#0d1a9c), loop color to rgba(180,220,255,...), and slow the pulse cycle by changing t*1.3 to t*0.7.",
+ "agentPrompt": "Change background to deep navy (#0d1a9c), loop color to rgba(180,220,255,...), and slow the pulse cycle by changing t*1.3 to t*0.7. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid spacing (gap=26)",
   "pulse speed (t*1.3)",
   "arc angles (Math.PI*0.15 / 1.05 / 1.15 / 2.05)",
   "jitter range (Math.random()-0.5)*4)",
   "background color (#9c0d20)",
-  "stroke opacity range (0.55+b*0.4)"
+  "stroke opacity range (0.55+b*0.4)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard and static fallback",
   "DPR-aware canvas sizing",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and canvas fillStyle — must update both",
@@ -45,7 +61,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "canvas",
@@ -69,6 +86,20 @@
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('dot04-cv'); if(!cv) return;
+  const root=document.documentElement, C={};
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--dot04-bg').trim();
+    C.net=cs.getPropertyValue('--dot04-net-rgb').trim();   // rgb triplet: alpha varies per cell
+  }
+  syncTheme();
+  addEventListener('message', (e)=>{   // live re-theme from the canvas
+    const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme();
+      if(REDUCED) draw(performance.now());
+    }
+  });
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
     const r=c.getBoundingClientRect();
@@ -91,13 +122,13 @@
     const dt=Math.min(0.05,(now-last)/1000); last=now;
     if(!REDUCED) t+=dt;
     const ctx=S.ctx;
-    ctx.fillStyle='#9c0d20'; ctx.fillRect(0,0,S.w,S.h);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,S.w,S.h);
     ctx.lineWidth=2.2; ctx.lineCap='round';
     for(let i=0;i<cells.length;i++){
       const c=cells[i];
       const b=REDUCED?0.6:(0.45+0.45*Math.sin(t*1.3+c.ph));
       const r=gap*(0.42+b*0.34);
-      ctx.strokeStyle='rgba(251,246,239,'+(0.55+b*0.4)+')';
+      ctx.strokeStyle='rgba('+C.net+','+(0.55+b*0.4)+')';
       ctx.beginPath(); ctx.arc(c.x+c.jx, c.y+c.jy, r, Math.PI*0.15, Math.PI*1.05); ctx.stroke();
       ctx.beginPath(); ctx.arc(c.x+c.jx, c.y+c.jy, r, Math.PI*1.15, Math.PI*2.05); ctx.stroke();
     }
@@ -106,7 +137,7 @@
   function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
   function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
   function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
-  S.ctx.fillStyle='#9c0d20'; S.ctx.fillRect(0,0,S.w,S.h);
+  S.ctx.fillStyle=C.bg; S.ctx.fillRect(0,0,S.w,S.h);
   let _rt;
   window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); build(); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
   document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });

@@ -8,7 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&family=Inter:wght@400&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
     --bg-700:#12141d; --bg-900:#08090d;
     --text-0:#f4f6fb; --text-2:#8a91a8;
@@ -17,10 +24,19 @@
     --font-display:"Space Grotesk",system-ui,sans-serif;
     --font-body:"Inter",system-ui,sans-serif;
     --ease-linear:linear;
+    --cap-o:.4;
+    --c05-page-a:#101019; --c05-page-b:#08090d;
+  }
+  :root[data-theme="light"]{
+    --bg-700:#eef1f6; --bg-900:#ffffff;
+    --text-0:#1b2130; --text-2:#666e89;
+    --accent-iris:#3a7887; --accent-cyan:#986139; --accent-magenta:#5e7378;
+    --cap-o:.55;
+    --c05-page-a:#eef1f6; --c05-page-b:#f2f4f8;
   }
   *,*::before,*::after{box-sizing:border-box;}
-  html,body{margin:0;height:100%;overflow:hidden;}
-  body{background:radial-gradient(80% 70% at 50% 30%,#101019,#08090d);
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c05-page-b);}
+  body{background:radial-gradient(80% 70% at 50% 30%,var(--c05-page-a),var(--c05-page-b));
     font-family:var(--font-body);}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
   .c05-glow{position:relative;width:48vmin;height:57vmin;max-width:240px;max-height:284px;
@@ -40,7 +56,7 @@
   .c05-glow__t{font-family:var(--font-display);font-weight:600;font-size:19px;color:var(--text-0);
     margin:0 0 var(--space-1);letter-spacing:-0.02em;}
   .c05-glow__p{font-size:12px;color:var(--text-2);margin:0;}
-  .cap{position:fixed;left:10px;bottom:8px;color:var(--accent-cyan);opacity:.4;
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--accent-cyan);opacity:var(--cap-o);
     font-family:var(--font-body);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
   .c05-glow.c05-glow--paused::before,.c05-glow.c05-glow--paused::after{animation-play-state:paused;}
   @media (prefers-reduced-motion:reduce){
@@ -55,19 +71,21 @@
  "description": "Dark card framed by a spinning conic powder-blue, tan and slate gradient border with a soft blurred aura glow behind it; auto-rotates continuously.",
  "useWhen": "Feature cards, pricing tiers, dashboard highlights, or any dark-UI context needing a premium glowing border accent.",
  "avoidWhen": "Light backgrounds (dark card is hardcoded). Contexts requiring static or print-ready layouts where motion is unwanted.",
- "agentPrompt": "Change accent colors to gold/orange by setting --accent-iris:#f59e0b, --accent-cyan:#fbbf24, --accent-magenta:#f97316, and slow the spin to 10s.",
+ "agentPrompt": "Change accent colors to gold/orange by setting --accent-iris:#f59e0b, --accent-cyan:#fbbf24, --accent-magenta:#f97316, and slow the spin to 10s. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent colors (--accent-iris, --accent-cyan, --accent-magenta)",
   "spin duration (6s in animation)",
   "glow blur radius (18px in ::after filter)",
   "card content (h3.c05-glow__t, p.c05-glow__p, .c05-glow__chip)",
-  "card size (48vmin / 57vmin)"
+  "card size (48vmin / 57vmin)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "::before/::after pseudo-element conic-gradient pair (border + glow layer)",
   "IIFE wrapper with visibilitychange pause",
   "prefers-reduced-motion guard",
-  "isolation:isolate on .c05-glow"
+  "isolation:isolate on .c05-glow",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background and card colors hardcoded — not themeable without CSS variable overrides",
@@ -80,7 +98,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "card",
@@ -111,6 +130,11 @@
   var glow=document.querySelector(".c05-glow");
   document.addEventListener("visibilitychange",function(){
     glow.classList.toggle("c05-glow--paused",document.hidden);
+  });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);
   });
 })();
 </script>

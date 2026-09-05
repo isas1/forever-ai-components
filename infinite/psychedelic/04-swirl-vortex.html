@@ -5,18 +5,42 @@
 <meta name="description" content="A slow vortex of nested rotating petal arms in pink-violet-cyan hues spiralling inward toward a glowing core.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Swirl Vortex</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0612;overflow:hidden}
-  #ps04-stage{position:fixed;inset:0;width:100%;height:100%;background:#0a0612}
+  /* theme tokens — dark values are the defaults; light = a screen-printed wash on
+     pale lilac. The arms are hsla() built per frame from --ps04-s/-lb/-la/-a, and
+     --ps04-blend swaps the additive glow for plain compositing in light. */
+  :root{
+    --ps04-bg:#0a0612; --ps04-canvas:#0a0612; --ps04-fade:rgba(10,6,18,0.20);
+    --ps04-blend:lighter; --ps04-s:92; --ps04-lb:48; --ps04-la:18; --ps04-a:0.5;
+    --ps04-core0:rgba(255,225,245,0.9); --ps04-core1:rgba(255,61,166,0.55); --ps04-core2:rgba(255,61,166,0);
+    --ps04-glow1:rgba(255,61,166,.22); --ps04-glow1b:rgba(255,61,166,0);
+    --ps04-glow2:rgba(20,8,30,0); --ps04-glow2b:rgba(7,3,12,.78);
+    --ps04-glow-blend:screen; --ps04-cap:#fff; --ps04-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --ps04-bg:#f5f0f6; --ps04-canvas:#f5f0f6; --ps04-fade:rgba(245,240,246,0.72);
+    --ps04-blend:source-over; --ps04-s:88; --ps04-lb:77; --ps04-la:9; --ps04-a:0.17;
+    --ps04-core0:rgba(88,8,52,0.92); --ps04-core1:rgba(176,17,97,0.55); --ps04-core2:rgba(176,17,97,0);
+    --ps04-glow1:rgba(176,17,97,.14); --ps04-glow1b:rgba(176,17,97,0);
+    --ps04-glow2:rgba(240,232,244,0); --ps04-glow2b:rgba(164,140,178,.18);
+    --ps04-glow-blend:multiply; --ps04-cap:#2a1024; --ps04-cap-o:.62;
+  }
+  html,body{margin:0;height:100%;background:var(--ps04-bg);overflow:hidden}
+  #ps04-stage{position:fixed;inset:0;width:100%;height:100%;background:var(--ps04-bg)}
   #ps04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   /* static glow vignette — painted once, never animated */
   #ps04-glow{position:absolute;inset:0;pointer-events:none;
     background:
-      radial-gradient(closest-side at 50% 50%, rgba(255,61,166,.22), rgba(255,61,166,0) 62%),
-      radial-gradient(closest-side at 50% 50%, rgba(20,8,30,0) 55%, rgba(7,3,12,.78) 100%);
-    mix-blend-mode:screen}
+      radial-gradient(closest-side at 50% 50%, var(--ps04-glow1), var(--ps04-glow1b) 62%),
+      radial-gradient(closest-side at 50% 50%, var(--ps04-glow2) 55%, var(--ps04-glow2b) 100%);
+    mix-blend-mode:var(--ps04-glow-blend)}
   #ps04-glow.v2{mix-blend-mode:normal}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ps04-cap);opacity:var(--ps04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -26,20 +50,22 @@
  "description": "5 petal arms across 11 rings rotate at differential speeds to create a slow inward vortex in pink-violet-cyan hues with a glowing core.",
  "useWhen": "Dark-mode hero backgrounds, psychedelic/creative portfolio sections, ambient looping screensavers.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy). Content-heavy layouts where motion competes with text legibility.",
- "agentPrompt": "Change ARMS to 7 and shift the hue sweep from pink-cyan to green-gold by setting ringHue[i]=t*120+60 and updating the core gradient stops to rgba(255,220,50,0.9).",
+ "agentPrompt": "Change ARMS to 7 and shift the hue sweep from pink-cyan to green-gold by setting ringHue[i]=t*120+60 and updating the core gradient stops to rgba(255,220,50,0.9). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "arm count (ARMS=5)",
   "ring count (RINGS=11)",
   "hue sweep range (t*230)",
   "rotation speed (TWO/40)",
   "warp breath speed (TWO/17)",
-  "petal width range (0.16-0.10*t)"
+  "petal width range (0.16-0.10*t)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "trailing-fade fill pattern (rgba fill instead of clearRect)",
   "IIFE wrapper",
   "visibilitychange pause/resume",
-  "reduced-motion staticFrame fallback"
+  "reduced-motion staticFrame fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and JS — must change in both places",
@@ -52,7 +78,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "vortex",
@@ -79,7 +106,24 @@
   var cv=document.getElementById('ps04-c');
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root=document.documentElement;
   var dpr=Math.min(2,window.devicePixelRatio||1);
+  // every colour the loop draws with — re-read from the tokens on each theme switch
+  var C={bg:'#0a0612',fade:'rgba(10,6,18,0.20)',blend:'lighter',s:92,lb:48,la:18,a:0.5,
+         c0:'rgba(255,225,245,0.9)',c1:'rgba(255,61,166,0.55)',c2:'rgba(255,61,166,0)'};
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){return cs.getPropertyValue(n).trim();};
+    C.bg=g('--ps04-canvas'); C.fade=g('--ps04-fade'); C.blend=g('--ps04-blend');
+    C.s=+g('--ps04-s'); C.lb=+g('--ps04-lb'); C.la=+g('--ps04-la'); C.a=g('--ps04-a');
+    C.c0=g('--ps04-core0'); C.c1=g('--ps04-core1'); C.c2=g('--ps04-core2');
+  }
+  addEventListener('message',function(e){ var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+      if(reduce) staticFrame();
+      else { ctx.globalCompositeOperation='source-over'; ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H); }
+    }
+  });
 
   var W=0,H=0,cx=0,cy=0,maxR=0;
 
@@ -107,10 +151,10 @@
   function frame(ang,warp){
     // trailing-fade fill instead of clear → liquid melt persistence, single rect, cheap
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle='rgba(10,6,18,0.20)';
+    ctx.fillStyle=C.fade;
     ctx.fillRect(0,0,W,H);
 
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=C.blend;
     var i,a, spiral=0.55;          // arm-to-arm log twist
     for(i=RINGS-1;i>=0;i--){
       var R=ringR[i];
@@ -126,18 +170,18 @@
         ctx.beginPath();
         ctx.lineWidth=lw;
         ctx.lineCap='round';
-        ctx.strokeStyle='hsla('+h+',92%,'+(48+18*Math.sin(i*0.6+a))+'%,0.5)';
+        ctx.strokeStyle='hsla('+h+','+C.s+'%,'+(C.lb+C.la*Math.sin(i*0.6+a))+'%,'+C.a+')';
         ctx.arc(cx,cy,R,base-sweep,base+sweep);
         ctx.stroke();
       }
     }
     // calm glowing core — static-feeling pip drawn each frame, tiny, no flash
-    ctx.globalCompositeOperation='lighter';
+    ctx.globalCompositeOperation=C.blend;
     var cr=maxR*0.05;
     var g=ctx.createRadialGradient(cx,cy,0,cx,cy,cr);
-    g.addColorStop(0,'rgba(255,225,245,0.9)');
-    g.addColorStop(0.5,'rgba(255,61,166,0.55)');
-    g.addColorStop(1,'rgba(255,61,166,0)');
+    g.addColorStop(0,C.c0);
+    g.addColorStop(0.5,C.c1);
+    g.addColorStop(1,C.c2);
     ctx.fillStyle=g;
     ctx.beginPath(); ctx.arc(cx,cy,cr,0,TWO); ctx.fill();
   }
@@ -145,7 +189,7 @@
   function staticFrame(){
     // opaque base so reduced-motion has solid, legible bg
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle='#0a0612'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     frame(0.8,0.0); frame(0.8,0.0); // two passes to build up from transparent trail fill
   }
 
@@ -164,11 +208,11 @@
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
   function init(){
-    size();
+    syncTheme(); size();
     if(reduce){ staticFrame(); return; }
     // prime the canvas opaque once so 'lighter' has somewhere to glow from
     ctx.globalCompositeOperation='source-over';
-    ctx.fillStyle='#0a0612'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     start();
   }
 
@@ -178,7 +222,7 @@
     rt=setTimeout(function(){
       size();
       if(reduce){ staticFrame(); }
-      else { ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#0a0612'; ctx.fillRect(0,0,W,H); }
+      else { ctx.globalCompositeOperation='source-over'; ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H); }
     },120);
   });
 

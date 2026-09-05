@@ -5,13 +5,32 @@
 <meta name="description" content="Colored dots drift along a curling flow field, tracing a sweeping diagonal arc with painterly divisionist trails.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stipple Flow</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
+  /* theme tokens — dark values are the defaults; the light re-theme is the one
+     [data-theme="light"] block. syncTheme() reads --po04-bg / --po04-pal. */
+  :root{
+    --po04-bg:#0d0f14; --po04-g0:#15171f; --po04-g1:#0d0f14; --po04-g2:#090a0e;
+    --po04-cap:#fff; --po04-cap-o:.42;
+    /* accent / warm light / vermilion / cobalt / violet / highlight fleck */
+    --po04-pal:240 168 48/247 200 96/233 120 52/88 120 196/120 84 170/222 238 250;
+  }
+  :root[data-theme="light"]{
+    /* canvas-linen ground with the same soft vignette; hues deepened to pigment */
+    --po04-bg:#f4efe3; --po04-g0:#faf6ee; --po04-g1:#f4efe3; --po04-g2:#ece5d6;
+    --po04-cap:#2b2418; --po04-cap-o:.55;
+    --po04-pal:180 110 8/176 132 26/168 64 20/42 70 150/80 48 132/92 102 124;
+  }
+  html,body{margin:0;height:100%;background:var(--po04-bg);overflow:hidden}
   #po04-stage{position:fixed;inset:0;background:
-      radial-gradient(120% 120% at 30% 22%,#15171f 0%,#0d0f14 60%,#090a0e 100%)}
+      radial-gradient(120% 120% at 30% 22%,var(--po04-g0) 0%,var(--po04-g1) 60%,var(--po04-g2) 100%)}
   #po04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-       color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+       color:var(--po04-cap);opacity:var(--po04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -21,18 +40,20 @@
  "description": "108 colored dots drift along a curling sinusoidal flow field, leaving slow translucent trails that paint a sweeping diagonal arc with divisionist optic-mixing.",
  "useWhen": "Dark ambient backgrounds, generative art hero sections, creative portfolio loops where painterly motion suits the brand.",
  "avoidWhen": "Light backgrounds (hardcoded dark navy). Contexts requiring legible text overlaid — persistent trails compete with reading.",
- "agentPrompt": "Change the palette array PAL to cool teals and purples (e.g. [0,200,180],[80,180,220],[140,80,200]), reduce N to 72, and slow the tick to t+=0.002.",
+ "agentPrompt": "Change the palette array PAL to cool teals and purples (e.g. [0,200,180],[80,180,220],[140,80,200]), reduce N to 72, and slow the tick to t+=0.002. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "dot count (N=108)",
   "palette colors (PAL array)",
   "flow field shape (curve/swirl coefficients in fieldAng)",
   "tick speed (t+=0.0042)",
-  "fade alpha (ctx.globalAlpha=0.052)"
+  "fade alpha (ctx.globalAlpha=0.052)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static drawOne() fallback",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and paintBG() — must change both",
@@ -46,7 +67,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "pointillism",
@@ -75,8 +97,8 @@
   var DPR=Math.min(2,window.devicePixelRatio||1);
   var W=0,H=0,running=false,raf=0,t=0;
 
-  // Divisionist palette: warm accent core, complementary cool shadows, optic-mixing flecks.
-  var PAL=[[240,168,48],[247,200,96],[233,120,52],[88,120,196],[120,84,170],[222,238,250]];
+  // Divisionist palette + ground come from the CSS tokens (see --po04-pal).
+  var root=document.documentElement, PAL=[], BG="#0d0f14";
   var N=108;                 // capped dot agents
   var px=new Float32Array(N),py=new Float32Array(N);
   var pa=new Float32Array(N);// age/phase
@@ -96,7 +118,7 @@
     for(var i=0;i<N;i++) seed(i);
   }
   function paintBG(){
-    ctx.fillStyle="#0d0f14"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
   }
 
   // Flow field: layered sinusoids form a curling vector field whose dominant
@@ -133,7 +155,7 @@
     t+=0.0042;
     // Slow translucent fade leaves divisionist trails without per-frame blur/filter.
     ctx.globalAlpha=0.052;
-    ctx.fillStyle="#0d0f14";
+    ctx.fillStyle=BG;
     ctx.fillRect(0,0,W,H);
     ctx.globalAlpha=1;
 
@@ -158,6 +180,19 @@
     raf=requestAnimationFrame(frame);
   }
 
+  // JS-drawn colors read the tokens, so CSS stays the single source of truth.
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    BG=cs.getPropertyValue('--po04-bg').trim();
+    PAL=cs.getPropertyValue('--po04-pal').trim().split('/').map(function(q){return q.trim().split(/\s+/).map(Number);});
+    // the trail buffer holds frames of the old palette — repaint it, don't wait
+    // for the 0.052 fade to grind the previous theme away.
+    if(W){ paintBG(); if(reduce) drawOne(); }
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme();}});
+
   function start(){ if(running)return; running=true; raf=requestAnimationFrame(frame); }
   function stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; }
 
@@ -172,6 +207,7 @@
     },140);
   });
 
+  syncTheme();
   size();
   if(reduce){ drawOne(); return; }
   start();

@@ -5,21 +5,37 @@
 <meta name="description" content="The word MORPH on deep navy, each letter pulsing font-weight and vertical squash in a sine wave with cyan-to-blue hue shifts.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Weight Morph Wave</title>
+<script>
+/* theme hook (prototype): the canvas appends ?theme=light|dark to the iframe src.
+   Runs before first paint so there is no dark flash. Standalone default stays dark. */
+(function(){
+  var t = new URLSearchParams(location.search).get('theme');
+  if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0d1b2a;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     light re-theme = the [data-theme="light"] block. --kw-l feeds the JS hue loop. */
+  :root{
+    --kw-bg:#0d1b2a; --kw-ink:#e0fbfc; --kw-glow:rgba(120,200,255,.25); --kw-l:72%;
+  }
+  :root[data-theme="light"]{
+    --kw-bg:#eef4f9; --kw-ink:#15707e; --kw-glow:rgba(21,112,126,.14); --kw-l:34%;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--kw-bg);}
   body{display:flex;align-items:center;justify-content:center;font-family:"Helvetica Neue",Arial,sans-serif;}
   #word{display:flex;line-height:.9;letter-spacing:-.02em;}
   #word span{
     display:inline-block;
-    color:#e0fbfc;
+    color:var(--kw-ink);
     font-size:clamp(38px,18vw,140px);
     font-weight:700;
     transform-origin:center bottom;
     transition:none;
-    text-shadow:0 0 24px rgba(120,200,255,.25);
+    text-shadow:0 0 24px var(--kw-glow);
   }
   .cap{position:absolute;left:10px;bottom:8px;font-size:11px;letter-spacing:.08em;
-       color:#e0fbfc;opacity:.28;text-transform:uppercase;font-weight:400;}
+       color:var(--kw-ink);opacity:.28;text-transform:uppercase;font-weight:400;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -28,17 +44,18 @@
  "description": "Each letter of a word pulses font-weight and vertical scale in a staggered sine wave, shifting hue from cyan to blue.",
  "useWhen": "Hero text needing ambient motion without distraction. Brand name displays.",
  "avoidWhen": "Body copy, strings longer than 8 characters, or viewports under 280px.",
- "agentPrompt": "Change the word to 'HELLO', set accent to #FF6B6B, slow the wave cycle to 4 seconds.",
+ "agentPrompt": "Change the word to 'HELLO', set accent to #FF6B6B, slow the wave cycle to 4 seconds. Theme: dark tokens live in :root (--kw-*), the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (text variable)",
   "wave speed (t += value)",
   "font weight range (200..900)",
-  "accent color"
+  "theme tokens (:root --kw-* dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard",
-  "visibilitychange pause"
+  "visibilitychange pause",
+  "theme hook (?theme= bootstrap + forever:theme message listener + --kw-* tokens)"
  ],
  "knownLimitations": [
   "Requires system font with bold weight; no variable-font axis — weight snaps in steps"
@@ -48,7 +65,8 @@
   "agent-ready",
   "easy-to-modify",
   "mobile-ready",
-  "accessible"
+  "accessible",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -66,6 +84,7 @@
 <script>
 (function(){
   var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var root = document.documentElement;
   var text = "MORPH";
   var host = document.getElementById('word');
   var spans = [];
@@ -77,6 +96,20 @@
   }
   var t=0, raf=0;
   var lastW=[], lastHue=[];   // skip redundant style writes that cause needless reflow/repaint
+  var lightness='72%';
+  function syncTheme(){       // JS-drawn colors read the token, so CSS stays the single source
+    lightness = (getComputedStyle(root).getPropertyValue('--kw-l')||'72%').trim();
+    lastHue=[];               // force a recolor pass on the next frame
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d = e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme);
+      syncTheme();
+    }
+  });
+  syncTheme();
   function frame(){
     t+=0.045;
     for(var i=0;i<spans.length;i++){
@@ -87,14 +120,14 @@
       var hue = Math.round(180 + p*40);
       if(wr!==lastW[i]){ spans[i].style.fontWeight = wr; lastW[i]=wr; }
       spans[i].style.transform = 'scaleY('+sc.toFixed(3)+')';
-      if(hue!==lastHue[i]){ spans[i].style.color = 'hsl('+hue+',80%,72%)'; lastHue[i]=hue; }
+      if(hue!==lastHue[i]){ spans[i].style.color = 'hsl('+hue+',80%,'+lightness+')'; lastHue[i]=hue; }
     }
     raf=requestAnimationFrame(frame);
   }
   function start(){ if(!raf && !reduce) raf=requestAnimationFrame(frame); }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
-  if(reduce){ for(var i=0;i<spans.length;i++){spans[i].style.fontWeight=600;} }
+  if(reduce){ for(var i=0;i<spans.length;i++){spans[i].style.fontWeight=600;} }  // color stays var(--kw-ink): theme-aware when static
   else start();
 })();
 </script>

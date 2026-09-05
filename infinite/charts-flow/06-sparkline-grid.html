@@ -2,14 +2,31 @@
 <meta name="description" content="Three-by-three grid of small-multiple sparklines scrolling leftward as fresh data arrives, each with a teal leading dot and diamond min/max">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sparkline Grid</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0d12;overflow:hidden}
+  /* theme tokens — dark = defaults (solid-dark-bg contract); light re-theme = the
+     [data-theme="light"] block. The --ch06-* colours are what the canvas draws with. */
+  :root{
+    --ch06-bg:#0a0d12; --ch06-glow:rgba(90,209,160,.09); --ch06-cap:#fff; --ch06-cap-o:.42;
+    --ch06-acc:#5ad1a0; --ch06-max:#d8623a; --ch06-min:#3aa6c9;
+    --ch06-grid:rgba(140,170,200,.10); --ch06-base:rgba(140,170,200,.07); --ch06-halo:rgba(90,209,160,.28);
+  }
+  :root[data-theme="light"]{
+    --ch06-bg:#f1f4f8; --ch06-glow:rgba(35,126,89,.08); --ch06-cap:#1b2130; --ch06-cap-o:.5;
+    --ch06-acc:#237e59; --ch06-max:#ba4b25; --ch06-min:#27768f;
+    --ch06-grid:rgba(60,90,120,.18); --ch06-base:rgba(60,90,120,.12); --ch06-halo:rgba(35,126,89,.30);
+  }
+  html,body{margin:0;height:100%;background:var(--ch06-bg);overflow:hidden}
   #ch06-wrap{position:fixed;inset:0;display:block}
   #ch06-c{position:absolute;inset:0;width:100%;height:100%;
     /* static inner glow — never repaints */
-    box-shadow:inset 0 0 130px rgba(90,209,160,.09)}
+    box-shadow:inset 0 0 130px var(--ch06-glow)}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
+    color:var(--ch06-cap);opacity:var(--ch06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +35,22 @@
  "description": "Nine teal sparklines in a 3x3 grid scroll leftward every 140ms; orange/blue diamonds mark running max/min and a halo dot tracks the latest value.",
  "useWhen": "Dashboards, monitoring UIs, or ambient data-display tiles needing real-time multi-series charting without a charting library.",
  "avoidWhen": "Contexts requiring interactive tooltips or labeled axes — this is display-only with no hover state or readable tick marks.",
- "agentPrompt": "Change grid to 2x2 (set COLS=2, ROWS=2), slow the update interval to 300ms (STEP=300), and shift the accent color to electric blue (#00d4ff).",
+ "agentPrompt": "Change grid to 2x2 (set COLS=2, ROWS=2), slow the update interval to 300ms (STEP=300), and shift the accent color to electric blue (#00d4ff). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid dimensions (COLS=3, ROWS=3)",
   "sample buffer length (LEN=46)",
   "update interval (STEP=140ms)",
   "accent color (ACC='#5ad1a0')",
   "min/max marker colors (MAXC, MINC)",
-  "oscillator frequency range (0.8+rnd()*1.7)"
+  "oscillator frequency range (0.8+rnd()*1.7)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "typed Float32Array ring buffers (allocation-free after setup)",
   "DPR-aware canvas sizing in layout()",
   "visibilitychange pause/resume guard",
-  "reduced-motion static fallback"
+  "reduced-motion static fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Synthetic data only — no real data feed wired in",
@@ -45,7 +64,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "sparkline",
@@ -70,11 +90,23 @@
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var cv=document.getElementById('ch06-c'), ctx=cv.getContext('2d');
 
-  // Constructivist data-viz palette around the teal accent
+  // Constructivist data-viz palette around the teal accent — read from tokens in syncTheme
   var BG='#0a0d12', ACC='#5ad1a0';
   var MAXC='#d8623a';   // warm — running max marker
   var MINC='#3aa6c9';   // cool — running min marker
   var GRID='rgba(140,170,200,.10)';
+  var BASE='rgba(140,170,200,.07)', HALO='rgba(90,209,160,.28)';
+
+  // ---- theme: every canvas colour comes from a CSS token ----
+  var root=document.documentElement;
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    BG=g('--ch06-bg'); ACC=g('--ch06-acc'); MAXC=g('--ch06-max'); MINC=g('--ch06-min');
+    GRID=g('--ch06-grid'); BASE=g('--ch06-base'); HALO=g('--ch06-halo');
+    if(W) draw();
+  }
+  addEventListener('message',function(e){ var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
 
   var COLS=3, ROWS=3, N=COLS*ROWS;   // 9 small multiples (well under cap)
   var LEN=46;                        // samples held per series
@@ -124,7 +156,7 @@
     ctx.strokeRect(x0+.5,y0+.5,cw-1,chh-1);
     // baseline (mid)
     ctx.beginPath(); ctx.moveTo(px,py+phh*0.5); ctx.lineTo(px+pw,py+phh*0.5);
-    ctx.strokeStyle='rgba(140,170,200,.07)'; ctx.stroke();
+    ctx.strokeStyle=BASE; ctx.stroke();
 
     var base=s*LEN, dx=pw/(LEN-1);
     // find running min/max + their positions in one pass
@@ -160,7 +192,7 @@
     ctx.fillStyle=ACC; ctx.fill();
     // static halo ring (one stroke, no per-frame shadow)
     ctx.beginPath(); ctx.arc(LX,LY,Math.max(4,Math.min(cw,chh)*0.10),0,6.283);
-    ctx.strokeStyle='rgba(90,209,160,.28)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.strokeStyle=HALO; ctx.lineWidth=1; ctx.stroke();
   }
 
   function draw(){
@@ -192,6 +224,7 @@
   });
 
   layout();
+  syncTheme();
   if(reduce){ draw(); return; }  // settle on one static legible frame
   draw(); start();
 })();

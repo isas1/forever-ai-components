@@ -5,11 +5,29 @@
 <meta name="description" content="A pointillist riverbank at dusk built from thousands of breathing dots that softly shimmer via optical color mixing.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pointillist Shimmer</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d0f14;overflow:hidden}
-  #po02-stage{position:fixed;inset:0;background:#0d0f14}
+  /* theme tokens — dark values are the defaults; the light re-theme is the one
+     [data-theme="light"] block. --po02-blend flips the optical mix: additive light
+     on the dark ground, subtractive pigment on linen (additive would blow to white). */
+  :root{
+    --po02-bg:#0d0f14; --po02-blend:add; --po02-cap:#fff; --po02-cap-o:.42;
+    /* saffron/orange/rose/violet/cobalt/teal/foliage/ochre/pale, as RGB triples */
+    --po02-pal:240 168 48/232 120 64/206 84 96/120 96 168/64 108 176/72 150 160/108 170 96/196 190 96/228 210 180;
+  }
+  :root[data-theme="light"]{
+    /* canvas-linen ground; the same nine hues deepened to read as laid pigment */
+    --po02-bg:#f4efe3; --po02-blend:sub; --po02-cap:#2b2418; --po02-cap-o:.55;
+    --po02-pal:186 116 10/174 72 24/152 40 58/86 62 136/34 72 142/26 102 112/56 116 48/140 128 34/176 150 104;
+  }
+  html,body{margin:0;height:100%;background:var(--po02-bg);overflow:hidden}
+  #po02-stage{position:fixed;inset:0;background:var(--po02-bg)}
   #po02-c{width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--po02-cap);opacity:var(--po02-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +37,21 @@
  "description": "Up to 2600 colored dots optically mix to paint a pointillist riverbank at dusk — sky, water, and grassy bank zones shimmer via per-dot breathing sine waves.",
  "useWhen": "Dark-mode hero backgrounds, art/generative portfolios, ambient screensaver-style tiles where painterly texture is the aesthetic.",
  "avoidWhen": "Light-background UIs (background hardcoded dark navy). Contexts needing text legibility — dense dot field competes with overlaid copy.",
- "agentPrompt": "Change the scene from riverbank to a sunset beach by shifting PAL entries: set cobalt water to [0,180,220], saffron to [255,140,0], and increase horizon to 0.52.",
+ "agentPrompt": "Change the scene from riverbank to a sunset beach by shifting PAL entries: set cobalt water to [0,180,220], saffron to [255,140,0], and increase horizon to 0.52. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "dot density cap (target = Math.min(2600, ...))",
   "palette (PAL array, 9 RGB entries)",
   "horizon line (horizon=0.46)",
   "breathing speed (t*0.0013)",
-  "buffer cap resolution (capE=560)"
+  "buffer cap resolution (capE=560)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "typed-array + single putImageData blit pattern (critical for perf)",
   "visibilitychange pause",
   "reduced-motion static-frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound inner pixel loop — heavy on low-end devices at high dot counts",
@@ -44,7 +64,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "pointillism",
@@ -74,18 +95,9 @@
   var W=0,H=0,dpr=1,BW=0,BH=0;
   // Buffer renders at capped resolution then scales to fill; single blit/frame.
   var img=null, buf32=null, acc=null;
-  // Divisionist palette: warm complements optically mixing against cool ground.
-  var PAL = [
-    [240,168,48],  // accent saffron (sky highlight)
-    [232,120,64],  // orange
-    [206,84,96],   // rose madder
-    [120,96,168],  // violet (shadow)
-    [64,108,176],  // cobalt water
-    [72,150,160],  // teal
-    [108,170,96],  // foliage green
-    [196,190,96],  // ochre-yellow grass
-    [228,210,180]  // pale light
-  ];
+  // Divisionist palette + ground + blend mode all live in the CSS tokens;
+  // syncTheme() reads them and rebuilds MIX, the per-hue splat weights.
+  var root=document.documentElement, PAL=[], MIX=[], BG=[13,15,20];
 
   // Dot field: typed arrays, allocation-free loop. Rendered into ONE ImageData
   // and blitted once per frame (no per-dot ctx path fills) — the typed-array +
@@ -94,7 +106,9 @@
 
   function build(){
     // density scaled to buffer area; positions live in buffer-pixel space.
-    var target = Math.min(2600, Math.round((BW*BH)/520));
+    // density and dot size were tuned for a 560px buffer; at wall size (264px) that gave 134
+    // sub-pixel dots on near-black (audit: flat). Denser, larger, brighter — same palette.
+    var target = Math.min(2600, Math.round((BW*BH)/150));
     N = target;
     px=new Float32Array(N); py=new Float32Array(N);
     baseR=new Float32Array(N);
@@ -119,7 +133,7 @@
       }
       px[i]=x; py[i]=y;
       var m=Math.min(BW,BH);
-      baseR[i]=0.0016*m+Math.random()*0.0042*m;
+      baseR[i]=0.006*m+Math.random()*0.012*m;
       col[i]=p;
       ph[i]=Math.random()*6.283;
       amp[i]=0.35+Math.random()*0.5;
@@ -149,19 +163,19 @@
   // then blit once. No per-dot canvas path fills.
   function draw(t){
     var ac=acc, bw=BW, bh=BH, n=N, k;
-    // ground wash so gaps read as deep ground, not pure black
-    var GR=13, GG=15, GB=20; // #0d0f14
+    // ground wash so gaps read as the tile's ground, not pure black
+    var GR=BG[0], GG=BG[1], GB=BG[2];
     var len=bw*bh*3;
     for(k=0;k<len;k+=3){ ac[k]=GR; ac[k+1]=GG; ac[k+2]=GB; }
     var i=0;
     for(;i<n;i++){
-      var c=col[i], r=PAL[c], cr=r[0], cg=r[1], cb=r[2];
+      var c=col[i], r=MIX[c], cr=r[0], cg=r[1], cb=r[2];
       // breathing: per-dot phase, slow global drift -> shimmer
       var b=0.55+0.45*amp[i]*Math.sin(t*0.0013 + ph[i] + px[i]*0.004 + py[i]*0.003);
       if(b<0) b=0; else if(b>1) b=1;
       var rad=baseR[i]*(0.78+0.4*b);
       if(rad<0.6) rad=0.6;
-      var inten=0.30+0.55*b;      // additive weight (matches old alpha curve)
+      var inten=0.42+0.58*b;      // additive weight
       var cx=px[i], cy=py[i];
       var x0=cx-rad, x1=cx+rad, y0=cy-rad, y1=cy+rad;
       var ix0=x0<0?0:(x0|0), iy0=y0<0?0:(y0|0);
@@ -182,9 +196,9 @@
     // tonemap accumulation -> RGBA (clamp), single blit
     var b32=buf32, p=0;
     for(k=0;k<len;k+=3){
-      var R=ac[k]; if(R>255)R=255;
-      var G=ac[k+1]; if(G>255)G=255;
-      var B=ac[k+2]; if(B>255)B=255;
+      var R=ac[k]; if(R>255)R=255; else if(R<0)R=0;
+      var G=ac[k+1]; if(G>255)G=255; else if(G<0)G=0;
+      var B=ac[k+2]; if(B>255)B=255; else if(B<0)B=0;
       // ABGR for little-endian Uint32 view
       b32[p++]=(255<<24)|((B|0)<<16)|((G|0)<<8)|(R|0);
     }
@@ -203,6 +217,22 @@
     if(!running){ running=true; raf=requestAnimationFrame(loop); }
   }
 
+  // JS-drawn colors read the tokens, so CSS stays the single source of truth.
+  function syncTheme(){
+    var cs=getComputedStyle(root), h=cs.getPropertyValue('--po02-bg').trim().replace('#','');
+    BG=[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];
+    PAL=cs.getPropertyValue('--po02-pal').trim().split('/').map(function(q){return q.trim().split(/\s+/).map(Number);});
+    // add: splat light onto the dark ground. sub: lay pigment, so overlapping dots
+    // deepen toward the hue instead of clipping to white on the pale ground.
+    var add=cs.getPropertyValue('--po02-blend').trim()==='add';
+    MIX=PAL.map(function(c){return add?c:[c[0]-BG[0],c[1]-BG[1],c[2]-BG[2]];});
+    if(acc&&reduce) draw(1200);   // static frame has to be repainted by hand
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
+
+  syncTheme();
   size();
   window.addEventListener('resize', function(){
     size();

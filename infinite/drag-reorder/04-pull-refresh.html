@@ -6,23 +6,25 @@
  "description": "A 5-row canvas list springs down on drag, revealing diagonal bars and a rotating geometric indicator; releasing past threshold triggers a 1.5s sync spinner.",
  "useWhen": "Mobile-style refresh affordance demos, gesture UI previews, or loading-state illustrations on dark dashboards.",
  "avoidWhen": "Contexts requiring real data refresh — the spinner is cosmetic only. Light backgrounds clash with the hardcoded dark theme.",
- "agentPrompt": "Change the release threshold to 80px by setting THRESH=80, swap the accent color to purple by changing CY='#a855f7', and increase row count to 7 by setting N=7 and extending rowLab.",
+ "agentPrompt": "Change the release threshold to 80px by setting THRESH=80, swap the accent color to purple by changing CY='#a855f7', and increase row count to 7 by setting N=7 and extending rowLab. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "release threshold (THRESH=58)",
   "max pull distance (MAXP=92)",
   "row count (N=5) and rowLab array",
   "accent/spinner color (CY variable)",
   "spring stiffness and damping (k=180, c=22)",
-  "refresh hold duration (refreshT>1.5)"
+  "refresh hold duration (refreshT>1.5)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static-frame guard",
   "visibilitychange pause/resume",
-  "pointer capture (setPointerCapture) for reliable drag tracking"
+  "pointer capture (setPointerCapture) for reliable drag tracking",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded dark navy — must edit BG variable and CSS :root --bg together",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Refresh action is cosmetic; no network hook or event emitted",
   "Row stagger lag (r*0.05 multiplier) becomes visually loose at N>8"
  ],
@@ -33,7 +35,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "pull-to-refresh",
@@ -46,18 +49,19 @@
  ]
 }
 </script>
-
 <meta name="description" content="A canvas list pulls down with elastic rubber-band overscroll, revealing diagonal bars and releasing into a spinning geometric sync indicator">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pull to Refresh</title>
+<script>/* theme hook: ?theme=light|dark or postMessage flips data-theme; runs pre-paint, no dark flash */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-  :root{--bg:#0c0e13;--ink:#e8eaef;--cy:#22d3ee;--red:#ec3a4b;--dim:#3a4150}
+  :root{--bg:#0c0e13;--ink:#e8eaef;--cy:#22d3ee;--red:#ec3a4b;--dim:#222834;--row0:#11141c;--row1:#0f121a;--cap:#fff;--cap-o:.42}
+  :root[data-theme="light"]{--bg:#eef1f6;--ink:#1b2230;--cy:#0a7686;--red:#ec3a4b;--dim:#5b6573;--row0:#ffffff;--row1:#f4f6fa;--cap:#1b2230;--cap-o:.5}
   *{margin:0;box-sizing:border-box}
   html,body{height:100%}
   body{background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
   #dr04-stage{position:fixed;inset:0;display:grid;place-items:center;touch-action:none}
   #dr04-c{width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   #dr04-stage:focus-visible{outline:2px solid var(--cy);outline-offset:-3px}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
@@ -70,7 +74,10 @@
   var stage=document.getElementById('dr04-stage'),cv=document.getElementById('dr04-c'),g=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var W=0,H=0,dpr=1,running=true,raf=0;
-  var BG='#0c0e13',INK='#e8eaef',CY='#22d3ee',RED='#ec3a4b',DIM='#222834';
+  var root=document.documentElement, BG,INK,CY,RED,DIM,ROW0,ROW1;
+  function syncTheme(){var cs=getComputedStyle(root);BG=cs.getPropertyValue('--bg').trim();INK=cs.getPropertyValue('--ink').trim();CY=cs.getPropertyValue('--cy').trim();RED=cs.getPropertyValue('--red').trim();DIM=cs.getPropertyValue('--dim').trim();ROW0=cs.getPropertyValue('--row0').trim();ROW1=cs.getPropertyValue('--row1').trim();}
+  syncTheme();
+  addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
   var N=5, rowLab=['ALPHA','BETA','GAMMA','DELTA','EPS']; // <=110 elements
   function size(){
     dpr=Math.min(2,window.devicePixelRatio||1);
@@ -79,7 +86,6 @@
     g.setTransform(dpr,0,0,dpr,0,0);
   }
   size();
-  // state ------------------------------------------------------------
   var pull=0;        // current elastic pull distance (px)
   var vel=0;         // spring velocity
   var target=0;      // user/demo target pull
@@ -89,7 +95,6 @@
   var lastInput=-1e9, t=0;
   var THRESH=58;     // release threshold
   var MAXP=92;
-  // demo scripting ---------------------------------------------------
   var demoPhase=0, demoT=0;
   function demoIdle(){ return (t-lastInput)>3.0; }
   function step(dt){
@@ -126,7 +131,6 @@
     }
     target=0; dragging=false;
   }
-  // drawing ----------------------------------------------------------
   function draw(){
     g.fillStyle=BG; g.fillRect(0,0,W,H);
     var cx=W/2;
@@ -179,7 +183,7 @@
       g.save();
       g.translate(lx,ry);
       // row plate
-      g.fillStyle = r===0?'#11141c':'#0f121a';
+      g.fillStyle = r===0?ROW0:ROW1;
       g.strokeStyle=DIM;g.lineWidth=1;
       rrect(g,0,0,w,rowH,3);g.fill();g.stroke();
       // left accent block — alternating red/cyan (El Lissitzky color blocking)
@@ -207,7 +211,6 @@
     g.fillStyle=BG;g.fillRect(0,H-2,W,2);
   }
   function rrect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
-  // loop -------------------------------------------------------------
   var prev=0;
   function frame(ts){
     if(!running)return;
@@ -216,7 +219,6 @@
     raf=requestAnimationFrame(frame);
   }
   function start(){ if(!running){running=true;prev=0;raf=requestAnimationFrame(frame);} }
-  // input ------------------------------------------------------------
   var startY=0, basePull=0;
   function pdown(e){
     dragging=true; lastInput=t; demoPhase=0; demoT=0;
@@ -247,7 +249,6 @@
   stage.addEventListener('keyup',function(e){
     if(e.key==='ArrowDown'||e.key==='ArrowUp'){ dragging=false; }
   });
-  // lifecycle --------------------------------------------------------
   window.addEventListener('resize',size);
   document.addEventListener('visibilitychange',function(){
     if(document.hidden){running=false;cancelAnimationFrame(raf);}

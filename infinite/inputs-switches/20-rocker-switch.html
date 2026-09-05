@@ -5,11 +5,19 @@
 <meta name="description" content="Photoreal I/O rocker switch in warm metal that clunks between on and off with specular tilt and a glowing amber LED witness light.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rocker Switch</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1d1a16;}
+  /* theme tokens — dark defaults; metal plate/rocker/LED stay dark both themes */
+  :root{ --rk-bg:#1d1a16; --rk-cap:#ff7849; --rk-cap-o:.36; }
+  :root[data-theme="light"]{ --rk-bg:#f6f2ea; --rk-cap:#1b2130; --rk-cap-o:.5; }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--rk-bg);}
   #rk-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:#ff7849;opacity:.36;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--rk-cap);opacity:var(--rk-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +27,21 @@
  "description": "Photoreal I/O rocker in warm metal clunks between ON/OFF with spring physics and specular tilt. Amber LED witness light glows when on.",
  "useWhen": "Hardware/industrial UI dashboards, retro control panel aesthetics, settings toggles where tactile feel is part of the brand.",
  "avoidWhen": "Light or minimal UIs — background is hardcoded dark brown. Production forms needing strict user-controlled state — auto-cycles by default.",
- "agentPrompt": "Change the LED to blue by editing the lens gradient rgb formula: set `r=20+30*fil, g=50+80*fil, b=40+215*fil` and update glow halo stops to `rgba(90,150,255,...)`.",
+ "agentPrompt": "Change the LED to blue by editing the lens gradient rgb formula: set `r=20+30*fil, g=50+80*fil, b=40+215*fil` and update glow halo stops to `rgba(90,150,255,...)`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "LED glow color (rgba in gh gradient stops)",
   "spring stiffness and damping (k=0.20, damp=0.74)",
   "auto-flip interval (2600+random*900ms)",
   "plate proportions (pw=S*0.50, ph=S*0.66)",
-  "specular highlight opacity (0.30*sp)"
+  "specular highlight opacity (0.30*sp)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange pause/start",
   "reduced-motion static fallback (reduce branch)",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "pointermove hover bias alters target without a click — remove listener for strict click-only behavior",
@@ -45,7 +55,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "rocker-switch",
@@ -66,6 +77,11 @@
 (function(){
   const cv=document.getElementById('rk-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const root=document.documentElement, C={};
+  function syncTheme(){ C.bg=getComputedStyle(root).getPropertyValue('--rk-bg').trim(); }
+  addEventListener('message',function(e){ const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
+  syncTheme();
   let W,H,DPR,S,raf=0;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -74,7 +90,6 @@
     S=Math.min(W,H);
   }
   addEventListener('resize',size);size();
-
   // state: tilt in [-1(off,down-left) .. +1(on,down-right)], target snaps between -1 and +1
   let tilt=-1,vel=0,target=-1,nextFlip=0,led=0;
   function flip(){target=-target;}
@@ -82,13 +97,11 @@
   cv.addEventListener('pointermove',e=>{ // hover hint: bias toward pointer half
     const x=e.offsetX; if(x>W*0.62)target=1; else if(x<W*0.38)target=-1;
   });
-
   const rr=(x,y,w,h,r)=>{ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
     ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();};
-
   function draw(){
     ctx.clearRect(0,0,W,H);
-    ctx.fillStyle='#1d1a16';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const cx=W/2,cy=H/2;
     const pw=S*0.50,ph=S*0.66,bz=S*0.05; // plate(width,height), bezel
     // mounting plate (recessed metal frame)
@@ -103,7 +116,6 @@
     let cg=ctx.createLinearGradient(0,-ph/2,0,ph/2);
     cg.addColorStop(0,'rgba(0,0,0,0.55)');cg.addColorStop(.5,'rgba(0,0,0,0)');cg.addColorStop(1,'rgba(0,0,0,0.55)');
     ctx.fillStyle=cg;ctx.fill();
-
     const t=tilt; // -1..1
     // each half pivots about center horizontal axis. Foreshorten the depressed half.
     // top half compresses when tilt<0 (top pushed in), bottom compresses when tilt>0
@@ -113,7 +125,6 @@
     const botDepth=(1+t)*0.5;
     // perspective: depressed half shifts inner edge & darkens
     const topInset=topDepth*fold*2.2, botInset=botDepth*fold*2.2;
-
     // ---- bottom half (ON / "I") ----
     ctx.save();
     ctx.beginPath();
@@ -149,7 +160,6 @@
     ctx.lineCap='round';
     ctx.beginPath();ctx.moveTo(0,midY+ph*0.20);ctx.lineTo(0,midY+ph*0.32);ctx.stroke();
     ctx.restore();
-
     // ---- top half (OFF / "O") ----
     ctx.save();
     ctx.beginPath();
@@ -180,7 +190,6 @@
     ctx.strokeStyle=topDepth>0.5?'rgba(255,120,73,0.85)':'rgba(255,255,255,0.16)';
     ctx.beginPath();ctx.arc(0,midY-ph*0.26,ph*0.055,0,Math.PI*2);ctx.stroke();
     ctx.restore();
-
     // fulcrum seam — the dark line where the two halves meet
     let seam=ctx.createLinearGradient(0,-S*0.02,0,S*0.02);
     seam.addColorStop(0,'rgba(0,0,0,0)');seam.addColorStop(.5,'rgba(0,0,0,0.85)');seam.addColorStop(1,'rgba(0,0,0,0)');
@@ -188,9 +197,7 @@
     // tiny accent glint riding the seam toward the raised side
     ctx.fillStyle='rgba(255,120,73,'+(0.22+0.25*Math.abs(t))+')';
     rr(-pw/2+S*0.02, (t>0?-1:1)*S*0.006-S*0.0015, pw-S*0.04, S*0.003, S*0.0015);ctx.fill();
-
     ctx.restore(); // plate translate
-
     // ---- LED witness light (below plate) ----
     const ly=cy+ph/2+bz+S*0.075, lr=S*0.030;
     // warm filament curve: led 0..1, ease for filament glow ramp
@@ -220,7 +227,6 @@
     ctx.beginPath();ctx.arc(-lr*0.32,-lr*0.34,lr*0.22,0,Math.PI*2);ctx.fill();
     ctx.restore();
   }
-
   let last=0;
   function frame(ts){
     if(!last)last=ts;const dt=Math.min(40,ts-last)/16.67;last=ts;

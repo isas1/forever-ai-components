@@ -5,11 +5,26 @@
 <meta name="description" content="A glowing hypotrochoid spirograph curve traced progressively against a dark navy field, recycling into new shapes.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Spirograph</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#07111a}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --gg04-fade is the per-frame trail wash. */
+  :root{
+    --gg04-bg:#07111a; --gg04-fade:rgba(7,17,26,0.028); --gg04-cap:#ffd479; --gg04-cap-o:.45;
+    --gg04-line-s:85; --gg04-line-l:62;
+  }
+  :root[data-theme="light"]{
+    --gg04-bg:#eef3f8; --gg04-fade:rgba(238,243,248,0.028); --gg04-cap:#946400; --gg04-cap-o:.8;
+    --gg04-line-s:72; --gg04-line-l:40;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--gg04-bg)}
   #c{display:block;width:100%;height:100%}
   #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
-       color:#ffd479;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+       color:var(--gg04-cap);opacity:var(--gg04-cap-o);letter-spacing:.5px;pointer-events:none;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +33,24 @@
  "description": "A hypotrochoid spirograph traced progressively on canvas with a shifting hue; each cycle completes then resets with new random radii and color.",
  "useWhen": "Dark-mode hero backgrounds, generative art showcases, math/geometry-themed pages needing ambient motion.",
  "avoidWhen": "Light-background layouts (background hardcoded dark navy). Contexts needing static or text-legible overlays.",
- "agentPrompt": "Change the hue rotation speed from 30 to 60 in the strokeStyle line, increase lineWidth from 1.4 to 2.5, and set the starting hue to a fixed value like 200 for a consistent blue palette.",
+ "agentPrompt": "Change the hue rotation speed from 30 to 60 in the strokeStyle line, increase lineWidth from 1.8 to 2.5, and set the starting hue to a fixed value like 200 for a consistent blue palette. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "hue shift speed (prog*30 multiplier)",
-  "line width (1.4)",
+  "line width (1.8)",
   "trace span per frame (0.10+boost)",
+  "trail fade (--gg04-fade alpha 0.028: lower = longer trail)",
+  "mount pre-roll (90 frames drawn before first paint)",
   "radius scale factor (s*0.42)",
   "inner radius range (0.18+random*0.28)",
-  "pen distance range (0.4+random*0.5)"
+  "pen distance range (0.4+random*0.5)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "GCD-based cycle calculation (ensures clean closure)",
   "DPR-aware canvas sizing",
   "visibilitychange pause",
-  "reduced-motion static fallback"
+  "reduced-motion static fallback",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and fillRect — must change both to alter backdrop",
@@ -44,7 +63,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "easy-to-modify"
+  "easy-to-modify",
+  "light-ready"
  ],
  "tags": [
   "spirograph",
@@ -66,6 +86,23 @@
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   let W,H,DPR,R,r,d,prog,cyc,hue,boost=0;
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  // theme: every canvas colour is read from the CSS tokens, once at start and once per switch
+  const root=document.documentElement;
+  const C={bg:'#07111a',fade:'rgba(7,17,26,0.028)',lineS:85,lineL:62};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--gg04-bg').trim()||C.bg;
+    C.fade=cs.getPropertyValue('--gg04-fade').trim()||C.fade;
+    C.lineS=parseFloat(cs.getPropertyValue('--gg04-line-s'))||85;
+    C.lineL=parseFloat(cs.getPropertyValue('--gg04-line-l'))||62;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      // the trail buffer still holds the other palette — repaint it in the new bg
+      if(W){if(reduce)drawStatic();else{ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);}}}
+  });
+  syncTheme();
   function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);reset();}
   function gcd(a,b){return b?gcd(b,a%b):a}
@@ -74,40 +111,44 @@
     R=s;r=s*(0.18+Math.random()*0.28);d=s*(0.4+Math.random()*0.5);
     cyc=Math.PI*2*Math.round(r)/gcd(Math.round(R),Math.round(r));
     prog=0;hue=Math.random()*360;
-    ctx.fillStyle='#07111a';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
   }
   function pt(th){
     const k=(R-r);
     return [k*Math.cos(th)+d*Math.cos(k/r*th), k*Math.sin(th)-d*Math.sin(k/r*th)];
   }
   let raf;
-  function loop(t){
-    if(!reduce){
-      ctx.fillStyle='rgba(7,17,26,0.035)';ctx.fillRect(0,0,W,H);
-      ctx.save();ctx.translate(W/2,H/2);
-      const span=0.10+boost;boost*=0.9;
-      ctx.lineWidth=1.4;
-      ctx.beginPath();
-      let started=false;
-      for(let a=prog;a<=prog+span;a+=0.01){
-        const[x,y]=pt(a);if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
-      }
-      ctx.strokeStyle='hsl('+((hue+prog*30)%360)+',85%,62%)';
-      ctx.stroke();ctx.restore();
-      prog+=span;
-      if(prog>cyc+0.2)reset();
+  function draw(span){   // one frame: fade the trail, stroke the next arc of the curve
+    ctx.fillStyle=C.fade;ctx.fillRect(0,0,W,H);
+    ctx.save();ctx.translate(W/2,H/2);
+    ctx.lineWidth=2.2;
+    ctx.beginPath();
+    let started=false;
+    for(let a=prog;a<=prog+span;a+=0.01){
+      const[x,y]=pt(a);if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
     }
+    ctx.strokeStyle='hsl('+((hue+prog*30)%360)+','+C.lineS+'%,'+C.lineL+'%)';
+    ctx.stroke();ctx.restore();
+    prog+=span;
+    if(prog>cyc+0.2)reset();
+  }
+  function loop(){
+    if(!reduce){const span=0.10+boost;boost*=0.9;draw(span);}
     raf=requestAnimationFrame(loop);
   }
   function start(){cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);}
   addEventListener('resize',resize);
   cv.addEventListener('pointerdown',()=>{boost=0.5;});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)cancelAnimationFrame(raf);else start();});
-  resize();
-  if(reduce){ctx.save();ctx.translate(W/2,H/2);ctx.beginPath();
+  function drawStatic(){
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
+    ctx.save();ctx.translate(W/2,H/2);ctx.beginPath();
     for(let a=0;a<=cyc;a+=0.01){const[x,y]=pt(a);a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
-    ctx.strokeStyle='hsl('+hue+',85%,62%)';ctx.lineWidth=1.2;ctx.stroke();ctx.restore();
-  }else start();
+    ctx.strokeStyle='hsl('+hue+','+C.lineS+'%,'+C.lineL+'%)';ctx.lineWidth=1.2;ctx.stroke();ctx.restore();
+  }
+  resize();
+  if(reduce)drawStatic();
+  else{ for(let i=0;i<130;i++)draw(0.10); start(); }   // mount ~2 s into the drawing: a lone arc reads as nothing on the wall
 })();
 </script>
 </body>

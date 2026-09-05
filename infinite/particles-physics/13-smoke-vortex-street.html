@@ -5,11 +5,28 @@
 <meta name="description" content="Teal smoke streamlines flow past an invisible cylinder, shedding alternating vortices in a Karman street; pointer disturbs the flow.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Smoke Vortex Street</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a1416;}
+  /* theme tokens — dark values are the defaults; light palette in the [data-theme] block.
+     --svs-c0/-cd are the smoke ramp (base rgb + per-heat delta) read back by syncTheme. */
+  :root{
+    --svs-bg:#0a1416; --svs-fade:rgba(10,20,22,0.13); --svs-accent:#5fd0c4; --svs-cap-o:.34;
+    --svs-c0:40,150,150; --svs-cd:70,60,40; --svs-a0:0.10; --svs-ak:0.5;
+    --svs-ob:95,208,196; --svs-ob-a:0.10;
+  }
+  :root[data-theme="light"]{
+    --svs-bg:#eef5f5; --svs-fade:rgba(238,245,245,0.13); --svs-accent:#247c73; --svs-cap-o:.62;
+    --svs-c0:150,196,192; --svs-cd:-122,-130,-118; --svs-a0:0.14; --svs-ak:0.6;
+    --svs-ob:36,124,115; --svs-ob-a:0.16;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--svs-bg);}
   #svs-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.13em;color:#5fd0c4;opacity:.34;text-transform:uppercase;
+       letter-spacing:.13em;color:var(--svs-accent);opacity:var(--svs-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +36,22 @@
  "description": "300 teal smoke streamlines flow past an invisible cylinder, shedding alternating Karman vortices; pointer repels nearby particles revealing the swirling wake.",
  "useWhen": "Dark ambient backgrounds, fluid-dynamics demos, science or generative-art hero sections.",
  "avoidWhen": "Light-background UIs (background is hardcoded dark teal-black). Contexts where pointer interaction competes with UI elements above the canvas.",
- "agentPrompt": "Change the smoke color to a warm amber palette by editing the strokeStyle line: replace (40+heat*70|0),(150+heat*60|0),(150+heat*40|0) with (220+heat*35|0),(120+heat*80|0),(20+heat*20|0).",
+ "agentPrompt": "Change the smoke color to a warm amber palette by editing the strokeStyle line: replace (40+heat*70|0),(150+heat*60|0),(150+heat*40|0) with (220+heat*35|0),(120+heat*80|0),(20+heat*20|0). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "particle count (N=300)",
   "obstacle position (oX=W*0.30, oY=H*0.5)",
   "obstacle radius (oR=sc*0.07)",
   "eddy shed period (period=58)",
   "base flow speed (sc*0.0016)",
-  "smoke color (strokeStyle heat ramp)"
+  "smoke color (strokeStyle heat ramp)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard and static fallback",
   "visibilitychange pause/start",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color is hardcoded in CSS (#0a1416) — must edit to use on non-dark themes",
@@ -45,7 +64,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "smoke",
@@ -67,6 +87,20 @@
   const cv=document.getElementById('svs-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,oX,oY,oR,sc;
+  // smoke colours live in the tokens; a theme flip re-reads them (no per-frame getComputedStyle)
+  const root=document.documentElement, C={};
+  function syncTheme(){
+    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    C.bg=g('--svs-bg');C.fade=g('--svs-fade');C.ob=g('--svs-ob');C.obA=g('--svs-ob-a');
+    C.c0=g('--svs-c0').split(',').map(Number);C.cd=g('--svs-cd').split(',').map(Number);
+    C.a0=+g('--svs-a0');C.ak=+g('--svs-ak');
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+      if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);for(let k=0;k<160;k++)frame();}
+    }});
+  syncTheme();
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
@@ -121,7 +155,7 @@
   const buf=[0,0];
   function frame(){
     t+=reduce?0:1;
-    ctx.fillStyle='rgba(10,20,22,0.13)';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.fade;ctx.fillRect(0,0,W,H);
     const vx=sc*0.0016*(1+nudge*0.5);nudge*=0.95;
 
     // shed an alternating eddy on a steady period (Strouhal-like cadence)
@@ -153,8 +187,8 @@
       p.h=p.h*0.9+speed*0.1;
       const heat=Math.min(1,p.h/(vx*2.2));
       // teal smoke -> brighter accent in fast swirls
-      const a=0.10+heat*0.5;
-      ctx.strokeStyle='rgba('+(40+heat*70|0)+','+(150+heat*60|0)+','+(150+heat*40|0)+','+a+')';
+      const a=C.a0+heat*C.ak;
+      ctx.strokeStyle='rgba('+(C.c0[0]+heat*C.cd[0]|0)+','+(C.c0[1]+heat*C.cd[1]|0)+','+(C.c0[2]+heat*C.cd[2]|0)+','+a+')';
       ctx.lineWidth=(0.5+heat*1.1);
       ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(nx,ny);ctx.stroke();
       p.x=nx;p.y=ny;
@@ -164,7 +198,7 @@
 
     // faint obstacle marker (invisible cylinder, just a whisper)
     const g=ctx.createRadialGradient(oX,oY,oR*0.2,oX,oY,oR*1.3);
-    g.addColorStop(0,'rgba(95,208,196,0.10)');g.addColorStop(1,'rgba(95,208,196,0)');
+    g.addColorStop(0,'rgba('+C.ob+','+C.obA+')');g.addColorStop(1,'rgba('+C.ob+',0)');
     ctx.fillStyle=g;ctx.beginPath();ctx.arc(oX,oY,oR*1.3,0,Math.PI*2);ctx.fill();
 
     if(!reduce)raf=requestAnimationFrame(frame);
@@ -173,7 +207,7 @@
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){ctx.fillStyle='#0a1416';ctx.fillRect(0,0,W,H);for(let k=0;k<160;k++)frame();}else start();
+  if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);for(let k=0;k<160;k++)frame();}else start();
 })();
 </script>
 </body>

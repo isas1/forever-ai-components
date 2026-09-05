@@ -5,11 +5,33 @@
 <meta name="description" content="Carp in the Still Pond — Ukiyo-e Wave &amp; Mountain. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Carp in the Still Pond</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0d2347;overflow:hidden}
-  #hok08-stage{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 40%,#284e7e,#0d2347)}
+  /* theme tokens — dark values are the defaults (deep indigo pond);
+     the light re-theme is a pale celadon pond. --hok08-koi is the koi colour array the JS
+     splits on ',' — syncTheme() re-reads it and re-maps every fish on a theme switch. */
+  :root{
+    --hok08-bg:#0d2347; --hok08-water0:#284e7e; --hok08-water1:#0d2347;
+    --hok08-fade:rgba(13,35,71,0.22); --hok08-ring-rgb:174,203,228;
+    --hok08-koi:#d96a7a,#e9a6ad,#cda85a,#f3ead6,#c98a3c;
+    --hok08-koi-line:rgba(26,23,20,0.45); --hok08-koi-eye:rgba(243,234,214,0.7);
+    --hok08-cap:#aecbe4; --hok08-cap-o:.5;
+  }
+  :root[data-theme="light"]{
+    --hok08-bg:#d6e5e8; --hok08-water0:#e2eef0; --hok08-water1:#cfe0e4;
+    --hok08-fade:rgba(214,229,232,0.20); --hok08-ring-rgb:27,58,107;
+    --hok08-koi:#c94a5e,#e08a95,#c98a3c,#b4602e,#2e5c9a;
+    --hok08-koi-line:rgba(26,23,20,0.55); --hok08-koi-eye:rgba(255,255,255,0.85);
+    --hok08-cap:#1a1714; --hok08-cap-o:.6;
+  }
+  html,body{margin:0;height:100%;background:var(--hok08-bg);overflow:hidden}
+  #hok08-stage{position:fixed;inset:0;width:100%;height:100%;background:radial-gradient(circle at 50% 40%,var(--hok08-water0),var(--hok08-water1))}
   #hok08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .hok08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#aecbe4;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .hok08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--hok08-cap);opacity:var(--hok08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +40,21 @@
  "description": "5 koi fish swim lazy circles in deep indigo water; periodic ripple rings bloom outward and cause nearby fish to dart away. Ukiyo-e palette.",
  "useWhen": "Ambient backgrounds for art, nature, or Japanese-themed UIs. Loading screens or screensaver-style displays.",
  "avoidWhen": "Light backgrounds (canvas hardcoded to dark navy). Contexts where constant motion competes with text legibility.",
- "agentPrompt": "Change fish count to 8 by adding 3 more entries in seedKoi, increase max ripple radius to 120, and shift fish palette to cooler blues (#6a9fd9, #aecbe4).",
+ "agentPrompt": "Change fish count to 8 by adding 3 more entries in seedKoi, increase max ripple radius to 120, and shift fish palette to cooler blues (#6a9fd9, #aecbe4). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "fish count (loop limit i<5 in seedKoi)",
   "fish color palette (cols array)",
   "ripple max radius (60+Math.random()*60)",
   "ripple spawn interval (nextRipple=70+Math.random()*90)",
   "fish speed after dart (k.sp=2.2)",
-  "fish body size (len: 18+Math.random()*14)"
+  "fish body size (len: 18+Math.random()*14)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing (cv.width=Math.round(W*DPR))",
   "visibilitychange pause/resume",
-  "reduced-motion static fallback (40-frame pre-render)"
+  "reduced-motion static fallback (40-frame pre-render)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and canvas fillStyle — must update both to change from dark navy",
@@ -44,7 +68,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "koi",
@@ -69,8 +94,25 @@
   var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var cv=document.getElementById('hok08-cv'); if(!cv) return;
   var ctx=cv.getContext('2d');
+  var root=document.documentElement;
   var W=0,H=0,DPR=Math.min(window.devicePixelRatio||1,2);
   var ripples=[], koi=[], t=0, nextRipple=40;
+  var C={};                                   // every colour the canvas draws with, read from tokens
+  function syncTheme(){
+    var cs=getComputedStyle(root), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    C.fade=g('--hok08-fade'); C.ring=g('--hok08-ring-rgb');
+    C.line=g('--hok08-koi-line'); C.eye=g('--hok08-koi-eye');
+    C.koi=g('--hok08-koi').split(',').map(function(c){ return c.trim(); });
+    for(var i=0;i<koi.length;i++) koi[i].col=C.koi[koi[i].ci%C.koi.length];   // recolour live fish
+  }
+  syncTheme();
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme();
+      if(REDUCED){ ctx.fillStyle=C.fade; for(var i=0;i<60;i++) draw(); }
+    }
+  });
 
   function size(){
     var r=cv.getBoundingClientRect(); W=Math.max(2,r.width); H=Math.max(2,r.height);
@@ -79,8 +121,7 @@
     if(koi.length===0) seedKoi();
   }
   function seedKoi(){
-    var cols=["#d96a7a","#e9a6ad","#cda85a","#f3ead6","#c98a3c"];
-    for(var i=0;i<5;i++) koi.push({x:Math.random()*W,y:Math.random()*H,a:Math.random()*6.28,sp:0.5+Math.random()*0.6,len:18+Math.random()*14,col:cols[i%cols.length],wob:Math.random()*6.28});
+    for(var i=0;i<5;i++) koi.push({x:Math.random()*W,y:Math.random()*H,a:Math.random()*6.28,sp:0.5+Math.random()*0.6,len:18+Math.random()*14,ci:i,col:C.koi[i%C.koi.length],wob:Math.random()*6.28});
   }
   function ripple(x,y){
     ripples.push({x:x,y:y,r:4,max:60+Math.random()*60,life:1});
@@ -96,18 +137,18 @@
     ctx.fillStyle=k.col; ctx.globalAlpha=0.85; ctx.fill();
     ctx.beginPath(); ctx.ellipse(0,0,k.len*0.55,k.len*0.26,0,0,6.28);
     ctx.fillStyle=k.col; ctx.globalAlpha=0.95; ctx.fill();
-    ctx.lineWidth=1.4; ctx.strokeStyle="rgba(26,23,20,0.45)"; ctx.stroke();
-    ctx.beginPath(); ctx.arc(k.len*0.12,0,k.len*0.12,0,6.28); ctx.fillStyle="rgba(243,234,214,0.7)"; ctx.fill();
+    ctx.lineWidth=1.4; ctx.strokeStyle=C.line; ctx.stroke();
+    ctx.beginPath(); ctx.arc(k.len*0.12,0,k.len*0.12,0,6.28); ctx.fillStyle=C.eye; ctx.fill();
     ctx.globalAlpha=1; ctx.restore();
   }
   function draw(){
     t+=0.016;
     if(--nextRipple<=0){ ripple(W*(0.15+Math.random()*0.7),H*(0.15+Math.random()*0.7)); nextRipple=70+Math.random()*90; }
-    ctx.fillStyle="rgba(13,35,71,0.22)"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.fade; ctx.fillRect(0,0,W,H);
     for(var i=ripples.length-1;i>=0;i--){
       var rp=ripples[i]; rp.r+=1.4; rp.life=1-rp.r/rp.max;
       if(rp.life<=0){ ripples.splice(i,1); continue; }
-      for(var rr=0;rr<3;rr++){ var rad=rp.r-rr*10; if(rad<=0)continue; ctx.beginPath(); ctx.arc(rp.x,rp.y,rad,0,6.28); ctx.strokeStyle="rgba(174,203,228,"+(rp.life*0.5*(1-rr*0.25))+")"; ctx.lineWidth=1.4; ctx.stroke(); }
+      for(var rr=0;rr<3;rr++){ var rad=rp.r-rr*10; if(rad<=0)continue; ctx.beginPath(); ctx.arc(rp.x,rp.y,rad,0,6.28); ctx.strokeStyle="rgba("+C.ring+","+(rp.life*0.5*(1-rr*0.25))+")"; ctx.lineWidth=1.4; ctx.stroke(); }
     }
     for(var j=0;j<koi.length;j++){
       var k=koi[j];

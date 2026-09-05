@@ -5,21 +5,43 @@
 <meta name="description" content="A Julia set whose complex constant traces a slow loop, morphing dendritic green filaments between connected and dust forms on black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Julia Morph</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  :root{--fr02-bg:#06070b;--fr02-accent:#378651}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the one [data-theme="light"] block. --fr02-s0..s6 are the escape-time
+     ramp the JS LUT interpolates (dark: deep green -> accent -> gold rim; light: the
+     same hues with the ramp inverted, so the gold rim becomes the deepest ink).
+     --fr02-imix is what the bounded-set interior is mixed toward: black in dark
+     (keeps the historic *0.5 dim exactly), paper in light. */
+  :root{--fr02-bg:#06070b;--fr02-accent:#378651;
+    --fr02-glow:rgba(55,134,81,.14);--fr02-vig:rgba(6,7,11,.82);--fr02-blend:screen;
+    --fr02-frame:rgba(55,134,81,.10);--fr02-cap:#fff;--fr02-cap-o:.42;
+    --fr02-idim:.5;--fr02-imix:#000000;
+    --fr02-s0:#16201a;--fr02-s1:#1e4630;--fr02-s2:#378651;--fr02-s3:#87a190;
+    --fr02-s4:#c09c59;--fr02-s5:#ffe1aa;--fr02-s6:#966028}
+  :root[data-theme="light"]{--fr02-bg:#eef3ef;--fr02-accent:#337b4a;
+    --fr02-glow:rgba(51,123,74,.14);--fr02-vig:rgba(108,80,27,.26);--fr02-blend:multiply;
+    --fr02-frame:rgba(51,123,74,.22);--fr02-cap:#16261c;--fr02-cap-o:.62;
+    --fr02-idim:.5;--fr02-imix:#eef3ef;
+    --fr02-s0:#dce3df;--fr02-s1:#c1d9cc;--fr02-s2:#95c0a3;--fr02-s3:#94a399;
+    --fr02-s4:#ad9870;--fr02-s5:#6c501b;--fr02-s6:#d1b89f}
   html,body{margin:0;height:100%;background:var(--fr02-bg)}
   .fr02-stage{position:fixed;inset:0;overflow:hidden;background:var(--fr02-bg)}
   #fr02-c{position:absolute;inset:0;width:100%;height:100%;display:block;image-rendering:auto}
   /* STATIC glow + vignette — painted once, never animated */
   .fr02-glow{position:absolute;inset:0;pointer-events:none;
     background:
-      radial-gradient(96% 96% at 50% 50%,rgba(55,134,81,.14),transparent 60%),
-      radial-gradient(140% 130% at 50% 50%,transparent 50%,rgba(6,7,11,.82) 100%);
-    mix-blend-mode:screen}
+      radial-gradient(96% 96% at 50% 50%,var(--fr02-glow),transparent 60%),
+      radial-gradient(140% 130% at 50% 50%,transparent 50%,var(--fr02-vig) 100%);
+    mix-blend-mode:var(--fr02-blend)}
   .fr02-frame{position:absolute;inset:0;pointer-events:none;
-    box-shadow:inset 0 0 0 1px rgba(55,134,81,.10)}
+    box-shadow:inset 0 0 0 1px var(--fr02-frame)}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
+    color:var(--fr02-cap);opacity:var(--fr02-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:3}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -29,19 +51,21 @@
  "description": "Julia set fractal whose complex constant traces a slow Lissajous loop, morphing green filaments between connected and dendritic forms over ~70 seconds.",
  "useWhen": "Dark hero backgrounds, generative art displays, screensavers, or anywhere that needs slow ambient complexity without user interaction.",
  "avoidWhen": "Low-end mobile devices (CPU-bound pixel loop at up to 420px resolution). Light-background layouts — background is hardcoded near-black.",
- "agentPrompt": "Change the palette to warm amber/red tones by replacing the stops array (e.g. [[20,5,0],[100,30,10],[220,80,20],[255,140,60],[255,210,130],[255,255,200],[80,40,10]]) and slow the morph by changing 0.00009 to 0.00005.",
+ "agentPrompt": "Change the palette to warm amber/red tones by replacing the stops array (e.g. [[20,5,0],[100,30,10],[220,80,20],[255,140,60],[255,210,130],[255,255,200],[80,40,10]]) and slow the morph by changing 0.00009 to 0.00005. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "morph speed (t *= 0.00009)",
   "palette color stops array (stops[])",
   "iteration cap (MAXIT=150)",
   "internal resolution cap (cap=420)",
-  "Lissajous loop center and radii (constantAt function)"
+  "Lissajous loop center and radii (constantAt function)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "low-res internal canvas cap (SW/SH capped at 420px long edge)",
   "visibility pause (visibilitychange listener)",
   "reduced-motion static fallback (constantAt(2.35) single render)",
-  "Uint32Array pixel buffer pattern (allocation-free in steady state)"
+  "Uint32Array pixel buffer pattern (allocation-free in steady state)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound pixel loop — each frame iterates up to MAXIT=150 times per pixel; expensive on slow CPUs",
@@ -54,7 +78,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "fractal",
@@ -91,11 +116,19 @@
   var W=0,H=0,SW=0,SH=0,buf=null,img=null,pix=null;
   var LUT_R=new Uint8Array(1024),LUT_G=new Uint8Array(1024),LUT_B=new Uint8Array(1024);
 
-  // Palette LUT: deep green -> accent green -> sage -> gold rim (movement palette around #378651).
-  (function(){
+  // Palette LUT + interior mix, both rebuilt from the CSS tokens on every theme
+  // switch. Dark: deep green -> accent green -> sage -> gold rim. Light: the same
+  // hues with the ramp inverted, so the field is paper and the rim is the ink.
+  var root=document.documentElement, IDIM=0.5, IMR=0, IMG=0, IMB=0;
+  function hex2rgb(h){ h=(h||'').trim().replace('#','');
+    if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; var v=parseInt(h,16);
+    return h.length===6&&isFinite(v)?[(v>>16)&255,(v>>8)&255,v&255]:[0,0,0]; }
+  function buildLUT(){
+    var cs=getComputedStyle(root);
     function lerp(a,b,t){return a+(b-a)*t;}
-    var stops=[[22,32,26],[30,70,48],[55,134,81],[135,161,144],[192,156,89],[255,225,170],[150,96,40]];
-    for(var i=0;i<1024;i++){
+    var stops=[],i;
+    for(i=0;i<7;i++) stops.push(hex2rgb(cs.getPropertyValue('--fr02-s'+i)));
+    for(i=0;i<1024;i++){
       var t=i/1023, f=t*(stops.length-1), k=f|0, fr=f-k;
       if(k>=stops.length-1){k=stops.length-2;fr=1;}
       var a=stops[k],b=stops[k+1];
@@ -103,7 +136,14 @@
       LUT_G[i]=lerp(a[1],b[1],fr)|0;
       LUT_B[i]=lerp(a[2],b[2],fr)|0;
     }
-  })();
+    IDIM=parseFloat(cs.getPropertyValue('--fr02-idim'))||0.5;
+    var m=hex2rgb(cs.getPropertyValue('--fr02-imix'));
+    IMR=m[0]*(1-IDIM); IMG=m[1]*(1-IDIM); IMB=m[2]*(1-IDIM);
+  }
+  function syncTheme(){ buildLUT(); if(img){var c=constantAt(lastT); render(c[0],c[1]);} }
+  addEventListener('message',function(ev){ var d=ev.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme(); } });
 
   // Render at a capped internal resolution, then let CSS upscale the canvas.
   // Keeps the per-frame Julia evaluation affordable on any screen size.
@@ -148,7 +188,7 @@
           var g=Math.sqrt(trap); if(g>1)g=1;
           var ii=(g*340)|0; if(ii>1023)ii=1023;
           // dim the interior toward bg so exterior filaments read as the figure
-          col=0xff000000|((LUT_B[ii]*0.5)|0)<<16|((LUT_G[ii]*0.5)|0)<<8|((LUT_R[ii]*0.5)|0);
+          col=0xff000000|((LUT_B[ii]*IDIM+IMB)|0)<<16|((LUT_G[ii]*IDIM+IMG)|0)<<8|((LUT_R[ii]*IDIM+IMR)|0);
         }else{
           var nu=it+1-Math.log(Math.log(zr2+zi2)*0.5)/LOG2;
           var idx=((nu*30.0)%1024+1024)%1024|0;
@@ -174,10 +214,11 @@
     return [cx,cy];
   }
 
-  var running=true, raf=0, t0=0;
+  var running=true, raf=0, t0=0, lastT=2.35;
   function frame(ts){
     if(!t0)t0=ts;
     var t=(ts-t0)*0.00009;           // slow morph: full loop ~70s
+    lastT=t;
     var c=constantAt(t);
     render(c[0],c[1]);
     if(running)raf=requestAnimationFrame(frame);
@@ -196,8 +237,9 @@
     if(reduce){var c=constantAt(2.35);render(c[0],c[1]);}
   },{passive:true});
 
+  syncTheme();
   resize();
-  if(reduce){ var c=constantAt(2.35); render(c[0],c[1]); return; } // one static dendritic frame
+  if(reduce){ var c=constantAt(lastT); render(c[0],c[1]); return; } // one static dendritic frame
   start();
 })();
 </script>

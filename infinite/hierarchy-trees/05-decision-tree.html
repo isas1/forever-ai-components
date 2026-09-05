@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Decision tree that traces its own path - two yes/no checks fan out to four outcomes; on each pass a different route lights up edge by edge, the outcome pill fills in its state colour and a result line reports the order and how long the decision took.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Decision Tree</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --pro-bg:#0d1117;
+    --pro-surface:#161b22;
+    --pro-border:rgba(255,255,255,.08);
+    --pro-text:#e6edf3;
+    --pro-muted:#8b949e;
+    --pro-accent:#AE6147;
+    --pro-ok:#5A8C73;
+    --pro-warn:#A68D3F;
+    --pro-err:#AE6147;
+    --pro-radius:9px;
+    --pro-font:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --dct-line:color-mix(in srgb,var(--pro-text) 15%,transparent);
+  }
+  :root[data-theme="light"]{--pro-bg:#f6f8fa;--pro-surface:#fff;--pro-border:rgba(0,0,0,.08);--pro-text:#1f2328;--pro-muted:#59636e;--pro-accent:#8f4630;--pro-ok:#2c8037;--pro-warn:#906917;--pro-err:#a33a22;--dct-line:color-mix(in srgb,var(--pro-text) 26%,transparent)}
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pro-bg)}
+  .dct-stage{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;
+    padding:3.6vmin 3.6vmin clamp(16px,3vmin,24px);font-family:var(--pro-font);color:var(--pro-text)}
+  .dct-head{display:flex;align-items:baseline;gap:1.6vmin;flex:none;min-width:0}
+  .dct-title{font-size:clamp(10px,2.4vmin,14px);font-weight:700;white-space:nowrap}
+  .dct-sub{margin-left:auto;font-size:clamp(7px,1.6vmin,10px);color:var(--pro-muted);
+    font-weight:600;white-space:nowrap}
+  .dct-tree{position:relative;flex:1;min-height:0;margin:1.6vmin 0}
+  .dct-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  .dct-svg path{fill:none;stroke:var(--dct-line);stroke-width:1.2;vector-effect:non-scaling-stroke;
+    transition:stroke .3s,stroke-width .3s}
+  .dct-svg path.on{stroke:var(--c,var(--pro-accent));stroke-width:2}
+  .dct-node{position:absolute;transform:translate(-50%,-50%);max-width:46%;text-align:center;
+    padding:clamp(3px,1.2vmin,9px) clamp(5px,1.5vmin,11px);
+    font-size:clamp(6.5px,1.65vmin,10.5px);font-weight:600;line-height:1.25;
+    background:var(--pro-surface);border:1px solid var(--pro-border);border-radius:var(--pro-radius);
+    transition:border-color .3s,box-shadow .3s,color .3s,background .3s}
+  .dct-node.q.on{border-color:var(--pro-accent);box-shadow:0 0 0 1px var(--pro-accent)}
+  .dct-out{max-width:27%;font-weight:700;white-space:nowrap;border-radius:999px;
+    color:var(--pro-muted);border-color:var(--pro-border)}
+  .dct-out.on{color:var(--c);border-color:var(--c);background:color-mix(in srgb,var(--c) 15%,var(--pro-surface));
+    box-shadow:0 0 0 1px var(--c)}
+  .dct-lbl{position:absolute;transform:translate(-50%,-50%);
+    font:700 clamp(5.5px,1.35vmin,8.5px)/1 var(--pro-font);letter-spacing:.06em;text-transform:uppercase;
+    color:var(--pro-muted);background:var(--pro-bg);padding:0 clamp(2px,.7vmin,5px);
+    transition:color .3s}
+  .dct-lbl.on{color:var(--c,var(--pro-accent))}
+  /* result line — what the traced path decided */
+  .dct-dock{flex:none;display:flex;align-items:center;gap:clamp(5px,1.6vmin,11px);min-width:0;
+    background:var(--pro-surface);border:1px solid var(--pro-border);border-radius:10px;
+    padding:clamp(5px,1.6vmin,11px) clamp(7px,2vmin,14px)}
+  .dct-ord{font:600 clamp(6.5px,1.6vmin,10px)/1 ui-monospace,SFMono-Regular,Menlo,monospace;
+    color:var(--pro-muted);white-space:nowrap}
+  .dct-amt{font-size:clamp(7px,1.75vmin,11px);font-weight:700;font-variant-numeric:tabular-nums;
+    white-space:nowrap}
+  .dct-res{margin-left:auto;flex:none;font-size:clamp(6.5px,1.5vmin,9.5px);font-weight:700;
+    color:var(--c,var(--pro-muted));background:color-mix(in srgb,var(--c,var(--pro-text)) 14%,transparent);
+    border-radius:999px;padding:clamp(2px,.6vmin,4px) clamp(4px,1.2vmin,8px);white-space:nowrap;
+    transition:color .3s,background .3s}
+  .cap{position:fixed;left:8px;bottom:6px;font:600 10px/1 ui-monospace,Menlo,monospace;
+    color:var(--pro-muted);opacity:.45;letter-spacing:.08em;text-transform:uppercase;
+    user-select:none;pointer-events:none}
+  @media (prefers-reduced-motion:reduce){ .dct-stage *{transition:none!important} }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/hierarchy-trees/05-decision-tree.html",
+ "title": "Decision Tree",
+ "description": "An order-approval decision tree: a risk check branches to a country check and an amount check, fanning out to four outcome pills; each pass lights one route edge by edge, fills the outcome in its state colour and reports the order and how long the decision took.",
+ "useWhen": "Rules engines, approval and routing logic, onboarding explainers, anywhere a yes/no path needs to be traced rather than described. Outcome pills carry ok/warn/err states.",
+ "avoidWhen": "Trees with more than about six nodes over three levels, or branching that is not binary — node positions are authored percentages with no auto-layout.",
+ "agentPrompt": "Edit nodes (x/y percent, q for a question, t label, c state colour) and edges (a parent, b child, l the Yes/No label), then the runs array — each entry is one traced route: e the two edge indexes, o the outcome, r the verdict, plus the order/amount/latency for the result line. Change the step beat with setInterval(advance,900). Re-theme to light by setting --pro-bg:#f6f8fa; --pro-surface:#ffffff; --pro-border:rgba(0,0,0,.08); --pro-text:#1f2328; --pro-muted:#59636e (keep --pro-accent), and update the catalog bg field to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "theme tokens (:root --pro-* dark defaults + the :root[data-theme=\"light\"] overrides)",
+  "the tree (nodes map: x/y percent, q question flag, t label, c state colour)",
+  "the edges (a, b, l label) and the traced routes (runs array: e edge pair, o outcome, r verdict, ord, amt, ms)",
+  "state colours (--pro-ok, --pro-warn, --pro-err)",
+  "step beat (setInterval(advance,900)) and the hold on the result (step>3)",
+  "node width (.dct-node max-width 46%, .dct-out 27%)"
+ ],
+ "preserveElements": [
+  ":root --pro-* token block (renaming breaks the shared pro theming API)",
+  "role=img + aria-label on .dct-stage",
+  "IIFE wrapper",
+  "vector-effect:non-scaling-stroke on the edges (the SVG is stretched with preserveAspectRatio=none)",
+  "prefers-reduced-motion early return to one fully traced path",
+  "visibilitychange pause (halt/play on the interval)",
+  "theme hook (?theme= pre-paint bootstrap + forever:theme message listener + the two-palette token block)"
+ ],
+ "knownLimitations": [
+  "Light re-theme via the --pro-* block; catalog bg/accent describe the dark default",
+  "Binary branching with authored positions — a third child on a node needs its x/y picked by hand",
+  "Routes are scripted in the runs array, not evaluated from the order values shown",
+  "Four outcome pills is the practical ceiling before labels collide at a 180-240px tile"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "decision-tree",
+  "branching",
+  "flowchart",
+  "yes-no",
+  "rules",
+  "logic",
+  "approval",
+  "diagram"
+ ]
+}
+</script>
+</head>
+<body>
+  <div class="dct-stage" role="img"
+       aria-label="Order-approval decision tree. A risk-score check branches to a country check on the yes side and an amount check on the no side, leading to four outcomes: approve, review, decline and manual. Each pass lights one route through the tree and reports the decision for an order.">
+    <div class="dct-head">
+      <span class="dct-title">Order approval</span>
+      <span class="dct-sub">2 checks · 4 outcomes</span>
+    </div>
+    <div class="dct-tree" id="dctTree">
+      <svg class="dct-svg" id="dctSvg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+    </div>
+    <div class="dct-dock">
+      <span class="dct-ord" id="dctOrd">#48211</span>
+      <span class="dct-amt" id="dctAmt">£128.40</span>
+      <span class="dct-res" id="dctRes">deciding…</span>
+    </div>
+  </div>
+  <div class="cap" aria-hidden="true">Decision Tree</div>
+  <script>(function(){"use strict";
+    var root=document.documentElement;
+    addEventListener("message",function(e){var d=e.data;
+      if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))root.setAttribute("data-theme",d.theme);});
+    var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var OK="var(--pro-ok)",WARN="var(--pro-warn)",ERR="var(--pro-err)",AC="var(--pro-accent)";
+    // nodes: q = a question, else an outcome pill with its state colour
+    var nodes={
+      root:{x:50,y:11,q:1,t:"Risk score &lt; 40?"},
+      geo: {x:26,y:47,q:1,t:"Country allowed?"},
+      amt: {x:76,y:47,q:1,t:"Amount &gt; £5,000?"},
+      ok:  {x:9, y:86,t:"Approve",c:OK},
+      rev: {x:37,y:86,t:"Review", c:WARN},
+      dec: {x:64,y:86,t:"Decline",c:ERR},
+      man: {x:91,y:86,t:"Manual", c:WARN}
+    };
+    var edges=[
+      {a:"root",b:"geo",l:"Yes"},{a:"root",b:"amt",l:"No"},
+      {a:"geo", b:"ok", l:"Yes"},{a:"geo", b:"rev",l:"No"},
+      {a:"amt", b:"dec",l:"Yes"},{a:"amt", b:"man",l:"No"}
+    ];
+    // each pass traces one route: the two edges taken, the outcome, and the receipt
+    var runs=[
+      {e:[0,2],o:"ok", c:OK,  r:"Auto-approved", ord:"#48211",amt:"£128.40", ms:"0.4s"},
+      {e:[0,3],o:"rev",c:WARN,r:"Held 24h",      ord:"#48219",amt:"£312.00", ms:"0.5s"},
+      {e:[1,4],o:"dec",c:ERR, r:"Declined",      ord:"#48224",amt:"£7,480.00",ms:"0.3s"},
+      {e:[1,5],o:"man",c:WARN,r:"Manual review", ord:"#48231",amt:"£2,140.50",ms:"0.6s"}
+    ];
+    var tree=document.getElementById("dctTree"),svg=document.getElementById("dctSvg");
+    if(!tree||!svg)return;
+    var ids=Object.keys(nodes);
+    ids.forEach(function(k){
+      var o=nodes[k],el=document.createElement("div");
+      el.className="dct-node"+(o.q?" q":" dct-out");
+      el.style.left=o.x+"%"; el.style.top=o.y+"%";
+      if(o.c) el.style.setProperty("--c",o.c);
+      el.innerHTML=o.t; tree.appendChild(el); o.el=el;
+    });
+    var eEl=[],lEl=[];
+    edges.forEach(function(e){
+      var a=nodes[e.a],b=nodes[e.b],m=((a.y+b.y)/2).toFixed(2);
+      var p=document.createElementNS("http://www.w3.org/2000/svg","path");
+      p.setAttribute("d","M"+a.x+" "+(a.y+7)+"V"+m+"H"+b.x+"V"+(b.y-7));
+      svg.appendChild(p); eEl.push(p);
+      var l=document.createElement("div");                 // Yes / No on the elbow's corner
+      l.className="dct-lbl"; l.textContent=e.l;
+      l.style.left=((a.x+b.x)/2)+"%"; l.style.top=m+"%";
+      tree.appendChild(l); lEl.push(l);
+    });
+
+    var ord=document.getElementById("dctOrd"),amt=document.getElementById("dctAmt"),
+        res=document.getElementById("dctRes");
+    function reset(){
+      eEl.forEach(function(p){ p.classList.remove("on"); p.style.removeProperty("--c"); });
+      lEl.forEach(function(l){ l.classList.remove("on"); l.style.removeProperty("--c"); });
+      ids.forEach(function(k){ nodes[k].el.classList.remove("on"); });
+    }
+    function light(r,step){
+      // step 0: the root check · 1: the second check · 2: the outcome + receipt
+      if(step===0){
+        reset();
+        ord.textContent=r.ord; amt.textContent=r.amt;
+        res.textContent="deciding…"; res.style.removeProperty("--c");
+        nodes.root.el.classList.add("on");
+      }
+      if(step<2){
+        var i=r.e[step],e=edges[i],c=step?r.c:AC;
+        eEl[i].classList.add("on"); eEl[i].style.setProperty("--c",c);
+        lEl[i].classList.add("on"); lEl[i].style.setProperty("--c",c);
+        nodes[e.b].el.classList.add("on");
+        if(step===1) nodes[e.b].el.style.setProperty("--c",r.c);
+      }else{
+        res.textContent=r.r+" · "+r.ms; res.style.setProperty("--c",r.c);
+      }
+    }
+
+    if(reduce){ light(runs[0],0); light(runs[0],1); light(runs[0],2); return; }
+
+    var n=0,step=0,timer=null;
+    function advance(){
+      if(step>3){ n=(n+1)%runs.length; step=0; }   // step 3 holds the result, then next order
+      if(step<3) light(runs[n],step);
+      step++;
+    }
+    function play(){ if(!timer) timer=setInterval(advance,900); }
+    function halt(){ clearInterval(timer); timer=null; }
+    document.addEventListener("visibilitychange",function(){ document.hidden?halt():play(); });
+    advance(); play();
+  })();
+  </script>
+</body>
+</html>

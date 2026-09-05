@@ -5,16 +5,33 @@
 <meta name="description" content="An elementary cellular automaton scrolling upward, computing each new row from a fixed rule to reveal green fractal triangles.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Elementary CA</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#06070b}
-  #fr08-stage{position:fixed;inset:0;overflow:hidden;background:#06070b}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the one [data-theme="light"] block. --fr08-hot/mid/cool is the age ramp
+     the JS bakes into its live-cell LUT: dark ages a cell pale gold -> accent green ->
+     deep green as it recedes into black; light runs it the other way, newest rows the
+     deepest ink and old rows fading toward the paper. Each step keeps the contrast
+     ratio against the ground it had in dark. The vignette is ground-coloured in both. */
+  :root{--fr08-bg:#06070b;--fr08-vig:rgba(6,7,11,.80);--fr08-shade:rgba(6,7,11,.92);
+    --fr08-glow:rgba(55,134,81,.10);--fr08-cap:#fff;--fr08-cap-o:.42;
+    --fr08-hot:#e6d296;--fr08-mid:#378651;--fr08-cool:#2e4838}
+  :root[data-theme="light"]{--fr08-bg:#eef3ef;--fr08-vig:rgba(238,243,239,.80);--fr08-shade:rgba(238,243,239,.92);
+    --fr08-glow:rgba(51,123,74,.12);--fr08-cap:#16261c;--fr08-cap-o:.62;
+    --fr08-hot:#2e250b;--fr08-mid:#337b4a;--fr08-cool:#8db69c}
+  html,body{margin:0;height:100%;background:var(--fr08-bg)}
+  #fr08-stage{position:fixed;inset:0;overflow:hidden;background:var(--fr08-bg)}
   #fr08-c{position:absolute;inset:0;width:100%;height:100%;display:block;
     image-rendering:pixelated;
-    box-shadow:inset 0 0 130px 34px rgba(6,7,11,.92),inset 0 0 26px 5px rgba(55,134,81,.10)}
+    box-shadow:inset 0 0 130px 34px var(--fr08-shade),inset 0 0 26px 5px var(--fr08-glow)}
   .fr08-vig{position:absolute;inset:0;pointer-events:none;
-    background:radial-gradient(125% 120% at 50% 38%,transparent 50%,rgba(6,7,11,.80) 100%)}
+    background:radial-gradient(125% 120% at 50% 38%,transparent 50%,var(--fr08-vig) 100%)}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--fr08-cap);opacity:var(--fr08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -24,20 +41,22 @@
  "description": "Elementary CA rows scroll upward, aging live cells from bright gold to deep green. Auto-cycles through Rule 30, 90, 110 and other interesting rules.",
  "useWhen": "Dark-mode ambient backgrounds, generative/math-themed hero sections, screensavers, or any context evoking emergence and complexity.",
  "avoidWhen": "Light backgrounds (hardcoded dark), contexts needing legible text overlays, or low-end devices where per-pixel ageGrid updates may stutter.",
- "agentPrompt": "Change the accent palette to amber — set HOT=[255,220,100], MID=[255,170,50], COOL=[180,100,20] and slow the step rate to STEP_MS=120.",
+ "agentPrompt": "Change the accent palette to amber — set HOT=[255,220,100], MID=[255,170,50], COOL=[180,100,20] and slow the step rate to STEP_MS=120. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "step rate (STEP_MS=78)",
   "color palette (HOT/MID/COOL arrays)",
   "active rule set (RULES array)",
   "cell pixel size (divisor 150 in resize)",
   "reseed interval (ROWS*3)",
-  "fade steps (STEPS=12)"
+  "fade steps (STEPS=12)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "ring-buffer head index logic in render()",
   "visibilitychange pause/resume guard",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS — must edit both html/body and #fr08-stage to change",
@@ -50,7 +69,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "cellular-automata",
@@ -84,15 +104,34 @@
   var BG=[6,7,11];
   var HOT=[230,210,150], MID=[55,134,81], COOL=[46,72,56];
   var STEPS=12, liveLUT=new Uint32Array(STEPS), dead;
-  (function(){
-    dead=(255<<24)|(BG[2]<<16)|(BG[1]<<8)|BG[0];
+  // the ground and the three age stops come from the CSS tokens, so the whole live-cell
+  // LUT (and the dead/background word the field is cleared to) is rebuilt on a switch
+  var root=document.documentElement;
+  function hex2rgb(h){ h=(h||'').trim().replace('#','');
+    if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; var v=parseInt(h,16);
+    return h.length===6&&isFinite(v)?[(v>>16)&255,(v>>8)&255,v&255]:[0,0,0]; }
+  function buildLUT(){
+    dead=((255<<24)|(BG[2]<<16)|(BG[1]<<8)|BG[0])>>>0;
     for(var i=0;i<STEPS;i++){
       var t=i/(STEPS-1), r,g,b;
       if(t<0.5){var k=t/0.5; r=HOT[0]+(MID[0]-HOT[0])*k; g=HOT[1]+(MID[1]-HOT[1])*k; b=HOT[2]+(MID[2]-HOT[2])*k;}
       else{var k2=(t-0.5)/0.5; r=MID[0]+(COOL[0]-MID[0])*k2; g=MID[1]+(COOL[1]-MID[1])*k2; b=MID[2]+(COOL[2]-MID[2])*k2;}
-      liveLUT[i]=(255<<24)|((b|0)<<16)|((g|0)<<8)|(r|0);
+      liveLUT[i]=((255<<24)|((b|0)<<16)|((g|0)<<8)|(r|0))>>>0;
     }
-  })();
+  }
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    BG=hex2rgb(cs.getPropertyValue('--fr08-bg'));
+    HOT=hex2rgb(cs.getPropertyValue('--fr08-hot'));
+    MID=hex2rgb(cs.getPropertyValue('--fr08-mid'));
+    COOL=hex2rgb(cs.getPropertyValue('--fr08-cool'));
+    buildLUT();
+    if(img) render();          // repaint at once, reduced-motion still included
+  }
+  addEventListener('message',function(ev){ var d=ev.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme(); } });
+  syncTheme();
 
   // A curated set of "interesting" elementary rules — chaotic, nested, and complex classes.
   var RULES=[30,90,110,150,182,22,60,105,73,45];

@@ -5,16 +5,31 @@
 <meta name="description" content="Byzantine Counterpoint — Gold-Leaf Ornamental Studies. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Byzantine Counterpoint</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#070502;overflow:hidden}
+  /* theme tokens — dark values are the defaults. Light re-theme: gold and malachite deepen
+     for ivory; --kli07-pupil is the hole punched through the eye, so it follows the ground. */
+  :root{
+    --kli07-bg:#070502; --kli07-gold:#c8a951; --kli07-mala:#1f6b4f; --kli07-pupil:#0d0b07;
+    --kli07-rule:rgba(200,169,81,.3); --kli07-cap:#e6cf86; --kli07-cap-o:.46;
+  }
+  :root[data-theme="light"]{
+    --kli07-bg:#f8f3e8; --kli07-gold:#7d6520; --kli07-mala:#1a5c43; --kli07-pupil:#f8f3e8;
+    --kli07-rule:rgba(125,101,32,.45); --kli07-cap:#4a3a14; --kli07-cap-o:.66;
+  }
+  html,body{margin:0;height:100%;background:var(--kli07-bg);overflow:hidden}
   #kli07-stage{position:fixed;inset:0;width:100%;height:100%}
   .kli07-wrap{position:absolute;inset:0;display:flex}
   .kli07-col{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:space-around;padding:14px 0}
-  .kli07-col.div{border-left:1px solid rgba(200,169,81,.3)}
+  .kli07-col.div{border-left:1px solid var(--kli07-rule)}
   .kli07-mark{width:34px;height:34px;display:flex;align-items:center;justify-content:center;
     transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .45s}
   .kli07-mark svg{width:100%;height:100%;display:block}
-  .kli07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#e6cf86;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .kli07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--kli07-cap);opacity:var(--kli07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -23,20 +38,22 @@
  "description": "Two SVG columns of spirals, eyes, and triangles in gold and malachite cycle motifs and counter-rotate every 900ms in phase-shifted counterpoint.",
  "useWhen": "Decorative ambient panels, art-deco or gold-leaf-themed hero sections, museum or gallery UI backgrounds.",
  "avoidWhen": "Contexts needing fast feedback or interactivity; the slow step cadence looks broken in busy, content-heavy layouts.",
- "agentPrompt": "Change GOLD to '#d4af37' and MALA to '#2e8b57', add a third column, and speed the tick interval from 900ms to 600ms.",
+ "agentPrompt": "Change GOLD to '#d4af37' and MALA to '#2e8b57', add a third column, and speed the tick interval from 900ms to 600ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "tick interval (acc>900)",
   "gold color (GOLD='#c8a951')",
   "malachite color (MALA='#1f6b4f')",
   "motifs array order [SP,EYE,TRI,EYE,SP]",
   "rotation step per tick (step*30 deg)",
-  "mark scale values (1.1 / 0.92)"
+  "mark scale values (1.1 / 0.92)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED branch)",
   "visibilitychange pause/resume",
-  "aria-label on stage element"
+  "aria-label on stage element",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "900ms interval feels sluggish — motion won't be apparent until the second tick",
@@ -49,7 +66,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "ornamental",
@@ -72,9 +90,23 @@
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const wrap=document.getElementById('kli07-wrap'); if(!wrap) return;
-  const GOLD='#c8a951', MALA='#1f6b4f';
+  const root=document.documentElement;
+  let GOLD, MALA, PUPIL, left=null, right=null;   // motif colours come from the CSS tokens
+  function syncTheme(){
+    const cs=getComputedStyle(root), g=function(n){return cs.getPropertyValue(n).trim();};
+    GOLD=g('--kli07-gold'); MALA=g('--kli07-mala'); PUPIL=g('--kli07-pupil');
+    if(left){ left.primary=GOLD; repaint(left); }  // re-stroke the SVG motifs already in the DOM
+    if(right){ right.primary=MALA; repaint(right); }
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
+  syncTheme();
   const SP=(col)=>'<svg viewBox="0 0 40 40"><g fill="none" stroke="'+col+'" stroke-width="2"><path d="M20 20 m0,-2 a2,2 0 1,1 -2,2 a6,6 0 1,1 6,-6 a10,10 0 1,1 -10,10 a14,14 0 1,1 14,-14"/></g></svg>';
-  const EYE=(col)=>'<svg viewBox="0 0 40 40"><ellipse cx="20" cy="20" rx="16" ry="9" fill="none" stroke="'+col+'" stroke-width="2"/><circle cx="20" cy="20" r="5.5" fill="'+col+'"/><circle cx="20" cy="20" r="2" fill="#0d0b07"/></svg>';
+  const EYE=(col)=>'<svg viewBox="0 0 40 40"><ellipse cx="20" cy="20" rx="16" ry="9" fill="none" stroke="'+col+'" stroke-width="2"/><circle cx="20" cy="20" r="5.5" fill="'+col+'"/><circle cx="20" cy="20" r="2" fill="'+PUPIL+'"/></svg>';
   const TRI=(col)=>'<svg viewBox="0 0 40 40"><path d="M20 5 L34 32 L6 32 Z" fill="none" stroke="'+col+'" stroke-width="2"/><path d="M20 16 L27 30 L13 30 Z" fill="'+col+'"/></svg>';
   const motifs=[SP,EYE,TRI,EYE,SP];
   const N=motifs.length;
@@ -89,14 +121,16 @@
     wrap.appendChild(col);
     return {marks, primary};
   }
-  const left=buildCol(false,GOLD);
-  const right=buildCol(true,MALA);
+  left=buildCol(false,GOLD);
+  right=buildCol(true,MALA);
   function render(side, step){
     side.marks.forEach((m,i)=>{
       const idx=((i+step)%N+N)%N;
+      m._i=idx;                                   // remembered so a re-theme can repaint in place
       m.innerHTML=motifs[idx](side.primary);
     });
   }
+  function repaint(side){ side.marks.forEach((m)=>{ m.innerHTML=motifs[m._i](side.primary); }); }
   if(REDUCED){ render(left,0);render(right,2); return; }
   let last=performance.now(),acc=0,step=0;
   function tick(){

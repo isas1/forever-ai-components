@@ -5,11 +5,28 @@
 <meta name="description" content="A springy 16-node tail in lime-to-gold gradient whips and follows the cursor, drifting in a figure-eight when idle.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Spring Chain</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1C1C1E}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The --c05-ss/--c05-sl (stroke)
+     and --c05-ds/--c05-dl/--c05-dk (node dot) numbers feed the JS hsl() strings;
+     the hue stays the lime-to-gold ramp in both themes. */
+  :root{
+    --c05-bg:#1C1C1E; --c05-cap:#7ABE37; --c05-cap-o:.5;
+    --c05-ss:85; --c05-sl:65; --c05-ds:90; --c05-dl:70; --c05-dk:-1.5;
+  }
+  :root[data-theme="light"]{
+    --c05-bg:#f2f2f3; --c05-cap:#4c7722; --c05-cap-o:.6;
+    --c05-ss:78; --c05-sl:25; --c05-ds:85; --c05-dl:21; --c05-dk:1.6;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c05-bg)}
   #c{display:block;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#7ABE37;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--c05-cap);opacity:var(--c05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +35,22 @@
  "description": "A 16-node spring chain whips and follows the cursor in a lime-to-gold gradient; drifts in a figure-eight pattern when idle.",
  "useWhen": "Cursor-follower effects, interactive hero backgrounds, playful physics demos where pointer engagement adds delight.",
  "avoidWhen": "Contexts requiring legible overlaid text (constant motion competes). Touch-only devices where pointer events are limited to taps.",
- "agentPrompt": "Change node count from 16 to 24, set the hue base to 120 (green), and increase spring stiffness constant k from 0.32 to 0.45.",
+ "agentPrompt": "Change node count from 16 to 24, set the hue base to 120 (green), and increase spring stiffness constant k from 0.32 to 0.45. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "node count (N=16)",
   "spring stiffness (k=0.32)",
   "damping factor (damp=0.74)",
   "hue start and step (90-i*3.5)",
   "segment length (seg = min(W,H)*0.055)",
-  "idle figure-eight amplitude (W*0.3 / H*0.3)"
+  "idle figure-eight amplitude (W*0.3 / H*0.3)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/play guards",
   "reduced-motion guard (single frame only)",
-  "IIFE-equivalent scoped vars"
+  "IIFE-equivalent scoped vars",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Reduced-motion support is minimal — draws one static frame but the chain is still mid-motion; no true static fallback",
@@ -43,7 +62,8 @@
   "mobile-ready",
   "accessible",
   "minimal-deps",
-  "copy-paste-safe"
+  "copy-paste-safe",
+  "light-ready"
  ],
  "tags": [
   "spring",
@@ -61,8 +81,17 @@
 <canvas id="c"></canvas>
 <div class="cap">Spring Chain</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
 let W,H,DPR,nodes=[],t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const root=document.documentElement;
+let SS=85,SL=65,DS=90,DL=70,DK=-1.5;   // hsl saturation/lightness for the strokes and the node dots
+function syncTheme(){const cs=getComputedStyle(root),n=k=>parseFloat(cs.getPropertyValue(k));
+  SS=n('--c05-ss');SL=n('--c05-sl');DS=n('--c05-ds');DL=n('--c05-dl');DK=n('--c05-dk');}
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',e=>{const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
+syncTheme();
 function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);init();}
 function init(){nodes=[];const N=16;for(let i=0;i<N;i++)nodes.push({x:W/2,y:H/2,vx:0,vy:0,i});}
@@ -82,10 +111,10 @@ function step(){
     const dx=p.x-n.x,dy=p.y-n.y,d=Math.hypot(dx,dy)||0.001,f=(d-seg)*k/d;
     n.vx+=dx*f;n.vy+=dy*f;n.vx*=damp;n.vy*=damp;n.x+=n.vx;n.y+=n.vy;}
   for(let i=0;i<nodes.length-1;i++){const a=nodes[i],b=nodes[i+1];
-    const h=90-i*3.5;x.strokeStyle='hsl('+h+',85%,65%)';x.lineWidth=Math.max(1.5,7-i*0.32);
+    const h=90-i*3.5;x.strokeStyle='hsl('+h+','+SS+'%,'+SL+'%)';x.lineWidth=Math.max(1.5,7-i*0.32);
     x.lineCap='round';x.beginPath();x.moveTo(a.x,a.y);x.lineTo(b.x,b.y);x.stroke();}
   for(let i=0;i<nodes.length;i++){const n=nodes[i],h=90-i*3.5;
-    x.fillStyle='hsl('+h+',90%,'+(70-i*1.5)+'%)';
+    x.fillStyle='hsl('+h+','+DS+'%,'+(DL+i*DK)+'%)';
     x.beginPath();x.arc(n.x,n.y,Math.max(1.6,6-i*0.27),0,7);x.fill();}
 }
 let raf;function loop(){step();raf=requestAnimationFrame(loop);}
@@ -93,6 +122,7 @@ function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
 play();
+})();
 </script>
 </body>
 </html>

@@ -8,7 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&family=Inter:wght@400&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
     --bg-800:#0d0f16; --bg-surface:#1c2030;
     --text-0:#f4f6fb; --text-2:#8a91a8;
@@ -18,10 +25,22 @@
     --font-display:"Space Grotesk",system-ui,sans-serif;
     --font-body:"Inter",system-ui,sans-serif;
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1); --dur-base:280ms;
+    --c04-page-a:#12141d; --c04-page-b:#08090d;
+    --c04-spot-glow:rgba(238,186,160,0.22); --c04-grid-line:rgba(255,255,255,0.04);
+    --cap-o:.4;
+  }
+  :root[data-theme="light"]{
+    --bg-800:#eef0f5; --bg-surface:#ffffff;
+    --text-0:#1b2130; --text-2:#666e89;
+    --accent-cyan:#7a712e; --accent-iris:#b65221;
+    --border-soft:rgba(20,24,38,0.06); --border-mid:rgba(20,24,38,0.12);
+    --c04-page-a:#eef1f6; --c04-page-b:#f2f4f8;
+    --c04-spot-glow:rgba(182,82,33,0.16); --c04-grid-line:rgba(20,24,38,0.05);
+    --cap-o:.55;
   }
   *,*::before,*::after{box-sizing:border-box;}
-  html,body{margin:0;height:100%;overflow:hidden;}
-  body{background:radial-gradient(80% 70% at 50% 30%,#12141d,#08090d);
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c04-page-b);}
+  body{background:radial-gradient(80% 70% at 50% 30%,var(--c04-page-a),var(--c04-page-b));
     font-family:var(--font-body);}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
   .c04-spot{position:relative;width:50vmin;height:55vmin;max-width:256px;max-height:282px;
@@ -31,11 +50,11 @@
     transition:border-color var(--dur-base) var(--ease-out-soft);}
   .c04-spot::before{content:"";position:absolute;inset:0;
     background:radial-gradient(380px circle at var(--c04-x,50%) var(--c04-y,50%),
-      rgba(238,186,160,0.22),transparent 42%);
+      var(--c04-spot-glow),transparent 42%);
     opacity:1;pointer-events:none;}
   .c04-spot__grid{position:absolute;inset:0;
-    background-image:linear-gradient(rgba(255,255,255,0.04) 1px,transparent 1px),
-      linear-gradient(90deg,rgba(255,255,255,0.04) 1px,transparent 1px);
+    background-image:linear-gradient(var(--c04-grid-line) 1px,transparent 1px),
+      linear-gradient(90deg,var(--c04-grid-line) 1px,transparent 1px);
     background-size:26px 26px;
     -webkit-mask:radial-gradient(260px circle at var(--c04-x,50%) var(--c04-y,50%),#000 0%,transparent 60%);
     mask:radial-gradient(260px circle at var(--c04-x,50%) var(--c04-y,50%),#000 0%,transparent 60%);}
@@ -44,7 +63,7 @@
   .c04-spot__t{position:relative;font-family:var(--font-display);font-weight:600;font-size:19px;
     color:var(--text-0);margin:0 0 var(--space-1);letter-spacing:-0.02em;}
   .c04-spot__p{position:relative;font-size:12px;color:var(--text-2);margin:0;}
-  .cap{position:fixed;left:10px;bottom:8px;color:var(--accent-iris);opacity:.4;
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--accent-iris);opacity:var(--cap-o);
     font-family:var(--font-body);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -54,18 +73,20 @@
  "description": "Dark card with a peach radial glow and a CSS-masked grid that both track the cursor; auto-orbits when the pointer is away.",
  "useWhen": "Feature cards, pricing tiles, or dashboard widgets on dark backgrounds needing tactile depth without canvas overhead.",
  "avoidWhen": "Light-background layouts (background hardcoded dark) or touch-only devices where pointermove never fires.",
- "agentPrompt": "Change the spotlight color from peach (#EEBAA0) to amber (#f59e0b) by updating --accent-iris and the rgba value in .c04-spot::before background.",
+ "agentPrompt": "Change the spotlight color from peach (#EEBAA0) to amber (#f59e0b) by updating --accent-iris and the rgba value in .c04-spot::before background. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "spotlight color (rgba(238,186,160,0.22) in ::before)",
   "grid cell size (background-size: 26px 26px)",
   "spotlight radius (380px in ::before, 260px in mask)",
   "auto-orbit speed (t += 0.018)",
-  "accent dot color (--accent-cyan)"
+  "accent dot color (--accent-cyan)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "CSS custom properties --c04-x/--c04-y driving both pseudo-elements",
   "rect cache + resize refresh pattern (avoids per-frame reflow)",
-  "visibilitychange stop/start guard"
+  "visibilitychange stop/start guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Grid and glow are pure CSS — no canvas, so spotlight edge is always a smooth gradient with no noise/texture",
@@ -78,7 +99,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "spotlight",
@@ -129,6 +151,11 @@
   function start(){if(!raf&&!reduce)loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);
+  });
   if(reduce){setXY(r.width*0.5,r.height*0.4);}else start();
 })();
 </script>

@@ -5,21 +5,43 @@
 <meta name="description" content="Eight vivid gradient album covers with reflections orbiting in a rotating 3D coverflow ring, speed steered by the pointer.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Coverflow Ring</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1C1B16;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block.
+     --c03-g1..g8 are the cover palettes (two stops each); the JS reads them via var(). */
+  :root{
+    --c03-bg:#1C1B16; --c03-drop:rgba(0,0,0,.6); --c03-edge:rgba(255,255,255,.15);
+    --c03-cap:#EBD5A2; --c03-cap-o:.34;
+    --c03-g1:#ff6ec7,#BCB6A9; --c03-g2:#36d1dc,#f8f0dd; --c03-g3:#f7971e,#ffd200;
+    --c03-g4:#11998e,#38ef7d; --c03-g5:#ee0979,#ff6a00; --c03-g6:#e0be70,#12c2e9;
+    --c03-g7:#f54ea2,#ff7676; --c03-g8:#43cea2,#D8D097;
+  }
+  :root[data-theme="light"]{
+    --c03-bg:#f6f4ec; --c03-drop:rgba(70,64,40,.22); --c03-edge:rgba(0,0,0,.12);
+    --c03-cap:#2e2a1c; --c03-cap-o:.5;
+    --c03-g1:#d63f9e,#8d857a; --c03-g2:#1a9aa6,#c9b98c; --c03-g3:#c96f00,#c99b00;
+    --c03-g4:#0b7a72,#1aa856; --c03-g5:#c00560,#cc5500; --c03-g6:#a5843a,#0d8fae;
+    --c03-g7:#c62e7c,#cc4c4c; --c03-g8:#2f9c78,#a2985c;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c03-bg);
     font-family:system-ui,-apple-system,sans-serif;}
   #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:800px;}
   #ring{position:relative;width:22vmin;height:22vmin;transform-style:preserve-3d;
     will-change:transform;}
   .cover{position:absolute;inset:0;border-radius:8px;
-    box-shadow:0 0 24px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.15);
+    box-shadow:0 0 24px var(--c03-drop);border:1px solid var(--c03-edge);
     background-size:200% 200%;}
   .cover::after{content:"";position:absolute;left:0;right:0;bottom:-100%;height:100%;
     border-radius:8px;background:inherit;transform:scaleY(-1);
     -webkit-mask-image:linear-gradient(transparent 55%,rgba(0,0,0,.4));
             mask-image:linear-gradient(transparent 55%,rgba(0,0,0,.4));}
-  .cap{position:fixed;left:10px;bottom:8px;color:#EBD5A2;opacity:.34;
+  .cap{position:fixed;left:10px;bottom:8px;color:var(--c03-cap);opacity:var(--c03-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -29,18 +51,20 @@
  "description": "Eight vivid gradient cards orbit in a 3D coverflow ring with CSS perspective and per-card reflections. Pointer X position steers rotation speed.",
  "useWhen": "Music app hero sections, portfolio carousels, product showcases needing depth and ambient motion.",
  "avoidWhen": "Content requiring legible card labels — cards are gradient-only with no text. Low-end devices sensitive to many simultaneous CSS 3D transforms.",
- "agentPrompt": "Change card count to 6 (N=6), swap palette entry 0 to ['#00f5a0','#00d9f5'], and slow base rotation speed by setting vel=0.2.",
+ "agentPrompt": "Change card count to 6 (N=6), swap palette entry 0 to ['#00f5a0','#00d9f5'], and slow base rotation speed by setting vel=0.2. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "card count (N=8)",
   "ring radius (R=20vmin)",
   "color palettes (palettes array)",
   "base rotation speed (vel=0.4)",
-  "pointer influence range (2.4 multiplier)"
+  "pointer influence range (2.4 multiplier)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause/resume",
   "prefers-reduced-motion guard",
-  "cached vw on resize to avoid per-frame layout reads"
+  "cached vw on resize to avoid per-frame layout reads",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Cards have no text or labels — purely visual",
@@ -54,7 +78,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "css-3d",
@@ -72,16 +97,15 @@
 <div id="stage"><div id="ring"></div></div>
 <div class="cap">Coverflow Ring</div>
 <script>
+(function(){
   const ring=document.getElementById('ring');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const N=8,R=20, palettes=[['#ff6ec7','#BCB6A9'],['#36d1dc','#f8f0dd'],
-    ['#f7971e','#ffd200'],['#11998e','#38ef7d'],['#ee0979','#ff6a00'],
-    ['#e0be70','#12c2e9'],['#f54ea2','#ff7676'],['#43cea2','#D8D097']];
+  const N=8,R=20;
   const items=[];
   for(let i=0;i<N;i++){
     const c=document.createElement('div');c.className='cover';
-    const p=palettes[i];
-    c.style.backgroundImage=`linear-gradient(135deg,${p[0]},${p[1]})`;
+    // palette stops live in CSS (--c03-g1..g8) so both themes resolve from one source
+    c.style.backgroundImage=`linear-gradient(135deg,var(--c03-g${i+1}))`;
     ring.appendChild(c);items.push(c);
   }
   let ang=0,vel=0.4,raf;
@@ -104,7 +128,12 @@
   function start(){if(!raf&&!reduce)loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);});
   if(reduce){vel=0;loop();cancelAnimationFrame(raf);raf=0;}else start();
+})();
 </script>
 </body>
 </html>

@@ -4,10 +4,32 @@
 <meta charset="utf-8">
 <meta name="description" content="Kaleidoscope Mandala — Stained Glass. A self-contained, zero-dependency animated web component.">
 <title>Kaleidoscope Mandala</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a0608}
+  /* theme tokens — dark values are the defaults; light = jewel panes in dark leading on a
+     pale parchment ground. The brightness tokens feed the keyframe filter swing. */
+  :root{
+    --km-bg1:#1a0818;--km-bg2:#0a0608;--km-lead:#0a0608;--km-jbg:#120818;
+    --km-red:#8b1a1a;--km-amb:#c8860a;--km-blu:#1a3a6b;--km-grn:#0d5c2e;--km-vio:#5b2d8e;--km-gld:#d4a017;--km-crm:#f8f0dc;
+    --km-cap:#c8860a;--km-cap-o:.45;--km-plo:.7;--km-phi:1.9;--km-hb:1.2;
+  }
+  :root[data-theme="light"]{
+    --km-bg1:#faf3ea;--km-bg2:#f0e6d6;--km-lead:#2b2026;--km-jbg:#e2d3e6;
+    --km-red:#d0625c;--km-amb:#e8b45c;--km-blu:#7fa6d4;--km-grn:#79b98d;--km-vio:#b295d6;--km-gld:#edc76a;--km-crm:#fdf8ea;
+    --km-cap:#895c07;--km-cap-o:.75;--km-plo:.9;--km-phi:1.25;--km-hb:1.03;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--km-bg2)}
   #km-wrap{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
   #km-svg{width:min(100%,100vh);height:min(100%,100vh);max-width:640px;max-height:640px}
+  /* segment / leading colours on classes so both palettes share one geometry */
+  .fr{fill:var(--km-red)}.fa{fill:var(--km-amb)}.fb{fill:var(--km-blu)}.fg{fill:var(--km-grn)}
+  .fv{fill:var(--km-vio)}.fo{fill:var(--km-gld)}.fc{fill:var(--km-crm)}
+  .fk{fill:var(--km-lead)}.fj{fill:var(--km-jbg)}.sk{stroke:var(--km-lead)}.sa{stroke:var(--km-amb)}
+  .kb0{stop-color:var(--km-bg1)}.kb1{stop-color:var(--km-bg2)}
   /* Fast enough to clearly see rotation */
   #km-outer{animation:km-cw 8s linear infinite;transform-origin:250px 250px}
   #km-mid{animation:km-ccw 5s linear infinite;transform-origin:250px 250px}
@@ -19,14 +41,14 @@
   @keyframes km-cw{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
   @keyframes km-ccw{from{transform:rotate(0deg)}to{transform:rotate(-360deg)}}
   @keyframes km-pulse{
-    0%,100%{filter:brightness(0.7) saturate(0.8)}
-    50%{filter:brightness(1.9) saturate(2.2) hue-rotate(40deg)}
+    0%,100%{filter:brightness(var(--km-plo)) saturate(0.8)}
+    50%{filter:brightness(var(--km-phi)) saturate(2.2) hue-rotate(40deg)}
   }
   @keyframes km-hue{
     0%,100%{filter:hue-rotate(0deg) saturate(1.2)}
-    50%{filter:hue-rotate(90deg) saturate(1.8) brightness(1.2)}
+    50%{filter:hue-rotate(90deg) saturate(1.8) brightness(var(--km-hb))}
   }
-  #km-caption{position:fixed;left:8px;bottom:7px;font:11px/1 monospace;color:#c8860a;opacity:0.45;pointer-events:none}
+  #km-caption{position:fixed;left:8px;bottom:7px;font:11px/1 monospace;color:var(--km-cap);opacity:var(--km-cap-o);pointer-events:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -35,19 +57,21 @@
  "description": "Three concentric rings of colored segments spin at different speeds; a pulsing jewel center and hue-sweep filter create a stained-glass kaleidoscope.",
  "useWhen": "Dark-mode hero backgrounds, loading screens, meditation or creative-app branding where strong continuous motion is welcome.",
  "avoidWhen": "Contexts where users need to focus on content — constant rotation and hue sweep will compete with any text overlay.",
- "agentPrompt": "Change the outer ring rotation speed from 8s to 16s by setting the km-outer animation duration, and shift the palette to cool blues by replacing #c8860a with #00bfff throughout the SVG path fills.",
+ "agentPrompt": "Change the outer ring rotation speed from 8s to 16s by setting the km-outer animation duration, and shift the palette to cool blues by replacing #c8860a with #00bfff throughout the SVG path fills. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "outer ring speed (8s in #km-outer animation)",
   "mid ring speed (5s in #km-mid animation)",
   "inner ring speed (3s in #km-inner animation)",
   "segment fill colors (hex values on each path)",
   "hue-rotate range in km-hue keyframe (90deg)",
-  "jewel center circles (radii and fill colors)"
+  "jewel center circles (radii and fill colors)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "reduced-motion guard (disables all animations via animation:none)",
   "transform-origin:250px 250px on each rotating group",
-  "stacking order: outer -> mid -> inner -> pulse"
+  "stacking order: outer -> mid -> inner -> pulse",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "visibilitychange listener registered but does nothing — no actual pause on tab hide",
@@ -59,7 +83,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "kaleidoscope",
@@ -78,8 +103,8 @@
 <svg id="km-svg" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <radialGradient id="km-bg" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#1a0818"/>
-      <stop offset="100%" stop-color="#0a0608"/>
+      <stop class="kb0" offset="0%"/>
+      <stop class="kb1" offset="100%"/>
     </radialGradient>
   </defs>
 
@@ -89,63 +114,70 @@
   <g id="km-all">
     <!-- Outer ring: 12-fold triangular segments — spins 8s/rev -->
     <g id="km-outer">
-      <path d="M250,250 L250,30 A220,220 0 0,1 359.8,109.3 Z" fill="#8b1a1a" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L359.8,109.3 A220,220 0 0,1 469.5,170 Z" fill="#c8860a" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L469.5,170 A220,220 0 0,1 469.5,330 Z" fill="#1a3a6b" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L469.5,330 A220,220 0 0,1 359.8,390.7 Z" fill="#0d5c2e" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L359.8,390.7 A220,220 0 0,1 250,470 Z" fill="#5b2d8e" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L250,470 A220,220 0 0,1 140.2,390.7 Z" fill="#d4a017" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L140.2,390.7 A220,220 0 0,1 30.5,330 Z" fill="#8b1a1a" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L30.5,330 A220,220 0 0,1 30.5,170 Z" fill="#c8860a" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L30.5,170 A220,220 0 0,1 140.2,109.3 Z" fill="#1a3a6b" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L140.2,109.3 A220,220 0 0,1 250,30 Z" fill="#0d5c2e" stroke="#0a0608" stroke-width="3"/>
-      <circle cx="250" cy="250" r="160" fill="#0a0608" stroke="#0a0608" stroke-width="1"/>
+      <path class="fr sk" d="M250,250 L250,30 A220,220 0 0,1 359.8,109.3 Z" stroke-width="3"/>
+      <path class="fa sk" d="M250,250 L359.8,109.3 A220,220 0 0,1 469.5,170 Z" stroke-width="3"/>
+      <path class="fb sk" d="M250,250 L469.5,170 A220,220 0 0,1 469.5,330 Z" stroke-width="3"/>
+      <path class="fg sk" d="M250,250 L469.5,330 A220,220 0 0,1 359.8,390.7 Z" stroke-width="3"/>
+      <path class="fv sk" d="M250,250 L359.8,390.7 A220,220 0 0,1 250,470 Z" stroke-width="3"/>
+      <path class="fo sk" d="M250,250 L250,470 A220,220 0 0,1 140.2,390.7 Z" stroke-width="3"/>
+      <path class="fr sk" d="M250,250 L140.2,390.7 A220,220 0 0,1 30.5,330 Z" stroke-width="3"/>
+      <path class="fa sk" d="M250,250 L30.5,330 A220,220 0 0,1 30.5,170 Z" stroke-width="3"/>
+      <path class="fb sk" d="M250,250 L30.5,170 A220,220 0 0,1 140.2,109.3 Z" stroke-width="3"/>
+      <path class="fg sk" d="M250,250 L140.2,109.3 A220,220 0 0,1 250,30 Z" stroke-width="3"/>
+      <circle class="fk sk" cx="250" cy="250" r="160" stroke-width="1"/>
     </g>
 
     <!-- Mid ring: 8-fold — counter-rotates 5s/rev -->
     <g id="km-mid">
-      <path d="M250,250 L250,90 A160,160 0 0,1 363.1,136.9 Z" fill="#5b2d8e" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L363.1,136.9 A160,160 0 0,1 410,250 Z" fill="#c8860a" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L410,250 A160,160 0 0,1 363.1,363.1 Z" fill="#8b1a1a" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L363.1,363.1 A160,160 0 0,1 250,410 Z" fill="#d4a017" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L250,410 A160,160 0 0,1 136.9,363.1 Z" fill="#1a3a6b" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L136.9,363.1 A160,160 0 0,1 90,250 Z" fill="#0d5c2e" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L90,250 A160,160 0 0,1 136.9,136.9 Z" fill="#5b2d8e" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L136.9,136.9 A160,160 0 0,1 250,90 Z" fill="#8b1a1a" stroke="#0a0608" stroke-width="3"/>
-      <circle cx="250" cy="250" r="105" fill="#0a0608" stroke="#0a0608" stroke-width="1"/>
+      <path class="fv sk" d="M250,250 L250,90 A160,160 0 0,1 363.1,136.9 Z" stroke-width="3"/>
+      <path class="fa sk" d="M250,250 L363.1,136.9 A160,160 0 0,1 410,250 Z" stroke-width="3"/>
+      <path class="fr sk" d="M250,250 L410,250 A160,160 0 0,1 363.1,363.1 Z" stroke-width="3"/>
+      <path class="fo sk" d="M250,250 L363.1,363.1 A160,160 0 0,1 250,410 Z" stroke-width="3"/>
+      <path class="fb sk" d="M250,250 L250,410 A160,160 0 0,1 136.9,363.1 Z" stroke-width="3"/>
+      <path class="fg sk" d="M250,250 L136.9,363.1 A160,160 0 0,1 90,250 Z" stroke-width="3"/>
+      <path class="fv sk" d="M250,250 L90,250 A160,160 0 0,1 136.9,136.9 Z" stroke-width="3"/>
+      <path class="fr sk" d="M250,250 L136.9,136.9 A160,160 0 0,1 250,90 Z" stroke-width="3"/>
+      <circle class="fk sk" cx="250" cy="250" r="105" stroke-width="1"/>
     </g>
 
     <!-- Inner ring: 6-fold — co-rotates 3s/rev (fastest) -->
     <g id="km-inner">
-      <path d="M250,250 L250,145 A105,105 0 0,1 340.9,197.5 Z" fill="#d4a017" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L340.9,197.5 A105,105 0 0,1 340.9,302.5 Z" fill="#8b1a1a" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L340.9,302.5 A105,105 0 0,1 250,355 Z" fill="#1a3a6b" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L250,355 A105,105 0 0,1 159.1,302.5 Z" fill="#0d5c2e" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L159.1,302.5 A105,105 0 0,1 159.1,197.5 Z" fill="#c8860a" stroke="#0a0608" stroke-width="3"/>
-      <path d="M250,250 L159.1,197.5 A105,105 0 0,1 250,145 Z" fill="#5b2d8e" stroke="#0a0608" stroke-width="3"/>
-      <circle cx="250" cy="250" r="52" fill="#0a0608" stroke="#0a0608" stroke-width="1"/>
+      <path class="fo sk" d="M250,250 L250,145 A105,105 0 0,1 340.9,197.5 Z" stroke-width="3"/>
+      <path class="fr sk" d="M250,250 L340.9,197.5 A105,105 0 0,1 340.9,302.5 Z" stroke-width="3"/>
+      <path class="fb sk" d="M250,250 L340.9,302.5 A105,105 0 0,1 250,355 Z" stroke-width="3"/>
+      <path class="fg sk" d="M250,250 L250,355 A105,105 0 0,1 159.1,302.5 Z" stroke-width="3"/>
+      <path class="fa sk" d="M250,250 L159.1,302.5 A105,105 0 0,1 159.1,197.5 Z" stroke-width="3"/>
+      <path class="fv sk" d="M250,250 L159.1,197.5 A105,105 0 0,1 250,145 Z" stroke-width="3"/>
+      <circle class="fk sk" cx="250" cy="250" r="52" stroke-width="1"/>
     </g>
 
     <!-- Leading ring borders -->
-    <circle cx="250" cy="250" r="220" fill="none" stroke="#0a0608" stroke-width="5"/>
-    <circle cx="250" cy="250" r="160" fill="none" stroke="#0a0608" stroke-width="4"/>
-    <circle cx="250" cy="250" r="105" fill="none" stroke="#0a0608" stroke-width="4"/>
-    <circle cx="250" cy="250" r="52"  fill="none" stroke="#0a0608" stroke-width="3"/>
+    <circle class="sk" cx="250" cy="250" r="220" fill="none" stroke-width="5"/>
+    <circle class="sk" cx="250" cy="250" r="160" fill="none" stroke-width="4"/>
+    <circle class="sk" cx="250" cy="250" r="105" fill="none" stroke-width="4"/>
+    <circle class="sk" cx="250" cy="250" r="52"  fill="none" stroke-width="3"/>
   </g>
 
   <!-- Centre jewel — strongly pulses -->
   <g id="km-pulse">
-    <circle cx="250" cy="250" r="52" fill="#120818" stroke="#c8860a" stroke-width="3"/>
-    <circle cx="250" cy="250" r="38" fill="#5b2d8e" stroke="#0a0608" stroke-width="2"/>
-    <circle cx="250" cy="250" r="26" fill="#d4a017" stroke="#0a0608" stroke-width="2"/>
-    <circle cx="250" cy="250" r="14" fill="#f8f0dc" stroke="#0a0608" stroke-width="2"/>
-    <circle cx="250" cy="250" r="6" fill="#c8860a"/>
+    <circle class="fj sa" cx="250" cy="250" r="52" stroke-width="3"/>
+    <circle class="fv sk" cx="250" cy="250" r="38" stroke-width="2"/>
+    <circle class="fo sk" cx="250" cy="250" r="26" stroke-width="2"/>
+    <circle class="fc sk" cx="250" cy="250" r="14" stroke-width="2"/>
+    <circle class="fa" cx="250" cy="250" r="6"/>
   </g>
 </svg>
 </div>
 <div id="km-caption">kaleidoscope mandala · stained glass</div>
 <script>
 (()=>{
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // Every colour is a CSS token, so re-setting the attribute is the whole switch.
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);
+  });
   const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
   if(reduce){
     ['km-outer','km-mid','km-inner','km-pulse','km-all'].forEach(id=>{

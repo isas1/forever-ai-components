@@ -5,22 +5,37 @@
 <meta name="description" content="Mint-green circular ring sweeps closed and a checkmark draws in with a springy pop and expanding halo on dark.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Success Check</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --fb01-bg:#0b0d12; --fb01-core:#0e1a16; --fb01-accent:#34d399; --fb01-ink:#eafff5;
+    --fb01-cap-o:.42; --fb01-hint-o:.34; --fb01-focus:rgba(52,211,153,.55);
+  }
+  :root[data-theme="light"]{
+    --fb01-bg:#eef6f1; --fb01-core:#ffffff; --fb01-accent:#1b7c59; --fb01-ink:#152420;
+    --fb01-cap-o:.5; --fb01-hint-o:.55; --fb01-focus:rgba(27,124,89,.55);
+  }
   html,body{margin:0;height:100%}
-  body{background:#0b0d12;overflow:hidden}
+  body{background:var(--fb01-bg);overflow:hidden}
   #fb01-stage{position:fixed;inset:0;display:grid;place-items:center;
     font:500 13px/1 ui-monospace,Menlo,monospace;outline:none}
-  #fb01-stage:focus-visible{box-shadow:inset 0 0 0 2px rgba(52,211,153,.55)}
+  #fb01-stage:focus-visible{box-shadow:inset 0 0 0 2px var(--fb01-focus)}
   #fb01-svg{width:min(62vmin,440px);height:min(62vmin,440px);display:block}
-  .fb01-ring{fill:none;stroke:#34d399;stroke-width:6;stroke-linecap:round;
+  .fb01-ring{fill:none;stroke:var(--fb01-accent);stroke-width:6;stroke-linecap:round;
     transform-origin:120px 120px}
-  .fb01-halo{fill:none;stroke:#34d399;stroke-width:2;opacity:0;transform-origin:120px 120px}
-  .fb01-tick{fill:none;stroke:#eafff5;stroke-width:11;stroke-linecap:round;stroke-linejoin:round}
-  .fb01-core{fill:#0e1a16}
+  .fb01-halo{fill:none;stroke:var(--fb01-accent);stroke-width:2;opacity:0;transform-origin:120px 120px}
+  .fb01-tick{fill:none;stroke:var(--fb01-ink);stroke-width:11;stroke-linecap:round;stroke-linejoin:round}
+  .fb01-core{fill:var(--fb01-core)}
   #fb01-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--fb01-ink);opacity:var(--fb01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   #fb01-hint{position:fixed;right:9px;bottom:7px;font:600 9px/1 ui-monospace,Menlo,monospace;
-    color:#34d399;opacity:.34;letter-spacing:.1em;text-transform:uppercase;user-select:none}
+    color:var(--fb01-accent);opacity:var(--fb01-hint-o);letter-spacing:.1em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -30,22 +45,24 @@
  "description": "Mint-green ring sweeps closed and a checkmark draws in with a springy pop and expanding halo; auto-replays and responds to click or spacebar.",
  "useWhen": "Form submission confirmations, payment success screens, onboarding step completions, or any positive feedback state.",
  "avoidWhen": "Error or warning states — color and motion are hardcoded for success. Avoid in contexts requiring immediate programmatic control without auto-replay.",
- "agentPrompt": "Change accent color from mint (#34d399) to gold (#f59e0b), slow the ring sweep to 800ms by changing the `520` value in `ms < 520`, and increase spring overshoot by raising `0.42` to `0.6`.",
+ "agentPrompt": "Change accent color from mint (#34d399) to gold (#f59e0b), slow the ring sweep to 800ms by changing the `520` value in `ms < 520`, and increase spring overshoot by raising `0.42` to `0.6`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (#34d399)",
   "ring sweep duration (ms < 520)",
   "spring overshoot amplitude (0.42)",
   "auto-replay gap (AUTO_GAP = 2600)",
-  "tick stroke width (stroke-width:11)"
+  "tick stroke width (stroke-width:11)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (drawOneFrame fallback)",
   "visibilitychange pause/resume",
-  "aria-live region for screen readers"
+  "aria-live region for screen readers",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Background color hardcoded to dark (#0b0d12) — must edit CSS to use on light backgrounds",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Auto-cycles indefinitely — remove nextAuto scheduling before using as a one-shot production component"
  ],
  "tier": "curated",
@@ -55,7 +72,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "success",
@@ -96,6 +114,15 @@
   var live  = document.getElementById("fb01-live");
 
   var RING_LEN = 377, TICK_LEN = 92;
+
+  // live re-theme: colours are pure CSS custom properties, so flipping the
+  // attribute is enough — nothing here caches a colour.
+  addEventListener("message", function(e){
+    var d = e.data;
+    if(d && d.type === "forever:theme" && (d.theme === "light" || d.theme === "dark")){
+      document.documentElement.setAttribute("data-theme", d.theme);
+    }
+  });
 
   function set(el, off){ el.style.strokeDashoffset = off; }
 

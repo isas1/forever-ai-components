@@ -5,11 +5,31 @@
 <meta name="description" content="A green low-poly paper terrain of rolling sine hills tilts in isometric view with face-normal lighting and crisp accent fold seams.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Folded Map Terrain</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0f2417;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The canvas builds each
+     quad from --fmt-lo (valley RGB) + altitude * --fmt-hi, times a sun term whose
+     ambient/gain pair is --fmt-shade — light lifts the ambient so lit paper never
+     goes muddy. --fmt-seam is the fold line. */
+  :root{
+    --fmt-bg:#0f2417; --fmt-lo:30,70,45; --fmt-hi:120,130,70;
+    --fmt-shade:0.18,0.95; --fmt-seam:123,211,137;
+    --fmt-cap:#7bd389; --fmt-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --fmt-bg:#eef6ec; --fmt-lo:150,178,146; --fmt-hi:70,58,40;
+    --fmt-shade:0.72,0.30; --fmt-seam:22,86,44;
+    --fmt-cap:#2a7e37; --fmt-cap-o:.6;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--fmt-bg);}
   #fmt-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
-       letter-spacing:.14em;color:#7bd389;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--fmt-cap);opacity:var(--fmt-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +39,22 @@
  "description": "12x12 quad grid forms rolling sine hills in isometric view with face-normal sun lighting. Pointer skews terrain phase; click boosts amplitude.",
  "useWhen": "Dark-mode hero backgrounds, generative art displays, ambient terrain or map-themed sections.",
  "avoidWhen": "Light backgrounds (dark navy hardcoded). Content-heavy layouts where surface motion competes with reading.",
- "agentPrompt": "Change grid resolution from G=12 to G=18, shift sun to {x:0.5,y:-0.8,z:0.3} for side lighting, and reduce cell size from 72 to 60 to keep quads in frame.",
+ "agentPrompt": "Change grid resolution from G=12 to G=18, shift sun to {x:0.5,y:-0.8,z:0.3} for side lighting, and reduce cell size from 72 to 60 to keep quads in frame. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid resolution (G=12)",
   "cell size (72*scale)",
   "sun direction (sun.x/y/z)",
   "height amplitude (0.62 multiplier)",
   "animation speed (t += 0.012)",
-  "green palette RGB offsets"
+  "green palette RGB offsets",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "O(G^2) quads per frame — G beyond 20 may drop FPS on low-end devices",
@@ -45,7 +67,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "terrain",
@@ -75,6 +98,26 @@
   }
   addEventListener('resize',size);size();
 
+  // the palette the canvas paints with is read from the CSS tokens once per
+  // theme, never per frame.
+  const root=document.documentElement, C={};
+  const trip=v=>v.trim().split(',').map(Number);
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--fmt-bg').trim();
+    C.lo=trip(cs.getPropertyValue('--fmt-lo'));
+    C.hi=trip(cs.getPropertyValue('--fmt-hi'));
+    C.sh=trip(cs.getPropertyValue('--fmt-shade'));
+    C.seam=cs.getPropertyValue('--fmt-seam').trim();
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{ const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+      if(reduce) frame();   // static-frame path repaints on demand
+    } });
+  syncTheme();
+
   // grid of vertices; quads tilt via per-vertex height -> face normal lighting
   const G=12;                          // grid resolution
   const sun={x:-0.5,y:-0.62,z:0.6};    // light direction (normalized below)
@@ -103,7 +146,7 @@
   function frame(){
     t+=reduce?0:0.012;
     boost*=0.95;
-    ctx.fillStyle='#0f2417';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
 
     const tt=t+px2*0.18*boost;
     // build vertex grid + heights
@@ -126,17 +169,17 @@
         let lum=nx*sun.x+ny*sun.y+nz*sun.z;
         lum=Math.max(0,lum);
         const ah=(hs[y][x]+0.4)/1.6;            // altitude tint 0..1
-        const shade=0.18+lum*0.95;
-        // green valley -> accent ridge palette
-        const r=Math.round((30+ah*120)*shade);
-        const g=Math.round((70+ah*130)*shade*1.05);
-        const b=Math.round((45+ah*70)*shade);
+        const shade=C.sh[0]+lum*C.sh[1];
+        // valley -> ridge palette, both ends read from the theme tokens
+        const r=Math.round((C.lo[0]+ah*C.hi[0])*shade);
+        const g=Math.round((C.lo[1]+ah*C.hi[1])*shade*1.05);
+        const b=Math.round((C.lo[2]+ah*C.hi[2])*shade);
         ctx.beginPath();
         ctx.moveTo(p0[0],p0[1]);ctx.lineTo(p1[0],p1[1]);
         ctx.lineTo(p2[0],p2[1]);ctx.lineTo(p3[0],p3[1]);ctx.closePath();
         ctx.fillStyle='rgb('+r+','+g+','+b+')';ctx.fill();
         // crisp fold seams in accent on bright faces
-        ctx.strokeStyle='rgba(123,211,137,'+(0.05+lum*0.22).toFixed(3)+')';
+        ctx.strokeStyle='rgba('+C.seam+','+(0.05+lum*0.22).toFixed(3)+')';
         ctx.lineWidth=1;ctx.stroke();
       }
     }

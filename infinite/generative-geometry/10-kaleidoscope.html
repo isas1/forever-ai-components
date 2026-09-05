@@ -5,11 +5,27 @@
 <meta name="description" content="Ten-fold mirrored kaleidoscope of spinning pink-and-magenta polygon blobs slowly rotating on a deep plum field.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kaleidoscope</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0c0612}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. fi-/st- feed the JS hsla() of each
+     mirrored blob: a bright rim on dark, a darker outline on light. */
+  :root{
+    --gg10-bg:#0c0612; --gg10-cap:#ff9ad1; --gg10-cap-o:.45;
+    --gg10-fi-s:85; --gg10-fi-l:62; --gg10-fi-a:0.85; --gg10-st-s:90; --gg10-st-l:75; --gg10-st-a:0.9;
+  }
+  :root[data-theme="light"]{
+    --gg10-bg:#f6f1f7; --gg10-cap:#d60075; --gg10-cap-o:.8;
+    --gg10-fi-s:64; --gg10-fi-l:58; --gg10-fi-a:0.78; --gg10-st-s:70; --gg10-st-l:38; --gg10-st-a:0.85;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--gg10-bg)}
   #c{display:block;width:100%;height:100%}
   #cap{position:fixed;left:8px;bottom:7px;font:11px/1 ui-monospace,monospace;
-       color:#ff9ad1;opacity:.45;letter-spacing:.5px;pointer-events:none;user-select:none}
+       color:var(--gg10-cap);opacity:var(--gg10-cap-o);letter-spacing:.5px;pointer-events:none;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +34,23 @@
  "description": "10-fold mirrored kaleidoscope of rotating polygon blobs on a deep plum background; tap/click spins the pattern and regenerates blobs.",
  "useWhen": "Dark-mode hero backgrounds, screensavers, generative art showcases, or any ambient loop needing hypnotic symmetry.",
  "avoidWhen": "Light-background UIs (background hardcoded dark plum). Contexts where users need to focus on text or UI controls.",
- "agentPrompt": "Change SEG from 10 to 8 for 8-fold symmetry, shift blob hues toward teal by replacing the random hue with a range of 150+Math.random()*80, and slow rotation by changing t*0.0002 to t*0.0001.",
+ "agentPrompt": "Change SEG from 10 to 8 for 8-fold symmetry, shift blob hues toward teal by replacing the random hue with a range of 150+Math.random()*80, and slow rotation by changing t*0.0002 to t*0.0001. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "segment count (SEG=10)",
   "blob count (M=7)",
+  "blob angular range (a within ±0.45·ang, bouncing at ±0.55·ang — must stay inside the mirrored wedge or the blob is clipped away in every segment)",
   "rotation speed (t*0.0002)",
   "blob hue range (Math.random()*360)",
-  "blob size range (0.04+Math.random()*0.1)",
-  "spin impulse on click (spin+=0.4)"
+  "blob size range (0.05+Math.random()*0.1)",
+  "spin impulse on click (spin+=0.4)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static draw on reduce)",
   "visibilitychange pause",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Reduced-motion path draws a single static frame but still runs the rAF loop (blobs update silently)",
@@ -44,7 +63,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "kaleidoscope",
@@ -67,12 +87,33 @@
   let W,H,DPR,blobs,spin=0;
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   const SEG=10,M=7;
+  // theme: every canvas colour is read from the CSS tokens, once at start and once per switch
+  const root=document.documentElement;
+  const C={bg:'#0c0612',fiS:85,fiL:62,fiA:'0.85',stS:90,stL:75,stA:'0.9'};
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--gg10-bg').trim()||C.bg;
+    C.fiS=parseFloat(cs.getPropertyValue('--gg10-fi-s'))||85;
+    C.fiL=parseFloat(cs.getPropertyValue('--gg10-fi-l'))||62;
+    C.fiA=cs.getPropertyValue('--gg10-fi-a').trim()||C.fiA;
+    C.stS=parseFloat(cs.getPropertyValue('--gg10-st-s'))||90;
+    C.stL=parseFloat(cs.getPropertyValue('--gg10-st-l'))||75;
+    C.stA=cs.getPropertyValue('--gg10-st-a').trim()||C.stA;
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();if(reduce&&blobs)draw(0);}
+  });
+  syncTheme();
   function resize(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);init();}
   function init(){
+    // blobs live inside the one wedge the mirrors repeat (angle within ±ang/2): a blob outside
+    // it is clipped away in every wedge — that is why the tile used to mount near-blank one time in three
+    const ang=Math.PI*2/SEG;
     blobs=[];for(let i=0;i<M;i++)blobs.push({
-      r:0.1+Math.random()*0.8,a:Math.random()*Math.PI*2,
-      sz:0.04+Math.random()*0.1,vr:(Math.random()-0.5)*0.0006,
+      r:0.1+Math.random()*0.8,a:(Math.random()-0.5)*ang*0.9,
+      sz:0.05+Math.random()*0.1,vr:(Math.random()-0.5)*0.0006,
       va:(Math.random()-0.5)*0.002,hue:Math.random()*360,sides:(3+(Math.random()*4|0))});
   }
   function drawWedge(t,R){
@@ -81,8 +122,8 @@
     ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,R*1.5,-ang/2,ang/2);ctx.closePath();ctx.clip();
     for(const b of blobs){
       const x=Math.cos(b.a)*b.r*R,y=Math.sin(b.a)*b.r*R;
-      ctx.fillStyle='hsla('+((b.hue+t*0.02)%360)+',85%,62%,0.85)';
-      ctx.strokeStyle='hsla('+((b.hue+t*0.02+40)%360)+',90%,75%,0.9)';
+      ctx.fillStyle='hsla('+((b.hue+t*0.02)%360)+','+C.fiS+'%,'+C.fiL+'%,'+C.fiA+')';
+      ctx.strokeStyle='hsla('+((b.hue+t*0.02+40)%360)+','+C.stS+'%,'+C.stL+'%,'+C.stA+')';
       ctx.lineWidth=1.2;
       ctx.beginPath();
       const s=b.sz*R;
@@ -93,11 +134,11 @@
     ctx.restore();
   }
   function draw(t){
-    ctx.fillStyle='#0c0612';ctx.fillRect(0,0,W,H);
-    for(const b of blobs){b.r+=b.vr;b.a+=b.va;if(b.r<0.08||b.r>0.95)b.vr*=-1;}
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
+    const ang=Math.PI*2/SEG;
+    for(const b of blobs){b.r+=b.vr;b.a+=b.va;if(b.r<0.08||b.r>0.95)b.vr*=-1;if(Math.abs(b.a)>ang*0.55)b.va*=-1;}
     const R=Math.min(W,H)*0.5;
     ctx.save();ctx.translate(W/2,H/2);ctx.rotate(t*0.0002+spin);
-    const ang=Math.PI*2/SEG;
     for(let i=0;i<SEG;i++){
       ctx.save();ctx.rotate(i*ang);
       if(i%2)ctx.scale(1,-1);

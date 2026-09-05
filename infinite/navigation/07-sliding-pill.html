@@ -8,8 +8,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
   :root{
+    --bg:#0d0f16; --glow-a:rgba(43,171,107,0.16);
     --bg-surface:#1c2030;
     --text-0:#f4f6fb;
     --text-2:#8a91a8;
@@ -20,12 +28,24 @@
     --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1);
     --dur-base:280ms;
+    --cap:#fff; --cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow-a:rgba(32,126,79,0.10);
+    --bg-surface:#ffffff;
+    --text-0:#1b2130;
+    --text-2:#5b6178;
+    --accent-iris-dim:rgba(32,126,79,0.14);
+    --border-soft:rgba(0,0,0,0.08);
+    --border-glow:rgba(32,126,79,0.55);
+    --glow-cyan:0 0 24px -8px rgba(32,126,79,0.35);
+    --cap:#152018; --cap-o:.5;
   }
   *,*::before,*::after{box-sizing:border-box}
   html,body{margin:0;height:100%;overflow:hidden}
   body{
-    background:#0d0f16;
-    background-image:radial-gradient(60vw 40vw at 15% -10%,rgba(43,171,107,0.16),transparent 60%);
+    background:var(--bg);
+    background-image:radial-gradient(60vw 40vw at 15% -10%,var(--glow-a),transparent 60%);
     font-family:"Inter",system-ui,sans-serif;
     display:grid;place-items:center;
   }
@@ -48,7 +68,7 @@
     transition:color var(--dur-base) var(--ease-out-soft);
   }
   .c07-pill__btn--active{color:var(--text-0)}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
   @media (prefers-reduced-motion:reduce){.c07-pill__glide{transition-duration:.001ms!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -58,19 +78,21 @@
  "description": "A 3-segment Day/Week/Month toggle where a glowing translucent pill slides between options with a spring bounce on a dark rounded bar.",
  "useWhen": "Calendar views, date-range pickers, or any 2-4 option segmented control on dark UI surfaces.",
  "avoidWhen": "Light backgrounds (colors hardcoded for dark surface). More than 4-5 options — pill width math gets cramped.",
- "agentPrompt": "Change the three labels to 'Hours', 'Days', 'Weeks' and update the accent glow color from emerald to amber by replacing rgba(43,171,107,0.5) with rgba(251,191,36,0.5).",
+ "agentPrompt": "Change the three labels to 'Hours', 'Days', 'Weeks' and update the accent glow color from emerald to amber by replacing rgba(43,171,107,0.5) with rgba(251,191,36,0.5). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "button labels (Day/Week/Month text)",
   "spring easing curve (--ease-spring cubic-bezier)",
   "glide transition duration (440ms)",
   "accent glow color (--glow-cyan / --border-glow)",
   "auto-cycle interval (1700ms)",
-  "padding and font size"
+  "padding and font size",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "requestAnimationFrame initial move() call (sizes glide on load)",
   "visibilitychange stop/loop pause pattern",
-  "prefers-reduced-motion guard on auto-cycle loop"
+  "prefers-reduced-motion guard on auto-cycle loop",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles by default — remove loop() call and stop() handler before shipping in production",
@@ -84,7 +106,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "navigation",
@@ -113,6 +136,13 @@
   var glide=document.getElementById('c07-glide');
   var btns=Array.prototype.slice.call(pill.querySelectorAll('.c07-pill__btn'));
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
   function move(btn){
     btns.forEach(function(x){x.classList.remove('c07-pill__btn--active');});
     btn.classList.add('c07-pill__btn--active');

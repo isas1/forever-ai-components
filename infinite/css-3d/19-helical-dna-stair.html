@@ -5,8 +5,32 @@
 <meta name="description" content="A cyan ladder of rungs twists into a rotating DNA double-helix spiral staircase with depth-faded opacity on dark teal.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Helical DNA Stair</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#041e2e;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Light keeps the bar's
+     bright-centre specular read but inverts the ladder to teal ink on pale blue. */
+  :root{
+    --hds-bg:#041e2e;
+    --hds-bar:linear-gradient(90deg,#39c0ed,#bdeeff,#39c0ed);
+    --hds-node-a:radial-gradient(circle at 35% 35%,#dff6ff,#39c0ed 70%);
+    --hds-node-b:radial-gradient(circle at 35% 35%,#cdeeff,#1c8fb8 72%);
+    --hds-node-shadow:0 0 6px rgba(57,192,237,.5);
+    --hds-cap:#39c0ed; --hds-cap-o:.36;
+  }
+  :root[data-theme="light"]{
+    --hds-bg:#eaf3f8;
+    --hds-bar:linear-gradient(90deg,#0e7699,#2f9dc4,#0e7699);
+    --hds-node-a:radial-gradient(circle at 35% 35%,#5cc4e4,#0e7699 70%);
+    --hds-node-b:radial-gradient(circle at 35% 35%,#4fb3d6,#0a5d7a 72%);
+    --hds-node-shadow:0 0 6px rgba(14,118,153,.35);
+    --hds-cap:#0e7699; --hds-cap-o:.6;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--hds-bg);}
   #hds-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:760px;perspective-origin:50% 46%;}
   #hds-helix{position:relative;width:1px;height:1px;
@@ -17,13 +41,13 @@
   /* the two backbone nodes + the connecting bar live inside each rung */
   .hds-bar{position:absolute;top:50%;left:50%;height:2px;border-radius:2px;
     transform:translate(-50%,-50%);transform-origin:50% 50%;
-    background:linear-gradient(90deg,#39c0ed,#bdeeff,#39c0ed);}
+    background:var(--hds-bar);}
   .hds-node{position:absolute;top:50%;border-radius:50%;
-    transform:translateY(-50%);box-shadow:0 0 6px rgba(57,192,237,.5);}
-  .hds-a{left:0;background:radial-gradient(circle at 35% 35%,#dff6ff,#39c0ed 70%);}
-  .hds-b{right:0;background:radial-gradient(circle at 35% 35%,#cdeeff,#1c8fb8 72%);}
+    transform:translateY(-50%);box-shadow:var(--hds-node-shadow);}
+  .hds-a{left:0;background:var(--hds-node-a);}
+  .hds-b{right:0;background:var(--hds-node-b);}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
-    letter-spacing:.13em;color:#39c0ed;opacity:.36;text-transform:uppercase;
+    letter-spacing:.13em;color:var(--hds-cap);opacity:var(--hds-cap-o);text-transform:uppercase;
     pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -33,20 +57,22 @@
  "description": "26 CSS 3D rungs twist into a rotating DNA double-helix staircase with depth-faded opacity; pointer drag and click add momentum to the spin.",
  "useWhen": "Science/biotech hero sections, ambient background loops, CSS 3D capability demos.",
  "avoidWhen": "Layouts requiring text legibility over the animation; low-end mobile where 26 transformed divs plus rAF may cause jank.",
- "agentPrompt": "Change STEPS to 32, increase RADIUS to 90, and swap the bar gradient colors from cyan (#39c0ed) to a purple (#a855f7) to match a biotech brand palette.",
+ "agentPrompt": "Change STEPS to 32, increase RADIUS to 90, and swap the bar gradient colors from cyan (#39c0ed) to a purple (#a855f7) to match a biotech brand palette. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "rung count (STEPS=26)",
   "twist rate (STEP_ANGLE=32 deg per step)",
   "helix radius (RADIUS=72)",
   "vertical rise per step (STEP_Y=15)",
   "auto-spin speed (spin += 0.42)",
-  "node and bar colors (#39c0ed)"
+  "node and bar colors (#39c0ed)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (static fallback at spin=18)",
   "visibilitychange pause/resume",
-  "depth-cue opacity formula (compositor-friendly, no filter)"
+  "depth-cue opacity formula (compositor-friendly, no filter)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "All geometry is rebuilt on resize via innerHTML clear — brief flash on window resize",
@@ -59,7 +85,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "3d",
@@ -148,6 +175,11 @@
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   addEventListener('resize',()=>{ scale(); place(spin); });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // every colour is a CSS token, so flipping the attribute is the whole switch.
+  addEventListener('message',e=>{ const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme); });
 
   scale();
   if(reduce){ spin=18; helix.style.transform='rotateX(8deg)'; place(spin); }

@@ -5,11 +5,27 @@
 <meta name="description" content="The Dotted Gourd — Infinitude. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>The Dotted Gourd</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0608;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. JS reads these in syncTheme().
+     Light keeps the black dots and puts the gourd on a cream ground instead of night. */
+  :root{
+    --dot03-bg:#0a0608; --dot03-body:#ff7a18; --dot03-rib:rgba(120,40,4,0.5);
+    --dot03-dot:#160a06; --dot03-stem:#4d6b18; --dot03-cap:#ffd9b0; --dot03-cap-o:.5;
+  }
+  :root[data-theme="light"]{
+    --dot03-bg:#f8f1e6; --dot03-body:#e46100; --dot03-rib:rgba(140,52,0,0.62);
+    --dot03-cap:#3a2416; --dot03-cap-o:.6;
+  }
+  html,body{margin:0;height:100%;background:var(--dot03-bg);overflow:hidden}
   #dot03-stage{position:fixed;inset:0;width:100%;height:100%}
   #dot03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .dot03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#ffd9b0;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .dot03-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--dot03-cap);opacity:var(--dot03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,20 +34,22 @@
  "description": "An orange ribbed gourd rendered on canvas with 110 dark dots scaled by curvature and depth; the whole form sways gently as if in a breeze.",
  "useWhen": "Ambient nature or harvest-themed backgrounds, seasonal landing pages, quirky generative art showcases.",
  "avoidWhen": "Contexts requiring text overlays — the gourd occupies center canvas with no padding. Dark background is hardcoded.",
- "agentPrompt": "Change the gourd color to deep purple (#7b2fbe) and the dot fill to #1a0030, then slow the sway by setting the sin multiplier from 0.9 to 0.4.",
+ "agentPrompt": "Change the gourd color to deep purple (#7b2fbe) and the dot fill to #1a0030, then slow the sway by setting the sin multiplier from 0.9 to 0.4. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gourd body color (#ff7a18)",
   "dot color (#160a06)",
   "sway speed (t*0.9)",
   "dot count (110)",
   "rib count (ribs=7)",
-  "body proportions (bodyH multiplier 0.62)"
+  "body proportions (bodyH multiplier 0.62)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED)",
   "visibilitychange pause/resume",
-  "DPR-aware fitCanvas()"
+  "DPR-aware fitCanvas()",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#0a0608) — must change both CSS and canvas fillStyle to retheme",
@@ -44,7 +62,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "canvas",
@@ -68,6 +87,23 @@
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('dot03-cv'); if(!cv) return;
+  const root=document.documentElement, C={};
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--dot03-bg').trim();
+    C.body=cs.getPropertyValue('--dot03-body').trim();
+    C.rib=cs.getPropertyValue('--dot03-rib').trim();
+    C.dot=cs.getPropertyValue('--dot03-dot').trim();
+    C.stem=cs.getPropertyValue('--dot03-stem').trim();
+  }
+  syncTheme();
+  addEventListener('message', (e)=>{   // live re-theme from the canvas
+    const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme();
+      if(REDUCED) draw(performance.now());
+    }
+  });
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
     const r=c.getBoundingClientRect();
@@ -84,7 +120,7 @@
     const dt=Math.min(0.05,(now-last)/1000); last=now;
     if(!REDUCED) t+=dt;
     const ctx=S.ctx;
-    ctx.fillStyle='#0a0608'; ctx.fillRect(0,0,S.w,S.h);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,S.w,S.h);
     const cx=S.w/2;
     const sway=REDUCED?0:Math.sin(t*0.9)*0.06;
     const bodyH=Math.min(S.h*0.62,S.w*0.62), bodyW=bodyH*1.02;
@@ -93,10 +129,10 @@
     ctx.translate(cx, topY+bodyH/2); ctx.rotate(sway); ctx.translate(-cx,-(topY+bodyH/2));
     for(let sl=0;sl<=40;sl++){
       const ty=sl/40, hw=bodyWidth(ty)*bodyW/2, yy=topY+ty*bodyH;
-      ctx.beginPath(); ctx.fillStyle='#ff7a18';
+      ctx.beginPath(); ctx.fillStyle=C.body;
       ctx.ellipse(cx,yy,hw,bodyH/40,0,0,Math.PI*2); ctx.fill();
     }
-    ctx.strokeStyle='rgba(120,40,4,0.5)'; ctx.lineWidth=2;
+    ctx.strokeStyle=C.rib; ctx.lineWidth=2;
     for(let rb=0;rb<=ribs;rb++){
       const off=(rb/ribs-0.5)*2;
       ctx.beginPath();
@@ -107,7 +143,7 @@
       }
       ctx.stroke();
     }
-    ctx.fillStyle='#160a06';
+    ctx.fillStyle=C.dot;
     for(let i=0;i<dots.length;i++){
       const d=dots[i], ty3=d.v, hw3=bodyWidth(ty3)*bodyW/2;
       if(hw3<1) continue;
@@ -118,14 +154,14 @@
       ctx.beginPath(); ctx.arc(px,py,rr,0,Math.PI*2); ctx.fill();
     }
     ctx.globalAlpha=1;
-    ctx.fillStyle='#4d6b18'; ctx.fillRect(cx-9, topY-22, 18, 30);
+    ctx.fillStyle=C.stem; ctx.fillRect(cx-9, topY-22, 18, 30);
     ctx.restore();
   }
   let raf=0, running=false;
   function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
   function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
   function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
-  S.ctx.fillStyle='#0a0608'; S.ctx.fillRect(0,0,S.w,S.h);
+  S.ctx.fillStyle=C.bg; S.ctx.fillRect(0,0,S.w,S.h);
   let _rt;
   window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
   document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });

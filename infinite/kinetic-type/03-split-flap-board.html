@@ -5,8 +5,25 @@
 <meta name="description" content="Amber split-flap airport board with six tiles flipping through letters to spell DEPART, ARRIVE, ONTIME, BOARDS on dark charcoal.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Split-Flap Board</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#161616;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c03-bg:#161616; --c03-flap-bg:#0a0a0a; --c03-ink:#f4c430;
+    --c03-border:#2a2a2a; --c03-shadow:rgba(0,0,0,.5); --c03-divider:rgba(0,0,0,.7);
+    --c03-cap:#f4c430; --c03-cap-o:.3;
+  }
+  :root[data-theme="light"]{
+    --c03-bg:#f4f2ee; --c03-flap-bg:#fbf8f2; --c03-ink:#896908;
+    --c03-border:#ddd6c4; --c03-shadow:rgba(0,0,0,.12); --c03-divider:rgba(0,0,0,.15);
+    --c03-cap:#201d18; --c03-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c03-bg);}
   body{display:flex;align-items:center;justify-content:center;
        font-family:"Helvetica Neue",Arial,sans-serif;}
   #board{display:flex;gap:clamp(3px,1.4vw,8px);}
@@ -14,21 +31,21 @@
     position:relative;
     width:clamp(26px,11vw,72px);
     height:clamp(38px,16vw,104px);
-    background:#0a0a0a;
+    background:var(--c03-flap-bg);
     border-radius:5px;
-    color:#f4c430;
+    color:var(--c03-ink);
     font-weight:800;
     font-size:clamp(24px,10vw,68px);
     display:flex;align-items:center;justify-content:center;
     overflow:hidden;
-    box-shadow:inset 0 0 0 1px #2a2a2a,0 3px 8px rgba(0,0,0,.5);
+    box-shadow:inset 0 0 0 1px var(--c03-border),0 3px 8px var(--c03-shadow);
   }
   .flap::after{content:"";position:absolute;left:0;right:0;top:50%;height:1px;
-    background:rgba(0,0,0,.7);z-index:3;}
+    background:var(--c03-divider);z-index:3;}
   .flap.spin .ch{animation:flip .09s linear;}
   @keyframes flip{0%{transform:rotateX(0);opacity:1}50%{transform:rotateX(-90deg);opacity:.3}51%{transform:rotateX(90deg)}100%{transform:rotateX(0);opacity:1}}
   .cap{position:absolute;left:10px;bottom:8px;font-size:11px;letter-spacing:.08em;
-       color:#f4c430;opacity:.3;text-transform:uppercase;font-weight:600;}
+       color:var(--c03-cap);opacity:var(--c03-cap-o);text-transform:uppercase;font-weight:600;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -37,19 +54,21 @@
  "description": "Six amber tiles cycle through letters to spell airport-style words (DEPART, ARRIVE, ONTIME, BOARDS) on a dark charcoal background with a rotateX flip animation.",
  "useWhen": "Hero sections with a travel, transit, or retro-tech theme. Countdown or status displays that need tactile mechanical character.",
  "avoidWhen": "Long words or sentences — board is fixed at 6 characters. Light-background layouts where the hardcoded dark charcoal body conflicts.",
- "agentPrompt": "Change seq to [\"HELLO\",\"WORLD\",\"READY\",\"GOXYZ\"] and set the amber color from #f4c430 to electric blue #00bfff to give it a sci-fi feel.",
+ "agentPrompt": "Change seq to [\"HELLO\",\"WORLD\",\"READY\",\"GOXYZ\"] and set the amber color from #f4c430 to electric blue #00bfff to give it a sci-fi feel. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word sequence (seq array)",
   "number of tiles (N=6)",
   "amber color (#f4c430)",
   "flip speed (animation: flip .09s)",
-  "hold duration between words (hold=40)"
+  "hold duration between words (hold=40)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce var)",
   "visibilitychange pause/start",
-  "spin class reflow trick (void offsetWidth)"
+  "spin class reflow trick (void offsetWidth)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Words longer than 6 characters are silently truncated — change N to match the longest word",
@@ -62,7 +81,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "split-flap",
@@ -117,6 +137,13 @@
   function start(){ if(!raf&&!reduce) raf=requestAnimationFrame(tick); }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d = e.data;
+    if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) {
+      document.documentElement.setAttribute('data-theme', d.theme);
+    }
+  });
   setTarget();
   if(reduce){ var w=seq[0]; for(var i=0;i<N;i++){flaps[i].ch.textContent=w[i]||' ';} }
   else start();

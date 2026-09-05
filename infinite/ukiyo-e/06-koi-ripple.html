@@ -5,10 +5,18 @@
 <meta name="description" content="A coral-marked koi turns and undulates beneath expanding concentric pond ripples with a few drifting petals in woodblock style.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Koi Ripple</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  /* theme tokens: dark defaults, light = the washi-paper re-print */
+  :root{--uk06-bg:#0f1822;--uk06-water:#16324a;--uk06-water2:#1d4666;--uk06-indigo:#274c6e;--uk06-cream:#e8d5b0;--uk06-ink:#0a0f16;--uk06-coral:#d6552f;--uk06-coral2:#e87a4a;--uk06-ring1:#e8d5b0;--uk06-ring2:#f3ead6;--uk06-fin:rgba(243,234,214,.8);--uk06-cap:#fff;--uk06-cap-o:.42}
+  :root[data-theme="light"]{--uk06-bg:#f4efe4;--uk06-water:#c3d9e2;--uk06-water2:#dbe8ec;--uk06-indigo:#a8c6d6;--uk06-cream:#fdf8ec;--uk06-ink:#14212e;--uk06-coral:#b53f26;--uk06-coral2:#d8663c;--uk06-ring1:#5e8ca8;--uk06-ring2:#7ba6bf;--uk06-fin:rgba(230,218,194,.95);--uk06-cap:#14212e;--uk06-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--uk06-bg);overflow:hidden}
   #uk06-stage{position:fixed;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--uk06-cap);opacity:var(--uk06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -18,19 +26,21 @@
  "description": "A kohaku koi undulates across a dark pond as four concentric ripple rings expand and coral petals drift, all rendered in woodblock palette.",
  "useWhen": "Ambient hero backgrounds with a Japanese or nature theme; dark-mode decorative panels; looping art screensavers.",
  "avoidWhen": "Light backgrounds (pond color hardcoded dark navy). Layouts needing legible text overlays — ripples and fish compete for attention.",
- "agentPrompt": "Change koi markings to red-and-white by setting CORAL='#c0392b' and CORAL2='#e74c3c', then increase petal count from 7 to 14 by changing PET=7 to PET=14.",
+ "agentPrompt": "Change koi markings to red-and-white by setting CORAL='#c0392b' and CORAL2='#e74c3c', then increase petal count from 7 to 14 by changing PET=7 to PET=14. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "koi size (len=R*0.30, wid=R*0.105)",
   "ripple ring count (RINGS=4) and speed (t*0.22)",
   "petal count (PET=7) and drift speed (t*0.012)",
   "color palette (CORAL, CORAL2, CREAM, WATER, WATER2)",
-  "koi swim sway amplitude (R*0.06, R*0.05)"
+  "koi swim sway amplitude (R*0.06, R*0.05)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper and 'use strict'",
   "visibilitychange stop/go guard",
   "DPR-aware canvas resize with setTransform",
-  "reduce flag early-exit with static frame(2.2)"
+  "reduce flag early-exit with static frame(2.2)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background and pond color are hardcoded — must edit CSS and palette vars to change from dark navy",
@@ -44,7 +54,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "koi",
@@ -66,9 +77,15 @@
   "use strict";
   var cv=document.getElementById("uk06-stage"),ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
-  // palette
-  var BG="#0f1822",WATER="#16324a",WATER2="#1d4666",CREAM="#e8d5b0",
-      INK="#0a0f16",CORAL="#d6552f",CORAL2="#e87a4a",INDIGO="#274c6e",WHITE="#f3ead6";
+  // palette — read from the CSS tokens, re-read on a theme switch
+  var root=document.documentElement, BG,WATER,WATER2,CREAM,INK,CORAL,CORAL2,INDIGO,WHITE,RING1,FIN;
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    BG=v("--uk06-bg"); WATER=v("--uk06-water"); WATER2=v("--uk06-water2"); CREAM=v("--uk06-cream");
+    INK=v("--uk06-ink"); CORAL=v("--uk06-coral"); CORAL2=v("--uk06-coral2");
+    INDIGO=v("--uk06-indigo"); WHITE=v("--uk06-ring2"); FIN=v("--uk06-fin");
+    RING1=v("--uk06-ring1");
+  }
   var W=0,H=0,DPR=1,cx=0,cy=0,R=0;
   function resize(){
     DPR=Math.min(2,window.devicePixelRatio||1);
@@ -78,6 +95,10 @@
     cx=W*0.5;cy=H*0.5;R=Math.min(W,H);
   }
   resize();
+  syncTheme();
+  addEventListener("message",function(e){ var d=e.data; // live re-theme from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce) frame(2.2); }
+  });
 
   // static water backdrop: flat plane + bokashi band, painted once per resize into offscreen
   function paintWater(){
@@ -154,7 +175,7 @@
     ctx.save();
     ctx.translate(len*0.18,wid*0.5);
     ctx.rotate(0.5+bend*0.6);
-    ctx.fillStyle="rgba(243,234,214,.8)";
+    ctx.fillStyle=FIN;
     ctx.beginPath();ctx.moveTo(0,0);
     ctx.quadraticCurveTo(wid*0.5,wid*0.2,wid*0.7,wid*0.7);
     ctx.quadraticCurveTo(wid*0.2,wid*0.5,0,0);ctx.fill();
@@ -173,7 +194,7 @@
       var rad=ph*R*0.52+R*0.04;
       var a=(1-ph)*0.5;
       ctx.globalAlpha=a;
-      ctx.strokeStyle=i%2?CREAM:WHITE;
+      ctx.strokeStyle=i%2?RING1:WHITE;
       ctx.beginPath();ctx.arc(cx,cy,rad,0,6.2832);ctx.stroke();
     }
     ctx.globalAlpha=1;

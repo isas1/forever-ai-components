@@ -5,11 +5,29 @@
 <meta name="description" content="Mirror Tunnel — Infinitude. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mirror Tunnel</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#060406;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. JS reads these in syncTheme().
+     Light inverts the corridor: deep ink/colour dots receding into a pale room. */
+  :root{
+    --dot02-bg:#060406; --dot02-halo:rgba(255,246,214,0.22); --dot02-halo-0:rgba(6,4,6,0);
+    --dot02-c1:#ff2d8a; --dot02-c2:#ffd400; --dot02-c3:#e8112d; --dot02-c4:#fff6d6; --dot02-c5:#ff63ac;
+    --dot02-cap:#fff6d6; --dot02-cap-o:.46;
+  }
+  :root[data-theme="light"]{
+    --dot02-bg:#f6f1f0; --dot02-halo:rgba(120,90,110,0.16); --dot02-halo-0:rgba(246,241,240,0);
+    --dot02-c1:#c2005a; --dot02-c2:#8a6a00; --dot02-c3:#b00d22; --dot02-c4:#4a4034; --dot02-c5:#a83a70;
+    --dot02-cap:#3a3030; --dot02-cap-o:.6;
+  }
+  html,body{margin:0;height:100%;background:var(--dot02-bg);overflow:hidden}
   #dot02-stage{position:fixed;inset:0;width:100%;height:100%}
   #dot02-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .dot02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff6d6;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .dot02-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--dot02-cap);opacity:var(--dot02-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +36,21 @@
  "description": "26 rings of colored dots recede toward a vanishing point, growing in size and radius as they rush toward the viewer — a looping mirrored tunnel illusion.",
  "useWhen": "Dark-mode hero backgrounds, loading screens, or ambient displays needing strong depth and motion.",
  "avoidWhen": "Light-background UIs (background hardcoded near-black). Contexts where text must be read over the animation.",
- "agentPrompt": "Change the color palette to cool blues/purples by replacing the cols array with ['#00d4ff','#7b2fff','#0090ff','#c8b8ff','#00ffcc'], and increase ring count by setting NR=36.",
+ "agentPrompt": "Change the color palette to cool blues/purples by replacing the cols array with ['#00d4ff','#7b2fff','#0090ff','#c8b8ff','#00ffcc'], and increase ring count by setting NR=36. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "ring count (NR=26)",
   "tunnel speed (speed=0.0016)",
   "color palette (cols array)",
   "max tunnel radius (maxR multiplier 0.62)",
-  "dot size range (1.5 + ez*9)"
+  "dot size range (1.5 + ez*9)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (REDUCED)",
   "visibilitychange pause/resume",
-  "DPR-aware fitCanvas()"
+  "DPR-aware fitCanvas()",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS (#060406) and canvas fillRect — must edit both",
@@ -41,7 +61,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "tunnel",
@@ -65,6 +86,22 @@
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('dot02-cv'); if(!cv) return;
+  const root=document.documentElement, C={cols:[]};
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--dot02-bg').trim();
+    C.halo=cs.getPropertyValue('--dot02-halo').trim();
+    C.halo0=cs.getPropertyValue('--dot02-halo-0').trim();
+    C.cols=[1,2,3,4,5].map(i=>cs.getPropertyValue('--dot02-c'+i).trim());  // ring colours re-read, not cached per ring
+  }
+  syncTheme();
+  addEventListener('message', (e)=>{   // live re-theme from the canvas
+    const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme();
+      if(REDUCED) draw(performance.now());
+    }
+  });
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
     const r=c.getBoundingClientRect();
@@ -75,19 +112,18 @@
   }
   let S=fitCanvas(cv), rings=[], last=performance.now(), t=0;
   const NR=26, speed=0.0016;
-  const cols=['#ff2d8a','#ffd400','#e8112d','#fff6d6','#ff63ac'];
   function build(){
     rings=[];
-    for(let i=0;i<NR;i++) rings.push({z:i/NR, n:10+((i*3)%8), rot:i*0.5, c:cols[i%cols.length]});
+    for(let i=0;i<NR;i++) rings.push({z:i/NR, n:10+((i*3)%8), rot:i*0.5, ci:i%5});
   }
   build();
   function draw(now){
     const dt=Math.min(50,now-last); last=now;
     if(!REDUCED) t+=dt;
     const ctx=S.ctx, cx=S.w/2, cy=S.h/2;
-    ctx.fillStyle='#060406'; ctx.fillRect(0,0,S.w,S.h);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,S.w,S.h);
     const g=ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(S.w,S.h)*0.5);
-    g.addColorStop(0,'rgba(255,246,214,0.22)'); g.addColorStop(1,'rgba(6,4,6,0)');
+    g.addColorStop(0,C.halo); g.addColorStop(1,C.halo0);
     ctx.fillStyle=g; ctx.fillRect(0,0,S.w,S.h);
     const mv=REDUCED?0:speed, maxR=Math.max(S.w,S.h)*0.62;
     for(let i=0;i<rings.length;i++){ const r=rings[i]; r.z+=mv*(dt/16.67); if(r.z>1) r.z-=1; }
@@ -98,7 +134,7 @@
       const alpha=Math.min(1,rr.z*1.6)*(1-rr.z*0.15);
       const dotR=1.5+ez*9;
       const spin=REDUCED?rr.rot:(rr.rot+t*0.0003*(1+rr.z));
-      ctx.fillStyle=rr.c;
+      ctx.fillStyle=C.cols[rr.ci];
       for(let j=0;j<rr.n;j++){
         const a=spin+(j/rr.n)*Math.PI*2;
         ctx.globalAlpha=alpha;
@@ -113,7 +149,7 @@
   function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
   function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
   function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
-  S.ctx.fillStyle='#060406'; S.ctx.fillRect(0,0,S.w,S.h);
+  S.ctx.fillStyle=C.bg; S.ctx.fillRect(0,0,S.w,S.h);
   let _rt;
   window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
   document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });

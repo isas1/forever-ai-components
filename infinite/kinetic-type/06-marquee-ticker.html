@@ -5,8 +5,23 @@
 <meta name="description" content="Two rows of bold words with bullet separators scrolling opposite directions in yellow and teal on dark green like a news ticker.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Marquee Ticker</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a0f0d;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c06-bg:#0a0f0d; --c06-yellow:#ffd23f; --c06-teal:#1dd3b0; --c06-red:#ff5d73;
+    --c06-cap:#ffd23f; --c06-cap-o:.35;
+  }
+  :root[data-theme="light"]{
+    --c06-bg:#eef4f0; --c06-yellow:#8a6900; --c06-teal:#117965; --c06-red:#e0001e;
+    --c06-cap:#142019; --c06-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c06-bg);}
   body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(6px,2.5vh,18px);
        font-family:"Helvetica Neue",Arial,sans-serif;}
   .row{width:100%;overflow:hidden;white-space:nowrap;}
@@ -18,16 +33,16 @@
     letter-spacing:-.01em;
     padding:0 .35em;
   }
-  .a span{color:#ffd23f;}
-  .b span{color:#1dd3b0;}
-  .dot{color:#ff5d73 !important;}
+  .a span{color:var(--c06-yellow);}
+  .b span{color:var(--c06-teal);}
+  .dot{color:var(--c06-red) !important;}
   .a{animation:scrollL 14s linear infinite;}
   .b{animation:scrollR 18s linear infinite;}
   @keyframes scrollL{from{transform:translateX(0)}to{transform:translateX(-50%)}}
   @keyframes scrollR{from{transform:translateX(-50%)}to{transform:translateX(0)}}
   @media (prefers-reduced-motion: reduce){.a,.b{animation:none;}}
   .cap{position:absolute;left:10px;bottom:8px;font-size:11px;letter-spacing:.08em;
-       color:#ffd23f;opacity:.35;text-transform:uppercase;font-weight:600;}
+       color:var(--c06-cap);opacity:var(--c06-cap-o);text-transform:uppercase;font-weight:600;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -36,19 +51,21 @@
  "description": "Two rows of bold words scroll in opposite directions — yellow left, teal right — with red bullet separators on a dark green background, news-ticker style.",
  "useWhen": "Brand marquees, event countdowns, portfolio hero sections, or any looping announcement banner needing kinetic energy.",
  "avoidWhen": "Contexts where users need to read the text carefully — fast scroll speed and opposing directions make sustained reading difficult.",
- "agentPrompt": "Change row 1 words to [\"DESIGN\",\"BUILD\",\"SHIP\",\"ITERATE\",\"LAUNCH\"], set yellow to #FF6B6B, and slow row 1 scroll to 20s by editing the .a animation duration.",
+ "agentPrompt": "Change row 1 words to [\"DESIGN\",\"BUILD\",\"SHIP\",\"ITERATE\",\"LAUNCH\"], set yellow to #FF6B6B, and slow row 1 scroll to 20s by editing the .a animation duration. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "row 1 word list (fill t1 array)",
   "row 2 word list (fill t2 array)",
   "scroll speeds (.a 14s / .b 18s)",
   "text colors (.a span #ffd23f / .b span #1dd3b0)",
-  "font size range (clamp 26px, 11vw, 76px)"
+  "font size range (clamp 26px, 11vw, 76px)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "duplicate unit in fill() for seamless 50% loop",
   "visibilitychange pause handler",
   "prefers-reduced-motion guard",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Seamless loop relies on exact 50% translateX — adding/removing words without duplicating the unit will break the loop",
@@ -61,7 +78,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "marquee",
@@ -90,6 +108,13 @@
   var tracks=document.querySelectorAll('.track');
   document.addEventListener('visibilitychange',function(){
     for(var i=0;i<tracks.length;i++) tracks[i].style.animationPlayState=document.hidden?'paused':'running';
+  });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d = e.data;
+    if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) {
+      document.documentElement.setAttribute('data-theme', d.theme);
+    }
   });
 })();
 </script>

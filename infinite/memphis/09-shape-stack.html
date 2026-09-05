@@ -5,7 +5,12 @@
 <meta name="description" content="Clashing Memphis shapes — bars, circle, arch, diamond — balanced into a glowing totem that gently wobbles, crowned by a squiggle, over a ter">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shape Stack</title>
+<script>
+/* theme hook: ?theme=light|dark applied before first paint; standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark defaults; light block below */
   :root{
     --mp09-bg:#16201A;
     --mp09-teal:#378651;
@@ -14,7 +19,11 @@
     --mp09-blue:#C09C59;
     --mp09-orange:#ff7a2f;
     --mp09-lilac:#87A190;
+    --mp09-mark:rgba(22,32,26,.85);--mp09-mark2:rgba(22,32,26,.7);--mp09-cap:#fff;--mp09-cap-o:.42;
   }
+  :root[data-theme="light"]{--mp09-bg:#f0f5f1;--mp09-teal:#337b4a;--mp09-pink:#db005d;--mp09-yellow:#8a6a00;
+    --mp09-blue:#896b34;--mp09-orange:#c34600;--mp09-lilac:#5c7565;--mp09-mark:#f0f5f1e6;
+    --mp09-mark2:#f0f5f1cc;--mp09-cap:#16201a;--mp09-cap-o:.5}
   html,body{margin:0;height:100%}
   body{background:var(--mp09-bg)}
   .mp09-stage{
@@ -32,7 +41,7 @@
       radial-gradient(circle at 40% 60%, var(--mp09-teal) 0 1.8px, transparent 3px);
   }
   .mp09-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .mp09-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .mp09-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--mp09-cap);opacity:var(--mp09-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
   }
@@ -44,20 +53,22 @@
  "description": "8 clashing Memphis shapes stack into a gently wobbling totem over a terrazzo background, crowned by a yellow squiggle. Glow baked into offscreen sprites.",
  "useWhen": "Memphis/retro-themed hero sections, loading screens, or decorative panels needing bold ambient motion without user interaction.",
  "avoidWhen": "Contexts requiring text legibility over the canvas or low-end devices where glow sprites may stress GPU compositing.",
- "agentPrompt": "Change the totem's wobble speed by setting the frequency multiplier from 1.15 to 0.7 in drawFrame, and swap COL.orange to '#00eaff' for a cooler palette.",
+ "agentPrompt": "Change the totem's wobble speed by setting the frequency multiplier from 1.15 to 0.7 in drawFrame, and swap COL.orange to '#00eaff' for a cooler palette. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (COL object)",
   "wobble frequency (1.15 multiplier)",
   "layer definitions (L array — shape types, sizes, phases)",
   "glow intensity (GLOW=14)",
   "gap between layers (gap=0.08)",
-  "squiggle color and size (COL.yellow, sw=unit*0.85)"
+  "squiggle color and size (COL.yellow, sw=unit*0.85)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "offscreen sprite baking pattern (buildSprites — critical for perf)",
   "visibilitychange pause/resume",
   "prefers-reduced-motion single-frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Glow is baked into offscreen sprites at resize — changing GLOW at runtime requires a resize trigger to rebuild",
@@ -70,7 +81,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "memphis",
@@ -98,7 +110,9 @@
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
+  var root=document.documentElement;
   var COL={teal:"#378651",pink:"#ff4f9a",yellow:"#ffd23e",blue:"#C09C59",orange:"#ff7a2f",lilac:"#87A190"};
+  var MARK,MARK2,KEY=["blue","orange","teal","pink","yellow","lilac","blue","pink"];
   // Totem layers, bottom -> top. Each clashes with its neighbour. (8 layers, well under cap.)
   // t = shape type, w/h relative to base unit, c = fill, s = swing scale, p = phase
   var L=[
@@ -186,8 +200,8 @@
           g.shadowColor=ly.c; g.shadowBlur=GLOW; // baked here ONCE, not per frame
           shape(g,ly.t,pxw,pxh);
           g.shadowBlur=0; g.shadowColor="transparent";
-          if(ly.t==="circle"){ g.fillStyle="rgba(22,32,26,.85)"; g.beginPath(); g.arc(0,0,pxw*0.22,0,6.2832); g.fill(); }
-          else if(ly.t==="bar"){ g.strokeStyle="rgba(22,32,26,.7)"; g.lineWidth=Math.max(2,pxh*0.18);
+          if(ly.t==="circle"){ g.fillStyle=MARK; g.beginPath(); g.arc(0,0,pxw*0.22,0,6.2832); g.fill(); }
+          else if(ly.t==="bar"){ g.strokeStyle=MARK2; g.lineWidth=Math.max(2,pxh*0.18);
             g.beginPath(); g.moveTo(-pxw*0.3,0); g.lineTo(pxw*0.3,0); g.stroke(); }
         });
       })(ly,pxw,pxh);
@@ -248,8 +262,19 @@
   function start(){ if(running) return; running=true; t0=0; rafId=requestAnimationFrame(loop); }
   function stop(){ running=false; if(rafId) cancelAnimationFrame(rafId); rafId=0; }
 
+  // JS colours read from tokens; a flip re-bakes sprites
+  function syncTheme(rebuild){
+    var cs=getComputedStyle(root),k,j;
+    for(k in COL) COL[k]=cs.getPropertyValue("--mp09-"+k).trim();
+    MARK=cs.getPropertyValue("--mp09-mark").trim(); MARK2=cs.getPropertyValue("--mp09-mark2").trim();
+    for(j=0;j<N;j++) L[j].c=COL[KEY[j]];
+    if(rebuild){ buildSprites(); if(reduce) drawFrame(0.9); }
+  }
+  addEventListener("message",function(e){ var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme(true);} });
+
   function init(){
-    size();
+    syncTheme(false); size();
     if(reduce){ drawFrame(0.9); return; } // one settled, on-brand frame, no loop
     start();
   }

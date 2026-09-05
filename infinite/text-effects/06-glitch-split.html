@@ -20,13 +20,15 @@ body{background:#0a0b10;display:grid;place-items:center}
   "channel offset range (idle 0.6, burst 7..11)",
   "burst frequency (nextBurst 1400..4000ms)",
   "slice count (2..6)",
-  "scan glint intensity (e*0.5)"
+  "scan glint intensity (e*0.5)",
+  "burst cadence (nextBurst: first ≈340 ms after mount, then every ~2.1 s) and the idle CRT scan band"
  ],
  "preserveElements": [
   "prefers-reduced-motion guard and staticFrame fallback",
   "visibilitychange pause",
   "IIFE wrapper",
-  "globalCompositeOperation='lighter' for RGB blend"
+  "globalCompositeOperation='lighter' for RGB blend",
+  "idle CRT scan band between bursts"
  ],
  "knownLimitations": [
   "Background color hardcoded to #0a0b10 — must edit CSS to change",
@@ -71,7 +73,7 @@ function size(){
 
 // glitch burst state — calm between, occasional jitter
 var burst=0;        // remaining intensity 0..1
-var nextBurst=900;  // ms until next burst
+var nextBurst=340;  // ms until next burst — the first one lands almost on mount
 var slices=[];      // active displaced slices
 function fontFor(px){return FONT.replace('#PX',px);}
 
@@ -100,9 +102,9 @@ function draw(now){
   // burst scheduling
   if(burst<=0){
     nextBurst-=dt;
-    if(nextBurst<=0){fire();nextBurst=1400+Math.random()*2600;}
+    if(nextBurst<=0){fire();nextBurst=1100+Math.random()*1200;}
   }else{
-    burst-=dt/240; // decay ~240ms
+    burst-=dt/300; // decay ~300ms
     if(burst<0)burst=0;
   }
   var b=burst<0?0:burst;
@@ -110,8 +112,9 @@ function draw(now){
   var e=b*b*(3-2*b);
 
   fnt(px);
-  // chromatic channel offset scales with burst, tiny idle shimmer
-  var idle=Math.sin(now/900)*0.6;
+  // chromatic channel offset scales with burst; between bursts the split never fully
+  // settles — a slow two-rate breath drifts it through registration and back out
+  var idle=1.4+Math.sin(now/760)*1.7+Math.sin(now/1730)*0.7;
   var off=idle+e*(7+Math.sin(now/40)*4);
   var jx=(Math.random()*2-1)*e*3;
   var jy=(Math.random()*2-1)*e*2;
@@ -127,6 +130,11 @@ function draw(now){
   ctx.strokeStyle='rgba(245,215,110,'+(0.18+e*0.5)+')';
   ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(cx-px*1.3,cy+px*0.62);ctx.lineTo(cx+px*1.3,cy+px*0.62);ctx.stroke();
+
+  // idle CRT scan — one soft band sweeps the word every ~2.1s so the quiet is never a still
+  var bandY=cy-px*0.95+((now/2100)%1)*(px*1.95);
+  ctx.fillStyle='rgba(245,215,110,.13)';ctx.fillRect(0,bandY,W,1.5);
+  ctx.fillStyle='rgba(45,214,255,.05)';ctx.fillRect(0,bandY+2,W,px*0.2);
 
   // slice displacement: re-stamp horizontal bands shifted sideways
   if(e>0.02){

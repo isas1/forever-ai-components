@@ -5,14 +5,19 @@
 <meta name="description" content="A row of split-flap cards in mint-on-purple flips letter by letter to cycle through words like PIVOT, FLIP and SNAP, departure-board style.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pivot Flip Row</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1b1020;}
+  :root{ --pfr-bg:#1b1020; --pfr-card-a:#241634; --pfr-card-b:#2c1c40; --pfr-accent:#80ffdb; --pfr-accent-rgb:128,255,219; --cap-o:.34; } /* canvas paints its own bg — JS reads these via syncTheme() */
+  :root[data-theme="light"]{ --pfr-bg:#f5f0f8; --pfr-card-a:#ffffff; --pfr-card-b:#f3edf8; --pfr-accent:#007a58; --pfr-accent-rgb:0,122,88; --cap-o:.5; }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pfr-bg);}
   body{display:flex;align-items:center;justify-content:center;}
-  #pfr{
-    display:block;width:100%;height:100%;
-  }
+  #pfr{ display:block;width:100%;height:100%; }
   .pfr-cap{position:fixed;right:10px;bottom:8px;font-size:11px;letter-spacing:.14em;
-       color:#80ffdb;opacity:.34;text-transform:uppercase;pointer-events:none;
+       color:var(--pfr-accent);opacity:var(--cap-o);text-transform:uppercase;pointer-events:none;
        font-family:ui-monospace,"SFMono-Regular","Courier New",monospace;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -22,20 +27,22 @@
  "description": "A row of split-flap cards flips letter by letter in a cascading wave, cycling through words in mint-on-purple departure-board style.",
  "useWhen": "Airport/transit-themed UIs, countdown displays, hero text with a mechanical retro feel.",
  "avoidWhen": "Contexts needing legible static text at all times; low-end devices where canvas redraws per frame may stutter.",
- "agentPrompt": "Change the words array to [\"CODE\",\"SHIP\",\"DONE\"], set ACC to '#ffdb80' for an amber palette, and increase STEP to 120 for a slower cascade.",
+ "agentPrompt": "Change the words array to [\"CODE\",\"SHIP\",\"DONE\"], set ACC to '#ffdb80' for an amber palette, and increase STEP to 120 for a slower cascade. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "words array (words=[...])",
   "cascade delay (STEP=70ms)",
   "flip duration (DUR=320ms)",
   "accent color (ACC='#80ffdb')",
   "hold time between words (650ms in frame loop)",
-  "font size scalar (H*0.42)"
+  "font size scalar (H*0.42)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard + renderStatic fallback",
   "visibilitychange stop/start",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "All words should be similar length to avoid layout reflow mid-cycle; maxLen logic handles it but short words leave visible empty card slots",
@@ -48,7 +55,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "split-flap",
@@ -70,9 +78,15 @@
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('pfr'), ctx=cv.getContext('2d');
   const DPR=Math.min(devicePixelRatio||1,2);
-  const BG='#1b1020', ACC='#80ffdb';
   const words=["PIVOT","FLIP","ROW","ENTER","SNAP"];
   let W=0,H=0;
+  const htmlEl=document.documentElement; // JS-drawn colours read from tokens via syncTheme()
+  const C={bg:'#1b1020',cardA:'#241634',cardB:'#2c1c40',accent:'#80ffdb',accentRgb:'128,255,219'};
+  function syncTheme(){ const cs=getComputedStyle(htmlEl);
+    C.bg=(cs.getPropertyValue('--pfr-bg')||C.bg).trim(); C.cardA=(cs.getPropertyValue('--pfr-card-a')||C.cardA).trim();
+    C.cardB=(cs.getPropertyValue('--pfr-card-b')||C.cardB).trim(); C.accent=(cs.getPropertyValue('--pfr-accent')||C.accent).trim();
+    C.accentRgb=(cs.getPropertyValue('--pfr-accent-rgb')||C.accentRgb).trim(); }
+  syncTheme();
   function resize(){
     W=cv.clientWidth; H=cv.clientHeight;
     cv.width=W*DPR; cv.height=H*DPR;
@@ -115,10 +129,10 @@
     function glyph(ch,centerY,clipY,clipH){
       ctx.save();
       card(clipY,clipH); ctx.clip();
-      ctx.fillStyle='#241634';
+      ctx.fillStyle=C.cardA;
       card(clipY,clipH); ctx.fill();
-      ctx.fillStyle=ACC;
-      ctx.shadowColor='rgba(128,255,219,.45)'; ctx.shadowBlur=fs*0.18;
+      ctx.fillStyle=C.accent;
+      ctx.shadowColor='rgba('+C.accentRgb+',.45)'; ctx.shadowBlur=fs*0.18;
       ctx.fillText(ch,cx,centerY);
       ctx.restore();
     }
@@ -153,21 +167,21 @@
     const r=Math.min(6,fw*0.12);
     ctx.rect(x,yTop,fw,half);
     ctx.clip();
-    ctx.fillStyle='#2c1c40';
+    ctx.fillStyle=C.cardB;
     card(yTop,half); ctx.fill();
-    ctx.fillStyle=ACC;
+    ctx.fillStyle=C.accent;
     ctx.globalAlpha=0.92;
     ctx.fillText(leafCh,cx,cy);
     ctx.restore();
 
     // hinge line
-    ctx.fillStyle=BG;
+    ctx.fillStyle=C.bg;
     ctx.fillRect(x,cy-gap*0.5,fw,gap);
   }
 
   function frame(now){
     if(!t0) t0=now;
-    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
 
     const n=cur.length;
     const maxLen=Math.max(n,nxt.length);
@@ -202,7 +216,7 @@
   }
 
   function renderStatic(){
-    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     const n=cur.length;
     let fs=Math.min(H*0.42,(W*0.9)/(n*0.78)); fs=Math.max(14,fs);
     const fw=fs*0.74, fh=fs*1.18, gapX=fs*0.18;
@@ -218,6 +232,15 @@
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
   cv.addEventListener('click',()=>{ if(reduce) return; t0=0; });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      htmlEl.setAttribute('data-theme', d.theme);
+      syncTheme();
+      if(reduce) renderStatic();
+    }
+  });
 
   resize();
   if(reduce){ renderStatic(); }

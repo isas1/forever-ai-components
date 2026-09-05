@@ -5,11 +5,21 @@
 <meta name="description" content="Clashing 80s-colored terrazzo chips breathe apart and resettle into a tilted slab card on a dark umber ground.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Terrazzo Scatter</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#241D14;overflow:hidden}
-  #mp02-stage{position:fixed;inset:0;background:#241D14}
+  /* theme tokens — dark defaults, light re-theme below; --mp02-p0..p7 feed the chips via syncTheme() */
+  :root{--mp02-bg:#241D14;--mp02-slab:#2C2421;--mp02-line:rgba(178,146,52,0.20);--mp02-cap:#fff;--mp02-cap-o:.42;
+    --mp02-p0:#B29234;--mp02-p1:#ff5a8a;--mp02-p2:#ffd23f;--mp02-p3:#A19A87;--mp02-p4:#ff7a3d;--mp02-p5:#f4f0e6;--mp02-p6:#C08459;--mp02-p7:#2bb89f}
+  :root[data-theme="light"]{--mp02-bg:#f6f2ea;--mp02-slab:#fffaf2;--mp02-line:rgba(131,107,38,0.35);--mp02-cap:#2b2318;--mp02-cap-o:.5;
+    --mp02-p0:#836b26;--mp02-p1:#db0040;--mp02-p2:#8a6900;--mp02-p3:#736c5a;--mp02-p4:#c73f00;--mp02-p5:#2b2318;--mp02-p6:#98613a;--mp02-p7:#1d7a69}
+  html,body{margin:0;height:100%;background:var(--mp02-bg);overflow:hidden}
+  #mp02-stage{position:fixed;inset:0;background:var(--mp02-bg)}
   #mp02-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--mp02-cap);opacity:var(--mp02-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +29,21 @@
  "description": "96 colored terrazzo chips breathe apart from a tilted slab card and resettle in a 5.2s looping cycle, using a Memphis 80s palette on dark umber.",
  "useWhen": "Memphis/retro-themed hero backgrounds, dark-mode landing pages, generative art canvases needing ambient motion without user interaction.",
  "avoidWhen": "Light backgrounds (BG hardcoded dark umber). Contexts requiring legible text overlaid on the chips — chips cover the slab fully when settled.",
- "agentPrompt": "Change the chip count to 64 by setting N=64, swap the palette accent to hot orange by replacing '#B29234' with '#ff6a00', and slow the cycle to 8000ms by changing CYCLE=8000.",
+ "agentPrompt": "Change the chip count to 64 by setting N=64, swap the palette accent to hot orange by replacing '#B29234' with '#ff6a00', and slow the cycle to 8000ms by changing CYCLE=8000. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "chip count (N=96)",
   "color palette (PAL array)",
   "cycle duration (CYCLE=5200)",
   "scatter radius multiplier (S*0.55)",
-  "base chip size (S*0.022)"
+  "base chip size (S*0.022)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and JS — must change both BG variable and #141019 CSS to retheme",
@@ -43,7 +55,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "terrazzo",
@@ -69,9 +82,20 @@
   var cv=document.getElementById("mp02-c");
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
-  // Memphis palette around accent #B29234
+  // Memphis palette around accent #B29234 — read from theme tokens so light recolours the slab.
+  var root=document.documentElement;
   var PAL=["#B29234","#ff5a8a","#ffd23f","#A19A87","#ff7a3d","#f4f0e6","#C08459","#2bb89f"];
-  var BG="#241D14";
+  var BG="#241D14", SLAB="#2C2421", LINE="rgba(178,146,52,0.20)";
+  function syncTheme(){
+    var cs=getComputedStyle(root),i;
+    for(i=0;i<PAL.length;i++)PAL[i]=cs.getPropertyValue("--mp02-p"+i).trim();
+    BG=cs.getPropertyValue("--mp02-bg").trim(); SLAB=cs.getPropertyValue("--mp02-slab").trim();
+    LINE=cs.getPropertyValue("--mp02-line").trim();
+  }
+  addEventListener("message",function(e){ // live re-theme broadcast by the canvas
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){root.setAttribute("data-theme",d.theme);syncTheme();if(reduce)drawStatic();}
+  });
   var W=0,H=0,S=1,DPR=Math.min(2,window.devicePixelRatio||1);
   var N=96; // chip count (<=110)
   // typed-array chip state
@@ -153,10 +177,10 @@
     ctx.save();
     ctx.translate(W/2,H/2);
     ctx.rotate(-0.04);
-    ctx.fillStyle="#2C2421";
+    ctx.fillStyle=SLAB;
     ctx.fillRect(-slabW/2,-slabH/2,slabW,slabH);
     // subtle inner border line
-    ctx.strokeStyle="rgba(178,146,52,0.20)";
+    ctx.strokeStyle=LINE;
     ctx.lineWidth=Math.max(1.5,S*0.006);
     ctx.strokeRect(-slabW/2,-slabH/2,slabW,slabH);
     ctx.restore();
@@ -187,8 +211,8 @@
     var slabW=S*0.82,slabH=S*0.62;
     var sx=(W-slabW)/2, sy=(H-slabH)/2;
     ctx.save();ctx.translate(W/2,H/2);ctx.rotate(-0.04);
-    ctx.fillStyle="#2C2421";ctx.fillRect(-slabW/2,-slabH/2,slabW,slabH);
-    ctx.strokeStyle="rgba(178,146,52,0.20)";ctx.lineWidth=Math.max(1.5,S*0.006);
+    ctx.fillStyle=SLAB;ctx.fillRect(-slabW/2,-slabH/2,slabW,slabH);
+    ctx.strokeStyle=LINE;ctx.lineWidth=Math.max(1.5,S*0.006);
     ctx.strokeRect(-slabW/2,-slabH/2,slabW,slabH);ctx.restore();
     var baseSize=S*0.022;
     for(var i=0;i<N;i++){
@@ -198,7 +222,7 @@
   }
 
   function boot(){
-    resize();
+    syncTheme(); resize();
     if(reduce){drawStatic();return;}
     requestAnimationFrame(startLoop);
   }

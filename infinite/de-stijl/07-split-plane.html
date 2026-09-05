@@ -5,11 +5,21 @@
 <meta name="description" content="An off-white plane partitioned by heavy black lines repeatedly splits along a seam, halves sliding apart and reflowing into new primary-colo">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Split Plane</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0e0e10}
-  #ds07-stage{position:fixed;inset:0;overflow:hidden;background:#0e0e10}
+  /* theme tokens — dark defaults (solid-dark-bg contract); the [data-theme="light"] block
+     takes the plane to true white on a warm gallery wall. Black structure stays black. */
+  :root{--ds07-bg:#0e0e10;--ds07-paint:#f4f1e9;--ds07-line:#101012;--ds07-red:#c8261d;
+    --ds07-blue:#1b5fc4;--ds07-yel:#e8b714;--ds07-cap:#fff;--ds07-cap-o:.42}
+  :root[data-theme="light"]{--ds07-bg:#f2f0ea;--ds07-paint:#ffffff;--ds07-cap:#14141a;--ds07-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--ds07-bg)}
+  #ds07-stage{position:fixed;inset:0;overflow:hidden;background:var(--ds07-bg)}
   #ds07-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ds07-cap);opacity:var(--ds07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +29,22 @@
  "description": "A square canvas splits along alternating seams; two halves slide apart and reflow into new De Stijl primary-color compositions every 4.4 s.",
  "useWhen": "Art/design portfolio heroes, generative art showcases, neoplastic-inspired branding backgrounds.",
  "avoidWhen": "Contexts needing legible text overlays — shifting planes compete with copy. Avoid on light backgrounds without restyling the outer dark field.",
- "agentPrompt": "Change the cycle duration to 3 seconds by setting `cycle=3`, swap accent blue to '#6B21A8' in the BLUE variable, and duplicate YEL in COLS for more frequent yellow.",
+ "agentPrompt": "Change the cycle duration to 3 seconds by setting `cycle=3`, swap accent blue to '#6B21A8' in the BLUE variable, and duplicate YEL in COLS for more frequent yellow. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "cycle duration (cycle=4.4)",
   "seam position options (SEAMS array)",
   "color palette (RED, BLUE, YEL, PAINT)",
   "line width ratio (S*0.024)",
   "gap size peak (0.045)",
-  "cross-cut options (CROSS array)"
+  "cross-cut options (CROSS array)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce flag + static draw path)",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background #0e0e10 is hardcoded in both CSS and canvas draw — must change in two places",
@@ -45,7 +57,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "de-stijl",
@@ -72,13 +85,23 @@
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 
-  // Neoplastic palette around accent #1b5fc4
-  var PAINT='#f4f1e9';   // off-white plane
-  var LINE ='#101012';   // black structure
-  var RED  ='#c8261d';
-  var BLUE ='#1b5fc4';   // brief accent
-  var YEL  ='#e8b714';
-  var COLS=[PAINT,RED,BLUE,YEL,PAINT,PAINT]; // index 0..5, weighted toward plane
+  // Neoplastic palette around accent #1b5fc4 — every colour the canvas paints with is
+  // read from the CSS tokens, so a theme switch re-paints without touching draw code.
+  var root=document.documentElement;
+  var BG='',PAINT='',LINE='';
+  var COLS=['','','','','','']; // index 0..5, weighted toward plane — rebuilt by syncTheme
+  function syncTheme(){
+    var cs=getComputedStyle(root),g=function(n){return cs.getPropertyValue(n).trim();};
+    BG=g('--ds07-bg'); PAINT=g('--ds07-paint'); LINE=g('--ds07-line');
+    COLS[0]=COLS[4]=COLS[5]=PAINT;                      // invalidate cached palette
+    COLS[1]=g('--ds07-red'); COLS[2]=g('--ds07-blue'); COLS[3]=g('--ds07-yel');
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',function(e){ var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme(); if(reduce)draw(); }
+  });
+  syncTheme();
 
   var W=0,H=0,DPR=1,S=0,OX=0,OY=0,LW=0;
 
@@ -162,7 +185,7 @@
 
   function draw(){
     var x0=OX,y0=OY,hw=LW/2;
-    ctx.fillStyle='#0e0e10'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=BG; ctx.fillRect(0,0,W,H);
 
     var g=gap*S;            // pixel gap, split symmetrically about the seam
     if(axis===0){           // vertical seam -> left slab A | right slab B, cross-cut horizontal

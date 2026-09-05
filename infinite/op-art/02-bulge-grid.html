@@ -5,11 +5,20 @@
 <meta name="description" content="A white-on-black square grid warps outward as an invisible sphere bulges through the surface with faint moire shimmer.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bulge Grid</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0a0a0a}
-  #op02-stage{position:fixed;inset:0;background:#0a0a0a;overflow:hidden}
+  /* theme tokens — dark values are the defaults; the light re-theme is the
+     classic op-art inversion: black ink grid on white paper. */
+  :root{ --op02-bg:#0a0a0a; --op02-ink:#fff; --op02-cap:#fff; --op02-cap-o:.42; }
+  :root[data-theme="light"]{ --op02-bg:#f4f4f2; --op02-ink:#141414; --op02-cap:#141414; --op02-cap-o:.55; }
+  html,body{margin:0;height:100%;background:var(--op02-bg)}
+  #op02-stage{position:fixed;inset:0;background:var(--op02-bg);overflow:hidden}
   #op02-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--op02-cap);opacity:var(--op02-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +28,22 @@
  "description": "A 22x22 white line grid on black warps radially outward as an invisible lens drifts on a slow lissajous path; a faint offset twin grid creates moire shimmer.",
  "useWhen": "Op-art hero backgrounds, creative portfolios, generative art showcases, or any context wanting ambient perceptual illusion without user interaction.",
  "avoidWhen": "Content-heavy layouts where grid motion competes with text, or light-background UIs (background hardcoded dark near-black).",
- "agentPrompt": "Change grid resolution to N=30 for a denser weave, reduce bulge radius to Math.min(W,H)*0.22, and tint lines to a warm amber (#ffb347) instead of white.",
+ "agentPrompt": "Change grid resolution to N=30 for a denser weave, reduce bulge radius to Math.min(W,H)*0.22, and tint lines to a warm amber (#ffb347) instead of white. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid density (N=22)",
   "bulge radius (R = min*0.34)",
   "lens drift amplitude (min*0.10)",
   "bulge breathe speed (t*0.9)",
   "moire offset translate (0.9, 0.9)",
-  "line color (#fff)"
+  "line color (#fff)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion single-frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Grid warps only within the circular lens region — outside is always a flat regular grid",
@@ -45,7 +56,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "op-art",
@@ -72,6 +84,22 @@
   var cv=document.getElementById('op02-c');
   var ctx=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root=document.documentElement;
+
+  // colours the canvas draws with — read once from the tokens, once per switch
+  var C={bg:'#0a0a0a',ink:'#fff'};
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    C.bg=cs.getPropertyValue('--op02-bg').trim();
+    C.ink=cs.getPropertyValue('--op02-ink').trim();
+    if(reduce&&W)frame(2.4,0.9);   // static fallback must repaint on a live switch
+  }
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+    }
+  });
 
   var W=0,H=0,DPR=1,cx=0,cy=0,R=0;
   // grid resolution: lines per axis (cells). Kept modest.
@@ -122,7 +150,7 @@
 
   function strokeGrid(){
     ctx.lineWidth=1;
-    ctx.strokeStyle='#fff';
+    ctx.strokeStyle=C.ink;
     // horizontal lines (rows)
     var i,j,k;
     ctx.beginPath();
@@ -141,7 +169,7 @@
   }
 
   function frame(t,b){
-    ctx.fillStyle='#0a0a0a';
+    ctx.fillStyle=C.bg;
     ctx.fillRect(0,0,W,H);
     build(t,b);
     // back grid (offset twin) creates moire interference — faint
@@ -180,6 +208,7 @@
 
   function init(){
     size();
+    syncTheme();
     if(reduce){frame(2.4,0.9);return;}  // one settled, dimensional frame
     start();
   }

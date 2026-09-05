@@ -5,10 +5,18 @@
 <meta name="description" content="A kinetic Calder-style mobile of red, blue and yellow shapes hanging from black balance arms swaying gently in counterpoint.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Mobile Balance</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme in [data-theme="light"]; JS reads both */
+  :root{--bh04-bg:#101012;--bh04-red:#e63329;--bh04-blu:#2746c4;--bh04-yel:#f2c029;--bh04-ink:#0c0c0e;--bh04-off:#e9e4d8;--bh04-cap:#fff;--bh04-cap-o:.42}
+  :root[data-theme="light"]{--bh04-bg:#f6f2ea;--bh04-red:#cc2b1f;--bh04-blu:#2746c4;--bh04-yel:#ad7f08;--bh04-ink:#1b1b20;--bh04-off:#6f6659;--bh04-cap:#1b1b20;--bh04-cap-o:.5}
+  html,body{margin:0;height:100%;background:var(--bh04-bg);overflow:hidden}
   #bh04-stage{position:fixed;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--bh04-cap);opacity:var(--bh04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -18,19 +26,21 @@
  "description": "A Calder-style kinetic mobile of Bauhaus primary-colored circles, squares, and triangles hang from swaying black balance arms in slow counterpoint.",
  "useWhen": "Dark-background hero sections, art/design portfolio accents, ambient decorative displays needing calm geometric motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark canvas). Contexts needing interactivity or fast motion — this is purely ambient and passive.",
- "agentPrompt": "Add a fifth leaf shape by appending a leaf('T', BLU, 0.09) to the rightmost arm's subtree and adjusting armLen from 0.20 to 0.26.",
+ "agentPrompt": "Add a fifth leaf shape by appending a leaf('T', BLU, 0.09) to the rightmost arm's subtree and adjusting armLen from 0.20 to 0.26. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "sway speed (t * 0.00065 multiplier)",
   "arm amplitudes (amp values per arm node)",
   "shape colors (RED, BLU, YEL constants)",
   "shape sizes (r values in leaf() calls)",
-  "root anchor vertical offset (cy - S*0.40)"
+  "root anchor vertical offset (cy - S*0.40)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas resize block",
   "visibilitychange pause/resume",
   "reduced-motion static frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to #101012 — must edit CSS and frame() fill to change",
@@ -42,7 +52,8 @@
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "bauhaus",
@@ -67,8 +78,20 @@
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var W=0,H=0,S=0,cx=0,cy=0,dpr=1;
 
-  // Palette: Bauhaus primaries + black, on off-dark.
-  var RED='#e63329', BLU='#2746c4', YEL='#f2c029', INK='#0c0c0e', OFF='#e9e4d8';
+  // Palette: Bauhaus primaries + black, on off-dark (light: on warm off-white).
+  // Nodes store a token KEY, never a literal, so one C refill re-colours the whole mobile.
+  var RED='red', BLU='blu', YEL='yel';
+  var docEl=document.documentElement;
+  var C={bg:'#101012',red:'#e63329',blu:'#2746c4',yel:'#f2c029',ink:'#0c0c0e',off:'#e9e4d8'};
+  function syncTheme(){
+    var cs=getComputedStyle(docEl), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    C.bg=g('--bh04-bg'); C.red=g('--bh04-red'); C.blu=g('--bh04-blu');
+    C.yel=g('--bh04-yel'); C.ink=g('--bh04-ink'); C.off=g('--bh04-off');
+    if(reduce && W) frame(0.45);            // the static frame repaints on a theme switch
+  }
+  addEventListener('message',function(e){ var d=e.data;   // live re-theme broadcast from the canvas
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ docEl.setAttribute('data-theme',d.theme); syncTheme(); }
+  });
 
   // Mobile tree. Each node: a horizontal arm with a left and right hang.
   // anchor amplitude + phase per arm gives counterpoint sway. Coords in unit space (-1..1), scaled by S.
@@ -102,7 +125,7 @@
 
   function drawShape(node,x,y){
     var r=node.r*S;
-    ctx.fillStyle=node.color;
+    ctx.fillStyle=C[node.color];
     if(node.type==='C'){
       ctx.beginPath(); ctx.arc(x,y,r,0,6.2831853); ctx.fill();
     } else if(node.type==='S'){
@@ -117,7 +140,7 @@
       ctx.closePath(); ctx.fill();
     }
     // black pin dot at suspension
-    ctx.fillStyle=INK;
+    ctx.fillStyle=C.ink;
     ctx.beginPath(); ctx.arc(x,y-(node.type==='T'?r*1.15:(node.type==='S'?r:r)),Math.max(1.5,S*0.006),0,6.2831853); ctx.fill();
   }
 
@@ -130,7 +153,7 @@
       var sx=px+Math.sin(swing)*hang;
       var sy=py+Math.cos(swing)*hang;
       // thread
-      ctx.strokeStyle=OFF; ctx.globalAlpha=0.55; ctx.lineWidth=Math.max(1,S*0.004);
+      ctx.strokeStyle=C.off; ctx.globalAlpha=0.55; ctx.lineWidth=Math.max(1,S*0.004);
       ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(sx,sy); ctx.stroke();
       ctx.globalAlpha=1;
       drawShape(node,sx,sy);
@@ -144,7 +167,7 @@
     var bx=px+Math.sin(sw)*drop;
     var by=py+Math.cos(sw)*drop;
     // hang thread from pivot to bar
-    ctx.strokeStyle=OFF; ctx.globalAlpha=0.55; ctx.lineWidth=Math.max(1,S*0.004);
+    ctx.strokeStyle=C.off; ctx.globalAlpha=0.55; ctx.lineWidth=Math.max(1,S*0.004);
     ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(bx,by); ctx.stroke();
     ctx.globalAlpha=1;
     // the balance arm: rotates with sw around bar center
@@ -153,25 +176,25 @@
     var lx=bx-c*half, ly=by-s*half;
     var rx=bx+c*half, ry=by+s*half;
     // black arm
-    ctx.strokeStyle=INK; ctx.lineWidth=Math.max(2,S*0.012); ctx.lineCap='round';
+    ctx.strokeStyle=C.ink; ctx.lineWidth=Math.max(2,S*0.012); ctx.lineCap='round';
     ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(rx,ry); ctx.stroke();
     // pivot knuckle
-    ctx.fillStyle=INK; ctx.beginPath(); ctx.arc(bx,by,Math.max(2,S*0.011),0,6.2831853); ctx.fill();
+    ctx.fillStyle=C.ink; ctx.beginPath(); ctx.arc(bx,by,Math.max(2,S*0.011),0,6.2831853); ctx.fill();
     // children swing in counterpoint to the arm tilt
     render(node.L,lx,ly,t,sw*0.6+0.0);
     render(node.R,rx,ry,t,-sw*0.6);
   }
 
   function frame(t){
-    ctx.fillStyle='#101012'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     // static ground tone: an off-dark modular band, never repaints expensively
     // top anchor point
     var ax=cx, ay=cy-S*0.40;
     // ceiling bar (static black anchor block)
-    ctx.fillStyle=INK;
+    ctx.fillStyle=C.ink;
     ctx.fillRect(ax-S*0.16,ay-S*0.022,S*0.32,S*0.022);
     // anchor dot
-    ctx.fillStyle=RED;
+    ctx.fillStyle=C.red;
     ctx.beginPath(); ctx.arc(ax,ay,Math.max(2,S*0.014),0,6.2831853); ctx.fill();
     render(root,ax,ay,t,0);
   }
@@ -202,6 +225,7 @@
   });
 
   resize();
+  syncTheme();
   start();
 })();
 </script>

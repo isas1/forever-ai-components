@@ -5,11 +5,26 @@
 <meta name="description" content="Bright confetti rectangles fire from the bottom corners, tumbling and flipping as they fall, with a click-triggered burst at the cursor.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Confetti Cannon</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#241D14}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --c03-pal feeds the JS confetti. */
+  :root{
+    --c03-bg:#241D14; --c03-cap:#B29234; --c03-cap-o:.5;
+    --c03-pal:#B29234,#ffd166,#06d6a0,#A19A87,#C08459,#ff9f1c;
+  }
+  :root[data-theme="light"]{
+    --c03-bg:#f6f1e8; --c03-cap:#836b26; --c03-cap-o:.6;
+    --c03-pal:#a68831,#b88000,#049f77,#918973,#bc7c4e,#c97400;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c03-bg)}
   #c{display:block;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#B29234;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--c03-cap);opacity:var(--c03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +33,21 @@
  "description": "Colored rectangles fire from bottom corners in auto-cycling bursts, tumbling with gravity and flip animation. Click anywhere to trigger a cursor burst.",
  "useWhen": "Celebration moments, success screens, gamification rewards, party or event landing pages.",
  "avoidWhen": "Productivity or focused reading contexts — constant auto-firing is highly distracting. Remove the auto-fire interval for production click-only use.",
- "agentPrompt": "Change the palette to pastels by replacing pal with ['#ffb3c6','#ffd6a5','#caffbf','#A19A87','#f8d8b4','#ffcf9f'], and increase gravity from 0.13 to 0.18 for faster fall.",
+ "agentPrompt": "Change the palette to pastels by replacing pal with ['#ffb3c6','#ffd6a5','#caffbf','#A19A87','#f8d8b4','#ffcf9f'], and increase gravity from 0.13 to 0.18 for faster fall. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "color palette (pal array)",
   "gravity constant (0.13)",
   "particle count per burst (18 + random*10)",
   "auto-fire interval (55 + random*30 ticks)",
-  "particle size (w/h ranges)"
+  "particle size (w/h ranges)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange stop/play guard",
   "reduced-motion branch (single static fire + step)",
   "DPR-aware canvas sizing",
-  "bits.length<100 cap to bound particle count"
+  "bits.length<100 cap to bound particle count",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-fires from corners continuously — remove the t>next block for click-only production use",
@@ -43,7 +60,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "confetti",
@@ -61,9 +79,17 @@
 <canvas id="c"></canvas>
 <div class="cap">Confetti Cannon</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
 let W,H,DPR,bits=[],t=0,next=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-const pal=['#B29234','#ffd166','#06d6a0','#A19A87','#C08459','#ff9f1c'];
+const root=document.documentElement;
+let pal=['#B29234'];
+function syncTheme(){   // JS-drawn colours read the token; each bit stores a palette index so a switch recolours live
+  pal=getComputedStyle(root).getPropertyValue('--c03-pal').split(',').map(v=>v.trim());}
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',e=>{const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);syncTheme();}});
+syncTheme();
 function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);}
 addEventListener('resize',size);size();
@@ -72,7 +98,7 @@ function fire(ox,oy,dir){
   for(let i=0;i<n;i++){const a=(-Math.PI/2)+dir+(Math.random()-0.5)*1.0,sp=5+Math.random()*5;
     bits.push({x:ox,y:oy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
       w:3+Math.random()*4,h:2+Math.random()*3,rot:Math.random()*6,vr:(Math.random()-0.5)*0.4,
-      c:pal[(Math.random()*pal.length)|0],life:1,sw:Math.random()*6});}
+      ci:(Math.random()*pal.length)|0,life:1,sw:Math.random()*6});}
 }
 cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();
   fire(e.clientX-r.left,e.clientY-r.top,0);});
@@ -85,7 +111,7 @@ function step(){
     if(b.y>H+12||b.life<=0){bits.splice(i,1);continue;}
     x.save();x.translate(b.x,b.y);x.rotate(b.rot);
     const sx=Math.cos(b.sw);x.scale(sx,1);
-    x.globalAlpha=Math.max(0,Math.min(1,b.life*1.4));x.fillStyle=b.c;
+    x.globalAlpha=Math.max(0,Math.min(1,b.life*1.4));x.fillStyle=pal[b.ci];
     x.fillRect(-b.w/2,-b.h/2,b.w,b.h);x.restore();
   }
   x.globalAlpha=1;
@@ -95,6 +121,7 @@ function play(){if(!raf&&!document.hidden){if(reduce){fire(W/2,H,0);step();retur
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
 play();
+})();
 </script>
 </body>
 </html>

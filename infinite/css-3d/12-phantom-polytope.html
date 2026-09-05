@@ -5,11 +5,30 @@
 <meta name="description" content="A glowing sage-green 4D tesseract wireframe rotating and turning through itself on canvas, speeding up on interaction.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Phantom Polytope</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1B1E1A;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. The canvas draws with
+     --pp-edge-a/-b (outer/inner edge RGB), --pp-node and --pp-blend: dark stacks
+     the wireframe additively on black, light draws it as ink on paper. */
+  :root{
+    --pp-bg:#1B1E1A; --pp-fade:rgba(27,30,26,0.30); --pp-blend:lighter;
+    --pp-edge-a:140,210,110; --pp-edge-b:230,210,170; --pp-node:224,235,219;
+    --pp-ea:1; --pp-cap:#B1CCA4; --pp-cap-o:.36;
+  }
+  :root[data-theme="light"]{
+    --pp-bg:#f1f4ee; --pp-fade:rgba(241,244,238,0.30); --pp-blend:source-over;
+    --pp-edge-a:85,121,68; --pp-edge-b:26,62,24; --pp-node:40,74,32;
+    --pp-ea:1.25; --pp-cap:#557944; --pp-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pp-bg);}
   #pp-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:#B1CCA4;opacity:.36;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--pp-cap);opacity:var(--pp-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +38,21 @@
  "description": "Glowing sage-green tesseract rotates through itself via dual perspective projection; edges glow hotter by 4D depth. Pointer/click boosts speed.",
  "useWhen": "Dark-theme hero backgrounds, math/generative-art showcases, sci-fi or cosmic aesthetic sections needing ambient depth.",
  "avoidWhen": "Light backgrounds (hardcoded dark canvas). Contexts needing legible text overlays or strict reduced-motion compliance.",
- "agentPrompt": "Change glow to warm amber: set the fixed green channel from 210 to 190, raise the red coefficient base from 140 to 200, then slow base speed from 0.012 to 0.007.",
+ "agentPrompt": "Change glow to warm amber: set the fixed green channel from 210 to 190, raise the red coefficient base from 140 to 200, then slow base speed from 0.012 to 0.007. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "base rotation speed (t += 0.012)",
   "rotation plane speeds (0.31, 0.23, 0.17, 0.27)",
   "perspective distances (wd=2.4, dd=3.2)",
   "edge glow color (strokeStyle RGB formula)",
-  "pointer boost cap (Math.min(boost+0.5, 3))"
+  "pointer boost cap (Math.min(boost+0.5, 3))",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
-  "reduced-motion static frame guard"
+  "reduced-motion static frame guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Reduced-motion renders only a single static frame — no fallback animation",
@@ -44,7 +65,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "tesseract",
@@ -74,6 +96,29 @@
     cx=W/2;cy=H/2;S=Math.min(W,H);
   }
   addEventListener('resize',size);size();
+
+  // colours the canvas draws with are read from the CSS tokens once per theme,
+  // never per frame. edgeA/edgeB are the outer/inner ends of the edge ramp.
+  const root=document.documentElement, C={};
+  const trip=v=>v.trim().split(',').map(Number);
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    C.solid=cs.getPropertyValue('--pp-bg').trim();
+    C.fade =cs.getPropertyValue('--pp-fade').trim();
+    C.blend=cs.getPropertyValue('--pp-blend').trim();
+    C.A=trip(cs.getPropertyValue('--pp-edge-a'));
+    C.B=trip(cs.getPropertyValue('--pp-edge-b'));
+    C.node=cs.getPropertyValue('--pp-node').trim();
+    C.ea=parseFloat(cs.getPropertyValue('--pp-ea'))||1;
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message',e=>{ const d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme();
+      // reduced motion draws one static frame and stops, so repaint it by hand
+      if(reduce){ctx.fillStyle=C.solid;ctx.fillRect(0,0,W,H);frame();}
+    } });
+  syncTheme();
 
   // 16 vertices of the tesseract: all (+/-1)^4
   const V=[];
@@ -124,8 +169,8 @@
 
   function frame(){
     if(!reduce){ t+=0.012*(1+boost); boost*=0.95; }
-    ctx.fillStyle='rgba(27,30,26,0.30)';ctx.fillRect(0,0,W,H);
-    ctx.globalCompositeOperation='lighter';
+    ctx.fillStyle=C.fade;ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation=C.blend;
     const pts=project(t);
     // depth range for shading
     let dmin=1e9,dmax=-1e9;
@@ -137,14 +182,15 @@
       // inner (high w4) edges glow hotter
       const inner=((p.w4+q.w4)/2-0.28)/0.55;
       const hue=0.42+dep*0.4+Math.max(0,inner)*0.25;
-      ctx.strokeStyle='rgba('+Math.round(140+inner*90)+',210,'+Math.round(110+dep*60)+','+(0.18+dep*0.6)+')';
+      const A=C.A,B=C.B;
+      ctx.strokeStyle='rgba('+Math.round(A[0]+(B[0]-A[0])*inner)+','+Math.round(A[1]+(B[1]-A[1])*dep)+','+Math.round(A[2]+(B[2]-A[2])*dep)+','+Math.min(1,(0.18+dep*0.6)*C.ea)+')';
       ctx.lineWidth=lw*(0.7+dep*1.4+Math.max(0,inner)*0.6);
       ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
     });
     // vertex nodes
     pts.forEach(p=>{
       const dep=(p.depth-dmin)/(dmax-dmin+1e-6);
-      ctx.fillStyle='rgba(224,235,219,'+(0.25+dep*0.7)+')';
+      ctx.fillStyle='rgba('+C.node+','+(0.25+dep*0.7)+')';
       ctx.beginPath();ctx.arc(p.x,p.y,(0.8+dep*2.4)*lw,0,Math.PI*2);ctx.fill();
     });
     ctx.globalCompositeOperation='source-over';
@@ -154,7 +200,7 @@
   function start(){if(!raf)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){ctx.fillStyle='#1B1E1A';ctx.fillRect(0,0,W,H);t=0.9;frame();}else start();
+  if(reduce){ctx.fillStyle=C.solid;ctx.fillRect(0,0,W,H);t=0.9;frame();}else start();
 })();
 </script>
 </body>

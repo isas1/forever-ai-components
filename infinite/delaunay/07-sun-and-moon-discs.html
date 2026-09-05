@@ -5,11 +5,31 @@
 <meta name="description" content="Sun &amp; Moon Discs — Orphist Colour Discs. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sun &amp; Moon Discs</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0d11;overflow:hidden}
+  /* theme tokens — dark values are the defaults; light re-theme = the [data-theme="light"] block.
+     --del07-blend carries the additive glow on black over to subtractive (multiply) mixing on
+     paper, so the two discs still make a new hue where they cross. */
+  :root{
+    --del07-bg:#0c0d11; --del07-blend:lighter; --del07-ring-rgb:243,240,232;
+    --del07-sun0:#f4c81e; --del07-sun1:#f08a24; --del07-sun2:rgba(226,59,46,0.12);
+    --del07-moon0:#8fc0ff; --del07-moon1:#1f6fd0; --del07-moon2:rgba(123,63,160,0.12);
+    --del07-cap:#f3f0e8; --del07-cap-o:.46;
+  }
+  :root[data-theme="light"]{
+    --del07-bg:#f7f3ea; --del07-blend:multiply; --del07-ring-rgb:44,36,24;
+    --del07-sun0:#e0b40c; --del07-sun1:#c26708; --del07-sun2:rgba(212,43,29,0.22);
+    --del07-moon0:#7fb0f0; --del07-moon1:#1a5cbb; --del07-moon2:rgba(106,54,144,0.22);
+    --del07-cap:#2c2418; --del07-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;background:var(--del07-bg);overflow:hidden}
   #del07-stage{position:fixed;inset:0;width:100%;height:100%}
   #del07-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .del07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3f0e8;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .del07-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--del07-cap);opacity:var(--del07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +38,21 @@
  "description": "Two large radial-gradient discs — a warm sun and cool moon — orbit the canvas center in opposite phase, blending with 'lighter' compositing where they overlap.",
  "useWhen": "Dark-mode hero backgrounds, cosmic or celestial themes, abstract ambient screensavers inspired by Orphism or color-field art.",
  "avoidWhen": "Light backgrounds (hardcoded dark fill). Contexts requiring legible text overlays — additive blending creates bright zones that reduce contrast.",
- "agentPrompt": "Change sun color to magenta by setting PAL.yellow to '#f72585' and PAL.orange to '#b5179e', and slow the orbit by changing t*0.6 to t*0.3.",
+ "agentPrompt": "Change sun color to magenta by setting PAL.yellow to '#f72585' and PAL.orange to '#b5179e', and slow the orbit by changing t*0.6 to t*0.3. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "orbit speed (t*0.6)",
   "disc radius (R = min(W,H)*0.30)",
   "orbit radius (orbit = min(W,H)*0.18)",
   "PAL color palette (yellow, orange, blue)",
-  "concentric ring count (k<=3) and opacity"
+  "concentric ring count (k<=3) and opacity",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "globalCompositeOperation='lighter' (core visual effect)",
   "IIFE wrapper",
   "prefers-reduced-motion guard",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and canvas fill — must change in both places",
@@ -43,7 +65,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "canvas",
@@ -66,7 +89,21 @@
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('del07-cv'); if(!cv) return;
-  const PAL={yellow:'#f4c81e',orange:'#f08a24',blue:'#1f6fd0'};
+  const root=document.documentElement;
+  const C={};                        /* colours JS draws with — read from the CSS tokens */
+  function syncTheme(){
+    const cs=getComputedStyle(root), v=n=>cs.getPropertyValue(n).trim();
+    C.bg=v('--del07-bg'); C.blend=v('--del07-blend'); C.ring=v('--del07-ring-rgb');
+    C.sun0=v('--del07-sun0'); C.sun1=v('--del07-sun1'); C.sun2=v('--del07-sun2');
+    C.moon0=v('--del07-moon0'); C.moon1=v('--del07-moon1'); C.moon2=v('--del07-moon2');
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme(); if(REDUCED) draw(performance.now());
+    }
+  });
+  syncTheme();
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
     const r=c.getBoundingClientRect();
@@ -83,24 +120,24 @@
     const ctx=S.ctx,W=S.w,H=S.h,cx=W/2,cy=H/2;
     const R=Math.min(W,H)*0.30;
     const orbit=Math.min(W,H)*0.18;
-    ctx.fillStyle='#0c0d11';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const sx=cx+Math.cos(t*0.6)*orbit,   sy=cy+Math.sin(t*0.6)*orbit;
     const mx=cx+Math.cos(t*0.6+Math.PI)*orbit, my=cy+Math.sin(t*0.6+Math.PI)*orbit;
-    ctx.globalCompositeOperation='lighter';
-    const sun=ctx.createRadialGradient(sx,sy,0,sx,sy,R);
-    sun.addColorStop(0,PAL.yellow);
-    sun.addColorStop(0.5,PAL.orange);
-    sun.addColorStop(1,'rgba(226,59,46,0.12)');
+    ctx.globalCompositeOperation=C.blend;
+    const sun=ctx.createRadialGradient(sx,sy,0,sx,sy,R);   /* rebuilt per frame — no stale gradient */
+    sun.addColorStop(0,C.sun0);
+    sun.addColorStop(0.5,C.sun1);
+    sun.addColorStop(1,C.sun2);
     ctx.fillStyle=sun;ctx.beginPath();ctx.arc(sx,sy,R,0,7);ctx.fill();
     const moon=ctx.createRadialGradient(mx,my,0,mx,my,R);
-    moon.addColorStop(0,'#8fc0ff');
-    moon.addColorStop(0.5,PAL.blue);
-    moon.addColorStop(1,'rgba(123,63,160,0.12)');
+    moon.addColorStop(0,C.moon0);
+    moon.addColorStop(0.5,C.moon1);
+    moon.addColorStop(1,C.moon2);
     ctx.fillStyle=moon;ctx.beginPath();ctx.arc(mx,my,R,0,7);ctx.fill();
     ctx.globalCompositeOperation='source-over';
     ctx.lineWidth=1.5;
     for(let k=1;k<=3;k++){
-      ctx.strokeStyle='rgba(243,240,232,'+(0.16-k*0.03)+')';
+      ctx.strokeStyle='rgba('+C.ring+','+(0.16-k*0.03)+')';
       ctx.beginPath();ctx.arc(sx,sy,R*k/3,0,7);ctx.stroke();
       ctx.beginPath();ctx.arc(mx,my,R*k/3,0,7);ctx.stroke();
     }
@@ -109,7 +146,7 @@
   function loop(){ if(!running) return; draw(performance.now()); raf=requestAnimationFrame(loop); }
   function start(){ if(running) return; running=true; last=performance.now(); raf=requestAnimationFrame(loop); }
   function stop(){ running=false; if(raf) cancelAnimationFrame(raf); raf=0; }
-  S.ctx.fillStyle='#0c0d11';S.ctx.fillRect(0,0,S.w,S.h);
+  S.ctx.fillStyle=C.bg;S.ctx.fillRect(0,0,S.w,S.h);
   let _rt;
   window.addEventListener('resize', ()=>{ clearTimeout(_rt); _rt=setTimeout(()=>{ S=fitCanvas(cv); if(REDUCED) draw(performance.now()); },150); }, {passive:true});
   document.addEventListener('visibilitychange', ()=>{ if(REDUCED) return; if(document.hidden) stop(); else start(); });

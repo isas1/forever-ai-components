@@ -5,11 +5,23 @@
 <meta name="description" content="A tilted Neoplastic grid of red, blue and yellow cells divided by black bars rotates from a steep angle and settles to a resting 15-degree t">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Counter Composition</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0e0e10;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. In dark the neoplastic "white" planes
+     are painted near-black (--ds06-plane); in light they become true white paper and
+     the field behind the tilted grid becomes a warm gallery wall. Bars stay black. */
+  :root{--ds06-bg:#0e0e10;--ds06-plane:#16161c;--ds06-black:#0e0e10;
+    --ds06-red:#c4321b;--ds06-blue:#1b5fc4;--ds06-yel:#e7c629;--ds06-cap:#fff;--ds06-cap-o:.42}
+  :root[data-theme="light"]{--ds06-bg:#f2f0ea;--ds06-plane:#ffffff;--ds06-cap:#14141a;--ds06-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--ds06-bg);overflow:hidden}
   #ds06-stage{position:fixed;inset:0;display:grid;place-items:center}
   #ds06-c{width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ds06-cap);opacity:var(--ds06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +31,22 @@
  "description": "A neoplastic grid of red, blue, and yellow cells divided by black bars rotates from 38° and settles to a gentle 15° resting angle with a slow living drift.",
  "useWhen": "Art/design-themed hero backgrounds, editorial layouts evoking modernist abstraction, dark-mode ambient displays.",
  "avoidWhen": "Contexts requiring overlaid readable text — the rotating composition competes visually. Light backgrounds without changing the hardcoded dark fill.",
- "agentPrompt": "Change the resting angle from 15 to 30 degrees by setting `rest=30*Math.PI/180`, increase grid size by setting S=Math.min(W,H)*0.80, and swap RED to '#e63946'.",
+ "agentPrompt": "Change the resting angle from 15 to 30 degrees by setting `rest=30*Math.PI/180`, increase grid size by setting S=Math.min(W,H)*0.80, and swap RED to '#e63946'. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "resting angle (rest=15*Math.PI/180)",
   "entry angle (entry=38*Math.PI/180)",
   "grid size fraction (0.62 in S=Math.min(W,H)*0.62)",
   "palette constants (RED, BLU, YEL)",
   "animation cycle duration (8s loop)",
-  "drift amplitude (0.012 in Math.sin(t*0.6)*0.012)"
+  "drift amplitude (0.012 in Math.sin(t*0.6)*0.012)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion static fallback (draw at rest, no rAF)",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to #0e0e10 — must change both CSS and BLK constant together",
@@ -45,7 +59,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "de-stijl",
@@ -72,24 +87,38 @@
   var DPR=Math.min(2,window.devicePixelRatio||1);
   var W=0,H=0,S=0,running=true,raf=0,start=0;
 
-  // Neoplastic palette around the brief's accent.
-  var RED="#c4321b",BLU="#1b5fc4",YEL="#e7c629",WHT="#eceae3",BLK="#0e0e10";
+  // Neoplastic palette around the brief's accent — read from the CSS tokens so a
+  // theme switch re-paints the canvas. PAL = [red, blue, yellow, plane].
+  var root=document.documentElement;
+  var BG="",BLK="",PAL=["","","",""];
 
   // Original composition in a unit square [0..1]. Diagonal bars + cells.
-  // Each cell: x,y,w,h (unit), fill.
+  // Each cell: x,y,w,h (unit), PAL index (3 = the neoplastic "white" plane).
   var CELLS=[
-    [0.00,0.00,0.30,0.42,WHT],
-    [0.30,0.00,0.40,0.22,YEL],
-    [0.70,0.00,0.30,0.42,RED],
-    [0.00,0.42,0.30,0.34,BLU],
-    [0.30,0.22,0.24,0.54,WHT],
-    [0.54,0.22,0.46,0.20,WHT],
-    [0.54,0.42,0.46,0.34,WHT],
-    [0.00,0.76,0.46,0.24,RED],
-    [0.46,0.76,0.24,0.24,WHT],
-    [0.70,0.42,0.30,0.58,BLU],
-    [0.46,0.76,0.54,0.0,WHT]
+    [0.00,0.00,0.30,0.42,3],
+    [0.30,0.00,0.40,0.22,2],
+    [0.70,0.00,0.30,0.42,0],
+    [0.00,0.42,0.30,0.34,1],
+    [0.30,0.22,0.24,0.54,3],
+    [0.54,0.22,0.46,0.20,3],
+    [0.54,0.42,0.46,0.34,3],
+    [0.00,0.76,0.46,0.24,0],
+    [0.46,0.76,0.24,0.24,3],
+    [0.70,0.42,0.30,0.58,1],
+    [0.46,0.76,0.54,0.0,3]
   ];
+
+  function syncTheme(){
+    var cs=getComputedStyle(root),g=function(n){return cs.getPropertyValue(n).trim();};
+    BG=g("--ds06-bg"); BLK=g("--ds06-black");
+    PAL[0]=g("--ds06-red"); PAL[1]=g("--ds06-blue"); PAL[2]=g("--ds06-yel"); PAL[3]=g("--ds06-plane");
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){ var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce)draw(15*Math.PI/180,1); }
+  });
+  syncTheme();
   // Black structural bars (van Doesburg counter-construction): unit coords.
   var BARS=[
     [0.30,0,0.30,1],[0.70,0,0.70,1],
@@ -110,7 +139,7 @@
 
   // Draw the composition rotated by `ang` (radians) with reveal `p` (0..1).
   function draw(ang,p){
-    cx.fillStyle=BLK;cx.fillRect(0,0,W,H);
+    cx.fillStyle=BG;cx.fillRect(0,0,W,H);
     cx.save();
     cx.translate(W/2,H/2);
     cx.rotate(ang);
@@ -123,10 +152,9 @@
     var i,c;
     for(i=0;i<CELLS.length;i++){
       c=CELLS[i];
-      if(c[4]===WHT) cx.fillStyle="#15151a"; else cx.fillStyle=c[4];
       var cw=c[2]*S, chh=c[3]*S;
       if(chh<=0) continue;
-      cx.fillStyle=(c[4]===WHT)?"#16161c":c[4];
+      cx.fillStyle=PAL[c[4]];
       cx.fillRect(c[0]*S, c[1]*S, cw, chh*(0.15+0.85*p));
     }
 

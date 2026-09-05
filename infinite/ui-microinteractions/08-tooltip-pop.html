@@ -5,17 +5,34 @@
 <meta name="description" content="Circular heart-icon button that springs a mint tooltip with arrow above it on hover with a subtle press bounce.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tooltip Pop</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#101c1a;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --c08-bg:#101c1a; --c08-btn-bg:#1c322e; --c08-btn-border:#2c4f48; --c08-btn-bg-on:#264a43;
+    --c08-accent:#4fe0c0; --c08-tip-ink:#06231d; --c08-shadow:rgba(0,0,0,.4);
+    --c08-cap:#fff; --c08-cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --c08-bg:#eef7f4; --c08-btn-bg:#ffffff; --c08-btn-border:#bfe0d7; --c08-btn-bg-on:#d7ece5;
+    --c08-accent:#167b65; --c08-tip-ink:#ffffff; --c08-shadow:rgba(10,40,30,.14);
+    --c08-cap:#06231d; --c08-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c08-bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
   #wrap{position:fixed;inset:0;display:grid;place-items:center}
   #stage{position:relative;display:grid;place-items:center}
-  #btn{width:54px;height:54px;border-radius:50%;background:#1c322e;border:1px solid #2c4f48;display:grid;place-items:center;cursor:pointer}
-  #btn svg{width:24px;height:24px;fill:none;stroke:#4fe0c0;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-  #tip{position:absolute;bottom:calc(100% + 14px);left:50%;transform:translateX(-50%) translateY(6px) scale(.85);background:#4fe0c0;color:#06231d;font-size:11px;font-weight:600;padding:6px 11px;border-radius:8px;white-space:nowrap;opacity:0;transform-origin:bottom center;transition:opacity .2s,transform .24s cubic-bezier(.2,1.5,.4,1);box-shadow:0 8px 20px rgba(0,0,0,.4)}
-  #tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:#4fe0c0}
+  #btn{width:54px;height:54px;border-radius:50%;background:var(--c08-btn-bg);border:1px solid var(--c08-btn-border);display:grid;place-items:center;cursor:pointer}
+  #btn svg{width:24px;height:24px;fill:none;stroke:var(--c08-accent);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  #tip{position:absolute;bottom:calc(100% + 14px);left:50%;transform:translateX(-50%) translateY(6px) scale(.85);background:var(--c08-accent);color:var(--c08-tip-ink);font-size:11px;font-weight:600;padding:6px 11px;border-radius:8px;white-space:nowrap;opacity:0;transform-origin:bottom center;transition:opacity .2s,transform .24s cubic-bezier(.2,1.5,.4,1);box-shadow:0 8px 20px var(--c08-shadow)}
+  #tip::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--c08-accent)}
   #stage.on #tip{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}
-  #stage.on #btn{background:#264a43}
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase}
+  #stage.on #btn{background:var(--c08-btn-bg-on)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--c08-cap);opacity:var(--c08-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -24,23 +41,26 @@
  "description": "Heart icon button springs a mint-green tooltip above it on hover with a cubic-bezier spring pop; click triggers a subtle press-bounce via Web Animations API.",
  "useWhen": "Icon-only buttons needing a label reveal, favorites or bookmark actions, any UI where a tooltip clarifies an ambiguous control.",
  "avoidWhen": "Touch-only interfaces where hover is unavailable; layouts where there is no room above the button for the tooltip to appear.",
- "agentPrompt": "Change tooltip text to 'Save for later', update accent color from #4fe0c0 to #a78bfa, and slow the spring transition to 0.36s.",
+ "agentPrompt": "Change tooltip text to 'Save for later', update accent color from #4fe0c0 to #a78bfa, and slow the spring transition to 0.36s. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "tooltip label text (#tip inner text)",
   "accent color (#4fe0c0)",
   "spring easing (cubic-bezier(.2,1.5,.4,1))",
   "tooltip offset (bottom: calc(100% + 14px))",
-  "auto-cycle interval (1700ms)",
-  "button size (54px)"
+  "idle demo cadence (first pop after 400 ms, then alternates every 1700 ms)",
+  "button size (54px)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "reduced-motion guard (reduce var)",
   "visibilitychange pause (clearInterval)",
-  "IIFE-equivalent scoped vars",
-  "pointerenter/pointerleave listeners"
+  "IIFE wrapper",
+  "pointerenter/pointerleave listeners",
+  "hover takeover (hover flag: the demo never toggles under a real pointer)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Auto-cycles by default for demo — remove the setInterval loop before shipping in production",
+  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
   "Tooltip position is hardcoded above the button; may clip at top of viewport",
   "Button div lacks aria role and aria-label — add for production accessibility"
  ],
@@ -51,7 +71,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "tooltip",
@@ -74,17 +95,24 @@
 </div>
 <div class="cap">Tooltip</div>
 <script>
+(function(){
 const stage=document.getElementById('stage'),btn=document.getElementById('btn');
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 function show(){stage.classList.add('on');}
 function hide(){stage.classList.remove('on');}
-btn.addEventListener('pointerenter',show);
-btn.addEventListener('pointerleave',hide);
+// idle demo: the tip pops at 0.25 s, then alternates every 1.7 s; a real hover owns it while the pointer is there
+let timer=0,on=false,hover=false;
+function loop(){clearInterval(timer);timer=0;if(reduce){show();return;}
+  timer=setInterval(()=>{if(hover)return;on=!on;on?show():hide();},1700);}
+function first(){if(reduce||hover)return;on=true;show();loop();}
+btn.addEventListener('pointerenter',()=>{hover=true;show();});
+btn.addEventListener('pointerleave',()=>{hover=false;hide();on=false;loop();});
 btn.addEventListener('click',()=>{btn.animate([{transform:'scale(1)'},{transform:'scale(.88)'},{transform:'scale(1)'}],{duration:240});});
-let timer,on=false;
-function loop(){clearInterval(timer);if(reduce){show();return;}timer=setInterval(()=>{on=!on;on?show():hide();},1700);}
-document.addEventListener('visibilitychange',()=>{document.hidden?clearInterval(timer):loop();});
-loop();
+document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInterval(timer);timer=0;}else loop();});
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',(e)=>{const d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))document.documentElement.setAttribute('data-theme',d.theme);});
+if(reduce)show();else setTimeout(first,250);
+})();
 </script>
 </body>
 </html>

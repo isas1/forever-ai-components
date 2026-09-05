@@ -5,24 +5,40 @@
 <meta name="description" content="Gold crown and sunrise emblem breathes open over a slowly rotating ray halo and flanking shimmer sparks on black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Crown Motif</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. On ivory the ramp inverts: "gold-hi"
+     (sparks, accent peaks, gradient tops) goes darkest so the crown still reads. */
   :root{
     --ad12-bg:#0c0b08;
     --ad12-gold:#d4af37;
     --ad12-gold-hi:#f3e0a3;
     --ad12-gold-dim:#8a6f24;
     --ad12-emerald:#0f3a30;
+    --ad12-stage-a:#16130c; --ad12-glow:rgba(212,175,55,.35);
+    --ad12-cap:#fff; --ad12-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --ad12-bg:#f7f1e4; --ad12-gold:#87681a; --ad12-gold-hi:#6f5314;
+    --ad12-gold-dim:#9c7a24; --ad12-emerald:#d5e2d7;
+    --ad12-stage-a:#fbf7ec; --ad12-glow:rgba(122,92,20,.20);
+    --ad12-cap:#2a2110; --ad12-cap-o:.55;
   }
   html,body{margin:0;height:100%;background:var(--ad12-bg);overflow:hidden}
   .ad12-stage{
     position:fixed;inset:0;display:grid;place-items:center;
     background:
       radial-gradient(120% 90% at 50% 92%, var(--ad12-emerald) 0%, transparent 46%),
-      radial-gradient(80% 60% at 50% 30%, #16130c 0%, var(--ad12-bg) 70%);
+      radial-gradient(80% 60% at 50% 30%, var(--ad12-stage-a) 0%, var(--ad12-bg) 70%);
   }
   .ad12-svg{width:100%;height:100%;display:block}
   /* static glow — never repaints */
-  #ad12-rays,#ad12-fan,#ad12-orb{filter:drop-shadow(0 0 6px rgba(212,175,55,.35))}
+  #ad12-rays,#ad12-fan,#ad12-orb{filter:drop-shadow(0 0 6px var(--ad12-glow))}
 
   @keyframes ad12-breathe{
     0%,100%{transform:scale(.965)}
@@ -48,7 +64,7 @@
   #ad12-orb{transform-box:fill-box;transform-origin:50% 50%;animation:ad12-orbpulse 7s cubic-bezier(.45,0,.2,1) infinite}
   .ad12-spark{transform-box:fill-box;transform-origin:50% 100%;animation:ad12-shimmer 3.5s ease-in-out infinite}
 
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ad12-cap);opacity:var(--ad12-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
@@ -64,18 +80,20 @@
  "description": "Gold art-deco crown breathes open over a slow-spinning ray halo with alternating fan wedges and flanking shimmer sparks on black.",
  "useWhen": "Luxury brand hero backgrounds, title screens, dark-theme decorative headers needing regal ambient motion.",
  "avoidWhen": "Light backgrounds (hardcoded dark stage). Contexts requiring text overlays — crown fills center of frame.",
- "agentPrompt": "Change the gold accent to rose gold by setting --ad12-gold to #c9836a and --ad12-gold-hi to #f0c4b0, then slow the halo spin to 120s.",
+ "agentPrompt": "Change the gold accent to rose gold by setting --ad12-gold to #c9836a and --ad12-gold-hi to #f0c4b0, then slow the halo spin to 120s. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gold palette (--ad12-gold, --ad12-gold-hi, --ad12-gold-dim)",
   "halo spin speed (60s in ad12-spin)",
   "fan spoke count (M=15)",
   "ray count (N=48)",
-  "breathe scale range (.965 / 1.035)"
+  "breathe scale range (.965 / 1.035)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper with DocumentFragment batch inserts",
   "visibilitychange pause handler",
-  "prefers-reduced-motion guard"
+  "prefers-reduced-motion guard",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Ray group built in JS — blank if script fails",
@@ -88,7 +106,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-deco",
@@ -167,6 +186,10 @@
 (function(){
   "use strict";
   var NS="http://www.w3.org/2000/svg";
+  // live re-theme: every colour is a CSS token, so flipping the attribute repaints all of it
+  var root=document.documentElement;
+  addEventListener("message",function(e){ var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")) root.setAttribute("data-theme",d.theme); });
 
   // build rotating ray halo (fine gold linework radiating from base 200,300)
   var rays=document.getElementById("ad12-rays");

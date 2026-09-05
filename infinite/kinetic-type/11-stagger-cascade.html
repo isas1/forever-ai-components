@@ -5,11 +5,28 @@
 <meta name="description" content="Amber canvas glyphs drop in one by one with motion trails and spring squash on impact, then the settled word breathes and cycles.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stagger Cascade</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0d0b1a;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Canvas colours are read via syncTheme(). */
+  :root{
+    --c11-bg:#0d0b1a; --c11-ink:#f5b700;
+    --c11-glow:rgba(245,183,0,.55); --c11-glow-static:rgba(245,183,0,.5);
+    --c11-cap:#f5b700; --c11-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --c11-bg:#f6f1f7; --c11-ink:#8a6700;
+    --c11-glow:rgba(138,103,0,.25); --c11-glow-static:rgba(138,103,0,.22);
+    --c11-cap:#241b28; --c11-cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c11-bg);}
   #sc-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;right:10px;bottom:8px;font:600 10px/1.2 ui-monospace,monospace;
-       letter-spacing:.16em;color:#f5b700;opacity:.34;text-transform:uppercase;
+       letter-spacing:.16em;color:var(--c11-cap);opacity:var(--c11-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,20 +36,22 @@
  "description": "Amber glyphs drop one by one with motion trails and spring squash on impact; settled word breathes with a sine lift, then cycles to the next word.",
  "useWhen": "Hero word reveals, loading sequences, kinetic typography demos on dark backgrounds.",
  "avoidWhen": "Light-background UIs (background hardcoded dark navy). Long words — layout is centered and uses fixed font size relative to viewport.",
- "agentPrompt": "Change WORDS array to [\"HELLO\",\"WORLD\",\"CRAFT\"], set ACC to '#00eaff', and increase drop distance by changing drop=fs*2.2.",
+ "agentPrompt": "Change WORDS array to [\"HELLO\",\"WORLD\",\"CRAFT\"], set ACC to '#00eaff', and increase drop distance by changing drop=fs*2.2. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "WORDS array content",
   "ACC accent color (#f5b700)",
   "spring constants k=0.085 and damp=0.78",
   "drop travel distance (fs*1.6)",
   "breathing amplitude (fs*0.10)",
-  "font size floor (Math.max(34,...))"
+  "font size floor (Math.max(34,...))",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded #0d0b1a — must edit CSS and staticFrame fill to change",
@@ -46,7 +65,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -68,7 +88,15 @@
   const cv=document.getElementById('sc-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,fs;
-  const ACC='#f5b700';
+  const root=document.documentElement;
+  let ACC='#f5b700', BG='#0d0b1a', GLOW='rgba(245,183,0,.55)', GLOW_STATIC='rgba(245,183,0,.5)';
+  function syncTheme(){          // JS-drawn canvas colours read the tokens, so CSS stays the single source
+    const cs=getComputedStyle(root);
+    ACC=(cs.getPropertyValue('--c11-ink')||ACC).trim();
+    BG=(cs.getPropertyValue('--c11-bg')||BG).trim();
+    GLOW=(cs.getPropertyValue('--c11-glow')||GLOW).trim();
+    GLOW_STATIC=(cs.getPropertyValue('--c11-glow-static')||GLOW_STATIC).trim();
+  }
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
     W=cv.clientWidth;H=cv.clientHeight;
@@ -101,7 +129,7 @@
   // elastic settle: spring toward 0 from above
   function tick(){
     setFont();
-    ctx.fillStyle='#0d0b1a';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
 
     const cx=W/2, cy=H/2;
     const drop=fs*1.6;          // travel distance above baseline
@@ -156,7 +184,7 @@
       ctx.scale(sx,sy);
       ctx.textAlign='center';ctx.textBaseline='middle';
       // soft glow
-      ctx.shadowColor='rgba(245,183,0,0.55)';
+      ctx.shadowColor=GLOW;
       ctx.shadowBlur=fs*0.22;
       ctx.fillStyle=ACC;
       ctx.fillText(g.ch,0,0);
@@ -178,10 +206,10 @@
 
   function staticFrame(){
     setFont();
-    ctx.fillStyle='#0d0b1a';ctx.fillRect(0,0,W,H);
+    ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
     const cx=W/2,cy=H/2;
     ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.shadowColor='rgba(245,183,0,0.5)';ctx.shadowBlur=fs*0.2;ctx.fillStyle=ACC;
+    ctx.shadowColor=GLOW_STATIC;ctx.shadowBlur=fs*0.2;ctx.fillStyle=ACC;
     for(const g of glyphs) ctx.fillText(g.ch,cx+g.x,cy);
     ctx.shadowBlur=0;
     ctx.globalAlpha=0.10;ctx.strokeStyle=ACC;ctx.lineWidth=1;
@@ -193,6 +221,16 @@
   function start(){ if(!raf&&!reduce) raf=requestAnimationFrame(tick); }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d = e.data;
+    if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) {
+      root.setAttribute('data-theme', d.theme);
+      syncTheme();
+      if(reduce) staticFrame();   // no raf loop running to pick up the new colours on its own
+    }
+  });
+  syncTheme();
   if(reduce){ build(); staticFrame(); } else start();
 })();
 </script>

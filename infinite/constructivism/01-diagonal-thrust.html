@@ -5,11 +5,33 @@
 <meta name="description" content="Red and black arrow-tipped slabs sweep along an aggressive diagonal axis across black with a red disc and propaganda type bar.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Diagonal Thrust</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0c0d;overflow:hidden}
-  #cv01-stage{position:fixed;inset:0;background:#0c0c0d}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. Every colour the canvas
+     draws with is re-read from these tokens in syncTheme(). Light = red + black
+     ink on cream poster stock, the native Constructivist print ground. */
+  :root{
+    --c01-bg:#0c0c0d; --c01-red:#d11f1f; --c01-red2:#a3151a; --c01-black:#0c0c0d;
+    --c01-ink:#141416; --c01-paper:#ece6da; --c01-cream:#d8cfbc;
+    --c01-cap:#ffffff; --c01-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    /* light keeps each slab's RELATION to the ground: --black sat on the dark ground
+       (invisible) and --ink one step off it, so they stay ground-tinted here too;
+       --paper/--cream were the high-contrast slabs and flip to ink. */
+    --c01-bg:#f4efe4; --c01-red:#d11f1f; --c01-red2:#a3151a; --c01-black:#f4efe4;
+    --c01-ink:#e9e2d3; --c01-paper:#1b1a17; --c01-cream:#2b2721;
+    --c01-cap:#1b1a17; --c01-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--c01-bg);overflow:hidden}
+  #cv01-stage{position:fixed;inset:0;background:var(--c01-bg)}
   #cv01-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--c01-cap);opacity:var(--c01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +41,21 @@
  "description": "Red and black arrow-tipped slabs sweep along a -28° diagonal axis over a black field; a dark-red disc and a bold type bar anchor the composition.",
  "useWhen": "Hero backgrounds evoking bold graphic-design or avant-garde aesthetics. Dark-mode landing pages, art/design portfolio headers.",
  "avoidWhen": "Light-background UIs (background hardcoded near-black). Contexts requiring legible text overlays — slabs cross the full canvas.",
- "agentPrompt": "Change the diagonal angle from -28° to -45° by setting ANG = -45*Math.PI/180, and increase slab count to 8 by adding two new entries to the SLAB array.",
+ "agentPrompt": "Change the diagonal angle from -28° to -45° by setting ANG = -45*Math.PI/180, and increase slab count to 8 by adding two new entries to the SLAB array. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "diagonal axis angle (ANG = -28*Math.PI/180)",
   "slab definitions (SLAB array — offset, length, thickness, color, speed, phase)",
   "palette constants (RED, RED2, INK, PAPER, CREAM)",
   "disc position and size (-0.66 multiplier, 0.072*S radius)",
-  "type bar proportions (H*0.86, W*0.62)"
+  "type bar proportions (H*0.86, W*0.62)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "reduce / prefers-reduced-motion static-frame guard",
   "visibilitychange stop/start pattern",
-  "DPR-aware canvas sizing (cv.width = Math.round(W*dpr))"
+  "DPR-aware canvas sizing (cv.width = Math.round(W*dpr))",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background hardcoded to near-black (#0c0c0d) — must change CSS and BLACK constant together",
@@ -45,7 +69,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "constructivism",
@@ -72,19 +97,33 @@
   var cv = document.getElementById('cv01-c');
   var ctx = cv.getContext('2d');
   var W=0,H=0,S=0,dpr=1;
-  // Constructivist palette around #d11f1f / #0c0c0d
-  var RED='#d11f1f', RED2='#a3151a', BLACK='#0c0c0d', INK='#141416', PAPER='#ece6da', CREAM='#d8cfbc';
+  var root=document.documentElement;
+  // Constructivist palette — every colour comes from the theme tokens (see :root in <style>)
+  var C={}, KEYS=['bg','red','red2','black','ink','paper','cream'];
+  function syncTheme(){
+    var cs=getComputedStyle(root);
+    for(var k=0;k<KEYS.length;k++) C[KEYS[k]]=cs.getPropertyValue('--c01-'+KEYS[k]).trim();
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme', d.theme); syncTheme();
+      if(reduce) frame(0.42);            // static frame has to be repainted on switch
+    }
+  });
   var ANG = -28*Math.PI/180;        // shared aggressive diagonal axis
   var COS=Math.cos(ANG), SIN=Math.sin(ANG);
 
   // Slabs travel along the diagonal axis. Each: along-offset, perp-offset, length, thick, color, speed, phase.
+  // colour slot is a token key, not a literal — so a theme switch recolours in place
   var SLAB=[
-    [-1.30,-0.34,1.55,0.150,RED ,1.00,0.00],
-    [-1.55,-0.10,1.95,0.235,BLACK,0.74,0.18],
-    [-1.10, 0.12,1.30,0.120,RED2,1.34,0.42],
-    [-1.45, 0.30,1.70,0.190,INK ,0.90,0.62],
-    [-1.20,-0.50,1.05,0.085,PAPER,1.62,0.30],
-    [-1.60, 0.50,1.45,0.165,RED ,0.82,0.85]
+    [-1.30,-0.34,1.55,0.150,'red'  ,1.00,0.00],
+    [-1.55,-0.10,1.95,0.235,'black',0.74,0.18],
+    [-1.10, 0.12,1.30,0.120,'red2' ,1.34,0.42],
+    [-1.45, 0.30,1.70,0.190,'ink'  ,0.90,0.62],
+    [-1.20,-0.50,1.05,0.085,'paper',1.62,0.30],
+    [-1.60, 0.50,1.45,0.165,'red'  ,0.82,0.85]
   ];
   var N=SLAB.length;
 
@@ -127,14 +166,14 @@
 
   function frame(tsec){
     cx=W*0.5; cy=H*0.5; U=S;
-    ctx.fillStyle=BLACK;
+    ctx.fillStyle=C.bg;                 // canvas paints its own ground: read the token
     ctx.fillRect(0,0,W,H);
 
     // static perpendicular tension bar (cream) — never moves, anchors the diagonal
     ctx.save();
     ctx.translate(cx,cy);
     ctx.rotate(ANG+Math.PI/2);
-    ctx.fillStyle=CREAM;
+    ctx.fillStyle=C.cream;
     ctx.globalAlpha=0.92;
     ctx.fillRect(-0.012*U, -0.62*U, 0.024*U, 1.24*U);
     ctx.globalAlpha=1;
@@ -146,23 +185,23 @@
       var t=((tsec*s[5]+s[6])% 2.6)/2.6;     // 0..1 cyclic
       var a = s[0] + t*(2.85);                // sweep across the field
       var p = s[1];
-      var len=s[2], th=s[3], col=s[4];
+      var len=s[2], th=s[3], col=C[s[4]];
       slab(a,p,len,th,col);
       // accent tip only on red slabs
-      if(col===RED||col===RED2) tip(a,p,len,th,col);
+      if(s[4]==='red'||s[4]==='red2') tip(a,p,len,th,col);
     }
 
     // circle disc (Suprematist) anchored on the axis, static
     ctx.beginPath();
-    ctx.fillStyle=RED2;
+    ctx.fillStyle=C.red2;
     ctx.arc(cx + (-0.66)*S*COS, cy + (-0.66)*S*SIN, 0.072*S, 0, 6.2832);
     ctx.fill();
 
     // type slab: bold black band with a cream stripe lower-right, propaganda energy
     ctx.save();
-    ctx.fillStyle=INK;
+    ctx.fillStyle=C.ink;
     ctx.fillRect(W*0.0, H*0.86, W*0.62, H*0.14);
-    ctx.fillStyle=RED;
+    ctx.fillStyle=C.red;
     ctx.fillRect(W*0.0, H*0.86, W*0.62, H*0.018);
     ctx.restore();
   }
@@ -187,6 +226,7 @@
   }
 
   function init(){
+    syncTheme();
     resize();
     if(reduce){ frame(0.42); return; }   // one calm, legible, on-brand frame
     start();

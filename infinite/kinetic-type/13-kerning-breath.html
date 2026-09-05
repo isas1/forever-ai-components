@@ -5,27 +5,40 @@
 <meta name="description" content="Thin pink word BREATHE whose letter-spacing widens and tightens like a slow breath, hairlines glowing in the gaps from the center out.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kerning Breath</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1a1014;}
+  /* theme tokens — dark values are the defaults; light re-theme = the [data-theme="light"] block.
+     --kb-accent-rgb feeds the JS text-shadow (same colour as --kb-accent, comma triple for rgba()). */
+  :root{
+    --kb-bg:#1a1014; --kb-ink:#ffd9e2; --kb-accent:#ff7b9c; --kb-accent-rgb:255,123,156; --cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --kb-bg:#faf1f3; --kb-ink:#a80028; --kb-accent:#db0037; --kb-accent-rgb:219,0,55; --cap-o:.5;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--kb-bg);}
   .kb-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
        font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",sans-serif;}
   .kb-word{
     display:flex;white-space:nowrap;
     font-size:clamp(40px,17vw,150px);
     font-weight:200;
-    color:#ff7b9c;
+    color:var(--kb-accent);
     will-change:contents;
   }
   .kb-word .kb-g{
     display:inline-block;
-    color:#ffd9e2;
+    color:var(--kb-ink);
   }
   .kb-word .kb-sp{
     display:inline-block;
     position:relative;
   }
   .kb-cap{position:fixed;right:11px;bottom:9px;font-size:10px;letter-spacing:.22em;
-       color:#ff7b9c;opacity:.34;text-transform:uppercase;pointer-events:none;
+       color:var(--kb-accent);opacity:var(--cap-o);text-transform:uppercase;pointer-events:none;
        font-family:ui-monospace,"SFMono-Regular",monospace;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -35,19 +48,21 @@
  "description": "The word BREATHE expands and contracts letter-spacing in a slow 5.2-second breath cycle; hairline glows pulse in each gap, rippling outward from center.",
  "useWhen": "Meditation, wellness, or calm-brand hero sections. Ambient idle screens where slow organic motion sets tone.",
  "avoidWhen": "High-information layouts where subtle glow competes with content. Contexts needing static, legible display text.",
- "agentPrompt": "Change the word to 'INHALE', slow the breath to 8 seconds (period=8), and shift the glow color from #ff7b9c to #7bc8ff.",
+ "agentPrompt": "Change the word to 'INHALE', slow the breath to 8 seconds (period=8), and shift the glow color from #ff7b9c to #7bc8ff. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (word variable)",
   "breath period in seconds (period=5.2)",
   "gap range in em (MINGAP=0.02, MAXGAP=0.74)",
   "glow color (#ff7b9c)",
-  "ripple phase spread (0.34 multiplier)"
+  "ripple phase spread (0.34 multiplier)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause/resume",
-  "phase offset array for center-out ripple"
+  "phase offset array for center-out ripple",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Pointer nudge (push) adds abrupt gap expansion that may feel jarring in calm contexts",
@@ -60,7 +75,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "typography",
@@ -128,12 +144,25 @@
     paintLines();
   }
 
+  // JS-drawn colour: the hairline gradient and text-shadow are built from the
+  // --kb-accent(-rgb) tokens so they stay in sync with the CSS accent across themes.
+  var htmlEl=document.documentElement;
+  var C={accent:'#ff7b9c', accentRgb:'255,123,156'};
+  function lineBg(){ return 'linear-gradient(to bottom,transparent,'+C.accent+',transparent)'; }
+  function syncTheme(){
+    var cs=getComputedStyle(htmlEl);
+    C.accent = (cs.getPropertyValue('--kb-accent')||'#ff7b9c').trim();
+    C.accentRgb = (cs.getPropertyValue('--kb-accent-rgb')||'255,123,156').trim();
+    for(var i=0;i<lines.length;i++){ lines[i].style.background = lineBg(); } // rebuild cached gradient
+    lastPeak=-1; // force text-shadow rewrite on next frame
+  }
+
   // lightweight hairlines drawn as child nodes (one per gap)
   var lines=gaps.map(function(g){
     var L=document.createElement('span');
     L.style.cssText='position:absolute;top:50%;left:50%;width:1px;height:0.5em;'+
-      'transform:translate(-50%,-50%);background:linear-gradient(to bottom,'+
-      'transparent,#ff7b9c,transparent);opacity:0;pointer-events:none;';
+      'transform:translate(-50%,-50%);opacity:0;pointer-events:none;';
+    L.style.background=lineBg();
     g.appendChild(L); return L;
   });
   function paintLines(){
@@ -146,7 +175,7 @@
     var pk=Math.round(peak*40)/40;           // quantize -> skip identical shadow rewrites
     if(pk!==lastPeak){
       lastPeak=pk;
-      root.style.textShadow='0 0 '+(8+26*pk).toFixed(1)+'px rgba(255,123,156,'+(0.15+0.4*pk).toFixed(3)+')';
+      root.style.textShadow='0 0 '+(8+26*pk).toFixed(1)+'px rgba('+C.accentRgb+','+(0.15+0.4*pk).toFixed(3)+')';
     }
   }
   var lastPeak=-1;
@@ -167,6 +196,16 @@
   // pointer nudge: a sharp inhale
   document.addEventListener('pointermove',function(){ push=Math.min(push+0.15,1.4); });
   document.addEventListener('click',function(){ push=1.8; });
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d = e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
+      htmlEl.setAttribute('data-theme', d.theme);
+      syncTheme();
+      render();
+    }
+  });
+  syncTheme();
 
   if(reduce){ t=0.46; render(); } else { render(); start(); }
 })();

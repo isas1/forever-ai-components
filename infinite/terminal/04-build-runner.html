@@ -28,13 +28,15 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0a;color:#00ff41;
   "build step messages (steps array)",
   "per-phase interval timings (120/180/280ms)",
   "MAX visible lines (MAX=16)",
-  "terminal accent color (#00ff41)"
+  "terminal accent color (#00ff41)",
+  "line cadence (setInterval(tick, 440 ms); rerun after a ~1.3 s hold)"
  ],
  "preserveElements": [
   "visibilitychange stop/play guard",
   "prefers-reduced-motion instant-render path",
   "IIFE wrapper",
-  "while(running) loop with running flag"
+  "while(running) loop with running flag",
+  "pre-rolled prompt + tick loop (paused on visibilitychange)"
  ],
  "knownLimitations": [
   "Cursor CSS class defined but never injected into DOM during streaming",
@@ -61,111 +63,71 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0a;color:#00ff41;
 }
 </script>
 </head><body>
-<div class="trm-wrap" id="trm-wrap"></div>
-<div class="trm-cap">build runner</div>
+<div class="trm-wrap" id="trm-wrap" role="img" aria-label="Terminal running npm install and npm run build: packages resolve and install, then lint, compile and bundle steps stream in and finish successfully before the watcher picks up a file change."></div>
+<div class="trm-cap" aria-hidden="true">build runner</div>
 <script>(()=>{
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   const wrap=document.getElementById('trm-wrap');
-  const MAX=16;
+  if(!wrap)return;
+  const D='trm-dim',K='trm-ok',H='trm-hi',W='trm-warn';
+  // one entry = one emitted line: [text, class]. resolve -> fetch -> install -> build -> watch
+  const SCRIPT=[
+    ['$ npm install',H],['',''],
+    ['  resolving packages ...',D],
+    ['  fetched 127 manifests in 640ms',D],
+    ['  added chalk@5.3.0',D],
+    ['  added dotenv@16.4.5',D],
+    ['  added express@4.18.2',D],
+    ['  added nodemon@3.1.0',D],
+    ['  added ws@8.17.0',D],['',''],
+    ['  added 127 packages in 2.4s',K],['',''],
+    ['$ npm run build',H],['',''],
+    ['  [1/3] linting ...',D],
+    ['  [1/3] lint OK \u2014 0 errors (312ms)',K],
+    ['  [2/3] compiling src/index.ts ...',D],
+    ['  [2/3] compiled 42 modules (1.1s)',K],
+    ['  [3/3] bundling ...',D],
+    ['  [3/3] bundle 84.2 kB \u2192 dist/app.js',K],['',''],
+    ['  \u2713 Compiled successfully in 1.8s',K],['',''],
+    ['  watching for file changes...',D],
+    ['  change detected: src/server.ts',W]
+  ];
+  const caret=document.createElement('span');caret.className='trm-cursor';
 
+  let LH=22,MAX=10;
+  function fit(){                       // keep the newest line on screen: cap rows to what fits
+    LH=parseFloat(getComputedStyle(wrap).lineHeight)||22;
+    MAX=Math.max(4,Math.floor((wrap.clientHeight-24)/LH));
+    trim();
+  }
+  function trim(){while(wrap.children.length>MAX)wrap.removeChild(wrap.firstChild);}
   function line(txt,cls){
     const d=document.createElement('div');
     d.className='trm-line'+(cls?' '+cls:'');
     d.textContent=txt;
-    wrap.appendChild(d);
-    while(wrap.children.length>MAX)wrap.removeChild(wrap.firstChild);
+    wrap.appendChild(d);trim();
     return d;
   }
 
-  const phases=[
-    ()=>new Promise(res=>{
-      line('$ npm install','trm-hi');
-      line('','');
-      let dots=0;
-      const dotLine=line('  resolving packages .','trm-dim');
-      if(reduce){dotLine.textContent='  resolving packages ......';res();return;}
-      const iv=setInterval(()=>{
-        dots++;
-        dotLine.textContent='  resolving packages '+''.padStart(dots%8,'.')+' '.repeat(8-dots%8);
-        if(dots===16){clearInterval(iv);res();}
-      },180);
-    }),
-    ()=>new Promise(res=>{
-      const pkgs=['  added chalk@5.3.0','  added dotenv@16.4.5','  added express@4.18.2','  added nodemon@3.1.0','  added ws@8.17.0'];
-      let i=0;
-      if(reduce){pkgs.forEach(p=>line(p,'trm-dim'));res();return;}
-      const iv=setInterval(()=>{
-        if(i<pkgs.length){line(pkgs[i],'trm-dim');i++;}
-        else{clearInterval(iv);res();}
-      },120);
-    }),
-    ()=>new Promise(res=>{
-      line('','');
-      line('  added 127 packages in 2.4s','trm-ok');
-      line('','');
-      if(reduce){res();return;}
-      setTimeout(res,500);
-    }),
-    ()=>new Promise(res=>{
-      line('$ npm run build','trm-hi');
-      line('','');
-      if(reduce){res();return;}
-      setTimeout(res,300);
-    }),
-    ()=>new Promise(res=>{
-      const steps=[
-        {t:'  [1/3] linting ...',c:'trm-dim'},
-        {t:'  [1/3] lint OK','c':'trm-ok'},
-        {t:'  [2/3] compiling src/index.ts ...',c:'trm-dim'},
-        {t:'  [2/3] compiled 42 modules','c':'trm-ok'},
-        {t:'  [3/3] bundling ...',c:'trm-dim'},
-        {t:'  [3/3] bundle 84.2 kB → dist/app.js','c':'trm-ok'},
-      ];
-      let i=0;
-      if(reduce){steps.forEach(s=>line(s.t,s.c));res();return;}
-      const iv=setInterval(()=>{
-        if(i<steps.length){line(steps[i].t,steps[i].c);i++;}
-        else{clearInterval(iv);res();}
-      },280);
-    }),
-    ()=>new Promise(res=>{
-      line('','');
-      line('  ✓ Compiled successfully in 1.8s','trm-ok');
-      line('','');
-      if(reduce){res();return;}
-      setTimeout(res,600);
-    }),
-    ()=>new Promise(res=>{
-      line('  watching for file changes...','trm-dim');
-      if(reduce){res();return;}
-      setTimeout(res,2200);
-    }),
-    ()=>new Promise(res=>{
-      line('','');
-      line('  change detected: src/server.ts','trm-warn');
-      line('','');
-      if(reduce){res();return;}
-      setTimeout(res,400);
-    }),
-  ];
-
-  let running=true;
-  async function run(){
-    while(running){
-      wrap.innerHTML='';
-      for(const ph of phases){
-        if(!running)break;
-        await ph();
-      }
-      if(!running)break;
-      await new Promise(r=>setTimeout(r,reduce?100:800));
-    }
+  let i=0,hold=0,running=true;
+  function tick(){                      // one visible line per tick; blanks ride along with the next
+    if(!running)return;
+    if(hold){hold--;return;}
+    if(i>=SCRIPT.length){wrap.textContent='';i=0;}
+    let last;
+    do{last=line(SCRIPT[i][0],SCRIPT[i][1]);i++;}while(i<SCRIPT.length&&SCRIPT[i-1][0]==='');
+    last.appendChild(caret);
+    if(i>=SCRIPT.length)hold=3;         // hold the finished build ~1.3s, then rerun
   }
 
-  function stop(){running=false;}
-  function play(){running=true;run();}
-
-  document.addEventListener('visibilitychange',()=>document.hidden?stop():(running||(running=true,run())));
-  play();
+  fit();
+  addEventListener('resize',fit);
+  if(reduce){                           // static representative frame: a finished, successful build
+    SCRIPT.forEach(s=>line(s[0],s[1]));
+    return;
+  }
+  tick();tick();                        // pre-roll so the prompt is up before the first tick
+  document.addEventListener('visibilitychange',()=>{running=!document.hidden;});
+  setInterval(tick,440);
 })();</script>
 </body></html>

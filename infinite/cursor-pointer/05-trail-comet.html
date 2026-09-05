@@ -1,13 +1,28 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="A hot-cored pink comet springs after the pointer, dragging an additive tapering tail and flinging sparks, lengthening with speed.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Trail Comet</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults; light re-theme is the [data-theme="light"] block.
+   --ccp05-blend switches the additive glow to normal blending on a light page (avoids white-out). */
+:root{
+  --ccp05-bg:#0a0a0f; --ccp05-acc:#ff5ca8; --ccp05-hot:#ffd2eb; --ccp05-spark:#ffa0d2;
+  --ccp05-blend:lighter; --cap-o:.45;
+}
+:root[data-theme="light"]{
+  --ccp05-bg:#f2f2f6; --ccp05-acc:#d60064; --ccp05-spark:#ff339e;
+  --ccp05-blend:source-over; --cap-o:.55;
+}
 html,body{margin:0;height:100%;overflow:hidden}
-body{background:#0a0a0f;display:grid;place-items:center}
+body{background:var(--ccp05-bg);display:grid;place-items:center}
 .ccp05-stage{position:relative;width:100%;height:100%}
 #ccp05-c{display:block;width:100%;height:100%;cursor:none}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-  color:#ff5ca8;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  color:var(--ccp05-acc);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/cursor-pointer/05-trail-comet.html",
@@ -15,19 +30,21 @@ body{background:#0a0a0f;display:grid;place-items:center}
  "description": "Hot-pink comet spring-follows the cursor, dragging a tapering additive trail that lengthens with speed and flings spark particles. Idle: Lissajous demo loop.",
  "useWhen": "Dark-background hero sections, creative portfolios, cursor-effect showcases where a premium tactile feel is needed.",
  "avoidWhen": "Light backgrounds (hardcoded dark fill). Forms or text-heavy layouts where a custom cursor competes with reading.",
- "agentPrompt": "Change comet color to cyan: replace all 'rgba(255,92,168,...)' with 'rgba(0,234,255,...)' and update the hot-core stop from rgba(255,210,235,...) to rgba(200,255,255,...).",
+ "agentPrompt": "Change comet color to cyan: replace all 'rgba(255,92,168,...)' with 'rgba(0,234,255,...)' and update the hot-core stop from rgba(255,210,235,...) to rgba(200,255,255,...). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "comet color (rgba(255,92,168,...))",
   "trail max length (MAX=110)",
   "spring stiffness (k=0.22 real / 0.14 demo)",
   "trail taper width multiplier (5.2)",
-  "speed-to-length scale factor (sp*4.2)"
+  "speed-to-length scale factor (sp*4.2)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing + setTransform",
   "visibilitychange pause/resume",
   "reduced-motion still() fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background hardcoded to #0a0a0f — change both CSS and ctx.fillStyle to use on light pages",
@@ -39,7 +56,8 @@ body{background:#0a0a0f;display:grid;place-items:center}
   "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "comet",
@@ -58,11 +76,34 @@ body{background:#0a0a0f;display:grid;place-items:center}
 <script>(function(){
 var cv=document.getElementById('ccp05-c'),ctx=cv.getContext('2d');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var root=document.documentElement;
 var W=0,H=0,DPR=1,raf=0,running=true,t=0;
 // pointer state: pos = real/target, head = spring-followed comet head
 var px=0,py=0,hx=0,hy=0,vx=0,vy=0;
 var real=false,lastMove=0;
 var MAX=110,trail=[];           // ring of {x,y} samples, head-first
+
+// colours JS draws with — read from tokens, re-read + invalidated on theme switch
+var C={};
+function hex2rgb(h){h=h.replace('#','');var n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255];}
+function syncTheme(){
+  var cs=getComputedStyle(root);
+  C.bg=cs.getPropertyValue('--ccp05-bg').trim();
+  C.accRgb=hex2rgb(cs.getPropertyValue('--ccp05-acc').trim());
+  C.hotRgb=hex2rgb(cs.getPropertyValue('--ccp05-hot').trim());
+  C.sparkRgb=hex2rgb(cs.getPropertyValue('--ccp05-spark').trim());
+  C.blend=cs.getPropertyValue('--ccp05-blend').trim()||'lighter';
+}
+// live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+addEventListener('message',function(e){
+  var d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme);syncTheme();
+    if(reduce)still();     // no rAF loop in reduced motion — force a recolor
+  }
+});
+syncTheme();
+
 function resize(){
   DPR=Math.min(2,window.devicePixelRatio||1);
   W=cv.clientWidth;H=cv.clientHeight;
@@ -99,9 +140,9 @@ function step(){
 }
 function draw(sp){
   ctx.clearRect(0,0,W,H);
-  ctx.fillStyle='#0a0a0f';ctx.fillRect(0,0,W,H);
+  ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
   var n=trail.length;if(!n)return;
-  ctx.globalCompositeOperation='lighter';
+  ctx.globalCompositeOperation=C.blend;
   // trail: additive tapering ribbon, fading from head to tail
   for(var i=n-1;i>=1;i--){
     var p=trail[i],q=trail[i-1];
@@ -109,7 +150,7 @@ function draw(sp){
     var w=f*f*5.2+0.4;           // taper
     var al=f*f*0.6;
     ctx.lineWidth=w;ctx.lineCap='round';
-    ctx.strokeStyle='rgba(255,92,168,'+al.toFixed(3)+')';
+    ctx.strokeStyle='rgba('+C.accRgb+','+al.toFixed(3)+')';
     ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
   }
   // sparse spark particles flung off the head, denser when fast
@@ -117,7 +158,7 @@ function draw(sp){
     var pp=trail[j],ff=1-j/n;
     var ang=j*2.4+t*3, rr=(1-ff)*8*(0.4+sp*0.05);
     var a2=ff*0.5;
-    ctx.fillStyle='rgba(255,160,210,'+a2.toFixed(3)+')';
+    ctx.fillStyle='rgba('+C.sparkRgb+','+a2.toFixed(3)+')';
     ctx.beginPath();
     ctx.arc(pp.x+Math.cos(ang)*rr,pp.y+Math.sin(ang)*rr,ff*1.3+0.3,0,6.283);
     ctx.fill();
@@ -125,9 +166,9 @@ function draw(sp){
   // comet head: layered glow with a hot white core
   var hd=trail[0],gx=hd.x,gy=hd.y;
   var glow=ctx.createRadialGradient(gx,gy,0,gx,gy,20+sp*1.6);
-  glow.addColorStop(0,'rgba(255,210,235,0.95)');
-  glow.addColorStop(0.25,'rgba(255,92,168,0.85)');
-  glow.addColorStop(1,'rgba(255,92,168,0)');
+  glow.addColorStop(0,'rgba('+C.hotRgb+',0.95)');
+  glow.addColorStop(0.25,'rgba('+C.accRgb+',0.85)');
+  glow.addColorStop(1,'rgba('+C.accRgb+',0)');
   ctx.fillStyle=glow;
   ctx.beginPath();ctx.arc(gx,gy,20+sp*1.6,0,6.283);ctx.fill();
   ctx.fillStyle='rgba(255,255,255,0.95)';

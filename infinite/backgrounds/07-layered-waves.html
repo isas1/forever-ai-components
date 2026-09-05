@@ -8,32 +8,51 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block. Wave fills moved
+   from SVG fill="" attributes into CSS so both themes read one source. */
 :root{
-  --bg-700:#12141d;
-  --text-2:#8a91a8;
+  --bg-900:#08090d;
+  --bg-700:#12141d; --sky-mid:#11192b; --sky-low:#0c1422;
+  --wave-1:#7c5cff; --wave-2:#22d3ee; --wave-3:#181b27;
+  --text-2:#8a91a8; --cap-o:.7;
   --font-display:"Space Grotesk",system-ui,sans-serif;
   --ease-linear:linear;
 }
+:root[data-theme="light"]{
+  --bg-900:#eef3fa;
+  --bg-700:#eaf1fa; --sky-mid:#dce9f7; --sky-low:#cbdff3;
+  --wave-1:#6a4fd0; --wave-2:#0a7686; --wave-3:#3a5a7a;
+  --text-2:#33414f; --cap-o:.62;
+}
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;overflow:hidden;}
-body{background:#08090d;}
+body{background:var(--bg-900);}
 .frame{position:absolute;inset:0;display:grid;place-items:center;}
-.stage{position:relative;width:100%;height:100%;overflow:hidden;background:#08090d;}
+.stage{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-900);}
 
 .c07-wave{position:absolute;inset:0;overflow:hidden;}
 .c07-wave__sky{position:absolute;inset:0;
-  background:linear-gradient(180deg,var(--bg-700) 0%,#11192b 60%,#0c1422 100%);}
+  background:linear-gradient(180deg,var(--bg-700) 0%,var(--sky-mid) 60%,var(--sky-low) 100%);}
 .c07-wave svg{position:absolute;left:0;bottom:0;width:200%;height:100%;}
 .c07-wave__layer{will-change:transform;}
 .c07-wave__layer--1{animation:c07-wave-slide 11s var(--ease-linear) infinite;opacity:.45;}
 .c07-wave__layer--2{animation:c07-wave-slide 7.5s var(--ease-linear) infinite;opacity:.65;}
 .c07-wave__layer--3{animation:c07-wave-slide 5s var(--ease-linear) infinite;opacity:.9;}
+.c07-wave__layer--1 path{fill:var(--wave-1);}
+.c07-wave__layer--2 path{fill:var(--wave-2);}
+.c07-wave__layer--3 path{fill:var(--wave-3);}
 @keyframes c07-wave-slide{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
 
 .caption{position:absolute;left:12px;bottom:10px;z-index:5;
   font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-2);opacity:.7;pointer-events:none;}
+  text-transform:uppercase;color:var(--text-2);opacity:var(--cap-o);pointer-events:none;}
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;}
@@ -46,19 +65,21 @@ body{background:#08090d;}
  "description": "Three SVG wave layers in iris, cyan, and dark slide horizontally at different speeds over a deep blue-gradient sky, creating a parallax depth effect.",
  "useWhen": "Dark-mode hero backgrounds, landing pages, ocean or depth-themed sections needing calm ambient motion.",
  "avoidWhen": "Light-background layouts (sky hardcoded dark navy). Contexts where text legibility is critical over the wave area.",
- "agentPrompt": "Change the foreground wave color from cyan (#22d3ee) to coral (#ff6b6b) and slow the fastest layer from 5s to 8s animation duration.",
+ "agentPrompt": "Change the foreground wave color from cyan (#22d3ee) to coral (#ff6b6b) and slow the fastest layer from 5s to 8s animation duration. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "wave colors (fill attributes on each path)",
   "animation durations (11s, 7.5s, 5s per layer)",
   "layer opacity values (.45, .65, .90)",
   "sky gradient colors (--bg-700 and stops)",
-  "wave height/shape (SVG path d attribute)"
+  "wave height/shape (SVG path d attribute)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange pause (animationPlayState toggle)",
   "IIFE wrapper",
   "prefers-reduced-motion guard",
-  "200%-width SVG with seamless -50% translateX loop"
+  "200%-width SVG with seamless -50% translateX loop",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background sky color hardcoded in CSS — must edit both .c07-wave__sky and body to change theme",
@@ -71,7 +92,8 @@ body{background:#08090d;}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "waves",
@@ -91,15 +113,15 @@ body{background:#08090d;}
     <div class="c07-wave" aria-hidden="true">
       <div class="c07-wave__sky"></div>
       <svg class="c07-wave__layer c07-wave__layer--1" viewBox="0 0 1440 320" preserveAspectRatio="none">
-        <path fill="#7c5cff" d="M0,160 C180,210 360,90 720,150 C1080,210 1260,110 1440,160 L1440,320 L0,320 Z
+        <path d="M0,160 C180,210 360,90 720,150 C1080,210 1260,110 1440,160 L1440,320 L0,320 Z
                                  M1440,160 C1620,210 1800,90 2160,150 C2520,210 2700,110 2880,160 L2880,320 L1440,320 Z"/>
       </svg>
       <svg class="c07-wave__layer c07-wave__layer--2" viewBox="0 0 1440 320" preserveAspectRatio="none">
-        <path fill="#22d3ee" d="M0,200 C200,150 400,250 720,200 C1040,150 1240,250 1440,200 L1440,320 L0,320 Z
+        <path d="M0,200 C200,150 400,250 720,200 C1040,150 1240,250 1440,200 L1440,320 L0,320 Z
                                  M1440,200 C1640,150 1840,250 2160,200 C2480,150 2680,250 2880,200 L2880,320 L1440,320 Z"/>
       </svg>
       <svg class="c07-wave__layer c07-wave__layer--3" viewBox="0 0 1440 320" preserveAspectRatio="none">
-        <path fill="#181b27" d="M0,250 C220,290 420,210 720,250 C1020,290 1220,210 1440,250 L1440,320 L0,320 Z
+        <path d="M0,250 C220,290 420,210 720,250 C1020,290 1220,210 1440,250 L1440,320 L0,320 Z
                                  M1440,250 C1660,290 1860,210 2160,250 C2460,290 2660,210 2880,250 L2880,320 L1440,320 Z"/>
       </svg>
     </div>
@@ -109,6 +131,12 @@ body{background:#08090d;}
 <script>
 (function(){
   "use strict";
+  // live re-theme: every colour is a CSS token, so flipping the attribute is the whole switch.
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))
+      document.documentElement.setAttribute("data-theme",d.theme);
+  });
   document.addEventListener("visibilitychange",function(){
     var l=document.querySelectorAll(".c07-wave__layer");
     var s=document.hidden?"paused":"running";

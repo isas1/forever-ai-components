@@ -2,11 +2,19 @@
 <meta name="description" content="Ukiyo-e woodblock scene of cranes gliding across flat indigo color bands beneath a coral sun and snow-capped cone.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Crane Glide</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0f1822;overflow:hidden}
+  /* theme tokens: dark defaults, light = the washi-paper re-print */
+  :root{--uk03-bg:#0f1822;--uk03-ink:#13202e;--uk03-band1:#1f3a5f;--uk03-band2:#2e5d86;--uk03-band3:#3f7d8c;--uk03-band4:#e8d5b0;--uk03-snow:#e8d5b0;--uk03-wing:#cdb98f;--uk03-wave:#1f3a5f;--uk03-coral:#d2603a;--uk03-rose:#c9748a;--uk03-sun:#e0a24a;--uk03-cap:#fff;--uk03-cap-o:.42}
+  :root[data-theme="light"]{--uk03-bg:#f6efe1;--uk03-ink:#22405f;--uk03-band1:#cfe1ee;--uk03-band2:#b4d2e6;--uk03-band3:#a6cdcd;--uk03-band4:#f4e8cf;--uk03-snow:#fffdf6;--uk03-wing:#e2d8c2;--uk03-wave:#2e5d86;--uk03-coral:#b54c29;--uk03-rose:#b05a70;--uk03-sun:#c98a2a;--uk03-cap:#22405f;--uk03-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--uk03-bg);overflow:hidden}
   #uk03-stage{position:fixed;inset:0}
   #uk03-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--uk03-cap);opacity:var(--uk03-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style><script type="application/json" id="forever-agent-meta">
 {
@@ -15,19 +23,21 @@
  "description": "7 cranes with flapping wings glide across flat indigo/teal bands past a coral sun and Mt. Fuji silhouette, with scrolling wave crests.",
  "useWhen": "Japanese-themed hero backgrounds, cultural art exhibits, ambient screensavers, or any dark-mode layout wanting serene generative motion.",
  "avoidWhen": "Light-background UIs (background hardcoded dark navy). Contexts where legible text overlays are needed over the animated area.",
- "agentPrompt": "Change crane count to 10 by setting N=10, shift the sun color to gold by replacing CORAL with '#e0c040' in the sun arc fillStyle, and slow wing flap by changing t*7 to t*4 in the frame loop.",
+ "agentPrompt": "Change crane count to 10 by setting N=10, shift the sun color to gold by replacing CORAL with '#e0c040' in the sun arc fillStyle, and slow wing flap by changing t*7 to t*4 in the frame loop. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "crane count (N=7)",
   "flight speed range (sp[i] = 0.018 + random*0.03)",
   "band colors (INDIGO1, INDIGO2, TEAL, CREAM)",
   "sun position and size (W*0.26, H*0.18, min*0.11)",
-  "wing flap rate (t*7)"
+  "wing flap rate (t*7)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and ctx.setTransform",
   "visibilitychange pause/start guard",
   "prefers-reduced-motion static fallback branch",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#0f1822) — must edit to change dark background",
@@ -40,7 +50,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "ukiyo-e",
@@ -66,19 +77,31 @@
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var W=0,H=0,DPR=1,running=false,raf=0,t0=0;
 
-  // Ukiyo-e palette
-  var INK="#13202e",INDIGO1="#1f3a5f",INDIGO2="#2e5d86",TEAL="#3f7d8c",
-      CREAM="#e8d5b0",CORAL="#d2603a",ROSE="#c9748a",SUN="#e0a24a",PAPER="#0f1822";
+  // Ukiyo-e palette — read from the CSS tokens, re-read on a theme switch
+  var root=document.documentElement, INK,INDIGO1,INDIGO2,TEAL,CREAM,CORAL,ROSE,SUN,PAPER,WAVE,SNOW,WING;
   // Crane body fill (hoisted: avoid per-frame array allocation in crane())
-  var CRANE_BODY=CREAM;
+  var CRANE_BODY;
 
-  // Horizontal color bands (ratios of H), flat planes
+  // Horizontal color bands (ratios of H), flat planes; col refreshed by syncTheme()
   var bands=[
-    {y0:0.00,y1:0.30,col:INDIGO1},
-    {y0:0.30,y1:0.46,col:INDIGO2},
-    {y0:0.46,y1:0.62,col:TEAL},
-    {y0:0.62,y1:1.00,col:CREAM}
+    {y0:0.00,y1:0.30,col:""},
+    {y0:0.30,y1:0.46,col:""},
+    {y0:0.46,y1:0.62,col:""},
+    {y0:0.62,y1:1.00,col:""}
   ];
+
+  function syncTheme(){
+    var cs=getComputedStyle(root), v=function(n){return cs.getPropertyValue(n).trim();};
+    INK=v("--uk03-ink"); INDIGO1=v("--uk03-band1"); INDIGO2=v("--uk03-band2"); TEAL=v("--uk03-band3");
+    CREAM=v("--uk03-band4"); CORAL=v("--uk03-coral"); ROSE=v("--uk03-rose"); SUN=v("--uk03-sun");
+    PAPER=v("--uk03-bg"); WAVE=v("--uk03-wave"); SNOW=v("--uk03-snow"); WING=v("--uk03-wing");
+    CRANE_BODY=SNOW;                                   // invalidate the hoisted body fill
+    bands[0].col=INDIGO1; bands[1].col=INDIGO2; bands[2].col=TEAL; bands[3].col=CREAM;
+  }
+  syncTheme();
+  addEventListener("message",function(e){ var d=e.data; // live re-theme from the canvas
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){ root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce){ drawScene(0); drawCranesStatic(); } }
+  });
 
   // Cranes: typed flight params (cap well under 110)
   var N=7, cx=new Float32Array(N),cy=new Float32Array(N),sp=new Float32Array(N),
@@ -120,7 +143,7 @@
     var px=W*0.70,base=H*0.62,half=Math.min(W,H)*0.42,peak=base-Math.min(W,H)*0.40;
     ctx.fillStyle=INK;
     ctx.beginPath();ctx.moveTo(px-half,base);ctx.lineTo(px,peak);ctx.lineTo(px+half,base);ctx.closePath();ctx.fill();
-    ctx.fillStyle=CREAM;
+    ctx.fillStyle=SNOW;
     var capw=half*0.22;
     ctx.beginPath();ctx.moveTo(px-capw,peak+(base-peak)*0.18);
     ctx.lineTo(px,peak);ctx.lineTo(px+capw,peak+(base-peak)*0.18);
@@ -129,7 +152,7 @@
 
     // stylised wave crests on cream foreground (static curl line motif)
     var fy=H*0.78;
-    ctx.strokeStyle=INDIGO1;ctx.lineWidth=Math.max(1.5,H*0.006);ctx.lineCap="round";
+    ctx.strokeStyle=WAVE;ctx.lineWidth=Math.max(1.5,H*0.006);ctx.lineCap="round";
     var n=Math.ceil(W/70)+1;
     for(var i=0;i<n;i++){
       var x=i*70 - ((t*16)%70);
@@ -170,7 +193,7 @@
     // wings — animated by flap, drawn as two flat planes
     var up=Math.sin(flap), wy=-18*up-2;
     // far wing
-    ctx.fillStyle="#cdb98f";ctx.strokeStyle=bw;ctx.lineWidth=2;
+    ctx.fillStyle=WING;ctx.strokeStyle=bw;ctx.lineWidth=2;
     ctx.beginPath();ctx.moveTo(-6,0);
     ctx.quadraticCurveTo(-2,wy*0.7,18,wy);
     ctx.quadraticCurveTo(6,wy*0.45+4,-6,4);ctx.closePath();ctx.fill();ctx.stroke();

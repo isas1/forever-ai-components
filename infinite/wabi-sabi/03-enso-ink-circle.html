@@ -4,8 +4,28 @@
 <meta charset="utf-8">
 <meta name="description" content="Enso Ink Circle — Wabi-Sabi. A self-contained, zero-dependency animated web component.">
 <title>Enso Ink Circle</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
+/* theme tokens — dark values are the defaults; light = unbleached paper with muted
+   tea/ash ink, the same brush geometry either way. */
+:root{
+  --en-bg:#1c1510;--en-p0:#d4c5a9;--en-p1:#bfb090;--en-p2:#a09070;
+  --en-i0:#0e0b08;--en-i1:#1a1510;--en-i2:#2c1810;--en-i3:#3a2518;
+  --en-glow:rgba(80,55,35,0.5);--en-bleed:#b8a888;--en-cap:#4a5240;--en-cap-o:.4;
+}
+:root[data-theme="light"]{
+  --en-bg:#f2ece0;--en-p0:#fbf6ea;--en-p1:#f3ead8;--en-p2:#e5d9c1;
+  --en-i0:#3a352c;--en-i1:#443c31;--en-i2:#514334;--en-i3:#5f4e3a;
+  --en-glow:rgba(120,104,74,0.42);--en-bleed:#cdbf9e;--en-cap:#3f4636;--en-cap-o:.75;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--en-bg)}
+.ep0{stop-color:var(--en-p0)}.ep1{stop-color:var(--en-p1)}.ep2{stop-color:var(--en-p2)}
+.ei0{stop-color:var(--en-i0)}.ei1{stop-color:var(--en-i1)}.ei2{stop-color:var(--en-i2)}.ei3{stop-color:var(--en-i3)}
+.en-bleed{fill:var(--en-bleed)}
 .en-wrap{position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 .en-svg{width:min(88vmin,340px);height:min(88vmin,340px)}
 .en-paper{fill:url(#en-paper-grad);filter:url(#en-grain)}
@@ -23,7 +43,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
 /* Secondary glow stroke that pulses — clearly visible */
 .en-glow{
   fill:none;
-  stroke:rgba(80,55,35,0.5);
+  stroke:var(--en-glow);
   stroke-width:28;
   stroke-linecap:round;
   stroke-dasharray:550;
@@ -31,7 +51,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
   animation:en-glow-pulse 1.8s ease-in-out infinite;
 }
 .en-drip{
-  fill:#0e0b08;
+  fill:var(--en-i0);
   animation:en-drip-fall 8s ease-in-out infinite;
 }
 .en-drip:nth-child(2){animation-delay:4s;animation-duration:7s}
@@ -52,7 +72,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
   65%{opacity:0}
   100%{opacity:0;transform:translateY(14px)}
 }
-.en-caption{position:fixed;left:8px;bottom:7px;font:11px/1 monospace;color:#4a5240;opacity:0.4;pointer-events:none}
+.en-caption{position:fixed;left:8px;bottom:7px;font:11px/1 monospace;color:var(--en-cap);opacity:var(--en-cap-o);pointer-events:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -61,22 +81,24 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
  "description": "An enso circle draws and erases itself in a continuous loop over washi paper texture; stroke width breathes via rAF sine wave and a glow halo pulses behind.",
  "useWhen": "Zen, mindfulness, or Japanese aesthetic contexts. Ambient hero backgrounds or loading screens needing calm, contemplative motion.",
  "avoidWhen": "Bright or colorful UIs — palette is hardcoded dark ink on warm parchment. Contexts where looping draw animation feels restless rather than meditative.",
- "agentPrompt": "Change stroke color to indigo by replacing the en-ink-grad stops with #1a0a3c and #3b1f6e, and slow the draw cycle to 5s by editing the en-draw-loop animation-duration.",
+ "agentPrompt": "Change stroke color to indigo by replacing the en-ink-grad stops with #1a0a3c and #3b1f6e, and slow the draw cycle to 5s by editing the en-draw-loop animation-duration. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "draw loop speed (3s in .en-stroke animation)",
   "stroke width breathe range (18 ± 3 in tick())",
   "ink gradient colors (en-ink-grad stops)",
   "paper background color (#1c1510 body + radialGradient stops)",
-  "glow pulse opacity (0.15–0.45 in en-glow-pulse)"
+  "glow pulse opacity (0.15–0.45 in en-glow-pulse)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (sets dashoffset 0, cancels animation)",
-  "visibilitychange pause in rAF loop"
+  "visibilitychange pause in rAF loop",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "stroke-dasharray hardcoded to 550 — must be recalculated if path geometry changes",
-  "Background and paper colors hardcoded; adapting to light themes requires edits in multiple places"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -85,7 +107,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "enso",
@@ -104,15 +127,15 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
   <svg class="en-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <radialGradient id="en-paper-grad" cx="50%" cy="48%" r="70%">
-        <stop offset="0%" stop-color="#d4c5a9"/>
-        <stop offset="60%" stop-color="#bfb090"/>
-        <stop offset="100%" stop-color="#a09070"/>
+        <stop class="ep0" offset="0%"/>
+        <stop class="ep1" offset="60%"/>
+        <stop class="ep2" offset="100%"/>
       </radialGradient>
       <linearGradient id="en-ink-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stop-color="#0e0b08"/>
-        <stop offset="30%" stop-color="#1a1510"/>
-        <stop offset="65%" stop-color="#2c1810"/>
-        <stop offset="100%" stop-color="#3a2518"/>
+        <stop class="ei0" offset="0%"/>
+        <stop class="ei1" offset="30%"/>
+        <stop class="ei2" offset="65%"/>
+        <stop class="ei3" offset="100%"/>
       </linearGradient>
       <filter id="en-grain">
         <feTurbulence type="fractalNoise" baseFrequency="0.72" numOctaves="4" stitchTiles="stitch" result="n"/>
@@ -132,8 +155,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
     <rect class="en-paper" x="5" y="8" width="190" height="186" rx="3" transform="rotate(-1.5 100 100)"/>
 
     <!-- ink bleed at edges -->
-    <ellipse fill="#b8a888" opacity="0.2" cx="28" cy="172" rx="18" ry="8" transform="rotate(-20 28 172)"/>
-    <ellipse fill="#b8a888" opacity="0.15" cx="175" cy="35" rx="12" ry="5" transform="rotate(10 175 35)"/>
+    <ellipse class="en-bleed" opacity="0.2" cx="28" cy="172" rx="18" ry="8" transform="rotate(-20 28 172)"/>
+    <ellipse class="en-bleed" opacity="0.15" cx="175" cy="35" rx="12" ry="5" transform="rotate(10 175 35)"/>
 
     <!-- glow halo behind stroke — pulses independently -->
     <path class="en-glow"
@@ -158,6 +181,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:#1c1510}
 <div class="en-caption">enso / 円相</div>
 <script>
 (()=>{
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // Every colour is a CSS token, so re-setting the attribute is the whole switch.
+  addEventListener('message',e=>{
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
+      document.documentElement.setAttribute('data-theme',d.theme);
+  });
   const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
   if(reduce){
     const s = document.querySelector('.en-stroke');

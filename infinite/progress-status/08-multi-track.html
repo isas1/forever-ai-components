@@ -5,6 +5,11 @@
 <meta name="description" content="Four labeled multicolor progress bars (ingest, transcode, index, publish) filling at staggered rates with a live N/4 complete counter.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Multi-Track</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
     --pg08-bg:#0b0d12;
@@ -16,6 +21,23 @@
     --pg08-track:#171b26;
     --pg08-ink:#eef0f7;
     --pg08-mute:#6f768c;
+    --pg08-track-inset:rgba(255,255,255,.045);
+    --pg08-tick:rgba(11,13,18,.85);
+    --pg08-cap:#fff; --pg08-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --pg08-bg:#f2f4f8;
+    --pg08-accent:#925d78;
+    --pg08-c1:#925d78;
+    --pg08-c2:#5a7472;
+    --pg08-c3:#756c63;
+    --pg08-c4:#8f6178;
+    --pg08-track:#e2e5ee;
+    --pg08-ink:#1b2130;
+    --pg08-mute:#686f83;
+    --pg08-track-inset:rgba(0,0,0,.08);
+    --pg08-tick:rgba(0,0,0,.35);
+    --pg08-cap:#1b2130; --pg08-cap-o:.5;
   }
   *{margin:0;box-sizing:border-box}
   html,body{height:100%}
@@ -58,7 +80,7 @@
   .pg08-bar{
     grid-column:1 / -1; position:relative; height:clamp(7px,2vmin,11px);
     border-radius:999px; background:var(--pg08-track);
-    box-shadow:inset 0 0 0 1px rgba(255,255,255,.045);
+    box-shadow:inset 0 0 0 1px var(--pg08-track-inset);
     overflow:hidden;
   }
   .pg08-fill{
@@ -72,10 +94,10 @@
   .pg08-bar::after{
     content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
     background:repeating-linear-gradient(90deg,transparent 0,transparent calc(25% - 1px),
-      rgba(11,13,18,.85) calc(25% - 1px),rgba(11,13,18,.85) 25%);
+      var(--pg08-tick) calc(25% - 1px),var(--pg08-tick) 25%);
   }
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--pg08-cap);opacity:var(--pg08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -85,20 +107,22 @@
  "description": "Four color-coded bars (ingest, transcode, index, publish) fill at staggered ease-out rates with a live N/4 complete counter; auto-resets after all finish.",
  "useWhen": "Pipeline dashboards, multi-step upload flows, build status displays, any context showing parallel async tasks completing at different rates.",
  "avoidWhen": "Single-task progress scenarios or production use — the auto-cycle loop must be replaced with real data binding before shipping.",
- "agentPrompt": "Add a fifth track named 'DEPLOY' with color var(--pg08-c1), rate 0.090, and t0 of 0.70 to TRACKS array, then update the '/4 complete' label to '/5 complete'.",
+ "agentPrompt": "Add a fifth track named 'DEPLOY' with color var(--pg08-c1), rate 0.090, and t0 of 0.70 to TRACKS array, then update the '/4 complete' label to '/5 complete'. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "track names and colors (TRACKS[i].n / .c)",
   "fill rates per track (TRACKS[i].rate)",
   "start stagger offsets (TRACKS[i].t0)",
   "hold duration after completion (HOLD = 1.6)",
   "bar height (clamp(7px,2vmin,11px))",
-  "tick-mark divisions (25% repeating-linear-gradient)"
+  "tick-mark divisions (25% repeating-linear-gradient)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "visibilitychange pause/resume guard",
   "prefers-reduced-motion static snapshot branch",
-  "aria-progressbar roles and aria-valuenow updates"
+  "aria-progressbar roles and aria-valuenow updates",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Auto-cycles indefinitely — replace rAF loop with external data binding for real production use",
@@ -111,7 +135,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "progress",
@@ -141,6 +166,11 @@
 (function(){
   "use strict";
   var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener('message', function(e){
+    var d=e.data; if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
   var rows = document.getElementById('pg08-rows');
   var totEl = document.getElementById('pg08-tot');
 

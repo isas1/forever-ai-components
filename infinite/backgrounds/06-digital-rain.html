@@ -8,11 +8,27 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+/* theme tokens — dark values are the defaults (solid-dark-bg contract);
+   the light re-theme is the [data-theme="light"] block. --rain-* feed the canvas:
+   the trail wash is the page colour at low alpha, so it must switch with the theme. */
 :root{
   --bg-900:#08090d;
-  --text-2:#8a91a8;
+  --text-2:#8a91a8; --cap-o:.7;
+  --rain-trail:rgba(8,9,13,0.18); --rain-glyph:#22d3ee; --rain-lead:#aef6ff;
+  --rain-still-bg:#0d0f16; --rain-still-ink:rgba(34,211,238,0.55);
   --font-display:"Space Grotesk",system-ui,sans-serif;
+}
+:root[data-theme="light"]{
+  --bg-900:#f2f4f6;
+  --text-2:#414a55; --cap-o:.62;
+  --rain-trail:rgba(242,244,246,0.10); --rain-glyph:#0a7686; --rain-lead:#073c46;
+  --rain-still-bg:#eef1f4; --rain-still-ink:rgba(10,118,134,0.75);
 }
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;overflow:hidden;}
@@ -23,7 +39,7 @@ body{background:var(--bg-900);}
 .c06-rain canvas{display:block;width:100%;height:100%;}
 .caption{position:absolute;left:12px;bottom:10px;z-index:5;
   font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--text-2);opacity:.7;pointer-events:none;}
+  text-transform:uppercase;color:var(--text-2);opacity:var(--cap-o);pointer-events:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -32,19 +48,21 @@ body{background:var(--bg-900);}
  "description": "Cyan katakana and hex glyphs fall in columns down a dark canvas, leaving fading trails; occasional bright white leading chars evoke the Matrix effect.",
  "useWhen": "Dark-mode hero backgrounds, hacker/cyberpunk themes, loading screens, tech brand splash pages.",
  "avoidWhen": "Light-background UIs (background hardcoded near-black). Contexts where constant column motion competes with foreground content.",
- "agentPrompt": "Change glyph color from cyan (#22d3ee) to neon green (#00ff41), increase font size divisor from 26 to 20 for denser columns, add more katakana to the GLYPHS array.",
+ "agentPrompt": "Change glyph color from cyan (#22d3ee) to neon green (#00ff41), increase font size divisor from 26 to 20 for denser columns, add more katakana to the GLYPHS array. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "glyph color (#22d3ee)",
   "bright lead-char color (#aef6ff) and frequency (0.92 threshold)",
   "font size divisor (w/26)",
   "trail fade opacity (rgba 0.18)",
-  "glyph set (GLYPHS array)"
+  "glyph set (GLYPHS array)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause in runLoop",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Renders every other frame (frame%2) — motion can feel slightly choppy at low refresh rates",
@@ -57,7 +75,8 @@ body{background:var(--bg-900);}
   "copy-paste-safe",
   "minimal-deps",
   "mobile-ready",
-  "animation-heavy"
+  "animation-heavy",
+  "light-ready"
  ],
  "tags": [
   "matrix",
@@ -110,9 +129,30 @@ body{background:var(--bg-900);}
 
   var host=document.querySelector("[data-c06]");
   if(!host) return;
+  var root=document.documentElement;
   var GLYPHS="アイウエオカキクケコｱｲｳ0123456789ABCDEF<>/\\=+*".split("");
   var cols=[],fontSize=14,columns=0,frame=0;
+  // every colour the canvas paints with lives in a CSS token: read once at start
+  // and once per theme switch (never per frame)
+  var C={trail:"rgba(8,9,13,0.18)",glyph:"#22d3ee",lead:"#aef6ff",
+         stillBg:"#0d0f16",stillInk:"rgba(34,211,238,0.55)"};
+  function syncTheme(){
+    var cs=getComputedStyle(root),g=function(n,d){return (cs.getPropertyValue(n)||d).trim();};
+    C.trail=g("--rain-trail","rgba(8,9,13,0.18)");
+    C.glyph=g("--rain-glyph","#22d3ee");
+    C.lead=g("--rain-lead","#aef6ff");
+    C.stillBg=g("--rain-still-bg","#0d0f16");
+    C.stillInk=g("--rain-still-ink","rgba(34,211,238,0.55)");
+    if(!REDUCED&&cv) cv.ctx.clearRect(0,0,cv.w,cv.h);   // drop the old palette's trail wash
+  }
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme);syncTheme();if(REDUCED) staticFrame();
+    }
+  });
   var cv=setupCanvas(host,{onResize:build});
+  syncTheme();
 
   function build(w,h){
     fontSize=Math.max(12,Math.round(w/26));
@@ -123,13 +163,13 @@ body{background:var(--bg-900);}
   function render(){
     frame++;
     var ctx=cv.ctx,w=cv.w,h=cv.h;
-    ctx.fillStyle="rgba(8,9,13,0.18)";ctx.fillRect(0,0,w,h);
+    ctx.fillStyle=C.trail;ctx.fillRect(0,0,w,h);
     ctx.font=fontSize+"px 'Space Grotesk', monospace";
     if(frame%2===0){
       for(var i=0;i<cols.length;i++){
         var ch=GLYPHS[(Math.random()*GLYPHS.length)|0];
         var x=i*fontSize,y=cols[i]*fontSize;
-        ctx.fillStyle=Math.random()>0.92?"#aef6ff":"#22d3ee";
+        ctx.fillStyle=Math.random()>0.92?C.lead:C.glyph;
         ctx.fillText(ch,x,y);
         if(y>h&&Math.random()>0.975) cols[i]=0;
         cols[i]+=1;
@@ -137,17 +177,18 @@ body{background:var(--bg-900);}
     }
   }
 
-  if(REDUCED){
+  function staticFrame(){
     build(cv.w,cv.h);
     var ctx=cv.ctx;
-    ctx.fillStyle="#0d0f16";ctx.fillRect(0,0,cv.w,cv.h);
+    ctx.fillStyle=C.stillBg;ctx.fillRect(0,0,cv.w,cv.h);
     ctx.font=fontSize+"px 'Space Grotesk', monospace";
-    ctx.fillStyle="rgba(34,211,238,0.55)";
+    ctx.fillStyle=C.stillInk;
     for(var i=0;i<cols.length;i+=2){
       ctx.fillText(GLYPHS[(Math.random()*GLYPHS.length)|0],i*fontSize,(i%6+2)*fontSize);
     }
-    return;
   }
+
+  if(REDUCED){ staticFrame(); return; }
   runLoop(render);
 })();
 </script>

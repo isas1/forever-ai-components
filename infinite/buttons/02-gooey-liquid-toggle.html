@@ -7,19 +7,33 @@
 <title>Gooey Liquid Toggle</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
+    --c02-bg:#0b0c12; --c02-glow-a:rgba(218,62,140,0.14);
     --bg-surface:#1c2030; --text-2:#8a91a8;
     --accent-iris:#DA3E8C; --accent-iris-dim:rgba(218,62,140,0.16);
     --border-soft:rgba(255,255,255,0.07); --border-glow:rgba(218,62,140,0.45);
+    --cap:#fff; --cap-o:.28;
     --r-pill:999px;
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1); --ease-spring:cubic-bezier(0.34,1.56,0.64,1);
     --dur-base:280ms;
     --font-display:"Space Grotesk",system-ui,sans-serif;
   }
+  :root[data-theme="light"]{
+    --c02-bg:#f2f4f8; --c02-glow-a:rgba(205,39,122,0.10);
+    --bg-surface:#ffffff; --text-2:#6b7280;
+    --accent-iris:#cd277a; --accent-iris-dim:rgba(205,39,122,0.12);
+    --border-soft:rgba(0,0,0,0.10); --border-glow:rgba(205,39,122,0.55);
+    --cap:#1b2130; --cap-o:.5;
+  }
   html,body{margin:0;height:100%;overflow:hidden}
-  body{background:#0b0c12;display:grid;place-items:center;
-    background-image:radial-gradient(60vw 40vw at 20% -10%,rgba(218,62,140,0.14),transparent 60%);}
+  body{background:var(--c02-bg);display:grid;place-items:center;
+    background-image:radial-gradient(60vw 40vw at 20% -10%,var(--c02-glow-a),transparent 60%);}
   #stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c02-goo{position:relative;transform:scale(1.6)}
@@ -34,7 +48,7 @@
   .c02-goo__btn[aria-pressed="true"] .c02-goo__field{background:var(--accent-iris-dim);border-color:var(--border-glow);}
   .c02-goo__btn[aria-pressed="true"] .c02-goo__blob{fill:var(--accent-iris);}
 
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;font-family:var(--font-display)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c02-goo__blob,.c02-goo__field{transition-duration:.001ms}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -44,23 +58,25 @@
  "description": "Pill toggle where an SVG goo-filtered blob stretches and merges as it slides from off to on, shifting grey to magenta. Auto-cycles as demo.",
  "useWhen": "Settings pages, dark-mode switches, any boolean UI control that benefits from tactile, liquid feel.",
  "avoidWhen": "Forms requiring immediate user control — remove the auto-cycle loop and wire state management before shipping in production.",
- "agentPrompt": "Change accent color to emerald (#22c55e), slow the toggle travel by setting --dur-base to 420ms, and increase the drop trail offset from 20 to 32.",
+ "agentPrompt": "Change accent color to emerald (#22c55e), slow the toggle travel by setting --dur-base to 420ms, and increase the drop trail offset from 20 to 32. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--accent-iris: #DA3E8C)",
   "transition duration (--dur-base: 280ms)",
   "knob size (r: 17px on lead blob)",
   "drop trail offset (offX+20 / onX-20)",
-  "auto-cycle interval (2200ms)"
+  "idle demo cadence (ON_MS=1700 on / OFF_MS=2500 off, first flip after 400 ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "SVG goo filter (feGaussianBlur + feColorMatrix)",
   "IIFE wrapper",
   "prefers-reduced-motion guard",
-  "aria-pressed attribute on button"
+  "aria-pressed attribute on button",
+  "idle demo cycle + takeover() on real click (setInterval driver, resumes after IDLE_RESUME)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Auto-cycles by default — remove loop() call before shipping in production",
-  "Drop blob r reset relies on a 200ms setTimeout which can desync if toggled rapidly"
+  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction"
  ],
  "tier": "curated",
  "labels": [
@@ -69,7 +85,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "toggle",
@@ -127,12 +144,28 @@
   }
   btn.addEventListener("click", toggle);
 
-  // autonomous idle: toggle back and forth
-  var timer=null;
-  function loop(){ if(reduce) return; timer=setTimeout(function(){ toggle(); loop(); }, 2200); }
-  function stop(){ clearTimeout(timer); }
-  document.addEventListener("visibilitychange", function(){ document.hidden?stop():loop(); });
-  loop();
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message", function(e){
+    var d=e.data; if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);
+  });
+
+  // idle demo: nothing on the wall ever clicks a toggle, so it flips itself through the very
+  // same toggle() a real click runs — first flip ~0.4 s after mount, then ON_MS on / OFF_MS
+  // off. A real click takes over (demo stops); the demo resumes after IDLE_RESUME ms of quiet.
+  var TICK=100, ON_MS=1700, OFF_MS=2500, IDLE_RESUME=3600, LEAD=400;
+  var demo=true, phase=OFF_MS-LEAD, idle=0, clock=null;
+  function tick(){
+    if(!demo){ idle+=TICK; if(idle>=IDLE_RESUME){ demo=true; idle=0; phase=OFF_MS-LEAD; } return; }
+    phase+=TICK;
+    if(phase >= (btn.getAttribute("aria-pressed")==="true" ? ON_MS : OFF_MS)){ phase=0; toggle(); }
+  }
+  function takeover(){ demo=false; idle=0; }   // a real click ends the idle demo
+  btn.addEventListener("click", takeover);
+  function start(){ if(!clock && !reduce) clock=setInterval(tick, TICK); }
+  function stop(){ clearInterval(clock); clock=null; }
+  document.addEventListener("visibilitychange", function(){ document.hidden ? stop() : start(); });
+  if(reduce) toggle();                         // reduced motion: one static "on" state, no loop
+  else start();
 })();
 </script>
 </body>

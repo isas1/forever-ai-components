@@ -5,11 +5,23 @@
 <meta name="description" content="An 8x8 grid of triangle pairs flips edge-on in a diagonal wave, revealing new Bauhaus primaries on each facet against near-black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Triangulate</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#101012;overflow:hidden}
-  #bh12-stage{position:fixed;inset:0;background:#101012}
+  /* theme tokens — dark defaults (solid-dark-bg contract); light re-theme in [data-theme="light"]; JS reads both.
+     Each facet is a pair: -a is the face turned to the light, -b the face turned away
+     (a darker shade on the dark ground, a paper-tint of the same hue on the light one). */
+  :root{--bh12-bg:#101012;--bh12-red-a:#e63329;--bh12-red-b:#b3271f;--bh12-blu-a:#1f54b3;--bh12-blu-b:#163c80;
+        --bh12-yel-a:#f0c419;--bh12-yel-b:#c79e10;--bh12-neu-a:#16161a;--bh12-neu-b:#0c0c0f;--bh12-cap:#fff;--bh12-cap-o:.42}
+  :root[data-theme="light"]{--bh12-bg:#f6f2ea;--bh12-red-a:#cc2b1f;--bh12-red-b:#f0bdb7;--bh12-blu-a:#1f54b3;--bh12-blu-b:#c3d2ee;
+        --bh12-yel-a:#ad7f08;--bh12-yel-b:#f2dfa8;--bh12-neu-a:#f3eee3;--bh12-neu-b:#e6ddcb;--bh12-cap:#1b1b20;--bh12-cap-o:.5}
+  html,body{margin:0;height:100%;background:var(--bh12-bg);overflow:hidden}
+  #bh12-stage{position:fixed;inset:0;background:var(--bh12-bg)}
   #bh12-c{display:block;width:100%;height:100%}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--bh12-cap);opacity:var(--bh12-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +31,21 @@
  "description": "8x8 grid of triangle pairs flips edge-on in a diagonal wave, cycling through Bauhaus primaries (red, blue, yellow) with facet shading on each half-cell.",
  "useWhen": "Bauhaus or geometric-themed hero backgrounds, design portfolio sections, ambient looping displays needing structured color motion.",
  "avoidWhen": "Layouts where text overlays the grid — high-contrast color cycling competes with readability. Low-end mobile where 128 canvas paths per frame may stutter.",
- "agentPrompt": "Change COLS and ROWS from 8 to 10 for a denser grid, set wave speed by editing the 0.0011 multiplier in frame(), and add green (#3a7d44) as a fourth FACE entry.",
+ "agentPrompt": "Change COLS and ROWS from 8 to 10 for a denser grid, set wave speed by editing the 0.0011 multiplier in frame(), and add green (#3a7d44) as a fourth FACE entry. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid size (COLS=8, ROWS=8)",
   "wave speed (0.0011 multiplier in frame())",
   "Bauhaus palette (FACE array)",
   "diagonal phase offset (0.55 in init)",
-  "background color (BG='#101012')"
+  "background color (BG='#101012')",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard with drawStatic fallback",
   "visibilitychange pause/resume",
-  "DPR-aware canvas resize"
+  "DPR-aware canvas resize",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "128 filled triangle paths drawn each frame — moderate CPU on very low-end devices",
@@ -45,7 +59,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bauhaus",
@@ -80,6 +95,20 @@
     ['#16161a','#0c0c0f']  // near-black
   ];
   var BG='#101012';
+  // Every facet colour is read from the CSS tokens; FACE is a cache, refilled on a theme switch.
+  var docEl=document.documentElement;
+  function syncTheme(){
+    var cs=getComputedStyle(docEl), g=function(n){ return cs.getPropertyValue(n).trim(); };
+    BG=g('--bh12-bg');
+    FACE[0][0]=g('--bh12-red-a'); FACE[0][1]=g('--bh12-red-b');
+    FACE[1][0]=g('--bh12-blu-a'); FACE[1][1]=g('--bh12-blu-b');
+    FACE[2][0]=g('--bh12-yel-a'); FACE[2][1]=g('--bh12-yel-b');
+    FACE[3][0]=g('--bh12-neu-a'); FACE[3][1]=g('--bh12-neu-b');
+    if(reduce && W) drawStatic();          // the static frame repaints on a theme switch
+  }
+  addEventListener('message',function(e){ var d=e.data;   // live re-theme broadcast from the canvas
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ docEl.setAttribute('data-theme',d.theme); syncTheme(); }
+  });
 
   // Grid of triangle pairs. Cap cells well under budget.
   var COLS=8, ROWS=8; // 64 cells, each = 2 triangles -> 128 tris drawn, no per-frame objects
@@ -181,6 +210,7 @@
 
   function boot(){
     resize();
+    syncTheme();
     if(reduce){ drawStatic(); return; }
     start();
   }

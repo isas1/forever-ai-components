@@ -5,11 +5,30 @@
 <meta name="description" content="Gray-Scott reaction-diffusion simulation morphing between coral, spots and maze patterns in teal-to-bone on near-black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Reaction Diffusion</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#08120f;}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme lives in the one [data-theme="light"] block. --rd-s0..--rd-s4 are the
+     five stops of the density ramp; s0 is the substrate (= page bg), s4 the crest. Light
+     inverts the ramp so the reaction draws as dark teal on a pale mint field. */
+  :root{
+    --rd-bg:#08120f;
+    --rd-s0:8,18,15; --rd-s1:10,40,33; --rd-s2:24,110,86; --rd-s3:57,217,138; --rd-s4:214,255,236;
+    --rd-cap:#39d98a; --rd-cap-o:.34;
+  }
+  :root[data-theme="light"]{
+    --rd-bg:#eef7f2;
+    --rd-s0:238,247,242; --rd-s1:206,235,224; --rd-s2:118,188,166; --rd-s3:20,124,74; --rd-s4:4,56,38;
+    --rd-cap:#14714a; --rd-cap-o:.72;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--rd-bg);}
   #rd-c{display:block;width:100%;height:100%;image-rendering:pixelated;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:#39d98a;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--rd-cap);opacity:var(--rd-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -19,19 +38,21 @@
  "description": "Gray-Scott reaction-diffusion simulation morphing between coral, spots, and maze patterns on a 128x128 grid; teal-to-bone color ramp on near-black.",
  "useWhen": "Ambient generative backgrounds, science/nature themes, creative portfolio hero sections needing organic texture.",
  "avoidWhen": "Low-end devices — runs 5-8 simulation steps per frame on a pixel loop. Contexts requiring legible text overlays or bright backgrounds.",
- "agentPrompt": "Change the color ramp stops array to warm amber/orange tones (e.g. replace [57,217,138] with [255,160,50]) and increase GW/GH to 192 for sharper detail.",
+ "agentPrompt": "Change the color ramp stops array to warm amber/orange tones (e.g. replace [57,217,138] with [255,160,50]) and increase GW/GH to 192 for sharper detail. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "grid resolution (GW=128, GH=128)",
   "color ramp stops array",
   "feed/kill parameter drift (params() function)",
   "diffusion rates (DA=0.18, DB=0.09)",
   "pointer seed radius (dy/dx loop ±2)",
-  "steps per frame (iter=5)"
+  "steps per frame (iter=5)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "buffer-swap pattern (a/a2, b/b2)",
   "visibilitychange pause/resume",
-  "reduced-motion static fallback (3200 pre-steps then draw)"
+  "reduced-motion static fallback (3200 pre-steps then draw)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "CPU-bound per-pixel loop — heavy at large grid sizes",
@@ -44,7 +65,8 @@
   "copy-paste-safe",
   "minimal-deps",
   "animation-heavy",
-  "mobile-ready"
+  "mobile-ready",
+  "light-ready"
  ],
  "tags": [
   "reaction-diffusion",
@@ -91,8 +113,8 @@
   // colour ramp: deep bg -> teal -> accent -> bone, precomputed
   const ramp=new Uint32Array(256);
   function mix(c1,c2,t){return [c1[0]+(c2[0]-c1[0])*t,c1[1]+(c2[1]-c1[1])*t,c1[2]+(c2[2]-c1[2])*t];}
-  (function buildRamp(){
-    const stops=[[0,[8,18,15]],[0.30,[10,40,33]],[0.55,[24,110,86]],[0.78,[57,217,138]],[1,[214,255,236]]];
+  const stops=[[0,[8,18,15]],[0.30,[10,40,33]],[0.55,[24,110,86]],[0.78,[57,217,138]],[1,[214,255,236]]];
+  function buildRamp(){
     for(let i=0;i<256;i++){
       const t=i/255;let s=0;while(s<stops.length-1&&t>stops[s+1][0])s++;
       const lo=stops[s],hi=stops[Math.min(s+1,stops.length-1)];
@@ -100,7 +122,23 @@
       const c=mix(lo[1],hi[1],lt);
       ramp[i]=(255<<24)|((c[2]|0)<<16)|((c[1]|0)<<8)|(c[0]|0);
     }
-  })();
+  }
+  // theme: the five ramp stops are read from the CSS tokens; a flip rebuilds the cached
+  // ramp and repaints the current chemical field straight away.
+  const root=document.documentElement;
+  function syncTheme(){
+    const cs=getComputedStyle(root);
+    for(let i=0;i<5;i++){
+      const v=cs.getPropertyValue('--rd-s'+i).trim();
+      if(v)stops[i][1]=v.split(',').map(Number);
+    }
+    buildRamp();if(img)draw();
+  }
+  addEventListener('message',e=>{const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();}
+  });
+  syncTheme();
   let t=0,nudge=0;
   // feed/kill drift through the parameter space: coral -> spots -> maze
   function params(){

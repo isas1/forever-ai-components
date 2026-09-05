@@ -5,12 +5,29 @@
 <meta name="description" content="Fourteen multicolor gradient bubbles packing toward center with soft collision relaxation and gentle jiggle, repacks on click.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bubble Pack Jiggle</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#06121a;
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block. --c09-p0..p5 are the bubble palette. */
+  :root{
+    --c09-bg:#06121a; --c09-cap:#41d6ff; --c09-cap-o:.4;
+    --c09-p0:#41d6ff; --c09-p1:#5af2c4; --c09-p2:#ffd166;
+    --c09-p3:#ff7eb6; --c09-p4:#9b8cff; --c09-p5:#73e07a;
+  }
+  :root[data-theme="light"]{
+    --c09-bg:#eef4f8; --c09-cap:#007899; --c09-cap-o:.62;
+    --c09-p0:#007899; --c09-p1:#0a7b59; --c09-p2:#946700;
+    --c09-p3:#db005f; --c09-p4:#6a4fc7; --c09-p5:#1c7d22;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--c09-bg);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
-    color:#41d6ff;opacity:.4;text-transform:uppercase}
+    color:var(--c09-cap);opacity:var(--c09-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -19,19 +36,21 @@
  "description": "14 multicolor gradient bubbles pack toward center with soft collision relaxation and a gentle sine jiggle; click repacks with new random sizes.",
  "useWhen": "Ambient data-viz backgrounds, proportional category charts, or decorative looping heroes where organic motion suits the brand.",
  "avoidWhen": "Contexts needing labeled data — bubbles carry no text. Avoid on low-end devices if many bubbles are stacked (O(N²) collision checks).",
- "agentPrompt": "Change bubble count to 20 by setting N=20, swap the palette to warm tones (['#ff7043','#ffa726','#ffee58','#ef5350','#ab47bc']), and slow the jiggle by reducing phase increment from dt/600 to dt/1200.",
+ "agentPrompt": "Change bubble count to 20 by setting N=20, swap the palette to warm tones (['#ff7043','#ffa726','#ffee58','#ef5350','#ab47bc']), and slow the jiggle by reducing phase increment from dt/600 to dt/1200. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "bubble count (N=14)",
   "color palette (pal array)",
   "max radius range (8 + rand*rand*40)",
   "jiggle strength (jig=0.18)",
-  "center-attraction force (0.6 multiplier)"
+  "center-attraction force (0.6 multiplier)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce disables jiggle)",
   "visibilitychange pause",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "O(N²) collision loop — keep N under ~30 for smooth mobile perf",
@@ -45,7 +64,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "bubbles",
@@ -66,9 +86,21 @@
 (function(){
   const cv=document.getElementById('c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const root=document.documentElement;
   let W,H,DPR;
-  const pal=['#41d6ff','#5af2c4','#ffd166','#ff7eb6','#9b8cff','#73e07a'];
+  let pal=['#41d6ff','#5af2c4','#ffd166','#ff7eb6','#9b8cff','#73e07a'];
   const N=14; let b=[];
+  function syncTheme(){            // every colour the canvas draws with comes from the tokens
+    const cs=getComputedStyle(root);
+    pal=pal.map((_,i)=>cs.getPropertyValue('--c09-p'+i).trim());
+    for(let i=0;i<b.length;i++)b[i].c=pal[i%pal.length];   // invalidate cached bubble colours
+  }
+  addEventListener('message',function(e){
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme);syncTheme();
+    }
+  });
   function init(){
     b=[];for(let i=0;i<N;i++){const r=8+Math.random()*Math.random()*40;
       b.push({x:Math.random(),y:Math.random(),r:r,vx:0,vy:0,c:pal[i%pal.length],ph:Math.random()*6});}
@@ -112,7 +144,7 @@
   addEventListener('resize',resize);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
   cv.addEventListener('pointerdown',init);
-  resize();init();raf();
+  syncTheme();resize();init();raf();
 })();
 </script>
 </body>

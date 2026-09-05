@@ -5,11 +5,30 @@
 <meta name="description" content="The Altarpiece — Symbolic Pastel Abstraction. A self-contained, zero-dependency animated web component.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>The Altarpiece</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#1d1a24;overflow:hidden}
+  /* theme tokens — dark values are the defaults; the light re-theme is the one
+     [data-theme="light"] block. syncTheme() re-reads every canvas colour: the five
+     pastels, the apex halo (bright core on dark / deep gold core on light) and the
+     --afk08-wash multiplier that keeps the stacked gradients airy on the pale ground. */
+  :root{
+    --afk08-bg:#1d1a24; --afk08-cream:#f3eee4; --afk08-yellow:#ecd58a; --afk08-glow:#f3eee4;
+    --afk08-p1:#a9c8e0; --afk08-p2:#e3a9bd; --afk08-p3:#ecd58a; --afk08-p4:#c3b3da; --afk08-p5:#a9c4a0;
+    --afk08-wash:1; --afk08-cap:#f3eee4; --afk08-cap-o:.46;
+  }
+  :root[data-theme="light"]{
+    --afk08-bg:#ece4d4; --afk08-cream:#241f2c; --afk08-yellow:#b3922f; --afk08-glow:#7b6314;
+    --afk08-p1:#4487bb; --afk08-p2:#ca5d83; --afk08-p3:#9e7f1a; --afk08-p4:#9072bb; --afk08-p5:#638a56;
+    --afk08-wash:.8; --afk08-cap:#241f2c; --afk08-cap-o:.58;
+  }
+  html,body{margin:0;height:100%;background:var(--afk08-bg);overflow:hidden}
   #afk08-stage{position:fixed;inset:0;width:100%;height:100%}
   #afk08-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .afk08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#f3eee4;opacity:.46;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .afk08-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--afk08-cap);opacity:var(--afk08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +37,21 @@
  "description": "9 breathing pastel rings inside a clipped triangle; 26 motes drift upward as a pulsing light crowns the apex. Homage to symbolic altarpiece diagrams.",
  "useWhen": "Spiritual or meditative hero sections, art/gallery contexts, dark ambient backgrounds needing slow celestial motion.",
  "avoidWhen": "Light-background UIs (background hardcoded dark #1d1a24). Contexts where upward particle drift distracts from primary content.",
- "agentPrompt": "Change PASTELS to warm sunset tones, slow breath by setting t*0.5 to t*0.25, and increase mote count from 26 to 40.",
+ "agentPrompt": "Change PASTELS to warm sunset tones, slow breath by setting t*0.5 to t*0.25, and increase mote count from 26 to 40. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "PASTELS color palette (5 colors)",
   "mote count (26 in seed loop)",
   "breath speed (t*0.5 in sin)",
   "apex pulse rate (t*1.6)",
-  "triangle proportions (baseHalf, apexY)"
+  "triangle proportions (baseHalf, apexY)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "ctx.clip() triangle clipping (keeps motes inside triangle)",
   "IIFE wrapper",
   "prefers-reduced-motion guard",
-  "visibilitychange pause/resume"
+  "visibilitychange pause/resume",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and PAL.deep — must edit both to change",
@@ -43,7 +64,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "triangle",
@@ -67,8 +89,24 @@
   "use strict";
   const REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cv=document.getElementById('afk08-cv'); if(!cv) return;
-  const PAL={cream:'#f3eee4',yellow:'#ecd58a',deep:'#1d1a24'};
+  const root=document.documentElement;
+  const PAL={cream:'#f3eee4',yellow:'#ecd58a',deep:'#1d1a24',glow:'#f3eee4'};
   const PASTELS=['#a9c8e0','#e3a9bd','#ecd58a','#c3b3da','#a9c4a0'];
+  let WASH=1;
+  function syncTheme(){            // motes keep a palette INDEX, so a re-theme recolours them too
+    const cs=getComputedStyle(root), v=n=>cs.getPropertyValue(n).trim();
+    PAL.deep=v('--afk08-bg'); PAL.cream=v('--afk08-cream');
+    PAL.yellow=v('--afk08-yellow'); PAL.glow=v('--afk08-glow');
+    for(let i=0;i<PASTELS.length;i++) PASTELS[i]=v('--afk08-p'+(i+1));
+    WASH=parseFloat(v('--afk08-wash'))||1;
+  }
+  addEventListener('message',function(e){   // live re-theme from the canvas
+    const d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme(); if(REDUCED) draw(performance.now());
+    }
+  });
+  syncTheme();
   function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
   function fitCanvas(c){
     const dpr=Math.min(window.devicePixelRatio||1,2);
@@ -80,7 +118,7 @@
   }
   let S=fitCanvas(cv), last=performance.now(), t=0;
   const motes=[];
-  (function seed(){ for(let i=0;i<26;i++) motes.push({x:Math.random(),y:Math.random(),sp:0.02+Math.random()*0.05,sz:1+Math.random()*2.2,col:PASTELS[(Math.random()*PASTELS.length)|0]}); })();
+  (function seed(){ for(let i=0;i<26;i++) motes.push({x:Math.random(),y:Math.random(),sp:0.02+Math.random()*0.05,sz:1+Math.random()*2.2,ci:(Math.random()*PASTELS.length)|0}); })();
   function draw(now){
     const dt=Math.min(0.05,(now-last)/1000);last=now;
     if(!REDUCED) t+=dt;
@@ -99,18 +137,18 @@
       const r=baseHalf*f*(0.9+0.12*breath);
       const col=PASTELS[i%PASTELS.length];
       const g=ctx.createRadialGradient(cx,cy-r*0.2,0,cx,cy,r);
-      g.addColorStop(0,rgba(col,0.5*(0.5+0.5*breath)));
-      g.addColorStop(0.7,rgba(col,0.16));
+      g.addColorStop(0,rgba(col,0.5*(0.5+0.5*breath)*WASH));
+      g.addColorStop(0.7,rgba(col,0.16*WASH));
       g.addColorStop(1,rgba(col,0));
       ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
-      ctx.strokeStyle=rgba(col,0.30+0.3*breath);ctx.lineWidth=1.4;
+      ctx.strokeStyle=rgba(col,(0.30+0.3*breath)*WASH);ctx.lineWidth=1.4;
       ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
     }
     motes.forEach(m=>{
       if(!REDUCED){ m.y-=m.sp*dt; if(m.y<0){m.y=1; m.x=Math.random();} }
       const x=apexX-baseHalf+m.x*baseHalf*2;
       const y=apexY+m.y*(baseY-apexY);
-      ctx.fillStyle=rgba(m.col,0.7);
+      ctx.fillStyle=rgba(PASTELS[m.ci],0.7);
       ctx.beginPath();ctx.arc(x,y,m.sz,0,Math.PI*2);ctx.fill();
     });
     ctx.restore();
@@ -119,7 +157,7 @@
     ctx.moveTo(apexX,apexY);ctx.lineTo(apexX+baseHalf,baseY);ctx.lineTo(apexX-baseHalf,baseY);ctx.closePath();ctx.stroke();
     const pulse=0.6+0.4*Math.sin(t*1.6);
     const ag=ctx.createRadialGradient(apexX,apexY,0,apexX,apexY,26*pulse+10);
-    ag.addColorStop(0,rgba(PAL.cream,0.95));
+    ag.addColorStop(0,rgba(PAL.glow,0.95));
     ag.addColorStop(0.4,rgba(PAL.yellow,0.6));
     ag.addColorStop(1,rgba(PAL.yellow,0));
     ctx.fillStyle=ag;ctx.beginPath();ctx.arc(apexX,apexY,26*pulse+10,0,Math.PI*2);ctx.fill();

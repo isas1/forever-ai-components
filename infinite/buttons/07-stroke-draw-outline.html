@@ -7,16 +7,28 @@
 <title>Stroke-Draw Outline</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
   :root{
+    --c07-bg:#08090d; --c07-glow-a:rgba(169,210,45,0.16); --rect-fill:rgba(169,210,45,0.04);
     --text-0:#f4f6fb; --text-2:#8a91a8; --accent-iris:#A9D22D;
+    --cap:#fff; --cap-o:.28;
     --ease-out-soft:cubic-bezier(0.22,1,0.36,1); --ease-in-out:cubic-bezier(0.65,0,0.35,1);
     --dur-base:280ms;
     --font-display:"Space Grotesk",system-ui,sans-serif;
   }
+  :root[data-theme="light"]{
+    --c07-bg:#f2f4f8; --c07-glow-a:rgba(95,118,25,0.10); --rect-fill:rgba(95,118,25,0.05);
+    --text-0:#1b2130; --text-2:#55617a; --accent-iris:#5f7619;
+    --cap:#1b2130; --cap-o:.5;
+  }
   html,body{margin:0;height:100%;overflow:hidden}
-  body{background:#08090d;display:grid;place-items:center;
-    background-image:radial-gradient(60vw 40vw at 20% -10%,rgba(169,210,45,0.16),transparent 60%);}
+  body{background:var(--c07-bg);display:grid;place-items:center;
+    background-image:radial-gradient(60vw 40vw at 20% -10%,var(--c07-glow-a),transparent 60%);}
   #stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c07-draw{position:relative;border:0;background:none;cursor:pointer;padding:18px 38px;
@@ -24,13 +36,13 @@
     transition:color var(--dur-base) var(--ease-out-soft);}
   .c07-draw:hover,.c07-draw.is-lit{color:var(--text-0);}
   .c07-draw__svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
-  .c07-draw__rect{fill:rgba(169,210,45,0.04);stroke:var(--accent-iris);stroke-width:1.5;
+  .c07-draw__rect{fill:var(--rect-fill);stroke:var(--accent-iris);stroke-width:1.5;
     stroke-dasharray:480;stroke-dashoffset:480;transition:stroke-dashoffset 0.9s var(--ease-in-out);}
   .c07-draw:hover .c07-draw__rect,
   .c07-draw:focus-visible .c07-draw__rect,
   .c07-draw.is-lit .c07-draw__rect{stroke-dashoffset:0;}
 
-  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:#fff;opacity:.28;text-transform:uppercase;font-family:var(--font-display)}
+  .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c07-draw__rect{transition-duration:.001ms;stroke-dashoffset:0}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -40,24 +52,26 @@
  "description": "Ghost button whose rounded-rect SVG border self-draws via stroke-dashoffset on hover; an idle loop auto-cycles draw/erase every ~2s.",
  "useWhen": "CTAs on dark backgrounds, hero section buttons, any ghost-style button needing tactile hover feedback without heavy motion.",
  "avoidWhen": "Light backgrounds (bg hardcoded dark). Forms requiring instant-visible borders — the outline starts hidden by default.",
- "agentPrompt": "Change accent to teal (#00d4aa), slow the draw to 1.4s (transition-duration on .c07-draw__rect), and update idle hold time from 2200 to 3500ms.",
+ "agentPrompt": "Change accent to teal (#00d4aa), slow the draw to 1.4s (transition-duration on .c07-draw__rect), and update idle hold time from 2200 to 3500ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--accent-iris: #A9D22D)",
   "stroke draw duration (0.9s on .c07-draw__rect)",
   "idle hold time (lit?2200 timeout)",
   "idle erase pause (1300 timeout)",
-  "stroke-dasharray total length (480)"
+  "stroke-dasharray total length (480)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "stroke-dasharray/stroke-dashoffset pattern (critical for draw effect)",
   "IIFE wrapper",
   "prefers-reduced-motion guard",
-  "visibilitychange pause"
+  "visibilitychange pause",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "stroke-dasharray=480 is hardcoded — must recalculate if button size changes significantly",
   "Auto-cycles by default; remove setTimeout loop before shipping in production",
-  "Background hardcoded dark — not drop-in on light themes"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
  ],
  "tier": "curated",
  "labels": [
@@ -66,7 +80,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "button",
@@ -95,6 +110,11 @@
   "use strict";
   var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
   var btn = document.querySelector(".c07-draw");
+
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message", function(e){
+    var d=e.data; if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);
+  });
 
   // autonomous idle: draw the outline, hold, undraw, repeat
   var timer=null, lit=false;

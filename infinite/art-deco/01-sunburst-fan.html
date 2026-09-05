@@ -5,16 +5,29 @@
 <meta name="description" content="A symmetric fan of tapered gold rays opens and closes from a glowing core medallion over a ziggurat plinth and emerald-tinted black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sunburst Fan</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme (deep gold on ivory) is the [data-theme="light"] block */
   :root{
     --ad01-bg:#0c0b08; --ad01-gold:#d4af37; --ad01-gold-lt:#f1d98a;
-    --ad01-gold-dk:#8a6d1f; --ad01-emerald:#10362c;
+    --ad01-gold-dk:#8a6d1f; --ad01-gold-dk2:#6e560f; --ad01-emerald:#10362c;
+    --ad01-glow:rgba(212,175,55,.10); --ad01-cap:#fff; --ad01-cap-o:.42;
+  }
+  :root[data-theme="light"]{
+    --ad01-bg:#f7f1e4; --ad01-gold:#87681a; --ad01-gold-lt:#a8801f;
+    --ad01-gold-dk:#5f4a12; --ad01-gold-dk2:#6f5314; --ad01-emerald:#dfe8e0;
+    --ad01-glow:rgba(135,104,26,.14); --ad01-cap:#2a2110; --ad01-cap-o:.55;
   }
   html,body{margin:0;height:100%;background:var(--ad01-bg);overflow:hidden}
   .ad01-stage{position:fixed;inset:0;display:grid;place-items:center;
     background:
       radial-gradient(120% 90% at 50% 116%, var(--ad01-emerald) 0%, transparent 55%),
-      radial-gradient(80% 60% at 50% 30%, rgba(212,175,55,.10) 0%, transparent 60%),
+      radial-gradient(80% 60% at 50% 30%, var(--ad01-glow) 0%, transparent 60%),
       var(--ad01-bg);
   }
   .ad01-svg{width:100%;height:100%;display:block}
@@ -38,7 +51,7 @@
   .ad01-pulse{animation:ad01-pulse 7s ease-in-out infinite both}
   @keyframes ad01-pulse{0%,100%{opacity:.45}48%{opacity:1}}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--ad01-cap);opacity:var(--ad01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
     .ad01-blade{transform:rotate(var(--o)) scaleY(1)!important}
@@ -53,20 +66,22 @@
  "description": "13 tapered gold rays open and close in mirrored symmetry from a glowing core medallion above a ziggurat plinth, breathing with a 7-second CSS cycle.",
  "useWhen": "Art deco hero sections, luxury brand intros, ambient looping backgrounds with a vintage geometric aesthetic.",
  "avoidWhen": "Light backgrounds (colors hardcoded for dark); layouts needing static or click-driven interactivity.",
- "agentPrompt": "Change blade count to 17 by setting N=17, widen the spread to 110 degrees, and shift the gold hue to rose gold by updating --ad01-gold to #c9956c.",
+ "agentPrompt": "Change blade count to 17 by setting N=17, widen the spread to 110 degrees, and shift the gold hue to rose gold by updating --ad01-gold to #c9956c. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "blade count (N=13)",
   "open spread angle (spread=84)",
   "animation duration (7s)",
   "gold color tokens (--ad01-gold, --ad01-gold-lt, --ad01-gold-dk)",
   "emerald background tint (--ad01-emerald)",
-  "blade path shape (d variable)"
+  "blade path shape (d variable)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
   "prefers-reduced-motion guard + paused state",
   "visibilitychange pause/resume",
-  "transform-box:fill-box pivot pattern"
+  "transform-box:fill-box pivot pattern",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background and palette fully hardcoded — requires CSS variable edits to retheme",
@@ -79,7 +94,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-deco",
@@ -105,7 +121,7 @@
         <stop offset="100" stop-color="var(--ad01-gold-lt)"/>
       </linearGradient>
       <linearGradient id="ad01-bladeG2" x1="0" y1="1" x2="0" y2="0">
-        <stop offset="0" stop-color="#6e560f"/>
+        <stop offset="0" stop-color="var(--ad01-gold-dk2)"/>
         <stop offset="100" stop-color="var(--ad01-gold)"/>
       </linearGradient>
       <radialGradient id="ad01-core" cx="50%" cy="50%" r="50%">
@@ -146,6 +162,13 @@
 <script>
 (function(){
   "use strict";
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
+  // Every colour here is a CSS token, so flipping the attribute repaints everything.
+  var root=document.documentElement;
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")) root.setAttribute("data-theme",d.theme);
+  });
   var fan=document.getElementById("ad01-fan");
   if(!fan)return;
   var N=13;                 // odd -> a true center blade, perfect mirror symmetry

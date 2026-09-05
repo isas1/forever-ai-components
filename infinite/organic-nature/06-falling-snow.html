@@ -5,11 +5,28 @@
 <meta name="description" content="Soft white snowflakes of varied depth drift and sway down a cool blue-grey gradient sky, with pointer-driven wind nudging the flurry.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Falling Snow</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#1a2433}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. --sn-s0/-s1 are the sky gradient stops and
+     --sn-flake is "r,g,b" (per-flake alpha stays): white flurry at night becomes slate
+     flakes read against a bright overcast sky. */
+  :root{
+    --sn-bg:#1a2433; --sn-cap:#e6f1ff; --sn-cap-o:.34;
+    --sn-s0:#243349; --sn-s1:#141d2a; --sn-flake:245,250,255;
+  }
+  :root[data-theme="light"]{
+    --sn-bg:#eef3f9; --sn-cap:#3d5a80; --sn-cap-o:.6;
+    --sn-s0:#f3f7fc; --sn-s1:#d8e5f2; --sn-flake:79,108,146;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--sn-bg)}
   #c{display:block;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-sans-serif,system-ui,sans-serif;
-       letter-spacing:.08em;text-transform:uppercase;color:#e6f1ff;opacity:.34;user-select:none}
+       letter-spacing:.08em;text-transform:uppercase;color:var(--sn-cap);opacity:var(--sn-cap-o);user-select:none}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -18,19 +35,21 @@
  "description": "Up to 110 depth-layered snowflakes drift and sway down a dark blue gradient; pointer movement shifts a wind force that nudges the entire flurry sideways.",
  "useWhen": "Winter/holiday hero backgrounds, ambient screensavers, seasonal landing pages on dark themes.",
  "avoidWhen": "Light-background layouts (background hardcoded dark navy). Contexts where motion competes with legible text overlays.",
- "agentPrompt": "Increase snowflake count by changing the divisor in `Math.round(W*H/4200)` to 2500, shift flake color to warm white by changing `rgba(245,250,255,` to `rgba(255,248,230,`, and slow drift speed by setting `t+=0.005`.",
+ "agentPrompt": "Increase snowflake count by changing the divisor in `Math.round(W*H/4200)` to 2500, shift flake color to warm white by changing `rgba(245,250,255,` to `rgba(255,248,230,`, and slow drift speed by setting `t+=0.005`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "flake density divisor (W*H/4200)",
   "flake color (rgba 245,250,255)",
   "wind responsiveness (mw*1.2 factor)",
   "flake size range (1+z*2.6)",
   "sway amplitude (0.5*f.z multiplier)",
-  "sky gradient colors (#243349 / #141d2a)"
+  "sky gradient colors (#243349 / #141d2a)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange pause/resume",
-  "prefers-reduced-motion guard (reduced drift path)"
+  "prefers-reduced-motion guard (reduced drift path)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS — must change #1a2433 and gradient stops together",
@@ -43,7 +62,8 @@
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
-  "agent-ready"
+  "agent-ready",
+  "light-ready"
  ],
  "tags": [
   "snow",
@@ -61,9 +81,25 @@
 <canvas id="c"></canvas>
 <div class="cap">Falling Snow</div>
 <script>
+(function(){
 const cv=document.getElementById('c'),x=cv.getContext('2d');
 let W,H,DPR,raf,F=[],t=0,wind=0,mw=0;
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+const root=document.documentElement;
+const C={s0:'',s1:'',flake:''};
+function syncTheme(){            // every colour the canvas draws with comes from the tokens
+  const cs=getComputedStyle(root);
+  C.s0=cs.getPropertyValue('--sn-s0').trim();       // sky gradient is rebuilt every frame
+  C.s1=cs.getPropertyValue('--sn-s1').trim();
+  C.flake=cs.getPropertyValue('--sn-flake').trim(); // per-flake alpha (f.sa) is unchanged
+}
+addEventListener('message',function(e){
+  const d=e.data;
+  if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+    root.setAttribute('data-theme',d.theme);syncTheme();
+  }
+});
+syncTheme();
 function size(){DPR=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;
   cv.width=W*DPR;cv.height=H*DPR;x.setTransform(DPR,0,0,DPR,0,0);build();}
 function build(){F=[];const n=Math.min(110,Math.round(W*H/4200));
@@ -77,7 +113,7 @@ function frame(){
   t+=0.01;
   wind+=(Math.sin(t*0.6)*0.5+mw*1.2-wind)*0.05;
   const g=x.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,'#243349');g.addColorStop(1,'#141d2a');
+  g.addColorStop(0,C.s0);g.addColorStop(1,C.s1);
   x.fillStyle=g;x.fillRect(0,0,W,H);
   for(const f of F){
     if(!reduce){
@@ -86,7 +122,7 @@ function frame(){
     }else{f.y+=0.2;}
     if(f.y>H+4){Object.assign(f,mk(-4));}
     if(f.x>W+4)f.x=-4;if(f.x<-4)f.x=W+4;
-    x.fillStyle=`rgba(245,250,255,${f.sa})`;
+    x.fillStyle=`rgba(${C.flake},${f.sa})`;
     x.beginPath();x.arc(f.x,f.y,f.r,0,7);x.fill();
   }
   raf=requestAnimationFrame(frame);
@@ -95,6 +131,7 @@ raf=requestAnimationFrame(frame);
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)cancelAnimationFrame(raf);else raf=requestAnimationFrame(frame);
 });
+})();
 </script>
 </body>
 </html>

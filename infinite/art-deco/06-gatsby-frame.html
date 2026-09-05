@@ -5,18 +5,30 @@
 <meta name="description" content="An ornate gold frame self-draws in fourfold symmetry — ziggurat corners, sunburst fans, chevrons and a fountain medallion — blooms bright th">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gatsby Frame</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;background:#0c0b08;overflow:hidden}
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. On ivory the ramp inverts: the "hi"
+     lines become the darkest bronze so prominence still reads. */
+  :root{--ad06-bg:#0c0b08;--ad06-gold:#d4af37;--ad06-fine:#8a6d1f;--ad06-hi:#f3dd92;
+    --ad06-vignette:rgba(0,0,0,.78);--ad06-cap:#fff;--ad06-cap-o:.42}
+  :root[data-theme="light"]{--ad06-bg:#f7f1e4;--ad06-gold:#87681a;--ad06-fine:#b08a2a;--ad06-hi:#5f4a12;
+    --ad06-vignette:rgba(120,92,30,.14);--ad06-cap:#2a2110;--ad06-cap-o:.55}
+  html,body{margin:0;height:100%;background:var(--ad06-bg);overflow:hidden}
   #ad06-stage{position:fixed;inset:0;display:block}
   #ad06-svg{position:absolute;inset:0;width:100%;height:100%;
-    box-shadow:inset 0 0 110px 26px rgba(0,0,0,.78)}
+    box-shadow:inset 0 0 110px 26px var(--ad06-vignette)}
   /* All strokes share the draw timeline. We mirror one authored quadrant with
      SVG <use> + transforms so the border is born in perfect 4-fold symmetry. */
-  .ad06-ln{fill:none;stroke:#d4af37;stroke-linecap:round;stroke-linejoin:round;
+  .ad06-ln{fill:none;stroke:var(--ad06-gold);stroke-linecap:round;stroke-linejoin:round;
     stroke-dasharray:var(--ad06-L);stroke-dashoffset:var(--ad06-L);
     animation:ad06-draw 4.2s cubic-bezier(.55,.06,.2,1) infinite}
-  .ad06-fine{stroke:#8a6d1f}
-  .ad06-hi{stroke:#f3dd92}
+  .ad06-fine{stroke:var(--ad06-fine)}
+  .ad06-hi{stroke:var(--ad06-hi)}
   .ad06-d1{animation-delay:0s}
   .ad06-d2{animation-delay:.34s}
   .ad06-d3{animation-delay:.66s}
@@ -39,7 +51,7 @@
     82%{transform:scale(1);opacity:.9}100%{transform:scale(1);opacity:0}
   }
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--ad06-cap);opacity:var(--ad06-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){
     *{animation-duration:.001ms!important;animation-iteration-count:1!important}
     .ad06-ln{stroke-dashoffset:0!important;opacity:1!important}
@@ -53,23 +65,25 @@
  "description": "Gold SVG frame self-draws in fourfold symmetry — ziggurat corners, sunburst fans, chevrons, and a fountain medallion bloom then fade and redraw in a 4.2s loop.",
  "useWhen": "Hero frames, title cards, luxury/editorial backgrounds, or anywhere an Art Deco motif needs ambient looping motion with no interaction required.",
  "avoidWhen": "Contexts needing legible content inside the frame — the medallion sits at center. Avoid on light backgrounds (strokes are gold on near-black).",
- "agentPrompt": "Change the primary stroke color from #d4af37 to #c0c0c0 (silver), slow the cycle to 6s by setting animation-duration to 6s, and increase the outer rule offset from 22px to 18px for a tighter border.",
+ "agentPrompt": "Change the primary stroke color from #d4af37 to #c0c0c0 (silver), slow the cycle to 6s by setting animation-duration to 6s, and increase the outer rule offset from 22px to 18px for a tighter border. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "primary gold stroke color (#d4af37 on .ad06-ln)",
   "highlight color (#f3dd92 on .ad06-hi)",
   "animation cycle duration (4.2s in .ad06-ln and .ad06-fan)",
   "stagger delays (.ad06-d1 through .ad06-d5)",
   "fountain medallion arc radii (A40, A30, A20)",
-  "inner shadow intensity (box-shadow inset on #ad06-svg)"
+  "inner shadow intensity (box-shadow inset on #ad06-svg)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "SVG defs + use mirroring pattern (fourfold symmetry depends on it)",
   "IIFE wrapper",
   "prefers-reduced-motion guard (CSS @media + JS early-return)",
-  "visibilitychange pause handler"
+  "visibilitychange pause handler",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Gold strokes are hardcoded for dark backgrounds — requires color changes for light themes",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Adding new paths requires manually assigning --ad06-L length and a delay class"
  ],
  "tier": "curated",
@@ -79,7 +93,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "art-deco",
@@ -159,6 +174,10 @@
 <script>
 (function(){
   "use strict";
+  // live re-theme: every colour is a CSS token, so flipping the attribute repaints all of it
+  var root = document.documentElement;
+  addEventListener('message', function(e){ var d=e.data;
+    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) root.setAttribute('data-theme', d.theme); });
   var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
   var svg = document.getElementById('ad06-svg');
   // CSS-only animation; JS just governs lifecycle (pause when hidden / settle when reduced).

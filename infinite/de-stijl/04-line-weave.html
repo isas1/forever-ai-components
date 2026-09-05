@@ -5,26 +5,45 @@
 <meta name="description" content="White horizontal and vertical lines thread and interlace over saturating primary-color blocks on a dark glowing field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Line Weave</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract); the light
+     re-theme is the [data-theme="light"] block. The weave inverts the way De Stijl
+     really works: cream threads on a dark field become black bars on warm paper,
+     and the white crossing node becomes a blue accent pin. */
   :root{
     --ds04-bg:#0e0e10;
     --ds04-line:#f4f1ea;
+    --ds04-node:#ffffff;
+    --ds04-glow:rgba(27,95,196,.16);
     --ds04-blue:#1b5fc4;
     --ds04-red:#c8362f;
     --ds04-yellow:#e3c01f;
+    --ds04-cap:#fff; --ds04-cap-o:.42;
   }
-  html,body{margin:0;height:100%}
+  :root[data-theme="light"]{
+    --ds04-bg:#f2f0ea;
+    --ds04-line:#101012;
+    --ds04-node:#1b5fc4;
+    --ds04-glow:rgba(27,95,196,.10);
+    --ds04-cap:#14141a; --ds04-cap-o:.55;
+  }
+  html,body{margin:0;height:100%;background:var(--ds04-bg)}
   #ds04-stage{
     position:fixed;inset:0;background:var(--ds04-bg);overflow:hidden;
   }
   /* Glow is a single static radial gradient — never repaints */
   #ds04-stage::before{
     content:"";position:absolute;inset:-10%;
-    background:radial-gradient(60% 55% at 50% 46%,rgba(27,95,196,.16),transparent 70%);
+    background:radial-gradient(60% 55% at 50% 46%,var(--ds04-glow),transparent 70%);
     pointer-events:none;
   }
   #ds04-c{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+  .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--ds04-cap);opacity:var(--ds04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -34,19 +53,21 @@
  "description": "Horizontal and vertical cream lines thread and interlace over primary-color blocks on a dark field, with bright nodes at crossing points during the weave sweep.",
  "useWhen": "Art/design portfolio heroes, geometric or neoplastic-inspired brand contexts, ambient dashboard backgrounds needing a structured, calm motion loop.",
  "avoidWhen": "Contexts requiring readable text overlays — the crossing node flashes compete with content. Not suited for light-background UIs (background is hardcoded dark).",
- "agentPrompt": "Change VX to [0.25, 0.50, 0.75] for an even three-column grid, swap BLUE to '#6B21A8' (purple), and slow the cycle by setting P=12.0.",
+ "agentPrompt": "Change VX to [0.25, 0.50, 0.75] for an even three-column grid, swap BLUE to '#6B21A8' (purple), and slow the cycle by setting P=12.0. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "vertical line positions (VX array)",
   "horizontal line positions (HY array)",
   "color block definitions (BLOCKS array)",
   "cycle duration (P=8.0)",
-  "line weight scale (S*0.018)"
+  "line weight scale (S*0.018)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange pause/play",
   "reduced-motion drawOneFrame() fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded to dark (#0e0e10) — must edit CSS var to change",
@@ -59,7 +80,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "de-stijl",
@@ -87,25 +109,42 @@
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
 
-  var css=getComputedStyle(document.documentElement);
-  var BG=css.getPropertyValue("--ds04-bg").trim()||"#0e0e10";
-  var LINE=css.getPropertyValue("--ds04-line").trim()||"#f4f1ea";
-  var BLUE=css.getPropertyValue("--ds04-blue").trim()||"#1b5fc4";
-  var RED=css.getPropertyValue("--ds04-red").trim()||"#c8362f";
-  var YEL=css.getPropertyValue("--ds04-yellow").trim()||"#e3c01f";
+  var root=document.documentElement;
+  var BG="",LINE="",NODE="";
+  var PAL=["","",""];                     // [blue, red, yellow] — cached, rebuilt on switch
 
   // Fixed neoplastic layout in 0..1 normalized space. Originals, no known painting.
   // Verticals (x) and horizontals (y) — uneven spacing = dynamic equilibrium.
   var VX=[0.20,0.42,0.63,0.81];
   var HY=[0.26,0.48,0.70];
-  // Color blocks: cell defined by [x0,y0,x1,y1] in normalized coords + color.
+  // Color blocks: cell defined by [x0,y0,x1,y1] in normalized coords + PAL index k.
+  // c is the resolved colour string, refreshed by syncTheme() so it never goes stale.
   var BLOCKS=[
-    {x0:0.00,y0:0.00,x1:0.20,y1:0.26,c:YEL},
-    {x0:0.63,y0:0.00,x1:0.81,y1:0.26,c:BLUE},
-    {x0:0.81,y0:0.48,x1:1.00,y1:0.70,c:RED},
-    {x0:0.00,y0:0.70,x1:0.20,y1:1.00,c:BLUE},
-    {x0:0.42,y0:0.70,x1:0.63,y1:1.00,c:YEL}
+    {x0:0.00,y0:0.00,x1:0.20,y1:0.26,k:2,c:""},
+    {x0:0.63,y0:0.00,x1:0.81,y1:0.26,k:0,c:""},
+    {x0:0.81,y0:0.48,x1:1.00,y1:0.70,k:1,c:""},
+    {x0:0.00,y0:0.70,x1:0.20,y1:1.00,k:0,c:""},
+    {x0:0.42,y0:0.70,x1:0.63,y1:1.00,k:2,c:""}
   ];
+
+  function syncTheme(){                   // JS-drawn colours read the tokens; CSS stays the source
+    var cs=getComputedStyle(root);
+    BG    =cs.getPropertyValue("--ds04-bg").trim()||"#0e0e10";
+    LINE  =cs.getPropertyValue("--ds04-line").trim()||"#f4f1ea";
+    NODE  =cs.getPropertyValue("--ds04-node").trim()||"#ffffff";
+    PAL[0]=cs.getPropertyValue("--ds04-blue").trim()||"#1b5fc4";
+    PAL[1]=cs.getPropertyValue("--ds04-red").trim()||"#c8362f";
+    PAL[2]=cs.getPropertyValue("--ds04-yellow").trim()||"#e3c01f";
+    for(var i=0;i<BLOCKS.length;i++) BLOCKS[i].c=PAL[BLOCKS[i].k];   // invalidate baked colours
+  }
+  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
+  addEventListener("message",function(e){
+    var d=e.data;
+    if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
+      root.setAttribute("data-theme",d.theme); syncTheme(); if(reduce)drawOneFrame();
+    }
+  });
+  syncTheme();
 
   var W=0,H=0,DPR=1,S=0; // S = min(W,H) used for stroke scaling
   function size(){
@@ -137,7 +176,7 @@
     ctx.fillRect(x-t/2,0,t,len);
     if(wp>=0){ // bright weave node
       var ny=wp*H;
-      ctx.fillStyle="#fff";
+      ctx.fillStyle=NODE;
       ctx.globalAlpha=0.9;
       ctx.fillRect(x-t*0.75,ny-t*0.75,t*1.5,t*1.5);
       ctx.globalAlpha=1;
@@ -150,7 +189,7 @@
     ctx.fillRect(0,y-t/2,len,t);
     if(wp>=0){
       var nx=wp*W;
-      ctx.fillStyle="#fff";
+      ctx.fillStyle=NODE;
       ctx.globalAlpha=0.9;
       ctx.fillRect(nx-t*0.75,y-t*0.75,t*1.5,t*1.5);
       ctx.globalAlpha=1;

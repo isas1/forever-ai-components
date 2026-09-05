@@ -5,16 +5,30 @@
 <meta name="description" content="A slowly rotating 6-fold kaleidoscope mirrors swirling pink, amber and violet liquid blobs into symmetric petals over a deep glowing dark fi">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Kaleidoscope</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#0a0612}
+  /* theme tokens — dark defaults; light = deepened poster inks on cream. --ps02-p1..p6 feed the JS blob palette as "r,g,b" triples. */
+  :root{
+    --ps02-bg:#0a0612; --ps02-canvas:#0a0612; --ps02-vig:rgba(255,61,166,.22); --ps02-cap:#fff; --ps02-cap-o:.42; --ps02-fa:.82; --ps02-sa:.9; --ps02-da:.55; --ps02-g0:rgba(255,61,166,.16); --ps02-g1:rgba(120,70,210,.10); --ps02-g2:rgba(10,6,18,0);
+    --ps02-p1:255,61,166; --ps02-p2:255,138,90; --ps02-p3:120,70,210; --ps02-p4:44,214,196; --ps02-p5:255,204,82; --ps02-p6:214,40,120;
+  }
+  :root[data-theme="light"]{
+    --ps02-bg:#f7f1ea; --ps02-canvas:#f7f1ea; --ps02-vig:rgba(150,18,80,.16); --ps02-cap:#2a1220; --ps02-cap-o:.62; --ps02-fa:.78; --ps02-sa:.86; --ps02-da:.55; --ps02-g0:rgba(198,20,110,.16); --ps02-g1:rgba(78,40,150,.12); --ps02-g2:rgba(247,241,234,0);
+    --ps02-p1:239,134,180; --ps02-p2:239,147,88; --ps02-p3:160,142,226; --ps02-p4:90,199,182; --ps02-p5:216,178,80; --ps02-p6:227,127,168;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--ps02-bg)}
   #ps02-stage{position:fixed;inset:0;display:grid;place-items:center}
   /* offscreen petal canvas is never shown directly */
   #ps02-src{display:none}
   /* visible canvas carries a STATIC glow only — never animated */
   #ps02-c{display:block;width:100%;height:100%;
-    box-shadow:inset 0 0 120px 10px rgba(255,61,166,.22)}
+    box-shadow:inset 0 0 120px 10px var(--ps02-vig)}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
-    color:#fff;opacity:.42;letter-spacing:.08em;text-transform:uppercase;user-select:none}
+    color:var(--ps02-cap);opacity:var(--ps02-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   /* motion is canvas/rAF and gated in JS via matchMedia; no CSS animations to tame */
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -24,20 +38,22 @@
  "description": "9 liquid blobs drift in a source wedge mirrored into 6-fold kaleidoscope symmetry on canvas; the whole disc rotates slowly with a hot-pink/violet/amber palette.",
  "useWhen": "Dark-background hero sections, loading screens, ambient psychedelic or music-festival aesthetics.",
  "avoidWhen": "Light-background UIs (background hardcoded #0a0612). Layouts where content overlaps the canvas — the constant motion competes with reading.",
- "agentPrompt": "Change SEG from 12 to 16 for 8-fold symmetry, swap PAL first entry to [0,220,255] for a cyan-dominant palette, and slow the global spin to t*0.00004.",
+ "agentPrompt": "Change SEG from 12 to 16 for 8-fold symmetry, swap PAL first entry to [0,220,255] for a cyan-dominant palette, and slow the global spin to t*0.00004. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "segment count / symmetry order (SEG=12)",
   "blob count (N=9)",
   "color palette (PAL array)",
   "global rotation speed (t*0.000085)",
   "blob wobble speed (t*0.0006)",
-  "blob size range (bs[i] = 0.05..0.16)"
+  "blob size range (bs[i] = 0.05..0.16)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "offscreen source canvas pattern (perf-critical — never draw wedge onto visible canvas)",
   "IIFE wrapper",
   "reduced-motion guard (matchMedia + drawFrame(1200) static fallback)",
-  "visibilitychange stop/start"
+  "visibilitychange stop/start",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#0a0612) — must edit to change",
@@ -51,7 +67,8 @@
   "mobile-ready",
   "accessible",
   "copy-paste-safe",
-  "minimal-deps"
+  "minimal-deps",
+  "light-ready"
  ],
  "tags": [
   "kaleidoscope",
@@ -78,11 +95,14 @@
       src=document.getElementById('ps02-src'),
       ctx=stage.getContext('2d'), sctx=src.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var root=document.documentElement;
   var W=0,H=0,DPR=1,R=0,SR=0,running=true,raf=0,grad=null;
   var SEG=12;                 // mirror wedges -> 6-fold symmetry
   var N=9;                    // liquid blobs in the source wedge (<=110)
-  // Fillmore-poster palette: hot pink -> magenta -> violet -> amber, complementary teal accent
+  // Fillmore-poster palette: hot pink -> magenta -> violet -> amber, complementary teal
+  // accent. Filled from the --ps02-p* tokens by syncTheme, so both themes share one source.
   var PAL=[[255,61,166],[255,138,90],[120,70,210],[44,214,196],[255,204,82],[214,40,120]];
+  var CBG='#0a0612', G0='', G1='', G2='', FA=0.82, SA=0.9, DA=0.55;
   // blob state (allocation-free after init)
   var br=new Float32Array(N), ba=new Float32Array(N), bs=new Float32Array(N),
       bvr=new Float32Array(N), bva=new Float32Array(N),
@@ -102,13 +122,30 @@
       bsd[i]=3+(Math.random()*4|0);
       bph[i]=Math.random()*6.283;
       ci[i]=(Math.random()*PAL.length)|0;
-      var c=PAL[ci[i]], c2=PAL[(ci[i]+2)%PAL.length];
-      fillStr[i]=rgba(c,0.82);                 // blob body
-      strokeStr[i]=rgba(c2,0.9);               // op-art outline
-      dotStr[i]=rgba(c2,0.55);                 // inner bead
     }
     seeded=true;
+    recolor();
   }
+  // cached colour strings (loop stays allocation-free) -> rebuilt on every theme switch
+  function recolor(){
+    for(var i=0;i<N;i++){ var c=PAL[ci[i]], c2=PAL[(ci[i]+2)%PAL.length];
+      fillStr[i]=rgba(c,FA); strokeStr[i]=rgba(c2,SA); dotStr[i]=rgba(c2,DA); }
+  }
+  function buildGrad(){                        // radial wash: resize + theme switch only
+    if(!SR) return; grad=sctx.createRadialGradient(0,0,0,0,0,SR);
+    grad.addColorStop(0,G0); grad.addColorStop(.55,G1); grad.addColorStop(1,G2);
+  }
+  function syncTheme(){                        // JS-drawn colours re-read from the tokens
+    var cs=getComputedStyle(root), g=function(n){return cs.getPropertyValue(n).trim();}, p;
+    for(var i=0;i<6;i++){ p=g('--ps02-p'+(i+1)).split(','); PAL[i]=[+p[0],+p[1],+p[2]]; }
+    CBG=g('--ps02-canvas'); G0=g('--ps02-g0'); G1=g('--ps02-g1'); G2=g('--ps02-g2'); FA=+g('--ps02-fa'); SA=+g('--ps02-sa'); DA=+g('--ps02-da');
+    if(seeded) recolor(); buildGrad();
+    if(reduce&&SR) drawFrame(1200);
+  }
+  addEventListener('message',function(e){ var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      root.setAttribute('data-theme',d.theme); syncTheme(); }
+  });
   function resize(){
     DPR=Math.min(2,window.devicePixelRatio||1);
     W=stage.clientWidth; H=stage.clientHeight;
@@ -119,10 +156,7 @@
     SR=Math.ceil(R);
     src.width=SR; src.height=SR;
     // rebuild the static radial wash once per resize (SR changes) -> not per frame
-    grad=sctx.createRadialGradient(0,0,0,0,0,SR);
-    grad.addColorStop(0,'rgba(255,61,166,.16)');
-    grad.addColorStop(.55,'rgba(120,70,210,.10)');
-    grad.addColorStop(1,'rgba(10,6,18,0)');
+    buildGrad();
     if(!seeded) seed();
     if(reduce) drawFrame(1200);                // one settled frame
   }
@@ -178,7 +212,7 @@
     }
     paintSource(t);
     ctx.setTransform(DPR,0,0,DPR,0,0);
-    ctx.fillStyle='#0a0612';
+    ctx.fillStyle=CBG;
     ctx.fillRect(0,0,W,H);
     ctx.save();
     ctx.translate(W/2,H/2);
@@ -208,6 +242,7 @@
   document.addEventListener('visibilitychange',function(){
     if(document.hidden)stop();else start();
   });
+  syncTheme();
   resize();
   if(reduce){drawFrame(1200);}else{start();}
 })();
