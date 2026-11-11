@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="UTF-8">
 <meta name="description" content="3D-tilting trading card with a warm iridescent sheen, conic foil chip and grain that shift with pointer position or drift idly.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -46,9 +47,9 @@
   }
   *,*::before,*::after{box-sizing:border-box;}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c08-page-b);}
-  body{background:radial-gradient(80% 70% at 50% 30%,var(--c08-page-a),var(--c08-page-b));
+  html,body{background:radial-gradient(80% 70% at 50% 30%,var(--c08-page-a),var(--c08-page-b));
     font-family:var(--font-body);}
-  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  #c08-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:1100px;}
   .c08-holo{position:relative;width:46vmin;height:59vmin;max-width:230px;max-height:296px;
     border-radius:var(--r-md);transform-style:preserve-3d;
@@ -75,15 +76,17 @@
   .cap{position:fixed;left:10px;bottom:8px;color:var(--accent-iris);opacity:var(--cap-o);
     font-family:var(--font-body);font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
   @media (prefers-reduced-motion:reduce){.c08-holo,.c08-holo__sheen{transition-duration:.001ms;}}
+  .c08-holo:focus-visible{outline:2px solid var(--text-0);outline-offset:4px;}
+@media(max-width:300px){.c08-holo{width:70vmin;height:74vmin}.c08-holo__body{padding:12px}.c08-holo__t{font-size:16px}.c08-holo__p{font-size:12px}.c08-holo__foil{top:12px;left:12px;width:30px;height:30px}}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/cards/08-holographic-iridescent.html",
  "title": "Holographic Iridescent",
- "description": "A 3D-tilting card with a warm iridescent sheen and conic foil chip that shift with pointer position; drifts idly when not hovered.",
+ "description": "A 3D-tilting card with a warm iridescent sheen and conic foil chip that shift with pointer position; drifts idly until first deliberate input.",
  "useWhen": "Product cards, trading card showcases, premium UI hero elements needing a luxury tactile feel.",
  "avoidWhen": "Light backgrounds (dark gradient hardcoded). Contexts where constant motion competes with surrounding content.",
- "agentPrompt": "Change the foil chip colors by editing the conic-gradient on .c08-holo__foil to use gold tones (#ffd700, #ff9900), and increase the max tilt angle from 12 to 18. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Adjust the existing palette tokens and effect parameters while preserving manual control. First deliberate input stops idle demo work while manual feedback finishes. Keep demo-v1 lifecycle marker, __foreverPreview.demoEnabled initialization and forever:interactive handler. Preserve reduced motion, visibility suspension and theme switching.",
  "editableAreas": [
   "max tilt angle (var max=12)",
   "sheen gradient colors (rgba values in .c08-holo__sheen)",
@@ -97,11 +100,16 @@
   "IIFE wrapper",
   "visibilitychange stop/start",
   "prefers-reduced-motion guard",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "sticky demo-v1 preview lifecycle; stop attract work, retain manual feedback and settling",
+  "pointer/touch takeover, keyboard access and visibility suspension",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background dark gradient is hardcoded in body CSS — must edit to use on light pages",
-  "Sheen uses mix-blend-mode:color-dodge which may render differently on non-dark backgrounds"
+  "Sheen uses mix-blend-mode:color-dodge which may render differently on non-dark backgrounds",
+  "Control state is local to each mount; format changes preserve preview takeover but create a fresh source instance.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -126,7 +134,7 @@
 </script>
 </head>
 <body>
-<div id="stage">
+<div id="c08-stage">
   <div class="c08-holo" tabindex="0" aria-label="Holographic iridescent card">
     <div class="c08-holo__sheen"></div>
     <div class="c08-holo__grain"></div>
@@ -149,18 +157,32 @@
     card.style.setProperty("--c08-rx",((0.5-py)*max*2).toFixed(2)+"deg");
     card.style.setProperty("--c08-sheen",(px*100).toFixed(1)+"%");
   }
-  card.addEventListener("pointermove",function(e){
+  function point(e){
     hovering=true;
     var r=card.getBoundingClientRect();
     apply((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height);
-  });
+  }
+  card.addEventListener("pointermove",point);
+  card.addEventListener("pointerdown",point);
   card.addEventListener("pointerleave",function(){hovering=false;});
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;stop();}
+  addEventListener("forever:interactive",stopDemo);
+  document.addEventListener("pointerdown",stopDemo,{capture:true});
+  document.addEventListener("click",stopDemo,{capture:true});
+  var px=.5,py=.5;
+  card.addEventListener("keydown",function(e){
+    if(!/^Arrow(Left|Right|Up|Down)$/.test(e.key))return;e.preventDefault();stopDemo();
+    px=Math.max(0,Math.min(1,px+(e.key==="ArrowRight"?.08:e.key==="ArrowLeft"?-.08:0)));
+    py=Math.max(0,Math.min(1,py+(e.key==="ArrowDown"?.08:e.key==="ArrowUp"?-.08:0)));apply(px,py);
+  });
   function loop(){
+    if(!demoEnabled||document.hidden)return;
     t+=0.011;
     if(!hovering)apply(0.5+Math.sin(t)*0.42,0.5+Math.cos(t*0.7)*0.3);
     raf=requestAnimationFrame(loop);
   }
-  function start(){if(!raf&&!reduce)loop();}
+  function start(){if(!raf&&!reduce&&demoEnabled&&!document.hidden)loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
@@ -168,7 +190,7 @@
     var d=e.data;
     if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);
   });
-  if(!reduce)start();
+  apply(.5,.5);if(!reduce)start();
 })();
 </script>
 </body>

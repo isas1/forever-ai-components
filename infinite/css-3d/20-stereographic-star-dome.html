@@ -5,6 +5,7 @@
 <meta name="description" content="A tilted planetarium dome of 150 twinkling billboard stars wheels slowly about its polar axis over a faint horizon ring on near-black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stereographic Star Dome</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#05060f;}
   #sd-stage{
@@ -65,12 +66,14 @@
   "billboard counter-rotation inverse transform (rotateZ(-spin) rotateX(-58deg))",
   "IIFE wrapper",
   "visibilitychange pause/start",
-  "reduced-motion static fallback"
+  "reduced-motion static fallback",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded as #05060f — must edit CSS to change",
   "150 3D-transformed DOM nodes can stress mobile GPU despite no per-star will-change",
-  "Pointer nudge only responds to horizontal axis (clientX); no vertical influence"
+  "Pointer nudge only responds to horizontal axis (clientX); no vertical influence",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -100,6 +103,12 @@
 <script>
 (function(){
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
   const dome = document.getElementById('sd-dome');
   // sphere radius in px ~ half the dome box (it scales via clamp, so use a unit & let transforms be in px relative to box)
   function radius(){ return dome.clientWidth/2; }
@@ -161,13 +170,13 @@
   }
 
   function frame(){
-    t += 0.016;
+    if(demo)t += 0.016;
     spin = (spin + vel) % 360;
     vel += (0.12 - vel)*0.02;        // ease back to base drift after a nudge
-    for(const s of stars){ s.tw += 0.016*s.tws; }
+    if(demo)for(const s of stars){ s.tw += 0.016*s.tws; }
     setDome();
     billboard();
-    raf = requestAnimationFrame(frame);
+    if(demo||performance.now()<interactionUntil)raf=requestAnimationFrame(frame);else raf=0;
   }
 
   // pointer nudges the planetarium spin
@@ -179,11 +188,11 @@
   addEventListener('click', ()=>{ vel += 1.0; });
 
   let raf = 0;
-  function start(){ if(!raf && !reduce) raf = requestAnimationFrame(frame); }
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);}
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange', ()=>document.hidden?stop():start());
 
-  if(reduce){ setDome(); billboard(); }   // one static resting frame, no loop
+  if(reduce||!demo){ setDome(); billboard(); }   // one static resting frame, no loop
   else start();
 })();
 </script>

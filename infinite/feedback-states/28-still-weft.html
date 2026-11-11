@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Still Weft — Feedback States. Weave list items into cloth on a still pool. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Still Weft</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#3cc4a8}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#0b7a66}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt15-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;outline:none}
+.dt15-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt15-cv{display:block;width:100%;height:100%;cursor:ew-resize}
+.dt15-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/feedback-states/28-still-weft.html",
+ "title": "Still Weft",
+ "description": "A list woven as cloth on a still pool: drag right to weave in an item, left to pull one out. Clean modern: off-black and verdigris with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and verdigris (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "At most 12 rows. Opens dark by default; the source defaulted to light.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "empty-state",
+  "weaving",
+  "thread",
+  "drag",
+  "canvas"
+ ]
+}
+</script>
+</head><body>
+<div class="dt15-root" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="12" aria-valuenow="0" aria-valuetext="0 items, the pool is still" aria-label="Forever plan list, woven as cloth on a still pool. Drag right across the threads to weave in an item. Drag left to pull out the top item. Arrow keys or Enter add and remove. Escape unweaves everything back to empty."></div>
+<div class="dt15-cap" aria-hidden="true">Still Weft</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.dt15-root'),cv=document.createElement('canvas');cv.className='dt15-cv';root.appendChild(cv);
+  var ctx=cv.getContext('2d'),W=300,dpr=1,N=17,MAX=12;
+  var o=new Float32Array(N),v=new Float32Array(N),rows=0,fl=null,clearing=false,cy=0,cyv=0,blink=0,beat=0,beatv=0,pd=null,ac;
+  var names=['Monday','cat-pics-2','Forever plan','Emotional baggage','Laundry','Forever','Delete old drafts','Tuesday','cat-pics-3','Call back','Groceries','Sunday'];
+  for(var q=1;q<N-1;q++)o[q]=3*Math.sin(Math.PI*q/(N-1)*3);
+  function cl(x,a,b){return x<a?a:x>b?b:x}
+  function G(){return{L:W*.27,R:W*.85,T:W*.16,B:W*.84,gap:W*.68/13}}
+  function rowY(k,g){return g.B-g.gap*(k+.75)}
+  function fell(g){return rows?rowY(rows-1,g)-g.gap*.5:g.B}
+  function wx(i,y,g){return g.L+(g.R-g.L)*i/(N-1)+o[i]*Math.sin(Math.PI*(y-g.T)/(g.B-g.T))}
+  function upd(){root.setAttribute('aria-valuenow',rows);
+    root.setAttribute('aria-valuetext',rows?rows+' items, last: '+names[(rows-1)%12]:'0 items, the pool is still')}
+  function pluck(){}
+  function shudder(){for(var i=1;i<N-1;i++)v[i]+=(i%2?1.4:-1.4)}
+  function move(np){np=cl(np,0,1);var a=fl.p,d=np-a;
+    for(var i=1;i<N-1;i++){var f=i/(N-1);if((f-a)*(f-np)<0)v[i]+=cl(d*W*.3,-3,3)}fl.p=np}
+  function land(e){var add=fl.mode==='add';
+    if(add&&e){rows++;beat=-G().gap*.7;beatv=0;v[N-2]-=2.5;pluck(1)}
+    else if(!add&&!e){rows--;v[1]+=2.5;pluck(0)}
+    fl=null;upd();
+    if(clearing){if(rows>0)fl={p:1,v:-.05,mode:'pull',dir:-1};else clearing=false}}
+  function step(dt){var m=false,n=Math.ceil(dt),h=dt/n,i,s;
+    for(s=0;s<n;s++){for(i=1;i<N-1;i++)v[i]+=(.2*(o[i-1]+o[i+1]-2*o[i])-.02*o[i])*h;
+      for(i=1;i<N-1;i++){v[i]*=Math.pow(.97,h);o[i]+=v[i]*h}}
+    for(i=1;i<N-1;i++)if(Math.abs(o[i])>.03||Math.abs(v[i])>.03)m=true;
+    var g=G(),t=fell(g);cyv=(cyv+(t-cy)*.16*dt)*Math.pow(.8,dt);cy+=cyv*dt;
+    if(Math.abs(t-cy)>.05||Math.abs(cyv)>.05)m=true;else{cy=t;cyv=0}
+    beatv=(beatv-beat*.2*dt)*Math.pow(.8,dt);beat+=beatv*dt;
+    if(Math.abs(beat)>.05||Math.abs(beatv)>.05)m=true;else beat=beatv=0;
+    if(blink>0){blink=Math.max(0,blink-.05*dt);m=true}
+    if(fl){m=true;if(!fl.held){var tg=fl.dir||(fl.p>.5?1:-1);fl.v+=tg*.0022*dt;fl.v=cl(fl.v*Math.pow(.95,dt),-.07,.07);
+      move(fl.p+fl.v*dt);if(fl.p>=1)land(1);else if(fl.p<=0)land(0)}}
+    return m}
+  function snapToTarget(){
+    while(fl&&!fl.held){land(fl.dir?fl.dir>0:fl.v?fl.v>0:fl.p>.5)}
+    o.fill(0);v.fill(0);cy=fell(G());cyv=beat=beatv=blink=0}
+  function line(a,b,c,d){ctx.beginPath();ctx.moveTo(a,b);ctx.lineTo(c,d);ctx.stroke()}
+  function weft(k,p,col,yo,sh,g,bg,ink){var y=rowY(k,g)+yo,xe=g.L+(g.R-g.L)*p,i,x,un=[];
+    ctx.strokeStyle=bg;ctx.lineWidth=4.5;line(g.L,y,xe,y);
+    ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(g.L,y);
+    for(i=1;i<N-1;i++){x=wx(i,y,g);if(x>=xe-2)break;if((i+k)%2){ctx.lineTo(x-2.4,y);ctx.moveTo(x+2.4,y);un.push(x)}}
+    ctx.lineTo(xe,y);ctx.stroke();
+    ctx.strokeStyle=ink;ctx.globalAlpha=.45;ctx.lineWidth=1;for(i=0;i<un.length;i++)line(un[i],y-3,un[i],y+3);ctx.globalAlpha=1;
+    if(sh){var s=W*.024;ctx.fillStyle=bg;ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(xe-s,y);
+      ctx.quadraticCurveTo(xe,y-s*.5,xe+s,y);ctx.quadraticCurveTo(xe,y+s*.5,xe-s,y);ctx.fill();ctx.stroke()}}
+  function crab(g,ink,bg){var s=W*.03,x=g.L-s*2.1,y=cy-s*.75,j,sd;
+    ctx.strokeStyle=ink;ctx.fillStyle=bg;ctx.lineWidth=1;ctx.globalAlpha=.45;line(x-s*1.7,cy,g.L,cy);ctx.globalAlpha=1;ctx.lineWidth=1.5;
+    for(sd=-1;sd<2;sd+=2){for(j=0;j<3;j++)line(x+sd*s*.6,y+s*(j*.16),x+sd*s*(1.05+j*.12),cy-s*.05);
+      line(x+sd*s*.5,y-s*.3,x+sd*s*.85,y-s*.6);ctx.beginPath();ctx.arc(x+sd*s*.95,y-s*.78,s*.24,0,7);ctx.fill();ctx.stroke();
+      line(x+sd*s*.22,y-s*.4,x+sd*s*.3,y-s*.9)}
+    ctx.beginPath();ctx.ellipse(x,y,s*.8,s*.5,0,0,7);ctx.fill();ctx.stroke();
+    ctx.lineWidth=1;line(x-s*.35,y+s*.12,x-s*.1,y-s*.18);line(x+s*.1,y+s*.18,x+s*.35,y-s*.12);
+    var es=Math.max(.15,1-Math.sin(blink*Math.PI));ctx.fillStyle=ink;
+    for(sd=-1;sd<2;sd+=2){ctx.beginPath();ctx.ellipse(x+sd*s*.3,y-s*.95,s*.13,s*.13*es,0,0,7);ctx.fill()}}
+  function draw(){var cs=getComputedStyle(document.documentElement),bg=cs.getPropertyValue('--bg').trim(),
+      ink=cs.getPropertyValue('--ink').trim(),acc=cs.getPropertyValue('--acc').trim(),g=G(),i,j,y;
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=bg;ctx.fillRect(0,0,W,W);ctx.lineCap='round';
+    ctx.strokeStyle=ink;ctx.lineWidth=1.5;line(g.L-6,g.T,g.R+6,g.T);line(g.L-6,g.B,g.R+6,g.B);
+    ctx.lineWidth=1;ctx.globalAlpha=.45;
+    for(i=1;i<N-1;i++){ctx.beginPath();for(j=0;j<=16;j++){y=g.T+(g.B-g.T)*j/16;j?ctx.lineTo(wx(i,y,g),y):ctx.moveTo(wx(i,y,g),y)}ctx.stroke()}
+    ctx.globalAlpha=1;
+    var full=fl&&fl.mode==='pull'?rows-1:rows;
+    for(i=0;i<full;i++)weft(i,1,ink,i===rows-1?beat:0,false,g,bg,ink);
+    if(fl)weft(fl.mode==='add'?rows:rows-1,fl.p,acc,fl.mode==='add'?-g.gap*.7:0,true,g,bg,ink);
+    ctx.strokeStyle=ink;ctx.lineWidth=1.5;line(g.L,g.T,g.L,g.B);line(g.R,g.T,g.R,g.B);
+    crab(g,ink,bg)}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  function span(){return W*.58}
+  cv.addEventListener('pointerdown',function(e){root.focus({preventScroll:true});clearing=false;
+    pd={x:e.clientX,lx:e.clientX,lt:e.timeStamp,vx:0,mode:null,p0:0};
+    if(fl){fl.held=true;fl.v=0;fl.dir=0;pd.mode=fl.mode;pd.p0=fl.p}
+    try{cv.setPointerCapture(e.pointerId)}catch(_){}kick()});
+  cv.addEventListener('pointermove',function(e){if(!pd)return;var dx=e.clientX-pd.x,dt=Math.max(1,e.timeStamp-pd.lt);
+    pd.vx=pd.vx*.4+.6*(e.clientX-pd.lx)/dt;pd.lx=e.clientX;pd.lt=e.timeStamp;
+    if(!pd.mode&&Math.abs(dx)>6){
+      if(dx>0&&rows<MAX){fl={p:0,v:0,mode:'add',held:true};pd.mode='add';pd.p0=0}
+      else if(dx<0&&rows>0){fl={p:1,v:0,mode:'pull',held:true};pd.mode='pull';pd.p0=1}
+      else{shudder();pd.mode='x'}}
+    if(fl&&fl.held)move(pd.p0+dx/span());kick()});
+  function up(e){if(!pd)return;
+    if(!pd.mode){var r=cv.getBoundingClientRect(),g=G(),x=e.clientX-r.left,i=cl(Math.round((x-g.L)/(g.R-g.L)*(N-1)),1,N-2);
+      v[i]+=2.2;if(x<g.L)blink=1}
+    else if(fl&&fl.held){fl.held=false;fl.v=cl(pd.vx*16.667/span(),-.07,.07)}
+    pd=null;kick()}
+  cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+  function add(){if(fl)return;if(rows>=MAX){shudder();return}fl={p:0,v:.05,mode:'add',dir:1}}
+  function pull(){if(fl)return;if(!rows){shudder();blink=1;return}fl={p:1,v:-.05,mode:'pull',dir:-1}}
+  root.addEventListener('keydown',function(e){var k=e.key;
+    if(k==='ArrowRight'||k==='ArrowUp'||k==='Enter'||k===' ')add();
+    else if(k==='ArrowLeft'||k==='ArrowDown'||k==='Backspace'||k==='Delete')pull();
+    else if(k==='Escape'){if(rows>0){clearing=true;pull()}}
+    else return;e.preventDefault();kick()});
+  setInterval(function(){if(!raf&&!document.hidden&&!reduce()&&amb()&&!fl){blink=1;v[1]+=.7;kick()}},4800);
+  new ResizeObserver(function(){W=root.getBoundingClientRect().width||300;dpr=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.round(W*dpr);cv.height=cv.width;cy=fell(G());cyv=0;draw();kick()}).observe(root);
+  cy=fell(G());
+  draw();kick();
+  // Idle demo (demo-v1): performs the control on its own until the first real input.
+  function amb(){var p=window.__foreverPreview;return !p||p.demoEnabled!==false}
+  var demo=amb(),dI=0,dT=0;
+  function stopDemo(){demo=false;clearInterval(dT)}
+  dT=setInterval(function(){if(!demo||document.hidden||reduce())return;
+    if('aadd'.charAt(dI++%4)==='a'){add();kick()}else{pull();kick()}},1800);
+  window.addEventListener('forever:interactive',stopDemo);
+  ['pointerdown','keydown','wheel'].forEach(function(t){document.addEventListener(t,stopDemo,true)});
+})();</script>
+</body></html>

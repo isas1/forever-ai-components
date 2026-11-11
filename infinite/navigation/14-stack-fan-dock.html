@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A dock whose fourth slot is a stack: press it and four document cards fan out upward in an arc, staggered; idle it opens and closes on its own.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stack Fan Dock</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --bg:#0d0f16; --glow:rgba(183,210,74,.14);
+    --dock-bg:rgba(28,32,48,.62); --dock-hl:rgba(255,255,255,.07); --border:rgba(255,255,255,.08);
+    --shadow:0 18px 50px -24px rgba(0,0,0,.9);
+    --item-hl:rgba(255,255,255,.22); --item-sh:rgba(0,0,0,.6);
+    --card:#f4f6fb; --card-line:rgba(0,0,0,.12); --card-sh:rgba(0,0,0,.5);
+    --accent:#B7D24A;
+    --cap:#fff; --cap-o:.28;
+    --g1:linear-gradient(150deg,#B7D24A,#6d8a12);
+    --g2:linear-gradient(150deg,#5FB7A1,#237a68);
+    --g3:linear-gradient(150deg,#f4f6fb,#9aa1bd);
+    --g5:linear-gradient(150deg,#E8AB30,#b7741a);
+    --c1:#B7D24A; --c2:#5FB7A1; --c3:#E8AB30; --c4:#F06A9B;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow:rgba(94,112,16,.10);
+    --dock-bg:rgba(255,255,255,.7); --dock-hl:rgba(255,255,255,.85); --border:rgba(0,0,0,.08);
+    --shadow:0 18px 40px -24px rgba(0,0,0,.18);
+    --item-hl:rgba(255,255,255,.5); --item-sh:rgba(0,0,0,.16);
+    --card:#ffffff; --card-line:rgba(0,0,0,.1); --card-sh:rgba(0,0,0,.16);
+    --accent:#5E7010;
+    --cap:#232a0a; --cap-o:.5;
+    --c1:#5E7010; --c2:#137468; --c3:#926710; --c4:#B0245C;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(60vw 40vw at 50% 110%,var(--glow),transparent 60%);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    display:grid;place-items:end center;padding-bottom:12%;
+  }
+  .c14-dock{
+    --sz:clamp(32px,14vmin,48px);
+    display:flex;align-items:flex-end;gap:clamp(6px,2.5vmin,10px);padding:10px 12px;
+    background:var(--dock-bg);border:1px solid var(--border);border-radius:16px;
+    box-shadow:inset 0 1px 0 var(--dock-hl),var(--shadow);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  }
+  .c14-item{
+    position:relative;width:var(--sz);height:var(--sz);flex:0 0 auto;border:0;padding:0;
+    border-radius:calc(var(--sz) * .27);cursor:pointer;
+    box-shadow:0 4px 12px -4px var(--item-sh),inset 0 1px 0 var(--item-hl);
+    transition:transform .18s cubic-bezier(.22,1,.36,1);
+  }
+  .c14-item:nth-child(1){background:var(--g1)}
+  .c14-item:nth-child(2){background:var(--g2)}
+  .c14-item:nth-child(3){background:var(--g3)}
+  .c14-item:nth-child(5){background:var(--g5)}
+  .c14-item:hover,.c14-item:focus-visible{transform:translateY(-5px) scale(1.08);outline:none}
+  /* the stack: a folder tile whose cards fan up from its centre */
+  .c14-stack{background:var(--dock-bg);border:1px solid var(--border);box-shadow:inset 0 1px 0 var(--dock-hl)}
+  .c14-stack::before{content:"";position:absolute;inset:32% 26%;border-radius:2px;background:var(--card);opacity:.55;transform:rotate(-8deg)}
+  .c14-stack::after{content:"";position:absolute;inset:32% 26%;border-radius:2px;background:var(--card);border-top:4px solid var(--accent);transform:rotate(6deg)}
+  .c14-card{
+    position:absolute;left:50%;bottom:50%;width:calc(var(--sz) * .62);height:calc(var(--sz) * .78);
+    margin-left:calc(var(--sz) * -.31);border-radius:3px;background:var(--card);
+    border-top:4px solid var(--tint);box-shadow:0 6px 16px -6px var(--card-sh);
+    transform-origin:50% 100%;
+    transform:translateY(calc(var(--sz) * .3)) rotate(0) scale(.5);opacity:0;pointer-events:none;
+    transition:transform 420ms cubic-bezier(.34,1.4,.64,1) var(--d),opacity 260ms var(--d);
+  }
+  .c14-card i{position:absolute;left:18%;right:18%;height:2px;background:var(--card-line);border-radius:1px}
+  .c14-card i:nth-child(1){top:30%}.c14-card i:nth-child(2){top:48%}.c14-card i:nth-child(3){top:66%;right:40%}
+  .c14-card:nth-child(1){--tint:var(--c1);--a:-27deg;--d:0ms}
+  .c14-card:nth-child(2){--tint:var(--c2);--a:-9deg;--d:45ms}
+  .c14-card:nth-child(3){--tint:var(--c3);--a:9deg;--d:90ms}
+  .c14-card:nth-child(4){--tint:var(--c4);--a:27deg;--d:135ms}
+  .c14-stack.is-open .c14-card{opacity:1;transform:rotate(var(--a)) translateY(calc(var(--sz) * -1.15)) scale(1)}
+  .c14-stack.is-open{transform:none}
+  .c14-cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
+  @media (prefers-reduced-motion:reduce){.c14-card,.c14-item{transition:opacity .2s}}
+@media(max-width:220px){.c14-dock{--sz:26px;gap:4px;padding:8px}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/14-stack-fan-dock.html",
+ "title": "Stack Fan Dock",
+ "description": "A dock whose fourth slot is a document stack: press it and four tinted cards fan upward in a 54° arc with a staggered spring, press again to gather them; it runs autonomously fans open for 1 until first deliberate input.7 s and closes for 2.3 s on its own.",
+ "useWhen": "Recent-files or quick-actions menus in a dock, launcher, or toolbar; any place a single slot should reveal a small set without a full menu.",
+ "avoidWhen": "Sets larger than ~5 items (the fan gets crowded) and layouts with no headroom above the dock for the cards to rise into.",
+ "agentPrompt": "Add a card by appending another <span class=\"c14-card\"> and giving it its own --tint/--a/--d nth-child rule (spread the --a angles evenly); change the rise with the -1.15 in the .is-open transform; make hover-only by removing the click handler. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "card count, tints (--c1…--c4) and fan angles (--a per card)",
+  "stagger (--d per card) and spring curve (cubic-bezier(.34,1.4,.64,1))",
+  "rise distance (translateY -1.15 × --sz)",
+  "demo timing (phase 5 open / 22 close on a 100 ms clock)",
+  "dock items and gradients (--g1, --g2, --g3, --g5)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "transform-origin 50% 100% on .c14-card (the fan pivots from the slot)",
+  "aria-expanded kept in step by setOpen()",
+  "IIFE wrapper",
+  "visibilitychange stop/start of the phase clock",
+  "prefers-reduced-motion guard (cards fade, no spring)",
+  "lastInput pause so the demo never fights a real press",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "The cards are decorative — no titles or click targets inside them yet",
+  "The dock is bottom-anchored (padding-bottom 12%) to leave room for the fan; re-centre it and the top cards may clip",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "dock",
+  "stack",
+  "fan",
+  "folder",
+  "navigation",
+  "macos",
+  "documents",
+  "spring"
+ ]
+}
+</script>
+</head>
+<body>
+<nav class="c14-dock" id="c14-dock" aria-label="Dock with a document stack">
+  <button class="c14-item" type="button" aria-label="Files"></button>
+  <button class="c14-item" type="button" aria-label="Mail"></button>
+  <button class="c14-item" type="button" aria-label="Notes"></button>
+  <button class="c14-item c14-stack" id="c14-stack" type="button" aria-label="Recent documents" aria-expanded="false">
+    <span class="c14-card"><i></i><i></i><i></i></span>
+    <span class="c14-card"><i></i><i></i><i></i></span>
+    <span class="c14-card"><i></i><i></i><i></i></span>
+    <span class="c14-card"><i></i><i></i><i></i></span>
+  </button>
+  <button class="c14-item" type="button" aria-label="Music"></button>
+</nav>
+<div class="c14-cap">Stack Fan Dock</div>
+<script>
+(function(){
+  var stack=document.getElementById('c14-stack'),dock=document.getElementById('c14-dock');
+  if(!stack||!dock)return;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
+  function setOpen(on){stack.classList.toggle('is-open',on);stack.setAttribute('aria-expanded',on?'true':'false');}
+  var lastInput=0;
+  stack.addEventListener('click',function(){lastInput=Date.now();setOpen(!stack.classList.contains('is-open'));});
+  stack.addEventListener('pointerenter',function(e){if(e.pointerType!=='mouse')return;lastInput=Date.now();setOpen(true);});
+  dock.addEventListener('pointerleave',function(e){if(e.pointerType!=='mouse')return;lastInput=Date.now();setOpen(false);});
+  /* autonomous idle: fan open for 1.7 s, closed for 2.3 s — a 100 ms clock so the
+     demo resumes ~3 s after real input without ever fighting it */
+  var timer=0,phase=0,demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function tick(){
+    if(document.hidden||Date.now()-lastInput<3000)return;
+    phase=(phase+1)%40;
+    if(phase===5)setOpen(true);
+    if(phase===22)setOpen(false);
+  }
+  function start(){if(!timer&&demoEnabled){timer=setInterval(tick,100);}}
+  function stop(){if(timer){clearInterval(timer);timer=0;}}
+  function takeover(){demoEnabled=false;stop();}
+  window.addEventListener("forever:interactive",takeover);dock.addEventListener("pointerdown",takeover,true);dock.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  start();
+})();
+</script>
+</body>
+</html>

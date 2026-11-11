@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="description" content="Priority queue you reorder by dragging: the lifted row tilts with pointer velocity and neighbours spring into place. Alt+Arrow keys reorder from the keyboard.">
+<title>Spring Physics Stack</title>
+<script>
+/* theme hook: ?theme=light|dark is applied before first paint */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --bg:#0A0A0A; --surface:#111111; --surface-2:#161616; --surface-3:#1C1C1C;
+    --text:#EDEDEA; --text-muted:#8A8A85; --text-faint:#5A5A56;
+    --border:rgba(255,255,255,0.08);
+    --accent:#C7F000; --accent-line:rgba(199,240,0,0.32); --accent-soft:rgba(199,240,0,0.14);
+    --shadow-lg:0 16px 48px rgba(0,0,0,.55);
+    --font-sans:ui-sans-serif,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --ease-out:cubic-bezier(0.22,1,0.36,1);
+  }
+  :root[data-theme="light"]{
+    --bg:#FAFAF8; --surface:#F4F4F0; --surface-2:#ECECE6; --surface-3:#FFFFFF;
+    --text:#1A1A18; --text-muted:#6B6B66; --text-faint:#9A9A93;
+    --border:rgba(0,0,0,0.08);
+    --accent:#4D7A00; --accent-line:rgba(77,122,0,0.35); --accent-soft:rgba(77,122,0,0.12);
+    --shadow-lg:0 16px 40px rgba(40,50,10,.18);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+  .spk-tile{
+    position:absolute;inset:0;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;
+    padding:clamp(8px,5vmin,24px) clamp(8px,5.5vmin,26px) clamp(14px,8vmin,34px);
+    background:var(--surface);color:var(--text);font-family:var(--font-sans);user-select:none;-webkit-user-select:none;
+  }
+  .spk-tile *{box-sizing:border-box}
+  .spk-head{
+    display:flex;justify-content:space-between;align-items:center;margin-bottom:min(2.6vmin,12px);
+    font:600 clamp(7px,2.9vmin,11px) var(--font-mono);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);
+  }
+  .spk-badge{background:var(--surface-3);padding:2px 8px;border-radius:999px}
+  .spk-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:min(2vmin,8px);position:relative}
+  .spk-item{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:8px;
+    padding:clamp(4px,2.5vmin,12px) clamp(6px,3.2vmin,14px);display:flex;align-items:center;gap:min(2.8vmin,11px);
+    cursor:grab;touch-action:none;will-change:transform;
+    transition:transform .28s var(--ease-out),box-shadow .2s ease,border-color .2s ease;
+  }
+  .spk-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .spk-item.spk-drag{cursor:grabbing;z-index:20;border-color:var(--accent);box-shadow:var(--shadow-lg),0 0 0 1px var(--accent-line),0 0 18px var(--accent-soft);transition:box-shadow .15s ease,border-color .15s ease}
+  .spk-grip{color:var(--text-faint);font-size:clamp(9px,4vmin,16px);line-height:1}
+  .spk-meta{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .spk-name{font-size:clamp(8px,3.4vmin,13px);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spk-sub{font:clamp(6px,2.6vmin,11px) var(--font-mono);color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spk-tag{font:700 clamp(6px,2.7vmin,11px) var(--font-mono);padding:3px 7px;border-radius:5px;background:var(--surface-3);color:var(--text-muted)}
+  .spk-t0{color:var(--text)} .spk-t3{color:var(--text-faint)}
+  @media (prefers-reduced-motion:reduce){.spk-item{transition:none}}
+  .spk-cap{position:absolute;left:min(3vmin,10px);bottom:min(2vmin,7px);font:clamp(6px,2.4vmin,9px) var(--font-mono);color:var(--text-muted);opacity:.55;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/drag-reorder/11-spring-physics-stack.html",
+ "title": "Spring Physics Stack",
+ "description": "Priority queue you reorder by dragging: the lifted row tilts with pointer velocity and neighbours spring into place.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [
+  "Forever Opus tokens on :root (--bg, --surface*, --text*, --border*, --accent) — one lime accent, no gradients",
+  "copy and data values in markup/script"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "theme hook: ?theme= bootstrap, forever:theme message listener and :root[data-theme=\"light\"] tokens",
+  "IIFE wrapper, visibilitychange sleep, prefers-reduced-motion guard, time-based (dt) animation"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Keyboard reorder uses Alt+ArrowUp/Down."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "reorder",
+  "drag-and-drop",
+  "spring",
+  "queue",
+  "list"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="spk-tile" role="group" aria-label="Spring physics priority queue">
+  <div class="spk-head"><span>Queue Priority</span><span class="spk-badge">4 active</span></div>
+  <ul class="spk-list" id="spk-list" role="listbox" aria-label="Reorderable priority queue">
+    <li class="spk-item" tabindex="0" role="option" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"><span class="spk-grip" aria-hidden="true">&#x283F;</span><div class="spk-meta"><span class="spk-name">edge-auth-proxy</span><span class="spk-sub">us-east-1 &middot; 99.98%</span></div><span class="spk-tag spk-t0">P0</span></li>
+    <li class="spk-item" tabindex="0" role="option" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"><span class="spk-grip" aria-hidden="true">&#x283F;</span><div class="spk-meta"><span class="spk-name">vector-ingest-worker</span><span class="spk-sub">eu-central &middot; 142ms</span></div><span class="spk-tag spk-t1">P1</span></li>
+    <li class="spk-item" tabindex="0" role="option" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"><span class="spk-grip" aria-hidden="true">&#x283F;</span><div class="spk-meta"><span class="spk-name">billing-webhook-sync</span><span class="spk-sub">global &middot; idle</span></div><span class="spk-tag spk-t2">P2</span></li>
+    <li class="spk-item" tabindex="0" role="option" aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"><span class="spk-grip" aria-hidden="true">&#x283F;</span><div class="spk-meta"><span class="spk-name">audit-log-archiver</span><span class="spk-sub">batch &middot; 6,204 rows</span></div><span class="spk-tag spk-t3">P3</span></li>
+  </ul>
+</div>
+<div class="spk-cap" aria-hidden="true">Spring Stack</div>
+<script>
+(() => {
+  addEventListener('message', (e) => {
+    const d = e.data;
+    if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const list = document.getElementById('spk-list');
+  let dragEl = null, startY = 0, lastY = 0, velocity = 0;
+  let demoEnabled = window.__foreverPreview?.demoEnabled !== false, demoTimer = 0, hop = 0;
+
+  const updateBadges = () => {
+    [...list.children].forEach((li, i) => {
+      const tag = li.querySelector('.spk-tag');
+      tag.textContent = 'P' + i;
+      tag.className = 'spk-tag spk-t' + Math.min(i, 3);
+    });
+  };
+  const tilt = (dy) => reduced() ? 'translateY(' + dy + 'px)' : 'translateY(' + dy + 'px) scale(1.03) rotate(' + velocity * 0.35 + 'deg)';
+
+  // FLIP: neighbours start at their old slot and the CSS transition springs them home
+  const animateFLIP = (firstRects) => {
+    if (reduced()) return;
+    [...list.children].forEach((child) => {
+      if (child === dragEl) return;
+      const dy = firstRects.get(child).top - child.getBoundingClientRect().top;
+      if (!dy) return;
+      child.style.transition = 'none';
+      child.style.transform = 'translateY(' + dy + 'px)';
+      requestAnimationFrame(() => { if (document.hidden) return; child.style.transition = ''; child.style.transform = ''; });
+    });
+  };
+
+  // attract: one neighbour swap every 1.5 s, sprung by the same FLIP the drag uses (wall visibility only)
+  const HOPS = [[1, -1], [2, -1], [0, 1], [3, -1]];
+  function demoStep() {
+    demoTimer = 0;
+    if (!demoEnabled || document.hidden || reduced()) return;
+    const [i, dir] = HOPS[hop++ % HOPS.length], item = list.children[i];
+    if (item) {
+      const first = new Map([...list.children].map((c) => [c, c.getBoundingClientRect()]));
+      if (dir < 0 && item.previousElementSibling) list.insertBefore(item, item.previousElementSibling);
+      else if (dir > 0 && item.nextElementSibling) list.insertBefore(item.nextElementSibling, item);
+      animateFLIP(first);
+      updateBadges();
+    }
+    demoTimer = setTimeout(demoStep, 1500);
+  }
+  const demoStart = () => { if (!demoTimer && demoEnabled && !document.hidden && !reduced()) demoTimer = setTimeout(demoStep, 700); };
+  const takeover = () => { demoEnabled = false; clearTimeout(demoTimer); demoTimer = 0; };
+  addEventListener('forever:interactive', takeover);
+  document.addEventListener('pointerdown', takeover, true);
+  document.addEventListener('keydown', takeover, true);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(demoTimer); demoTimer = 0; } else demoStart(); });
+
+  list.addEventListener('pointerdown', (e) => {
+    const item = e.target.closest('.spk-item');
+    if (!item) return;
+    dragEl = item;
+    startY = lastY = e.clientY;
+    velocity = 0;
+    item.classList.add('spk-drag');
+    item.setPointerCapture(e.pointerId);
+  });
+
+  list.addEventListener('pointermove', (e) => {
+    if (!dragEl) return;
+    const dy = e.clientY - startY;
+    velocity = Math.max(-12, Math.min(12, (e.clientY - lastY) * 0.45));
+    lastY = e.clientY;
+    dragEl.style.transform = tilt(dy);
+
+    const box = dragEl.getBoundingClientRect(), center = box.top + box.height / 2;
+    for (const sib of list.querySelectorAll('.spk-item:not(.spk-drag)')) {
+      const sb = sib.getBoundingClientRect(), sc = sb.top + sb.height / 2;
+      const pos = dragEl.compareDocumentPosition(sib);
+      if ((dy > 0 && center > sc && pos & Node.DOCUMENT_POSITION_FOLLOWING) || (dy < 0 && center < sc && pos & Node.DOCUMENT_POSITION_PRECEDING)) {
+        const first = new Map([...list.children].map((c) => [c, c.getBoundingClientRect()]));
+        const before = dragEl.offsetTop;
+        list.insertBefore(dragEl, dy > 0 ? sib.nextSibling : sib);
+        startY += dragEl.offsetTop - before;
+        dragEl.style.transform = tilt(e.clientY - startY);
+        animateFLIP(first);
+        updateBadges();
+        break;
+      }
+    }
+  });
+
+  const endDrag = () => {
+    if (!dragEl) return;
+    dragEl.classList.remove('spk-drag');
+    dragEl.style.transform = '';
+    dragEl = null;
+  };
+  list.addEventListener('pointerup', endDrag);
+  list.addEventListener('pointercancel', endDrag);
+
+  list.addEventListener('keydown', (e) => {
+    const item = e.target.closest('.spk-item');
+    if (!item || !e.altKey) return;
+    if (e.key === 'ArrowUp' && item.previousElementSibling) {
+      e.preventDefault();
+      list.insertBefore(item, item.previousElementSibling);
+    } else if (e.key === 'ArrowDown' && item.nextElementSibling) {
+      e.preventDefault();
+      list.insertBefore(item.nextElementSibling, item);
+    } else return;
+    item.focus();
+    updateBadges();
+  });
+  demoStart();
+})();
+</script>
+</body>
+</html>

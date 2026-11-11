@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block.
@@ -24,10 +25,10 @@
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c09-bg);
     font-family:system-ui,-apple-system,sans-serif;}
-  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  #ce9-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:420px;perspective-origin:50% 50%;}
-  #tunnel{position:relative;width:62vmin;height:62vmin;transform-style:preserve-3d;}
-  .ring{position:absolute;inset:0;border:2px solid;border-radius:10px;
+  #ce9-tunnel{position:relative;width:62vmin;height:62vmin;transform-style:preserve-3d;}
+  .ce9-ring{position:absolute;inset:0;border:2px solid;border-radius:10px;
     box-shadow:0 0 12px var(--c09-glow);}
   .cap{position:fixed;left:10px;bottom:8px;color:var(--c09-cap);opacity:var(--c09-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
@@ -54,12 +55,14 @@
   "prefers-reduced-motion check",
   "IIFE-style scoped constants",
   "SPAN-based z wrapping (o.z -= SPAN)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "No reduced-motion static fallback — animation is fully stopped but no still frame is shown",
   "Background color hardcoded in CSS; must edit to change from dark navy",
-  "Ring count and SPAN tightly coupled — changing N without adjusting SPAN shifts spacing"
+  "Ring count and SPAN tightly coupled — changing N without adjusting SPAN shifts spacing",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -84,15 +87,21 @@
 </script>
 </head>
 <body>
-<div id="stage"><div id="tunnel"></div></div>
+<div id="ce9-stage"><div id="ce9-tunnel"></div></div>
 <div class="cap">Perspective Tunnel</div>
 <script>
 (function(){
-  const tunnel=document.getElementById('tunnel');
+  const tunnel=document.getElementById('ce9-tunnel');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
   const N=18,SPAN=1800,rings=[];
   for(let i=0;i<N;i++){
-    const r=document.createElement('div');r.className='ring';
+    const r=document.createElement('div');r.className='ce9-ring';
     tunnel.appendChild(r);
     rings.push({el:r,z:-(i/N)*SPAN});
   }
@@ -113,9 +122,9 @@
       docEl.setAttribute('data-theme',d.theme);syncTheme();}});
   syncTheme();
   function loop(){
-    roll+=spin;
+    if(demo||performance.now()<interactionUntil)roll+=spin;
     rings.forEach(o=>{
-      o.z+=4;
+      if(demo)o.z+=4;
       if(o.z>200)o.z-=SPAN;
       const depth=(o.z+SPAN)/SPAN;            // 0 far .. ~1 near
       const hue=(o.z*0.12+roll*2)%360;
@@ -125,14 +134,14 @@
       const sc=0.2+depth*0.9;
       o.el.style.transform=`translateZ(${o.z}px) rotateZ(${roll+o.z*0.05}deg) scale(${sc})`;
     });
-    raf=requestAnimationFrame(loop);
+    if(demo||performance.now()<interactionUntil)raf=requestAnimationFrame(loop);else raf=0;
   }
   addEventListener('pointermove',e=>{interacted=true;
     spin=0.25+(e.clientX/innerWidth-.5)*1.6;});
-  function start(){if(!raf&&!reduce)loop();}
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
-  if(reduce){loop();cancelAnimationFrame(raf);raf=0;}else start();
+  if(reduce||!demo){loop();cancelAnimationFrame(raf);raf=0;}else start();
 })();
 </script>
 </body>

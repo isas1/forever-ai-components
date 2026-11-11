@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="Outlined button where a copper-to-emerald gradient sweeps across to fill it and flip the text dark, looping in and out.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sliding Fill</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,7 +34,7 @@
   html,body{margin:0;height:100%;overflow:hidden}
   body{background:var(--c08-bg);display:grid;place-items:center;
     background-image:radial-gradient(60vw 40vw at 80% 0%,var(--c08-glow-a),transparent 60%);}
-  #stage{position:fixed;inset:0;display:grid;place-items:center}
+  #c08-stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c08-fill{position:relative;overflow:hidden;border:1px solid var(--border-mid);cursor:pointer;padding:17px 36px;
     font-family:var(--font-display);font-size:clamp(15px,4.5vw,18px);font-weight:600;color:var(--text-0);
@@ -46,21 +47,22 @@
 
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c08-fill,.c08-fill::before{transition-duration:.001ms}}
+  .c08-fill:focus-visible{outline:2px solid var(--text-0);outline-offset:3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/buttons/08-sliding-fill.html",
  "title": "Sliding Fill",
- "description": "Outlined button where a copper-to-emerald gradient sweeps in from the left on hover, filling the button and flipping text dark. Auto-cycles as idle demo.",
+ "description": "Outlined button where a copper-to-emerald gradient sweeps in from the left on hover, filling the button and flipping text dark. cycles autonomously until first deliberate input as autonomous preview until first deliberate input.",
  "useWhen": "CTA buttons, hero sections, or any action button needing tactile hover feedback with strong color contrast.",
- "avoidWhen": "Auto-cycle demo mode ships as-is — remove the setTimeout loop before production use. Avoid on light backgrounds without color adjustments.",
+ "avoidWhen": "Auto-cycle demo mode ships as-is — remove the setTimeout loop before production use. Avoid on light backgrounds without color adjustments. Autonomous preview ends at first deliberate input and never resumes.",
  "agentPrompt": "Change the gradient to a rose-to-orange sweep by setting --grad-iris-cyan to linear-gradient(120deg,#f43f5e,#fb923c), and slow the fill transition by changing --dur-slow to 800ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gradient colors (--grad-iris-cyan)",
   "transition duration (--dur-slow: 520ms)",
   "button padding and font size",
   "filled text color (#0b0c12)",
-  "idle demo cadence (FILL_MS=1500 filled / REST_MS=1500 empty, first sweep after 300 ms)",
+  "autonomous preview until first deliberate input cadence (FILL_MS=1500 filled / REST_MS=1500 empty, first sweep after 300 ms)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -69,17 +71,18 @@
   "prefers-reduced-motion guard",
   "visibilitychange pause",
   ".is-filled demo class sharing the :hover rules + takeover on real hover/press/focus",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
-  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
+  "autonomous preview cycle that stops at first deliberate input runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
   "agent-ready",
   "easy-to-modify",
-  "mobile-ready",
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
@@ -98,7 +101,7 @@
 </script>
 </head>
 <body>
-<div id="stage">
+<div id="c08-stage">
   <button class="c08-fill" type="button">Slide fill</button>
 </div>
 <div class="cap">Sliding fill</div>
@@ -118,20 +121,19 @@
   // FILL_MS filled / REST_MS empty. Real hover/press/focus takes over and hands the button back
   // to :hover; the demo resumes after IDLE_RESUME ms of quiet.
   var TICK=100, FILL_MS=1500, REST_MS=1500, IDLE_RESUME=3600, LEAD=300;
-  var demo=true, filled=false, phase=REST_MS-LEAD, idle=0, clock=null;
+  var demo=window.__foreverPreview?.demoEnabled!==false&&!reduce, filled=false, phase=REST_MS-LEAD, idle=0, clock=null;
   function fill(on){ filled=on; btn.classList.toggle("is-filled", on); }
   function tick(){
-    if(!demo){ if(over) idle=0; else idle+=TICK; if(idle>=IDLE_RESUME){ demo=true; idle=0; phase=REST_MS-LEAD; } return; }
+    if(!demo)return;
     phase+=TICK;
     if(phase >= (filled?FILL_MS:REST_MS)){ phase=0; fill(!filled); }
   }
-  function takeover(){ demo=false; idle=0; fill(false); }   // real input ends the idle demo
+  function takeover(){ if(!demo)return; demo=false; idle=0; stop(); }   // real input ends the idle demo
   var over=false;                              // demo stays off while a pointer rests on the control
-  btn.addEventListener("pointerenter", function(){ over=true; takeover(); });
-  btn.addEventListener("pointerleave", function(){ over=false; idle=0; });
-  btn.addEventListener("pointerdown", takeover);
-  btn.addEventListener("focus", takeover);
-  function start(){ if(!clock && !reduce) clock=setInterval(tick, TICK); }
+  window.addEventListener("forever:interactive",takeover);
+  btn.addEventListener("pointerdown",takeover,true);
+  btn.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  function start(){ if(!clock && !reduce && demo) clock=setInterval(tick, TICK); }
   function stop(){ clearInterval(clock); clock=null; }
   document.addEventListener("visibilitychange", function(){ document.hidden ? stop() : start(); });
   if(reduce) fill(true);                       // reduced motion: one static filled state, no loop

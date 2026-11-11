@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Swallowed Item — Feedback &amp; States. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Swallowed Item</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--mut:#5d6066;--acc:#a6d36b}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--mut:#a3a5a9;--acc:#4b6e12}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt18-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.dt18-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt18-cv{display:block;width:100%;height:100%}
+.dt18-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.dt18-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/feedback-states/31-swallowed-item.html",
+ "title": "Swallowed Item",
+ "description": "A stack of list entries above an anemone: fling an entry into it to delete, then tap the anemone within 5 seconds to bring it back. Clean modern: off-black and pistachio with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and pistachio (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "The stack holds at most 4 entries. Light-theme dashed slot and muted details are low contrast and decorative. Close to the 12 KB soft size limit.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "delete",
+  "undo",
+  "list",
+  "anemone",
+  "fling"
+ ]
+}
+</script>
+</head><body>
+<div class="dt18-root" role="application" tabindex="0" aria-label="Swallowed Item. A stack of list entries above an anemone. Drag and fling an entry into the anemone to delete it. Tap the anemone within 5 seconds to bring it back. Tap the dashed slot to add an entry. Keyboard: arrows choose, Enter or Space flings or adds, Escape brings the last entry back."><canvas class="dt18-cv" aria-hidden="true"></canvas><span class="dt18-sr" aria-live="polite"></span></div>
+<div class="dt18-cap" aria-hidden="true">Swallowed Item</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var R=document.querySelector('.dt18-root'),C=R.querySelector('canvas'),X=C.getContext('2d'),SR=R.querySelector('.dt18-sr');
+  var NAMES=['Forever plan','cat-pics-2','Emotional baggage','Monday','Forever backup','cat-pics-3','Tuesday','Delete me'],ni=4;
+  var W=0,dpr=1,MX=.5,MY=.76,MAX=4;
+  function mk(n){return{n:n,x:0,y:0,vx:0,vy:0,s:1,b:.3+((n.length*37+n.charCodeAt(0))%50)/100}}
+  var items=NAMES.slice(0,4).map(mk),fly=[],pend=null,parts=[],o=.7,ov=0,t=0,awake=220,sel=0,kbd=false,drag=null,timer=0;
+  function slotY(i){return W*(.13+i*.13)}
+  function say(s){SR.textContent=s}
+  function burst(x,y,n,c,up){for(var i=0;i<n;i++){var a=up?-Math.PI/2+(Math.random()-.5)*1.2:-Math.PI*Math.random(),v=W*(up?.002+Math.random()*.004:.006+Math.random()*.012);
+    parts.push({x:x,y:y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,l:30+Math.random()*25,m:30+25,c:c,r:1+Math.random()*1.5})}}
+  function openTarget(){var mx=W*MX,my=W*MY,d=1e9;
+    if(drag)d=Math.hypot(drag.it.x-mx,drag.it.y-my);
+    fly.forEach(function(f){d=Math.min(d,Math.hypot(f.x-mx,f.y-my))});
+    if(d<1e9)return .35+.65*Math.max(0,Math.min(1,1-d/(W*.55)));
+    if(pend)return .12;return items.length?.3:0}
+  function swallow(f){if(pend)digest();pend={n:f.n,b:f.b,i:f.i,s:0,sv:0,end:performance.now()+5000};
+    burst(W*MX,W*MY,22,'acc');say(f.n+' swallowed. Tap the anemone within 5 seconds to bring it back.');
+    if(!timer)timer=setInterval(function(){checkPend();kick()},250);kick()}
+  function stopTimer(){clearInterval(timer);timer=0}
+  function digest(){burst(W*MX,W*(MY+.08),8,'mut',true);say(pend.n+' is gone.');pend=null;stopTimer()}
+  function checkPend(){if(pend&&performance.now()>=pend.end){digest();kick()}}
+  function restore(){if(!pend)return;var it=mk(pend.n);it.b=pend.b;it.x=W*MX;it.y=W*MY;it.vy=-W*.02;
+    items.splice(Math.min(pend.i,items.length),0,it);burst(W*MX,W*MY,10,'acc');pend=null;stopTimer();say(it.n+' is back.');kick()}
+  function add(){if(items.length+(pend?1:0)>=MAX){say('The stack is full.');return}
+    var it=mk(NAMES[ni++%NAMES.length]);it.x=W/2;it.y=-W*.1;items.push(it);sel=items.length;say(it.n+' added.');kick()}
+  function flingItem(i,vx,vy){var it=items.splice(i,1)[0];it.vx=vx;it.vy=vy;it.age=0;it.i=i;fly.push(it);sel=Math.max(0,Math.min(sel,items.length-1));kick()}
+  function step(dt){t+=dt;if(awake>0)awake-=dt;var mv=awake>0||!!drag,k=.16,d=Math.pow(.8,dt),mx=W*MX,my=W*MY;
+    items.forEach(function(it,i){if(drag&&drag.it===it)return;var tx=W/2,ty=slotY(i);
+      it.vx=(it.vx+(tx-it.x)*k*dt)*d;it.vy=(it.vy+(ty-it.y)*k*dt)*d;it.x+=it.vx*dt;it.y+=it.vy*dt;
+      if(Math.abs(it.vx)+Math.abs(it.vy)>.03||Math.abs(tx-it.x)+Math.abs(ty-it.y)>.3)mv=true;else{it.x=tx;it.y=ty;it.vx=it.vy=0}});
+    for(var i=fly.length-1;i>=0;i--){var f=fly[i],fr=Math.pow(.9,dt);f.age+=dt;
+      f.vx=(f.vx+(mx-f.x)*.014*dt)*fr;f.vy=(f.vy+(my-f.y)*.014*dt)*fr;f.x+=f.vx*dt;f.y+=f.vy*dt;
+      var dd=Math.hypot(mx-f.x,my-f.y);f.s=Math.min(1,.3+dd/(W*.3));
+      if(dd<W*.06||f.age>150){fly.splice(i,1);swallow(f)}mv=true}
+    if(pend){pend.sv=(pend.sv+(1-pend.s)*.2*dt)*Math.pow(.78,dt);pend.s+=pend.sv*dt;mv=true}
+    var ot=openTarget();ov=(ov+(ot-o)*.12*dt)*Math.pow(.82,dt);o+=ov*dt;if(Math.abs(ov)>.001||Math.abs(ot-o)>.002)mv=true;
+    parts=parts.filter(function(p){var f=Math.pow(.93,dt);p.vx*=f;p.vy*=f;p.x+=p.vx*dt;p.y+=p.vy*dt;p.l-=dt;return p.l>0});
+    if(parts.length)mv=true;checkPend();return mv}
+  function snapToTarget(){items.forEach(function(it,i){if(drag&&drag.it===it)return;it.x=W/2;it.y=slotY(i);it.vx=it.vy=0});
+    while(fly.length)swallow(fly.shift());if(pend)pend.s=1;o=openTarget();ov=0;parts=[];awake=0}
+  function rr(x,y,w,h,r){X.beginPath();X.moveTo(x+r,y);X.arcTo(x+w,y,x+w,y+h,r);X.arcTo(x+w,y+h,x,y+h,r);X.arcTo(x,y+h,x,y,r);X.arcTo(x,y,x+w,y,r);X.closePath()}
+  function item(x,y,s,rot,b,c,lw,bar){var w=W*.6,h=W*.09;X.save();X.translate(x,y);X.rotate(rot);X.scale(s,s);
+    rr(-w/2,-h/2,w,h,h*.22);X.strokeStyle=c;X.lineWidth=lw/s;X.stroke();
+    X.fillStyle=bar;X.fillRect(-w/2+h*.4,-h*.09,(w-h*1.2)*b,h*.18);
+    X.beginPath();X.arc(w/2-h*.45,0,h*.09,0,7);X.fill();X.restore()}
+  function draw(){if(!W)return;var cs=getComputedStyle(document.documentElement),g=function(v){return cs.getPropertyValue(v).trim()};
+    var bg=g('--bg'),ink=g('--ink'),mut=g('--mut'),acc=g('--acc'),lw=Math.max(1,W/320);
+    X.setTransform(dpr,0,0,dpr,0,0);X.fillStyle=bg;X.fillRect(0,0,W,W);
+    var n=items.length,can=n+(pend?1:0)<MAX,foc=kbd&&document.activeElement===R;
+    sel=Math.max(0,Math.min(sel,can?n:n-1));
+    if(can){var gy=slotY(n),w=W*.6,h=W*.09;X.setLineDash([lw*3,lw*3]);rr(W/2-w/2,gy-h/2,w,h,h*.22);
+      X.strokeStyle=foc&&sel===n?acc:mut;X.lineWidth=lw;X.stroke();X.setLineDash([]);
+      X.beginPath();X.moveTo(W/2-h*.18,gy);X.lineTo(W/2+h*.18,gy);X.moveTo(W/2,gy-h*.18);X.lineTo(W/2,gy+h*.18);X.stroke()}
+    var mx=W*MX,my=W*MY,bw=W*.11*(1+.1*(pend?pend.s:(n?0:1))),base=my+W*.17,amp=.06+.22*Math.min(1,Math.max(0,awake)/80)+.3*Math.max(0,o-.4),N=13;
+    X.lineCap='round';X.strokeStyle=ink;X.lineWidth=lw*1.3;X.fillStyle=ink;
+    for(var i=0;i<N;i++){var a=Math.PI+(i+.5)/N*Math.PI,bx=mx+Math.cos(a)*bw*.92,by=my+Math.sin(a)*bw*.2,
+      wg=Math.sin(t*.05+i*.8)*amp,L=W*(.04+.14*o),oa=a+wg,
+      otx=bx+Math.cos(oa)*L,oty=by+Math.sin(oa)*L,ctx=mx+Math.cos(a)*bw*.3,cty=my-W*.045,
+      tx=ctx+(otx-ctx)*o,ty=cty+(oty-cty)*o,
+      qx=bx+(Math.cos(a+wg*1.6)*L*.55)*o,qy=by-W*.03*(1-o)+Math.sin(a+wg*1.6)*L*.55*o;
+      X.beginPath();X.moveTo(bx,by);X.quadraticCurveTo(qx,qy,tx,ty);X.stroke();
+      X.beginPath();X.arc(tx,ty,lw*1.2,0,7);X.fill()}
+    X.beginPath();X.moveTo(mx-bw,my);X.bezierCurveTo(mx-bw*1.08,my+W*.08,mx-bw*.7,base-W*.03,mx-bw*.72,base);
+    X.lineTo(mx+bw*.72,base);X.bezierCurveTo(mx+bw*.7,base-W*.03,mx+bw*1.08,my+W*.08,mx+bw,my);
+    X.fillStyle=bg;X.fill();X.lineWidth=lw*1.3;X.stroke();
+    X.beginPath();X.ellipse(mx,my,bw,bw*.2,0,0,7);X.fill();X.stroke();
+    X.beginPath();X.moveTo(mx-W*.18,base);X.lineTo(mx+W*.18,base);X.strokeStyle=mut;X.lineWidth=lw;X.stroke();
+    if(pend){item(mx,my+W*.05,.28*pend.s,0,pend.b,acc,lw,acc);
+      var sec=Math.max(1,Math.ceil((pend.end-performance.now())/1000));
+      X.fillStyle=acc;X.font='600 '+Math.max(11,Math.round(W*.055))+'px -apple-system,system-ui,sans-serif';
+      X.textAlign='center';X.textBaseline='middle';X.fillText(String(sec),mx,my+W*.11)}
+    items.forEach(function(it,i){var sl=foc&&i===sel,dr=drag&&drag.it===it;
+      item(it.x,it.y,dr?1.04:1,dr?Math.max(-.3,Math.min(.3,drag.vx*.01)):it.vx*.004,it.b,sl?acc:ink,sl?lw*2:lw,mut)});
+    fly.forEach(function(f){item(f.x,f.y,f.s,(f.vx*.02)%.6,f.b,acc,lw,acc)});
+    parts.forEach(function(p){X.globalAlpha=Math.max(0,p.l/p.m);X.fillStyle=p.c==='acc'?acc:mut;X.beginPath();X.arc(p.x,p.y,p.r*W/320,0,7);X.fill()});
+    X.globalAlpha=1}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  new ResizeObserver(function(){var nw=R.clientWidth;if(!nw)return;dpr=Math.min(2,window.devicePixelRatio||1);
+    if(W){var r=nw/W;items.concat(fly).forEach(function(it){it.x*=r;it.y*=r});parts.forEach(function(p){p.x*=r;p.y*=r})}
+    var first=!W;W=nw;C.width=Math.round(W*dpr);C.height=Math.round(W*dpr);
+    if(first)items.forEach(function(it,i){it.x=W/2;it.y=slotY(i)});draw();kick()}).observe(R);
+  function pt(e){var r=C.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*W/r.height}}
+  R.addEventListener('pointerdown',function(e){kbd=false;var p=pt(e);
+    if(pend&&Math.hypot(p.x-W*MX,p.y-W*(MY+.07))<Math.max(W*.14,26)){restore();return}
+    var best=-1;for(var i=0;i<items.length;i++)if(Math.abs(p.y-items[i].y)<W*.065&&Math.abs(p.x-items[i].x)<W*.36)best=i;
+    if(best>=0){var it=items[best];drag={it:it,ox:p.x-it.x,oy:p.y-it.y,lx:p.x,ly:p.y,lt:e.timeStamp,vx:0,vy:0};
+      it.vx=it.vy=0;sel=best;try{R.setPointerCapture(e.pointerId)}catch(_){}kick();return}
+    if(p.y<W*(MY-.1))add();else draw()});
+  R.addEventListener('pointermove',function(e){if(!drag)return;var p=pt(e),dm=e.timeStamp-drag.lt;
+    if(dm>0){var f=16.667/dm;drag.vx=drag.vx*.5+(p.x-drag.lx)*f*.5;drag.vy=drag.vy*.5+(p.y-drag.ly)*f*.5}
+    drag.lx=p.x;drag.ly=p.y;drag.lt=e.timeStamp;drag.it.x=p.x-drag.ox;drag.it.y=p.y-drag.oy;kick()});
+  function up(e){if(!drag)return;var it=drag.it,i=items.indexOf(it),vx=drag.vx,vy=drag.vy;
+    if(e.timeStamp-drag.lt>90)vx=vy=0;var sp=Math.hypot(vx,vy),dm=Math.hypot(it.x-W*MX,it.y-W*MY);drag=null;
+    if(i>=0&&(sp>W*.012||dm<W*.2))flingItem(i,vx,vy);else{it.vx=vx*.3;it.vy=vy*.3}kick()}
+  R.addEventListener('pointerup',up);R.addEventListener('pointercancel',up);
+  R.addEventListener('keydown',function(e){var k=e.key,n=items.length,can=n+(pend?1:0)<MAX;kbd=true;
+    if(k==='ArrowDown'||k==='ArrowRight')sel=Math.min(sel+1,can?n:n-1);
+    else if(k==='ArrowUp'||k==='ArrowLeft')sel=Math.max(sel-1,0);
+    else if(k==='Enter'||k===' '){if(sel<n)flingItem(sel,0,W*.01);else add();e.preventDefault();kick();return}
+    else if(k==='Escape'){if(pend)restore();else say('Nothing to bring back.');e.preventDefault();return}
+    else return;
+    e.preventDefault();say(sel<n?items[sel].n:'Empty slot. Enter adds an entry.');draw()});
+  R.addEventListener('blur',draw);R.addEventListener('focus',draw);
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,di=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  var demoT=setInterval(function(){if(!demo||document.hidden||reduce())return;var o='ffaa'[di++%4];if(o==='f'&&items.length>1&&!drag&&!fly.length)flingItem(items.length-1,0,W*.01);else if(items.length+(pend?1:0)<MAX)add()},1500);
+  window.addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,true);document.addEventListener('keydown',stopDemo,true);
+  draw();
+})();</script>
+</body></html>

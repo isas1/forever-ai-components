@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Gear Slot Field — Drag &amp; Reorder. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gear Slot Field</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--wid-bg:#0C0C12;--wid-pn:#181824;--wid-sl:#242436;--wid-ac:#32324C;--wid-go:#FFE600;--wid-cy:#00F0FF;--wid-gr:#39FF14;--wid-cr:#FF1F48;--wid-ink:#FFFFFF;--wid-mu:#8E8EA8;--wid-bd:#000}
+:root[data-theme="light"]{--wid-bg:#D8D8E5;--wid-pn:#EAEAF2;--wid-sl:#FFFFFF;--wid-ac:#E0E0F0;--wid-go:#B38600;--wid-cy:#007A8A;--wid-gr:#008800;--wid-cr:#CC0029;--wid-ink:#101018;--wid-mu:#555566;--wid-bd:#1E1E2E}
+.wid-stage,.wid-stage *{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--wid-bg)}
+.wid-stage{position:absolute;inset:0;min-height:100vh;display:grid;place-items:center;background:var(--wid-bg)}
+.wid-root{width:min(92vmin,640px);aspect-ratio:1;border:4px solid var(--wid-bd);box-shadow:6px 6px 0 rgba(0,0,0,.6);background:var(--wid-pn);touch-action:none;user-select:none;-webkit-user-select:none}
+.wid-root:focus-visible{outline:2px solid var(--wid-cy);outline-offset:4px}
+.wid-cv{display:block;width:100%;height:100%;image-rendering:pixelated}
+.wid-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+.wid-cap{position:fixed;left:8px;bottom:7px;max-width:calc(100% - 16px);font:10px/1.2 system-ui,sans-serif;letter-spacing:.03em;color:var(--wid-ink);opacity:.35;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/drag-reorder/16-gear-slot-field.html",
+ "title": "Gear Slot Field",
+ "description": "Arcade ink palette with gold, cyan and green pixel gear; hover to magnify slots and hold to equip them above a load wave.",
+ "useWhen": "A playful item picker with capacity feedback and keyboard alternatives.",
+ "avoidWhen": "Persistent inventory management without connecting real item data and storage.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes.",
+  "Owner-approved light gold accent #B38600 has 2.35:1 contrast on #D8D8E5; catalog accentLight uses actual light ink #101018 for readable placeholder chrome."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "inventory",
+  "hold",
+  "pixel-art",
+  "proximity",
+  "capacity"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wid-stage" role="group" aria-label="Gear Slot Field">
+<div class="wid-root" id="wid-root" role="application" aria-label="Slot field: hover to magnify, hold to equip or unequip, capacity 10" tabindex="0"><canvas class="wid-cv" id="wid-cv" aria-hidden="true"></canvas></div>
+<div class="wid-live" id="wid-live" aria-live="polite"></div>
+</div>
+<div class="wid-cap" aria-hidden="true">Gear Slot Field</div>
+<script>
+(function(){
+var G=80,CAP=10,kb=0,sel=0,raf=0,last=0,C={},
+$=function(i){return document.getElementById(i)},
+cv=$('wid-cv'),cx=cv.getContext('2d'),root=$('wid-root'),live=$('wid-live'),
+mq=matchMedia('(prefers-reduced-motion: reduce)'),
+N=['sword','shield','helm','boots','bow','potion'],
+CL=['cy','go','gr','cr','cy','gr'],
+SP=[[3,6,12,152,240,96,176,192],[255,255,255,255,126,126,60,24],[60,126,255,255,255,195,195,0],[0,0,56,56,56,63,127,127],[24,20,18,17,17,18,20,24],[24,24,24,60,126,255,255,126]],
+F={"0":31599,"1":11415,"2":29671,"3":29647,"4":23497,"5":31183,"6":31215,"7":29266,"8":31727,"9":31695,"/":4772};
+cv.width=cv.height=G;
+function rm(){return mq.matches}
+function cols(){var s=getComputedStyle(document.documentElement);'bg pn sl ac go cy gr cr ink mu bd'.split(' ').forEach(function(k){C[k]=s.getPropertyValue('--wid-'+k).trim()})}
+function say(s){live.textContent=s}
+function R(x,y,w,h,c){cx.fillStyle=c;cx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h))}
+function O(x,y,w,h,c){R(x,y,w,1,c);R(x,y+h-1,w,1,c);R(x,y,1,h,c);R(x+w-1,y,1,h,c)}
+function spr(k,x,y,c){x=Math.round(x);y=Math.round(y);cx.fillStyle=c;SP[k].forEach(function(r,j){for(var i=0;i<8;i++)if(r>>(7-i)&1)cx.fillRect(x+i,y+j,1,1)})}
+function numC(s,y,c){var x=Math.round((G-s.length*4+1)/2);y=Math.round(y);cx.fillStyle=c;for(var n=0;n<s.length;n++){var g=F[s[n]];for(var j=0;j<15;j++)if(g>>(14-j)&1)cx.fillRect(x+n*4+j%3,y+(j/3|0),1,1)}}
+function tot(){return IT.reduce(function(a,t){return a+(t.eq?t.w:0)},0)}
+function pt(e){var r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*G,y:(e.clientY-r.top)/r.height*G,t:e.timeStamp,ty:e.pointerType}}
+function frame(t){var d=Math.min(t-last,50)/16.667;last=t;raf=step(d)?requestAnimationFrame(frame):0;draw()}
+function kick(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(frame)}}
+var W=[1,2,3,1,2,1,3,2,1,2,1,2],IT=W.map(function(w,i){return{w:w,k:i%6,eq:0,h:0,hd:0,sh:0}}),PT=[],mx=-99,my=-99,ho=-1,dn=-1,lv=0,amp=0,fl=0;
+function cx0(i){return 13.5+(i%4)*18}
+function cy0(i){return 25.5+(i/4|0)*18}
+function init(){}
+function burst(x,y,c,n){if(rm())return;for(var i=0;i<n;i++){var a=Math.random()*6.283,v=.6+Math.random()*1.6;PT.push({x:x,y:y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-.5,l:30+Math.random()*20,c:c})}}
+function put(i,on){var t=IT[i];
+ if(on&&tot()+t.w>CAP){fl=1;t.sh=1;burst(cx0(i),cy0(i),'cr',12);say(N[t.k]+' too heavy');return}
+ t.eq=on?1:0;amp=2;burst(cx0(i),cy0(i),on?'go':'cy',16);say(N[t.k]+(on?' equipped, ':' removed, ')+tot()+' of '+CAP)}
+function hit(p){var c=((p.x-6)/18)|0,r=((p.y-18)/18)|0;if(p.x<6||p.y<18||c>3||r>2||(p.x-6)%18>15||(p.y-18)%18>15)return -1;return r*4+c}
+function step(dt){var b=0,s=rm(),f=1-Math.pow(.75,dt);
+ IT.forEach(function(t,i){var g=mx<0?0:Math.max(0,1-Math.hypot(mx-cx0(i),my-cy0(i))/26);
+  t.h=s?g:t.h+(g-t.h)*f;if(Math.abs(g-t.h)>.01)b=1;else t.h=g;
+  if(dn===i&&ho===i){t.hd+=s?1:dt/22;if(t.hd>=1){t.hd=0;dn=-1;put(i,!t.eq)}}else if(t.hd>0)t.hd=Math.max(0,t.hd-dt/8);
+  if(t.hd>0)b=1;t.sh*=Math.pow(.88,dt);if(t.sh<.03||s)t.sh=0;else b=1});
+ for(var j=PT.length;j--;){var p=PT[j];p.vy+=.05*dt;p.vx*=Math.pow(.96,dt);p.vy*=Math.pow(.96,dt);p.x+=p.vx*dt;p.y+=p.vy*dt;if((p.l-=dt)<=0)PT.splice(j,1);else b=1}
+ var lt=tot()/CAP*55;lv=s?lt:lv+(lt-lv)*(1-Math.pow(.9,dt));if(Math.abs(lt-lv)>.05)b=1;else lv=lt;
+ amp=s?0:amp*Math.pow(.97,dt);if(amp<.05)amp=0;fl*=Math.pow(.92,dt);if(fl<.02||s)fl=0;
+ return b||amp||fl}
+function draw(){R(0,0,G,G,C.pn);
+ var o=ho>=0&&!IT[ho].eq?IT[ho]:0,n=tot()+(o?o.w:0),bad=fl>.05||n>CAP,now=performance.now();
+ numC(n+'/'+CAP,5,bad?C.cr:o?C.cy:C.go);
+ IT.map(function(_,i){return i}).sort(function(a,b){return IT[a].h-IT[b].h}).forEach(function(i){
+  var t=IT[i],s=15+Math.round(3*t.h),c=C[CL[t.k]],x=cx0(i)-s/2+Math.round(t.sh*2*Math.sin(now/20)),y=cy0(i)-s/2,u=t.hd*(s-2);
+  R(x,y,s,s,t.eq?C.go:C.sl);O(x,y,s,s,t.eq?C.go:t.h>.5?C.cy:C.mu);
+  if(u>0){cx.globalAlpha=.55;R(x+1,y+s-1-u,s-2,u,C.cy);cx.globalAlpha=1}
+  spr(t.k,cx0(i)-4,cy0(i)-4,t.eq?C.bg:c);
+  for(var j=0;j<t.w;j++)R(x+2+j*2,y+s-3,1,1,t.eq?C.bg:C.ink);
+  if(kb&&sel===i)O(x-2,y-2,s+4,s+4,C.go)});
+ if(lv>.5){var wc=fl>.05?C.cr:C.cy;for(var X=0;X<G;X++){var y0=71-lv+amp*Math.sin(X*.4+now/120);cx.globalAlpha=.25;R(X,y0,1,71-y0,wc);cx.globalAlpha=1;R(X,y0,1,1,wc)}}
+ PT.forEach(function(p){cx.globalAlpha=Math.min(1,p.l/15);R(p.x,p.y,1,1,C[p.c])});cx.globalAlpha=1}
+function down(p){mx=p.x;my=p.y;ho=hit(p);dn=ho;if(ho>=0)sel=ho}
+function move(p){kb=0;mx=p.x;my=p.y;ho=hit(p)}
+function up(p){dn=-1;if(p.ty==='touch'){mx=my=-99;ho=-1}}
+function leave(){mx=my=-99;ho=-1}
+function key(k){var d={ArrowRight:1,ArrowLeft:11,ArrowDown:4,ArrowUp:8}[k];
+ if(d){sel=(sel+d)%12;mx=cx0(sel);my=cy0(sel);ho=sel;return 1}
+ if(k===' '||k==='Enter'){put(sel,!IT[sel].eq);return 1}}
+cv.addEventListener('pointerdown',function(e){kb=0;cv.setPointerCapture(e.pointerId);down(pt(e));kick()});
+cv.addEventListener('pointermove',function(e){move(pt(e));kick()});
+cv.addEventListener('pointerup',function(e){up(pt(e));kick()});
+cv.addEventListener('pointercancel',function(e){up(pt(e));kick()});
+cv.addEventListener('pointerleave',function(){leave();kick()});
+root.addEventListener('keydown',function(e){kb=1;if(key(e.key)){e.preventDefault()}kick()});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+mq.addEventListener('change',kick);
+addEventListener('message',function(e){var m=e.data;if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){document.documentElement.setAttribute('data-theme',m.theme);cols();kick()}});
+new ResizeObserver(kick).observe(cv);
+cols();init();kick();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoTimer=0,demoIndex=0;
+function demoStop(){demoEnabled=false;clearInterval(demoTimer);demoTimer=0}
+function demoStart(){if(demoTimer||!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;demoTimer=setInterval(function(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;var i=demoIndex++%IT.length;put(i,!IT[i].eq);kick()},1400)}
+window.addEventListener('forever:interactive',demoStop);
+['pointerdown','keydown','wheel','click'].forEach(function(t){document.addEventListener(t,function(e){if(e.isTrusted)demoStop()},{capture:true,passive:true})});
+document.addEventListener('visibilitychange',function(){clearInterval(demoTimer);demoTimer=0;if(!document.hidden)demoStart()});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',function(){clearInterval(demoTimer);demoTimer=0;demoStart()});
+demoStart();
+})();
+</script>
+</body>
+</html>

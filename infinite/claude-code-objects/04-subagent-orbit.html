@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Chalk on night ink: a core launches sub-agent moons onto elliptical orbits, they work, curve back and merge, adding a bead to the core.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Sub-agent Orbit</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --co04-bg:#12110f; --co04-surface:#211f1c; --co04-line:#3a3631; --co04-ink:#e8e3d8; --co04-muted:#a39c90;
+    --co04-clay:#c87456; --co04-ochre:#b88b58; --co04-sage:#6f8f79; --co04-brick:#a85858; --co04-stone:#7a746b;
+    --co04-core:#26231f; --co04-chalk:#e8e3d8;
+    --co04-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --co04-bg:#f3efe6; --co04-surface:#fbf8f1; --co04-line:#d9d2c4; --co04-ink:#1d1b18; --co04-muted:#5f594f;
+    --co04-clay:#a4532f; --co04-ochre:#8a6232; --co04-sage:#46664f; --co04-brick:#8e3b3b; --co04-stone:#8f887c;
+    --co04-core:#e6dfcf; --co04-chalk:#2a2622;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--co04-bg)}
+  .co04-root{position:fixed;inset:0;background:var(--co04-bg);cursor:pointer;outline:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+    font:clamp(8px,7vmin,40px)/1 var(--co04-mono);color:var(--co04-ink)}
+  .co04-root:focus-visible{outline:2px solid var(--co04-ochre);outline-offset:-5px}
+  .co04-cv{display:block;width:100%;height:100%}
+  .co04-n{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);text-align:center;font-weight:700;font-variant-numeric:tabular-nums;pointer-events:none}
+  .co04-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .co04-cap{position:fixed;left:8px;bottom:7px;font:10px var(--co04-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--co04-ink);opacity:.28}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code-objects/04-subagent-orbit.html",
+ "title": "Sub-agent Orbit",
+ "description": "Chalk-on-ink diagram: a pulsing core launches sub-agent moons onto elliptical orbits; each works, curves back and merges, adding a bead to the core. Max five at once.",
+ "useWhen": "Showing sub-agents running in parallel and returning results.",
+ "avoidWhen": "A task list or process table is needed.",
+ "agentPrompt": "Chalk core with sub-agent moons on elliptical orbits that return and merge; active count as the only text.",
+ "editableAreas": [
+  "colour tokens on :root (chalk, core, moon colours)",
+  "ORB orbit table and the launch cadence in the script"
+ ],
+ "preserveElements": [
+  "demo-v1: __foreverPreview.demoEnabled, forever:interactive, first-input takeover",
+  "theme: ?theme=, forever:theme messages, light tokens",
+  "IIFE, visibilitychange, reduced motion, keyboard, aria-live"
+ ],
+ "knownLimitations": [
+  "Canvas drawn; a blackboard look is strongest in the dark theme.",
+  "Launched moons return on their own after a few seconds even in manual mode."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "orbit",
+  "chalk",
+  "sub-agent",
+  "parallel",
+  "canvas"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="co04-root" id="co04-root" role="button" tabindex="0" aria-label="Sub-agent orbit. Press to launch a sub-agent, up to five.">
+  <canvas class="co04-cv" id="co04-cv" aria-hidden="true"></canvas>
+  <div class="co04-n" id="co04-n" aria-hidden="true">2</div>
+  <div class="co04-sr" id="co04-sr" aria-live="polite" data-fit-clip-ok></div>
+</div>
+<div class="co04-cap" aria-hidden="true">Sub-agent Orbit</div>
+<script>
+(function(){
+  'use strict';
+  var $=function(i){return document.getElementById(i)};
+  var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var root=$('co04-root'),cv=$('co04-cv'),g=cv.getContext('2d'),nEl=$('co04-n'),sr=$('co04-sr');
+  var C={},K='chalk core clay ochre sage brick muted line'.split(' ');
+  var W=1,H=1,raf=0,last=0,tt=0,demoT=0,demoI=0,seed=5,pat=null;
+  var ORB=[{a:35,b:14,r:-.5,s:1.5,c:'ochre'},{a:30,b:19,r:.75,s:-1.2,c:'sage'},{a:38,b:12,r:1.9,s:1.7,c:'clay'},{a:27,b:21,r:2.6,s:-1.0,c:'muted'},{a:33,b:16,r:-1.5,s:1.35,c:'brick'}];
+  var ag=[],beads=['ochre','sage','clay'],ripples=[],flash=0,dst=0,dn=0,dc=0,nl=1;
+  function tok(){var s=getComputedStyle(document.documentElement);K.forEach(function(k){C[k]=s.getPropertyValue('--co04-'+k).trim()||'#888'});}
+  function setTheme(t){if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);tok();mkPat();kick();}}
+  window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+  function rnd(){seed=(seed*16807)%2147483647;return seed/2147483647;}
+  function ease(p){p=Math.max(0,Math.min(1,p));return p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;}
+  function mkPat(){var c=document.createElement('canvas');c.width=c.height=80;var x=c.getContext('2d'),i,s=seed;
+    x.fillStyle=C.chalk;for(i=0;i<70;i++){x.globalAlpha=.025+rnd()*.025;x.fillRect(rnd()*80,rnd()*80,.45,.45);}seed=s;pat=g.createPattern(c,'repeat');}
+  function size(){var r=root.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);W=r.width;H=r.height;cv.width=Math.max(1,W*d);cv.height=Math.max(1,H*d);kick();}
+  function announce(){sr.textContent=ag.length+' sub-agent'+(ag.length===1?'':'s')+' active';nEl.textContent=ag.length;}
+  function launch(){
+    if(ag.length>=5)return false;var used=ag.map(function(o){return o.i}),i=0;while(used.indexOf(i)>-1)i++;
+    ag.push({i:i,o:ORB[i],ph:rnd()*6.28,st:reduced()?1:0,t:0,wd:2300+rnd()*1000});announce();kick();return true;}
+  function merge(o){beads.push(o.o.c);if(beads.length>10)beads.shift();ripples.push({t:0,c:o.o.c});flash=1;}
+  function pos(o,R,p){var ex=o.a*R*Math.cos(p),ey=o.b*R*Math.sin(p),c=Math.cos(o.r),s=Math.sin(o.r);return{x:50+ex*c-ey*s,y:50+ex*s+ey*c};}
+  function Rof(a){return a.st===0?ease(a.t/650):a.st===1?1:1-ease(a.t/800);}
+  function step(dt){
+    var s=dt/1000,i,a;tt+=dt;flash=Math.max(0,flash-s*1.8);
+    for(i=ripples.length-1;i>=0;i--){ripples[i].t+=dt;if(ripples[i].t>900)ripples.splice(i,1);}
+    for(i=ag.length-1;i>=0;i--){a=ag[i];a.t+=dt;a.ph+=a.o.s*s*(a.st===2?2:1);
+      if(a.st===0&&a.t>=650){a.st=1;a.t=0;}
+      else if(a.st===1&&a.t>=a.wd){a.st=2;a.t=0;}
+      else if(a.st===2&&a.t>=800){ag.splice(i,1);merge(a);announce();}}
+    return true;}
+  function draw(){
+    var d=cv.width/W,u=Math.min(W,H)/100,i,j,a,R,P,cr;
+    g.setTransform(d,0,0,d,0,0);g.clearRect(0,0,W,H);
+    g.setTransform(d*u,0,0,d*u,d*(W-100*u)/2,d*(H-100*u)/2);
+    g.globalAlpha=1;g.fillStyle=pat;g.fillRect(-60,-60,220,220);
+    g.lineCap='round';g.lineJoin='round';g.strokeStyle=C.chalk;
+    g.globalAlpha=.1;g.lineWidth=.35;g.setLineDash([.6,2.4]);g.beginPath();g.arc(50,50,44,0,7);g.stroke();
+    g.setLineDash([]);
+    for(i=0;i<ag.length;i++){a=ag[i];R=Rof(a);if(R<.02)continue;
+      g.strokeStyle=C.chalk;g.setLineDash([2.2,1.6]);
+      g.globalAlpha=.3*Math.min(1,R*1.6);g.lineWidth=.45;g.beginPath();g.ellipse(50,50,a.o.a*R,a.o.b*R,a.o.r,0,7);g.stroke();
+      g.setLineDash([]);
+      /* trail */
+      g.strokeStyle=C[a.o.c];g.lineWidth=1.3;var q=pos(a.o,R,a.ph),sg=a.o.s<0?1:-1,pp;
+      for(j=1;j<=16;j++){pp=pos(a.o,R,a.ph+sg*j*.07);g.globalAlpha=.5*(1-j/17);g.lineWidth=1.05*(1-j/20);
+        g.beginPath();g.moveTo(q.x,q.y);g.lineTo(pp.x,pp.y);g.stroke();q=pp;}
+      /* moon */
+      P=pos(a.o,R,a.ph);var mr=1.9*(1+(a.st===1?.08*Math.sin(tt/150+a.i):0));
+      g.fillStyle='#000';g.globalAlpha=.2;g.beginPath();g.arc(P.x+.45,P.y+.7,mr*1.1,0,7);g.fill();g.fillStyle=C[a.o.c];
+      g.globalAlpha=1;g.beginPath();g.arc(P.x,P.y,mr,0,7);g.fill();
+      g.fillStyle='#fff';g.globalAlpha=.35;g.beginPath();g.arc(P.x-mr*.3,P.y-mr*.3,mr*.38,0,7);g.fill();}
+    /* core */
+    cr=6.6*(1+.035*Math.sin(tt/(ag.length?240:520)))+flash*1.1;
+    g.fillStyle='#000';g.globalAlpha=.2;g.beginPath();g.arc(50.4,50.8,cr+.4,0,7);g.fill();
+    g.globalAlpha=1;g.fillStyle=C.core;g.beginPath();g.arc(50,50,cr,0,7);g.fill();
+    g.strokeStyle=C.chalk;g.globalAlpha=.7;g.lineWidth=.55;g.beginPath();g.arc(50,50,cr,0,7);g.stroke();
+    g.globalAlpha=.2;g.lineWidth=.35;g.beginPath();g.arc(50,50,cr-1.5,0,7);g.stroke();
+    /* bead ring: ten slots, filled by returned sub-agents */
+    for(i=0;i<10;i++){var an=-1.5708+i*.6283,bx=50+Math.cos(an)*(cr+3),by=50+Math.sin(an)*(cr+3),f=i<beads.length;
+      g.globalAlpha=f?1:.28;g.fillStyle=f?C[beads[i]]:C.chalk;g.beginPath();g.arc(bx,by,f?1:.5,0,7);g.fill();}
+    for(i=0;i<ripples.length;i++){g.strokeStyle=C[ripples[i].c];g.globalAlpha=.6*(1-ripples[i].t/900);g.lineWidth=.6;g.beginPath();g.arc(50,50,cr+3+ripples[i].t*.018,0,7);g.stroke();}
+    g.globalAlpha=1;
+  }
+  function frame(now){raf=0;if(document.hidden){last=0;return;}
+    var dt=last?Math.min(now-last,50):16;last=now;
+    if(reduced()){draw();last=0;return;}
+    step(dt);draw();raf=requestAnimationFrame(frame);}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame);}}
+  function demoTick(){
+    if(!demoEnabled||reduced()||document.hidden)return;dc+=100;
+    if(dst===0&&dc>=dn){launch();if(++nl>=3)dst=1;else dn=dc+700;}
+    else if(dst===1&&!ag.length){dst=2;dn=dc+900;}
+    else if(dst===2&&dc>=dn){dst=0;nl=0;dn=dc;}}
+  function stopDemo(){clearTimeout(demoT);clearInterval(demoI);}
+  function startDemo(d){if(!demoEnabled||reduced()||document.hidden)return;stopDemo();
+    demoT=setTimeout(function(){demoI=setInterval(demoTick,100);demoTick();},d);}
+  function takeover(){demoEnabled=false;stopDemo();}
+  function act(){if(reduced()){if(!launch()){ag.length=0;beads.push('sage');if(beads.length>10)beads.shift();announce();kick();}}else launch();}
+  window.addEventListener('forever:interactive',takeover);
+  root.addEventListener('pointerdown',takeover,true);
+  root.addEventListener('click',function(){takeover();act();});
+  root.addEventListener('keydown',function(e){takeover();if(e.key===' '||e.key==='Enter'){e.preventDefault();act();}});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0;}last=0;stopDemo();}else{kick();startDemo(500);}});
+  window.addEventListener('resize',size);
+  tok();mkPat();size();
+  launch();launch();ag[0].st=1;ag[0].t=0;ag[1].st=1;ag[1].t=900;
+  if(reduced()){launch();}
+  announce();
+  startDemo(400);
+})();
+</script>
+</body>
+</html>

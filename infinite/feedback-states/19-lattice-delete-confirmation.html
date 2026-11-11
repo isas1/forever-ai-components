@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Hex Lattice Delete — Feedback &amp; States. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hex Lattice Delete</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+:root{--bg:var(--p);--p:#15130F;--i:#E9E2D0;--a:#D2705D}
+:root[data-theme="light"]{--p:#EFE8D8;--i:#1E1B16;--a:#7A2E22}
+.wdf-root,.wdf-root *{box-sizing:border-box;margin:0}
+
+html,body{margin:0;height:100%;background:var(--bg);color:var(--i);display:grid;place-items:center;font:clamp(11px,2.7vmin,17px)/1.2 Georgia,serif;overflow:hidden}
+#wdf-r{--s:min(100vmin,640px);position:relative;width:var(--s);height:var(--s)}
+#wdf-c{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#wdf-u{position:absolute;left:12%;right:12%;bottom:4%;display:grid;gap:.6em;justify-items:center}
+#wdf-nm{font-size:1.3em;letter-spacing:.14em;text-transform:uppercase}
+#wdf-in{width:100%;background:none;border:1.5px solid var(--i);color:inherit;font:inherit;text-align:center;padding:.35em 0;border-radius:0}
+.wdf-b{display:flex;gap:1.2em}
+.wdf-b button{font:inherit;color:inherit;background:none;border:0;border-bottom:1.5px solid var(--i);padding:.35em .2em;cursor:pointer;min-height:2.4em;transition:color .2s,opacity .2s}
+.wdf-b button:disabled{opacity:.35;cursor:default;text-decoration:line-through}
+#wdf-d:not(:disabled){color:var(--a);border-bottom:2px solid var(--a)}
+.wdf-root :focus-visible{outline:2px solid var(--a);outline-offset:3px}
+.wdf-root [hidden]{display:none!important}
+
+.wdf-cap{position:fixed;left:8px;bottom:7px;font:9px/1.2 system-ui,sans-serif;color:var(--i);opacity:.45;pointer-events:none}
+.wdf-root input:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){.wdf-root *{transition:none!important}}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/feedback-states/19-lattice-delete-confirmation.html",
+ "title": "Hex Lattice Delete",
+ "description": "Stone-and-parchment terracotta register: typing lattice flips concentric hexagonal cells before their staggered disappearance.",
+ "useWhen": "A reversible confirmation pattern with animated removal feedback.",
+ "avoidWhen": "Actual destructive actions without connecting validated server-side permission and recovery rules.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Client-side delete/restore demo; no backend deletion."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "delete",
+  "type-to-confirm",
+  "hexagons",
+  "spring",
+  "keyboard"
+ ]
+}
+</script>
+</head><body>
+<main id="wdf-r" role="group" aria-label="Confirm deleting lattice. Type its name exactly to arm Delete." class="wdf-root">
+<canvas id="wdf-c" aria-hidden="true"></canvas>
+<div id="wdf-u"><b id="wdf-nm" aria-hidden="true">lattice</b>
+<input id="wdf-in" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Type lattice to confirm deletion">
+<div class="wdf-b"><button id="wdf-x" type="button">Cancel</button><button id="wdf-d" type="button" disabled>Delete</button></div></div>
+</main>
+<div class="wdf-cap" aria-hidden="true">Hex Lattice Delete</div>
+<script>
+(()=>{
+let demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoTimer=0,demoPhase=0;
+const focus=el=>{if(!demoEnabled)el.focus({preventScroll:true})};
+
+const NAME='lattice',N=NAME.length,$=i=>document.getElementById('wdf-'+i),
+R=$('r'),cv=$('c'),cx=cv.getContext('2d'),inp=$('in'),bd=$('d'),bx=$('x'),
+rm=()=>matchMedia('(prefers-reduced-motion: reduce)').matches,
+sp=(x=0)=>({x,v:0,t:x}),cl=(x,a=0,b=1)=>Math.max(a,Math.min(b,x)),
+K=sp(),cells=[];
+for(let q=-3;q<=3;q++)for(let r=-3;r<=3;r++)if(Math.abs(q+r)<=3)cells.push({q,r,d:Math.max(Math.abs(q),Math.abs(r),Math.abs(q+r)),
+ x:0,y:0,f:sp(),g:sp(),h:sp(),w:0,k:'',val:0});
+cells.sort((a,b)=>(a.d-b.d)||(Math.atan2(a.r,a.q)-Math.atan2(b.r,b.q)));
+cells.forEach((c,i)=>c.rank=i);
+let C={},W=1,D=1,raf=0,last=0,ok=false,bad=false,dead=false,mx=-1e4,my=-1e4,prev=0;
+const col=()=>{const s=getComputedStyle(document.documentElement);C.i=s.getPropertyValue('--i').trim();C.a=s.getPropertyValue('--a').trim()};
+const later=(c,k,val,w)=>{c.k=k;c.val=val;c.w=w};
+function spr(o,dt,k,f){o.v+=(o.t-o.x)*k*dt;o.v*=Math.pow(f,dt);o.x+=o.v*dt;return Math.abs(o.v)>.0008||Math.abs(o.t-o.x)>.0008}
+function step(dt){let b=false;const snap=rm();
+ for(const c of cells){
+  if(c.k){c.w-=dt;if(c.w<=0||snap){c[c.k].t=c.val;c.k=''}else b=true}
+  if(!dead&&!snap){const d=Math.hypot(c.x-mx,c.y-my);c.h.t=cl(1-d/(W*.17))}else c.h.t=0;
+  for(const o of [c.f,c.g,c.h]){if(snap){o.x=o.t;o.v=0}else if(spr(o,dt,o===c.h?.2:.1,o===c.h?.7:.78))b=true}}
+ if(snap){K.x=K.t;K.v=0}else if(spr(K,dt,.1,.8))b=true;
+ return b}
+function hex(rad,rot){for(let k=0;k<6;k++){const a=-Math.PI/2+k*Math.PI/3;cx[k?'lineTo':'moveTo'](Math.cos(a)*rad,Math.sin(a)*rad)}cx.closePath()}
+function draw(){
+ cx.setTransform(D,0,0,D,0,0);cx.clearRect(0,0,W,W);cx.lineJoin='round';
+ const z=W*.056;cx.translate(W/2,W*.37);cx.rotate(K.x);
+ for(const c of cells){
+  const x=z*Math.sqrt(3)*(c.q+c.r/2),y=z*1.5*c.r,s=(1+.28*c.h.x)*cl(1-c.g.x,0,1.2);
+  if(s<=.01)continue;
+  const sx=Math.cos(Math.PI*c.f.x),back=sx<0;
+  cx.save();cx.translate(x,y);cx.scale(Math.max(Math.abs(sx),.02)*s,s);
+  cx.lineWidth=1.5/Math.max(Math.abs(sx),.3);cx.globalAlpha=.4+.6*Math.max(c.h.x,Math.abs(sx)>.99&&back?1:0,back?.8:0);
+  cx.strokeStyle=back||c.h.x>.3?C.a:C.i;
+  cx.beginPath();hex(z*.9);cx.stroke();
+  if(back){cx.beginPath();hex(z*.45);for(let k=0;k<6;k++){const a=-Math.PI/2+k*Math.PI/3;cx.moveTo(Math.cos(a)*z*.45,Math.sin(a)*z*.45);cx.lineTo(Math.cos(a)*z*.9,Math.sin(a)*z*.9)}cx.stroke()}
+  cx.restore()}
+}
+function tick(now){raf=0;const dt=Math.min(now-last,50)/16.667;last=now;const b=step(dt);draw();if(b)raf=requestAnimationFrame(tick)}
+const wake=()=>{if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}};
+document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(raf);raf=0}else wake()});
+function sync(){const v=inp.value;let m=0;while(m<v.length&&m<N&&v[m]===NAME[m])m++;
+ const was=bad;bad=v.length>m;ok=v===NAME;
+ const n=cells.length;
+ for(const c of cells){const on=(c.rank+1)/n<=m/N+1e-9;later(c,'f',on?1:0,on?c.rank*.7:(n-c.rank)*.25)}
+ if(bad&&!was)K.v+=(Math.random()<.5?-1:1)*.04;
+ prev=m;bd.disabled=!ok||dead;wake()}
+function del(){if(!ok||dead)return;dead=true;cells.forEach(c=>later(c,'g',1,c.rank*1.4));bd.hidden=true;inp.disabled=true;bx.textContent='Undo';focus(bx);wake()}
+function cancel(){if(dead){dead=false;cells.forEach(c=>later(c,'g',0,(cells.length-c.rank)*.6));inp.disabled=false;bd.hidden=false;bx.textContent='Cancel'}
+ inp.value='';sync();focus(inp)}
+inp.addEventListener('input',sync);
+inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();del()}});
+bd.addEventListener('click',del);bx.addEventListener('click',cancel);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')cancel()});
+const aim=e=>{const r=cv.getBoundingClientRect(),p=e.touches?e.touches[0]:e;mx=p.clientX-r.left-W/2;my=p.clientY-r.top-W*.37;wake()};
+const off=()=>{mx=my=-1e4;wake()};
+cv.addEventListener('pointermove',aim);cv.addEventListener('pointerdown',aim);
+['pointerleave','pointerup','pointercancel'].forEach(t=>cv.addEventListener(t,off));
+new ResizeObserver(()=>{W=R.clientWidth;D=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(W*D);
+ const z=W*.056;cells.forEach(c=>{c.x=z*Math.sqrt(3)*(c.q+c.r/2);c.y=z*1.5*c.r});draw()}).observe(R);
+const setTheme=t=>{if(t==='light'||t==='dark'){document.documentElement.dataset.theme=t;col();draw()}};
+addEventListener('message',e=>{const d=e.data;if(d&&d.type==='forever:theme')setTheme(d.theme)});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',wake);
+col();sync();draw();
+
+function demoStep(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+ demoPhase++;if(demoPhase<=NAME.length){inp.value=NAME.slice(0,demoPhase);sync()}
+ else if(demoPhase===NAME.length+2){del()}
+ else if(demoPhase>=NAME.length+5){cancel();demoPhase=0}}
+function demoStart(){if(demoEnabled&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches&&!demoTimer)demoTimer=setInterval(demoStep,450)}
+function takeover(){if(!demoEnabled)return;demoEnabled=false;clearInterval(demoTimer);demoTimer=0;}
+window.addEventListener('forever:interactive',takeover);
+['pointerdown','keydown','input'].forEach(t=>document.addEventListener(t,takeover,true));
+document.addEventListener('visibilitychange',()=>{clearInterval(demoTimer);demoTimer=0;if(!document.hidden)demoStart()});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',()=>{clearInterval(demoTimer);demoTimer=0;demoStart()});
+demoStep();demoStart();
+})();
+</script></body></html>

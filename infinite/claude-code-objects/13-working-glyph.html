@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A letterpress card: a regular geometric glyph morphs between star, cross, dot and flower while an invented working verb and elapsed seconds tick below.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Working Glyph</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --co13-bg:#171614; --co13-paper:#26231f; --co13-paper2:#1b1916; --co13-ink:#ebe5d6; --co13-brick:#da8f8a;
+    --co13-muted:#a39c90; --co13-accent:#c87456; --co13-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --co13-bg:#e9e3d6; --co13-paper:#f6f1e5; --co13-paper2:#e6dfce; --co13-ink:#1d1b18; --co13-brick:#8e3b3b;
+    --co13-muted:#5f594f; --co13-accent:#a4532f;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--co13-bg)}
+  .co13-root{position:fixed;inset:0;cursor:pointer;user-select:none;-webkit-user-select:none;outline:none;-webkit-tap-highlight-color:transparent}
+  .co13-root:focus-visible{outline:2px solid var(--co13-accent);outline-offset:-5px}
+  .co13-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .co13-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .co13-cap{position:fixed;left:8px;bottom:7px;font:10px var(--co13-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--co13-muted);opacity:.28}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code-objects/13-working-glyph.html",
+ "title": "Working Glyph",
+ "description": "Letterpress card: a regular geometric glyph (eight-point star, cross, dot, four-petal flower) morphs in deep ink on textured stock while one invented working verb and elapsed seconds cycle below. Tap or Esc interrupts, the word turns brick for two seconds, then work resumes.",
+ "useWhen": "Showing an agent that is busy working, with an interrupt action.",
+ "avoidWhen": "A conventional spinner or progress bar is wanted.",
+ "agentPrompt": "Swap the verb list and the glyph radius functions in the script; keep shapes regular and the demo-v1 lifecycle.",
+ "editableAreas": [
+  "colour tokens on :root and the light block (--co13-*)",
+  "verb list, glyph shape functions and timings in the script"
+ ],
+ "preserveElements": [
+  "demo-v1: __foreverPreview.demoEnabled, forever:interactive, first-input takeover",
+  "theme: ?theme=, forever:theme messages, light tokens",
+  "IIFE, visibilitychange, reduced motion, keyboard, aria-live"
+ ],
+ "knownLimitations": [
+  "Canvas drawn; verbs are not selectable text.",
+  "Verbs and seconds are invented demo data."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "accessible",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "letterpress",
+  "glyph",
+  "morph",
+  "working",
+  "canvas",
+  "claude-code"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="co13-root" id="co13-root" role="button" tabindex="0" aria-label="Working glyph. Activate or press Escape to interrupt.">
+  <canvas class="co13-cv" id="co13-cv" aria-hidden="true"></canvas>
+  <span class="co13-sr" id="co13-sr" aria-live="polite"></span>
+</div>
+<div class="co13-cap" aria-hidden="true">Working Glyph</div>
+<script>
+(function(){
+  'use strict';
+  var root=document.getElementById('co13-root'),cv=document.getElementById('co13-cv'),sr=document.getElementById('co13-sr');
+  var ctx=cv.getContext('2d'),lay=document.createElement('canvas'),lx=lay.getContext('2d'),pap=document.createElement('canvas'),px=pap.getContext('2d');
+  var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var MONO='ui-monospace,"SF Mono",Menlo,monospace',N=96,TAU=Math.PI*2;
+  var VERBS=['Whittling…','Mulling…','Tinkering…','Untangling…','Simmering…'];
+  var T={},W=0,H=0,u=1,dpr=1,raf=0,last=0,t=3.2,intr=false,intT=0,nextInt=7,speck=null,resume=0;
+  var SH=[function(a){var x=Math.abs(((a*4/Math.PI)%1+1)%1-.5)*2;return .34+.66*Math.pow(x,.85);},
+    function(a){var c=Math.abs(Math.cos(a))+1e-4,s=Math.abs(Math.sin(a))+1e-4;return Math.min(1,Math.max(Math.min(1/c,.21/s),Math.min(.21/c,1/s)));},
+    function(){return .44;},
+    function(a){return .3+.7*Math.pow(Math.abs(Math.sin(2*a)),.75);}];
+  var TB=SH.map(function(f){var r=[],i;for(i=0;i<N;i++)r.push(f(i/N*TAU));return r;});
+
+  function tok(){var s=getComputedStyle(document.documentElement);
+    ['bg','paper','paper2','ink','brick','muted','accent'].forEach(function(k){T[k]=s.getPropertyValue('--co13-'+k).trim()||'#888';});}
+  function setTheme(v){if(v==='light'||v==='dark'){document.documentElement.setAttribute('data-theme',v);tok();build();kick();}}
+  window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+
+  function build(){ /* paper stock: fibres, grain, deckle shadow; plus a speckle tile that eats holes in the ink */
+    pap.width=cv.width;pap.height=cv.height;px.setTransform(dpr,0,0,dpr,0,0);px.clearRect(0,0,W,H);
+    var cx=(W-86*u)/2,cy=(H-86*u)/2,cw=86*u,i,g,seed=31;function rnd(){seed=seed*16807%2147483647;return seed/2147483647;}
+    px.save();px.shadowColor='rgba(0,0,0,.5)';px.shadowBlur=3*u;px.shadowOffsetY=1.2*u;px.fillStyle=T.paper;px.fillRect(cx,cy,cw,cw);px.restore();
+    g=px.createLinearGradient(cx,cy,cx+cw,cy+cw);g.addColorStop(0,'rgba(255,255,255,.06)');g.addColorStop(1,'rgba(0,0,0,.14)');px.fillStyle=g;px.fillRect(cx,cy,cw,cw);
+    px.save();px.beginPath();px.rect(cx,cy,cw,cw);px.clip();
+    for(i=0;i<420;i++){px.fillStyle=rnd()<.5?'rgba(255,255,255,.035)':'rgba(0,0,0,.04)';px.fillRect(cx+rnd()*cw,cy+rnd()*cw,rnd()*.8*u+.4,Math.max(.5,rnd()*.5*u));}
+    for(i=0;i<900;i++){px.fillStyle=rnd()<.5?'rgba(255,255,255,.05)':'rgba(0,0,0,.06)';px.fillRect(cx+rnd()*cw,cy+rnd()*cw,1,1);}
+    px.restore();px.strokeStyle=T.paper2;px.lineWidth=1;px.strokeRect(cx+.5,cy+.5,cw-1,cw-1);
+    var s=document.createElement('canvas');s.width=s.height=96;var sx=s.getContext('2d');sx.fillStyle='#000';
+    for(i=0;i<260;i++){sx.globalAlpha=.12+rnd()*.24;sx.fillRect(rnd()*96,rnd()*96,.6+rnd()*.6,.6+rnd()*.6);}
+    speck=lx.createPattern(s,'repeat');
+  }
+  function size(){dpr=Math.min(window.devicePixelRatio||1,2);W=cv.clientWidth||180;H=cv.clientHeight||180;
+    cv.width=lay.width=Math.round(W*dpr);cv.height=lay.height=Math.round(H*dpr);u=Math.min(W,H)/100;build();}
+  function poly(c,m,a,b,S,ox,oy){c.beginPath();for(var i=0;i<N;i++){var th=i/N*TAU-Math.PI/2,r=(TB[a][i]+(TB[b][i]-TB[a][i])*m)*S;
+    c.lineTo(ox+Math.cos(th)*r,oy+Math.sin(th)*r);}c.closePath();}
+  function ease(x){return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;}
+  function txt(s,x,y,fs,font,col,al){ctx.font=fs+'px '+font;
+    ctx.globalAlpha=al;ctx.fillStyle=col;ctx.fillText(s,x,y);ctx.globalAlpha=1;}
+
+  function draw(){
+    var ph=t%2.4,a=Math.floor(t/2.4)%4,b=(a+1)%4,m=reduced()?0:(ph<.9?0:ease((ph-.9)/1.5)),vi=Math.floor(t/4.8)%5,fr=(t%4.8),cx=W/2,cy=H/2-12*u;
+    var S=21*u;
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);ctx.drawImage(pap,0,0,W,H);
+    poly(ctx,m,a,b,S,cx+.25*u,cy+.35*u);ctx.fillStyle='rgba(255,255,255,.12)';ctx.fill();
+    lx.setTransform(dpr,0,0,dpr,0,0);lx.globalCompositeOperation='source-over';lx.clearRect(0,0,W,H);
+    poly(lx,m,a,b,S,cx,cy);lx.fillStyle=T.ink;lx.fill();
+    lx.globalCompositeOperation='destination-out';lx.globalAlpha=.55;lx.fillStyle=speck;lx.fillRect(0,0,W,H);lx.globalAlpha=1;
+    ctx.drawImage(lay,0,0,W,H);
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    var fs=7.6*u,sec=11+Math.floor(t);
+    if(intr)txt('Interrupted',cx,H/2+20*u,fs,'system-ui,sans-serif',T.brick,1);
+    else{var k=reduced()?1:Math.min(1,fr/.35);
+      if(k<1)txt(VERBS[(vi+4)%5],cx,H/2+20*u,fs,'system-ui,sans-serif',T.ink,1-k);
+      txt(VERBS[vi],cx,H/2+20*u,fs,'system-ui,sans-serif',T.ink,k);}
+    txt(sec+'s',cx,H/2+30.5*u,5.6*u,MONO,T.muted,intr?.6:1);
+  }
+  function frame(now){
+    raf=0;if(document.hidden)return;
+    var dt=last?Math.min(now-last,50)/1000:.016;last=now;
+    if(!reduced()){
+      if(intr){intT+=dt;if(intT>=2){intr=false;nextInt=t+9;sr.textContent='Working';}}
+      else{t+=dt;if(demoEnabled&&t>nextInt)act();}
+    }
+    draw();
+    if(!reduced())raf=requestAnimationFrame(frame);
+  }
+  function kick(){if(document.hidden)return;if(reduced()){draw();return;}if(!raf){last=0;raf=requestAnimationFrame(frame);}}
+  function act(){if(intr)return;intr=true;intT=0;sr.textContent='Interrupted';
+    if(reduced()){clearTimeout(resume);resume=setTimeout(function(){intr=false;sr.textContent='Working';draw();},2000);}draw();}
+  function takeover(){demoEnabled=false;}
+  window.addEventListener('forever:interactive',takeover);
+  root.addEventListener('pointerdown',function(){takeover();act();});
+  root.addEventListener('click',function(e){if(e.detail===0){takeover();act();}});
+  root.addEventListener('keydown',function(e){takeover();if(e.key===' '||e.key==='Enter'||e.key==='Escape'){e.preventDefault();act();}});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0;}last=0;}else kick();});
+  window.addEventListener('resize',function(){size();kick();});
+  tok();size();if(reduced())t=0;draw();kick();
+})();
+</script>
+</body>
+</html>

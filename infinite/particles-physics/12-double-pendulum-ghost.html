@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="An emerald double pendulum swings chaotically, its glowing bob tracing a slowly fading ribbon ghost; pointer nudges, click rekicks.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Double Pendulum Ghost</title>
@@ -53,12 +54,14 @@
   "offscreen trail canvas (tr/tctx) for ghost ribbon",
   "visibilitychange pause/resume",
   "reduced-motion static fallback",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and canvas fill — must edit both to change",
   "No reduced-motion animation fallback beyond a single static frame",
-  "RK4 with 8 substeps per frame is CPU-intensive on low-end devices"
+  "RK4 with 8 substeps per frame is CPU-intensive on low-end devices",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -83,10 +86,15 @@
 </script>
 </head>
 <body>
-<canvas id="dpg-c"></canvas>
+<canvas id="dpg-c" class="dpg-root"></canvas>
 <div class="dpg-cap">Double Pendulum Ghost</div>
 <script>
 (function(){
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   const cv=document.getElementById('dpg-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,cx,cy,L;
@@ -95,7 +103,7 @@
   // every drawn colour comes from the tokens; a flip re-reads them and clears the stale ribbon
   const root=document.documentElement, C={};
   function syncTheme(){
-    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    const FB={'--dpg-bg':'#16201A','--dpg-accent':'#378651','--dpg-rod':'rgba(55,134,81,0.85)','--dpg-halo':'rgba(55,134,81,0)','--dpg-bob1':'rgba(55,134,81,0.9)','--dpg-bob2':'rgba(224,201,140,0.95)','--dpg-core':'#ffffff','--dpg-blend':'lighter','--dpg-hue':'140','--dpg-l0':'58','--dpg-lk':'1.6','--dpg-ta':'0.5'}, cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim()||FB[n];
     C.bg=g('--dpg-bg');C.rod=g('--dpg-rod');C.halo=g('--dpg-halo');C.accent=g('--dpg-accent');
     C.bob1=g('--dpg-bob1');C.bob2=g('--dpg-bob2');C.core=g('--dpg-core');C.blend=g('--dpg-blend');
     C.hue=+g('--dpg-hue');C.l0=+g('--dpg-l0');C.lk=+g('--dpg-lk');C.ta=g('--dpg-ta');
@@ -152,8 +160,8 @@
   cv.addEventListener('click',rekick);
   syncTheme();
   let hue=0,still=0;
-  function draw(){
-    if(!reduce)for(let s=0;s<8;s++)step(0.04); // substeps = smooth, energy-stable ribbon
+  function draw(){raf=0;if(document.hidden)return;
+    if(!reduce&&(demoEnabled||sessionActive))for(let s=0;s<8;s++)step(0.04); // substeps = smooth, energy-stable ribbon
     // fade the trail slowly (the "ghost") — destination-out, so the rgb below is ignored
     tctx.globalCompositeOperation='destination-out';
     tctx.fillStyle='rgba(0,0,0,0.012)';tctx.fillRect(0,0,W,H);
@@ -171,7 +179,7 @@
     px=tx;py=ty;
     // detect near-stillness -> rekick
     const ke=v1*v1+v2*v2;
-    if(ke<0.0008){still++;if(still>120){rekick();still=0;}}else still=0;
+    if(demoEnabled&&!reduce&&ke<0.0008){still++;if(still>120){rekick();still=0;}}else still=0;
     // compose
     ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     ctx.drawImage(tr,0,0,W,H);
@@ -187,13 +195,14 @@
     ctx.fillStyle=C.accent;ctx.beginPath();ctx.arc(cx,cy,Math.max(2,L*0.02),0,6.29);ctx.fill();
     bob(mx,my,Math.max(3,L*0.034),C.bob1);
     bob(tx,ty,Math.max(3.5,L*0.04),C.bob2);
-    raf=requestAnimationFrame(draw);
+    if(!reduce&&(demoEnabled||(sessionActive)))start();
   }
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(draw);}
+  function start(){if(!raf&&!document.hidden&&!reduce&&(demoEnabled||(sessionActive)))raf=requestAnimationFrame(draw);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){a1=2.0;a2=2.7;px=py=null;draw();stop();}else start();
+  ['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;if(reduce){draw();}else start();}));
 })();
 </script>
 </body>

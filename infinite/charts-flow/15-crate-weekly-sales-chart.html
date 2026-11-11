@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Crate Weekly Sales Chart — cubic SVG trend curve with week morphing, rolling counter, and spring day scrubber.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crate Weekly Sales Chart</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+:root{--b:#131316;--i:#F1F1F4;--m:#9A9CA6;--l:#2B2C31;--c:#7B95C4;color-scheme:dark}
+:root[data-theme="light"]{--b:#EFF0F3;--i:#000;--m:#5F616B;--l:#CDCFD8;--c:#2B4473;color-scheme:light}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--b);color:var(--i);font:14px/1.3 "Avenir Next",Avenir,system-ui,sans-serif}
+.cr18-st,.cr18-st *{box-sizing:border-box}
+.cr18-st{position:relative;width:100%;height:100%;display:grid;place-items:center;padding:clamp(8px,3vmin,20px);background:var(--b);color:var(--i)}
+.cr18-st :focus-visible{outline:2px solid var(--c);outline-offset:2px}
+.cr18-ch{width:min(100%,320px);display:grid;gap:clamp(4px,2vmin,8px)}
+.cr18-top{display:flex;align-items:flex-start;justify-content:space-between}
+.cr18-val{font-family:Futura,"Avenir Next",sans-serif;font-size:clamp(22px,9vmin,40px);font-weight:700;line-height:1}
+.cr18-day{margin-top:3px;color:var(--m);font-size:clamp(10px,3vmin,13px)}
+.cr18-wk{display:flex;align-items:center;gap:2px;font-weight:600;font-size:clamp(11px,3vmin,13px)}
+.cr18-ib{display:inline-grid;place-items:center;width:clamp(24px,8vmin,34px);height:clamp(24px,8vmin,34px);border-radius:50%;border:1.5px solid transparent;background:none;padding:0;color:inherit;cursor:pointer;touch-action:manipulation;transition:border-color .2s,scale .15s,opacity .2s}
+.cr18-ib:hover{border-color:var(--i)}.cr18-ib:active{scale:.9}.cr18-ib[aria-disabled="true"]{opacity:.35;cursor:default}
+.cr18-ic{display:block;width:clamp(12px,4vmin,16px);height:clamp(12px,4vmin,16px);fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.cr18-wkl{min-width:34px;text-align:center}
+.cr18-plot{touch-action:pan-y;cursor:crosshair;border-radius:3px}
+.cr18-svg{display:block;width:100%;height:auto;overflow:visible}
+.cr18-line{fill:none;stroke:var(--l);stroke-width:2.5;stroke-linecap:round}.cr18-ink{stroke:var(--i)}
+.cr18-ghost{fill:none;stroke:var(--m);stroke-width:1.2;stroke-dasharray:1 5;stroke-linecap:round;transition:opacity .3s}
+.cr18-guide{stroke:var(--i);stroke-width:1;stroke-dasharray:2 3}.cr18-dot{fill:var(--b);stroke:var(--i);stroke-width:2.5}
+.cr18-xt{font:500 10px "Avenir Next",sans-serif;fill:var(--m);text-anchor:middle}.cr18-xt.cr18-on{fill:var(--i);font-weight:700}
+.cr18-rl{display:inline-block;overflow:hidden;height:1.15em;line-height:1.15em;vertical-align:bottom;text-align:center;width:.66em}
+.cr18-rc{display:block;transition:transform .45s ease}.cr18-rs{display:block;height:1.15em;font-style:normal}
+.cr18-cap{position:absolute;left:10px;bottom:8px;font:500 11px/1 ui-monospace,monospace;color:var(--i);opacity:.45;letter-spacing:.04em;text-transform:uppercase;pointer-events:none;user-select:none}
+@media (prefers-reduced-motion:reduce){.cr18-st *{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/charts-flow/15-crate-weekly-sales-chart.html",
+ "title": "Crate Weekly Sales Chart",
+ "description": "Mon-Sun sales chart toggling between Records and Revenue via interpolated SVG path morphing and interactive crosshair readout.",
+ "useWhen": "Weekly store metrics, metric comparison toggles, and compact analytics cards.",
+ "avoidWhen": "Multi-series scatter plots or dense time-series logs.",
+ "agentPrompt": "Edit --b/--i/--c/--l tokens in :root and [data-theme=\"light\"].",
+ "editableAreas": [
+  "theme CSS tokens (--b/--i/--c/--l), data arrays & timings"
+ ],
+ "preserveElements": [
+  "IIFE + crNN- prefix, reduced-motion, visibilitychange, theme/demo-v1"
+ ],
+ "knownLimitations": [
+  "Demo state resets on remount"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "line-chart",
+  "svg-morph",
+  "crosshair",
+  "analytics",
+  "sales",
+  "crate"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="cr18-st" id="cr18-st"></div>
+<div class="cr18-cap" aria-hidden="true">Sales Chart</div>
+<script>(()=>{
+  const s=document.getElementById('cr18-st'),RM=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+  const spring=o=>{if(RM()){o.step(o.to);return()=>{}}let x=o.from,v=0,last=performance.now(),id=0;const t=n=>{const dt=Math.min(.032,(n-last)/1000);last=n;for(let i=0;i<4;i++){v+=(-420*(x-o.to)-30*v)*dt/4;x+=v*dt/4}if(Math.abs(x-o.to)<.2&&Math.abs(v)<4){o.step(o.to);return}o.step(x);id=requestAnimationFrame(t)};id=requestAnimationFrame(t);return()=>cancelAnimationFrame(id)};
+  const roller=el=>{let slots=[],first=true;return str=>{const ch=[...String(str)].reverse();ch.forEach((c,i)=>{let sl=slots[i];if(!sl){sl=slots[i]=document.createElement('span');sl.className='cr18-rl';sl.innerHTML='<span class="cr18-rc">'+'0123456789'.replace(/\d/g,'<i class="cr18-rs">$&</i>')+'</span>';el.prepend(sl);const col=sl.firstChild;col.style.transition='none';col.style.transform=`translateY(${first?-c*10:0}%)`;col.offsetHeight;col.style.transition=''}sl.firstChild.style.transitionDelay=i*35+'ms';sl.firstChild.style.transform=`translateY(${-c*10}%)`});while(slots.length>ch.length)slots.pop().remove();first=false}};
+  const WK=[[12,18,9,22,30,41,26],[8,14,19,17,35,38,21],[15,11,24,28,26,47,33],[10,21,16,31,29,52,37]],D=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],W=280,H=128,G=248/6;
+  const X=i=>16+i*G,Y=v=>104-v/56*92,path=a=>a.map((v,i)=>i?`C${(X(i-1)+X(i))/2} ${Y(a[i-1])} ${(X(i-1)+X(i))/2} ${Y(v)} ${X(i)} ${Y(v)}`:`M${X(0)} ${Y(v)}`).join('');
+  const I=d=>`<svg class="cr18-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
+  let w=3,sel=6,ys=WK[3].slice(),gs=WK[2].slice(),cx=X(6),stopX=null,raf=0,timer=0,kick=0,step=0;
+  s.innerHTML=`<div class="cr18-ch"><div class="cr18-top"><div><div class="cr18-val" data-fit-clip-ok aria-hidden="true"></div><div class="cr18-day" aria-hidden="true"></div></div><div class="cr18-wk" role="group" aria-label="Week"><button type="button" class="cr18-ib" aria-label="Previous week">${I('M15 6l-6 6 6 6')}</button><span class="cr18-wkl" aria-live="polite"></span><button type="button" class="cr18-ib" aria-label="Next week">${I('M9 6l6 6-6 6')}</button></div></div><div class="cr18-plot" role="slider" tabindex="0" aria-label="Records sold by day" aria-valuemin="0" aria-valuemax="6"><svg class="cr18-svg" viewBox="0 0 ${W} ${H}" aria-hidden="true"><defs><clipPath id="cr18-clip"><rect x="0" y="-20" width="${cx}" height="${H+20}"/></clipPath></defs><path class="cr18-ghost"/><path class="cr18-line"/><path class="cr18-line cr18-ink" clip-path="url(#cr18-clip)"/><line class="cr18-guide" y1="4" y2="108"/><circle class="cr18-dot" r="5"/><g>${D.map((d,i)=>`<text class="cr18-xt" x="${X(i)}" y="124">${d[0]}</text>`).join('')}</g></svg></div></div>`;
+  const ghost=s.querySelector('.cr18-ghost'),line=s.querySelector('.cr18-line'),ink=s.querySelector('.cr18-ink'),clip=s.querySelector('#cr18-clip rect'),guide=s.querySelector('.cr18-guide'),dot=s.querySelector('.cr18-dot'),plot=s.querySelector('.cr18-plot'),val=roller(s.querySelector('.cr18-val')),day=s.querySelector('.cr18-day'),wk=s.querySelector('.cr18-wkl'),[pv,nx]=[...s.querySelectorAll('.cr18-ib')],labs=[...s.querySelectorAll('.cr18-xt')];
+  const yAt=x=>{const L=line.getTotalLength();if(!L)return Y(ys[sel]);let a=0,b=L;for(let i=0;i<14;i++){const m=(a+b)/2;line.getPointAtLength(m).x<x?a=m:b=m}return line.getPointAtLength((a+b)/2).y};
+  const draw=()=>{const d=path(ys);line.setAttribute('d',d);ink.setAttribute('d',d);ghost.setAttribute('d',path(gs));clip.setAttribute('width',String(cx));guide.setAttribute('x1',String(cx));guide.setAttribute('x2',String(cx));dot.setAttribute('cx',String(cx));dot.setAttribute('cy',String(yAt(cx)))};
+  const info=()=>{val(WK[w][sel]);day.textContent=D[sel];labs.forEach((t,i)=>t.classList.toggle('cr18-on',i===sel));plot.setAttribute('aria-valuenow',String(sel));plot.setAttribute('aria-valuetext',`${D[sel]}, ${WK[w][sel]} sold`);wk.textContent='Wk '+(42+w);pv.setAttribute('aria-disabled',String(w===0));nx.setAttribute('aria-disabled',String(w===WK.length-1));ghost.style.opacity=w?.7:0};
+  const pick=i=>{i=clamp(i,0,6);if(i===sel)return;sel=i;info();stopX&&stopX();stopX=spring({from:cx,to:X(i),step:v=>{cx=v;draw()}})};
+  const week=n=>{n=clamp(n,0,WK.length-1);if(n===w)return;w=n;info();const a=ys.slice(),b=WK[w],ga=gs.slice(),gb=WK[Math.max(w-1,0)],t0=performance.now();cancelAnimationFrame(raf);
+    if(RM()){ys=b.slice();gs=gb.slice();draw();return}
+    const f=now=>{const t=clamp((now-t0)/540,0,1),u=t-1,e=1+2.4*u*u*u+1.4*u*u;ys=a.map((v,i)=>v+(b[i]-v)*e);gs=ga.map((v,i)=>v+(gb[i]-v)*e);draw();raf=t<1&&!document.hidden?requestAnimationFrame(f):0};raf=requestAnimationFrame(f)};
+  const from=e=>{const r=plot.getBoundingClientRect();pick(Math.round(((e.clientX-r.left)/r.width*W-16)/G))};
+  plot.addEventListener('pointermove',from);plot.addEventListener('pointerdown',from);
+  plot.addEventListener('keydown',e=>{const k=e.key;if(k==='ArrowRight'||k==='ArrowUp')pick(sel+1);else if(k==='ArrowLeft'||k==='ArrowDown')pick(sel-1);else if(k==='Home')pick(0);else if(k==='End')pick(6);else if(k==='PageUp')week(w+1);else if(k==='PageDown')week(w-1);else return;e.preventDefault()});
+  pv.onclick=()=>week(w-1);nx.onclick=()=>week(w+1);draw();info();
+
+  let demo=!RM()&&!(window.__foreverPreview&&window.__foreverPreview.demoEnabled===false);
+  const play=()=>{if(!demo||RM()||document.hidden)return;const p=step++%5;if(p===0)pick(3);else if(p===1)pick(5);else if(p===2)week(2);else if(p===3)pick(1);else{week(3);pick(6)}};
+  const stop=()=>{clearInterval(timer);clearTimeout(kick);cancelAnimationFrame(raf);stopX&&stopX();timer=kick=raf=0},start=()=>{if(!timer&&demo&&!RM())timer=setInterval(play,1150)},tk=()=>{demo=false;clearInterval(timer);clearTimeout(kick);timer=kick=0};
+  window.addEventListener('forever:interactive',tk);s.addEventListener('pointerdown',tk,true);s.addEventListener('keydown',tk,true);
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():demo&&start());
+  window.addEventListener('message',e=>{if(e.data&&e.data.type==='forever:theme'&&(e.data.theme==='light'||e.data.theme==='dark'))document.documentElement.setAttribute('data-theme',e.data.theme)});
+  if(demo){kick=setTimeout(play,550);start()}
+})();</script>
+</body>
+</html>

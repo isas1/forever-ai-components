@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="DAG Pipeline Matrix — Dev Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>DAG Pipeline Matrix</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+:root{
+  --accent:#C7F000;--accent-soft:rgba(199,240,0,.14);--accent-line:rgba(199,240,0,.3);
+  --bg:#0A0A0A;--bg-sunken:#070707;--surface:#111111;--surface-2:#161616;--surface-3:#1C1C1C;
+  --text:#EDEDEA;--text-muted:#8A8A85;
+  --border:rgba(255,255,255,.08);
+  --success:#5BB98C;--danger:#E5604D;
+  --radius-sm:5px;--radius-md:8px;--radius-lg:12px;--radius-pill:999px;
+  --font-mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+:root[data-theme="light"]{
+  --bg:#FAFAF8;--bg-sunken:#F1F1EC;--surface:#F4F4F0;--surface-2:#ECECE6;--surface-3:#FFFFFF;
+  --text:#1A1A18;--text-muted:#6B6B66;
+  --border:rgba(0,0,0,.08);
+  --accent:#4D7A00;--accent-soft:rgba(77,122,0,.12);--accent-line:rgba(77,122,0,.35);
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+body{display:grid;place-items:center;color:var(--text);font-family:var(--font-mono);user-select:none}
+.dag-card{box-sizing:border-box;width:40em;font-size:min(2.4vmin,12px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:1.33em;display:flex;flex-direction:column;gap:1em}
+.dag-hdr{display:flex;justify-content:space-between;align-items:center}
+.dag-title{font-weight:700;display:flex;align-items:center;gap:.67em}
+.dag-badge{padding:.17em .67em;border-radius:var(--radius-pill);font-size:.83em;font-weight:600;letter-spacing:.05em;font-variant-numeric:tabular-nums;background:var(--accent-soft);color:var(--accent)}
+.dag-badge[data-s="fail"]{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+.dag-badge[data-s="pass"]{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.dag-timer{font-variant-numeric:tabular-nums;color:var(--text-muted)}
+.dag-graph{position:relative;width:100%;height:15.4em}
+.dag-edges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.dag-edge{fill:none;stroke:var(--border);stroke-width:2;transition:stroke .25s}
+.dag-edge.active{stroke:var(--accent);stroke-dasharray:5 5;animation:dag-dash .6s linear infinite}
+.dag-edge.done{stroke:var(--success)}
+.dag-edge.failed{stroke:var(--danger);stroke-dasharray:3 3}
+@keyframes dag-dash{to{stroke-dashoffset:-10}}
+.dag-card[data-still] .dag-edge{animation:none}
+.dag-node{--c:var(--text-muted);position:absolute;transform:translate(-50%,-50%);box-sizing:border-box;background:var(--bg-sunken);color:inherit;border:1.5px solid var(--border);border-radius:var(--radius-md);padding:.5em .75em;min-width:7.2em;cursor:pointer;font:inherit;text-align:left;transition:transform .15s,border-color .2s;display:flex;flex-direction:column;gap:.25em}
+.dag-node:hover{transform:translate(-50%,-50%) scale(1.05)}
+.dag-node[data-state="running"]{--c:var(--accent);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent-line),0 0 1.5em var(--accent-soft)}
+.dag-node[data-state="success"]{--c:var(--success);border-color:var(--success)}
+.dag-node[data-state="failed"]{--c:var(--danger);border-color:var(--danger)}
+.dag-node[data-state="skipped"]{opacity:.5}
+.dag-top{display:flex;justify-content:space-between;align-items:center;gap:.5em;font-size:.83em;font-weight:600}
+.dag-dot{width:.5em;height:.5em;border-radius:50%;background:var(--c)}
+.dag-meta{font-size:.75em;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.dag-bar{height:2px;background:var(--border);border-radius:2px;overflow:hidden}
+.dag-fill{height:100%;width:0;background:var(--c)}
+.dag-ftr{display:flex;justify-content:space-between;align-items:center;gap:.8em;font-size:.92em;color:var(--text-muted);border-top:1px solid var(--border);padding-top:.83em}
+.dag-btns{display:flex;gap:.5em;flex:none}
+.dag-btn{background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);padding:.33em .67em;font:inherit;font-size:.83em;cursor:pointer;transition:border-color .15s}
+.dag-btn:hover{border-color:var(--accent)}
+.dag-node:focus-visible,.dag-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dag-cap{position:fixed;left:8px;bottom:6px;font:10px var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text);opacity:.28;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.dag-edge,.dag-node{transition:none}.dag-edge.active{animation:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/dev-status/12-dag-pipeline-matrix.html",
+ "title": "DAG Pipeline Matrix",
+ "description": "CI pipeline as a seven-stage dependency graph; stages run in parallel, and clicking a stage injects a fault and skips its downstream stages.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [
+  "Forever Opus tokens on :root (--bg, --surface*, --text*, --border*, --accent) — one lime accent, no gradients",
+  "copy and data values in markup/script"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "theme hook: ?theme= bootstrap, forever:theme message listener and :root[data-theme=\"light\"] tokens",
+  "IIFE wrapper, visibilitychange sleep, prefers-reduced-motion guard, time-based (dt) animation"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Text is very small at 180px tiles.",
+  "Inject Fault always targets the test stage."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "ci",
+  "pipeline",
+  "dag",
+  "devops",
+  "status"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="dag-card" id="dag-card" role="group" aria-label="CI pipeline status, seven stages">
+<div class="dag-hdr">
+    <div class="dag-title"><span>main &#35;8492</span><span class="dag-badge" id="dag-badge">RUNNING</span></div>
+    <span class="dag-timer" id="dag-timer">00.0s</span>
+  </div>
+  <div class="dag-graph" id="dag-graph"><svg class="dag-edges" id="dag-edges" viewBox="0 0 448 185" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+  <div class="dag-ftr">
+    <span id="dag-hint" aria-live="polite">Click a stage to inject fault / re-run</span>
+    <div class="dag-btns">
+      <button type="button" class="dag-btn" id="dag-fault">Inject Fault</button>
+      <button type="button" class="dag-btn" id="dag-replay">Replay DAG</button>
+    </div>
+  </div>
+</div>
+<div class="dag-cap" aria-hidden="true">DAG pipeline</div>
+<script>
+(() => {
+ const mq = matchMedia('(prefers-reduced-motion: reduce)');
+ const reduced = () => mq.matches;
+ addEventListener('message', e => {
+  const d = e.data;
+  if (d && (d.type === 'forever:theme' || d.type === 'theme') && (d.theme === 'light' || d.theme === 'dark'))
+   document.documentElement.setAttribute('data-theme', d.theme);
+ });
+
+ const nodes = [
+  { id: 'src', label: 'checkout', x: 14, y: 50, deps: [], dur: 1200 },
+  { id: 'lint', label: 'eslint', x: 42, y: 20, deps: ['src'], dur: 1600 },
+  { id: 'unit', label: 'vitest', x: 42, y: 50, deps: ['src'], dur: 2100 },
+  { id: 'wasm', label: 'wasm-opt', x: 42, y: 80, deps: ['src'], dur: 2500 },
+  { id: 'edge', label: 'edge-pkg', x: 70, y: 35, deps: ['lint', 'unit'], dur: 1700 },
+  { id: 'e2e', label: 'playwright', x: 70, y: 70, deps: ['unit', 'wasm'], dur: 2200 },
+  { id: 'prod', label: 'deploy', x: 90, y: 50, deps: ['edge', 'e2e'], dur: 1100 }
+ ];
+ const $ = id => document.getElementById(id);
+ const card = $('dag-card'), graph = $('dag-graph'), svg = $('dag-edges');
+ const badge = $('dag-badge'), timer = $('dag-timer'), hint = $('dag-hint');
+ const byId = {}, state = {}, edges = [];
+ let demo = window.__foreverPreview?.demoEnabled !== false;   // demo-v1 lifecycle
+ let userRun = false, elapsed = 0, raf = 0, last = 0, restartT = 0;
+
+ nodes.forEach(n => {
+  byId[n.id] = n;
+  const el = document.createElement('button');
+  el.type = 'button';
+  el.className = 'dag-node';
+  el.style.left = n.x + '%';
+  el.style.top = n.y + '%';
+  el.innerHTML = `<div class="dag-top"><span>${n.label}</span><span class="dag-dot"></span></div><div class="dag-meta"></div><div class="dag-bar"><div class="dag-fill"></div></div>`;
+  n.el = el; n.meta = el.children[1]; n.fill = el.children[2].firstChild;
+  el.addEventListener('click', () => { act(); toggleFault(n.id); });
+  graph.appendChild(el);
+ });
+ nodes.forEach(t => t.deps.forEach(d => {
+  const s = byId[d], p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  const x1 = s.x / 100 * 448 + 38, y1 = s.y / 100 * 185, x2 = t.x / 100 * 448 - 38, y2 = t.y / 100 * 185, cx = (x1 + x2) / 2;
+  p.setAttribute('d', `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`);
+  p.setAttribute('class', 'dag-edge');
+  svg.appendChild(p);
+  edges.push({ s: s.id, t: t.id, p });
+ }));
+
+ function resetDAG(faultId) {
+  elapsed = 0;
+  nodes.forEach(n => { state[n.id] = { status: n.deps.length ? 'queued' : 'running', progress: 0, willFail: n.id === faultId }; });
+ }
+ function skipDown(id) {
+  nodes.forEach(n => {
+   if (n.deps.includes(id) && state[n.id].status !== 'failed') { state[n.id].status = 'skipped'; state[n.id].progress = 0; skipDown(n.id); }
+  });
+ }
+ function recoverDown(id) {
+  nodes.forEach(n => {
+   if (n.deps.includes(id) && state[n.id].status === 'skipped') { state[n.id].status = 'queued'; state[n.id].progress = 0; recoverDown(n.id); }
+  });
+ }
+ function toggleFault(id) {
+  const s = state[id];
+  if (s.status === 'failed') {
+   s.status = 'running'; s.progress = 0; s.willFail = false;
+   hint.textContent = `Recovered ${id}, resuming downstream`;
+   recoverDown(id);
+  } else {
+   s.status = 'failed'; s.progress = 65;
+   hint.textContent = `Fault injected in ${id}, downstream skipped`;
+   skipDown(id);
+  }
+  resume();
+ }
+
+ function step(ms) {
+  nodes.forEach(n => {
+   const s = state[n.id];
+   if (s.status !== 'running') return;
+   s.progress += ms / n.dur * 100;
+   if (s.willFail && s.progress >= 65) { s.progress = 65; s.status = 'failed'; skipDown(n.id); }
+   else if (s.progress >= 100) { s.progress = 100; s.status = 'success'; }
+  });
+  let busy = false;
+  nodes.forEach(n => {
+   const s = state[n.id];
+   if (s.status === 'queued' && n.deps.every(d => state[d].status === 'success')) s.status = 'running';
+   if (s.status === 'running') busy = true;
+  });
+  if (busy) elapsed += ms / 1000;
+  return busy;
+ }
+ function advance(ms) { for (let t = 0; t < ms && step(100); t += 100); }
+
+ function render() {
+  let run = false, fail = false, done = true;
+  nodes.forEach(n => {
+   const s = state[n.id];
+   n.el.dataset.state = s.status;
+   n.fill.style.width = (s.status === 'success' ? 100 : Math.min(100, s.progress)) + '%';
+   n.meta.textContent = s.status === 'running' ? Math.round(s.progress) + '%'
+    : s.status === 'success' ? (n.dur / 1000).toFixed(1) + 's ✓'
+    : s.status === 'failed' ? 'ERR_EXIT_1' : s.status;
+   n.el.setAttribute('aria-label', `${n.label}: ${s.status}`);
+   if (s.status === 'running') run = true;
+   if (s.status === 'failed') fail = true;
+   if (s.status !== 'success') done = false;
+  });
+  edges.forEach(e => {
+   const a = state[e.s].status, b = state[e.t].status;
+   e.p.setAttribute('class', 'dag-edge ' + (a === 'failed' ? 'failed' : b === 'running' ? 'active' : a === 'success' && b === 'success' ? 'done' : ''));
+  });
+  if (fail) { badge.textContent = 'FAILED'; badge.dataset.s = 'fail'; }
+  else if (run) { badge.textContent = 'RUNNING'; badge.dataset.s = 'run'; }
+  else if (done) { badge.textContent = 'PASSED'; badge.dataset.s = 'pass'; }
+  timer.textContent = elapsed.toFixed(1).padStart(4, '0') + 's';
+  if (demo || userRun) card.removeAttribute('data-still'); else card.setAttribute('data-still', '');
+ }
+
+ function tick(now) {
+  raf = 0;
+  if (document.hidden || !(demo || userRun)) return;
+  const dt = last ? Math.min(now - last, 50) : 16.667;
+  last = now;
+  const busy = step(dt);
+  render();
+  if (busy) raf = requestAnimationFrame(tick);
+  else {
+   userRun = false;
+   if (demo && !restartT) restartT = setTimeout(() => {
+    restartT = 0;
+    if (!demo) return;
+    resetDAG(Math.random() < 0.28 ? 'wasm' : null);
+    render(); kick();
+   }, 2400);
+  }
+ }
+ function kick() { if (raf || document.hidden || !(demo || userRun)) return; last = 0; raf = requestAnimationFrame(tick); }
+ function resume() { if (reduced()) { advance(30000); render(); } else { userRun = true; render(); kick(); } }
+ function act() { demo = false; clearTimeout(restartT); restartT = 0; }
+
+  addEventListener('forever:interactive', () => { act(); render(); });
+ card.addEventListener('pointerdown', act, true);
+ card.addEventListener('keydown', e => { if (/^(Enter| |Arrow|Escape)/.test(e.key)) act(); }, true);
+
+ $('dag-replay').addEventListener('click', () => { hint.textContent = 'Pipeline triggered manually'; resetDAG(); resume(); });
+ $('dag-fault').addEventListener('click', () => { hint.textContent = 'Fault armed in vitest'; resetDAG('unit'); resume(); });
+
+ document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { if (raf) cancelAnimationFrame(raf); raf = 0; } else { last = 0; kick(); }
+ });
+
+ resetDAG();
+ if (reduced()) advance(30000);
+ else if (!demo) advance(3400);
+ render();
+ kick();
+})();
+</script>
+</body>
+</html>

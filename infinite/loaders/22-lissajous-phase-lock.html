@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="An oscilloscope Lissajous trace that cycles frequency ratios until it phase-locks; pointer position sets the sweep speed, click changes ratio.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Lissajous Phase Lock</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --lsj-bg:#0A0A0A; --lsj-text:#EDEDEA; --lsj-muted:#8A8A85; --lsj-line:rgba(255,255,255,0.08); --lsj-accent:#C7F000;
+    --lsj-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --lsj-bg:#FAFAF8; --lsj-text:#1A1A18; --lsj-muted:#6B6B66; --lsj-line:rgba(0,0,0,0.08); --lsj-accent:#4D7A00;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--lsj-bg)}
+  .lsj-root{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.9em;
+    font:clamp(6px,3.4vmin,22px)/1.2 var(--lsj-mono);color:var(--lsj-muted);user-select:none;-webkit-user-select:none;
+    cursor:crosshair;box-sizing:border-box}
+  .lsj-root:focus-visible{outline:2px solid var(--lsj-accent);outline-offset:-6px}
+  .lsj-scr{position:relative;width:24em;max-width:90%;aspect-ratio:210/170;border:1px solid var(--lsj-line);border-radius:.6em;overflow:hidden;
+    background:linear-gradient(to right,var(--lsj-line) 1px,transparent 1px) 0 0/12.5% 100%,
+               linear-gradient(to bottom,var(--lsj-line) 1px,transparent 1px) 0 0/100% 15.44%}
+  .lsj-cv{display:block;width:100%;height:100%}
+  .lsj-hud{width:24em;max-width:90%;display:flex;justify-content:space-between;gap:.5em;font-size:.95em;letter-spacing:.1em;white-space:nowrap}
+  .lsj-cap{position:fixed;left:8px;bottom:7px;font:10px var(--lsj-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--lsj-text);opacity:.28}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/loaders/22-lissajous-phase-lock.html",
+ "title": "Lissajous Phase Lock",
+ "description": "Oscilloscope Lissajous trace cycling frequency ratios until it phase-locks; pointer sets sweep speed, click or Enter changes ratio.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [
+  "Forever Opus tokens on :root (--bg, --surface*, --text*, --border*, --accent) — one lime accent, no gradients",
+  "copy and data values in markup/script"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "theme hook: ?theme= bootstrap, forever:theme message listener and :root[data-theme=\"light\"] tokens",
+  "IIFE wrapper, visibilitychange sleep, prefers-reduced-motion guard, time-based (dt) animation"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Reduced motion shows one static frame."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "loader",
+  "lissajous",
+  "oscilloscope",
+  "phase-lock",
+  "waveform"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="lsj-root" id="lsj-root" role="group" tabindex="0" aria-label="Lissajous phase lock: click or press Enter to change ratio">
+  <div class="lsj-scr"><canvas class="lsj-cv" id="lsj-cv" aria-hidden="true"></canvas></div>
+  <div class="lsj-hud"><span id="lsj-ratio">RATIO 3:2</span><span id="lsj-lock" aria-live="polite">ACQUIRING...</span></div>
+</div>
+<div class="lsj-cap" aria-hidden="true">Lissajous Phase Lock</div>
+<script>
+(function(){
+  'use strict';
+  var $=function(i){return document.getElementById(i)};
+  var root=$('lsj-root'),cv=$('lsj-cv'),ctx=cv.getContext('2d'),ratioEl=$('lsj-ratio'),lockEl=$('lsj-lock');
+  var mq=matchMedia('(prefers-reduced-motion: reduce)'),reduced=function(){return mq.matches};
+  var P=[[3,2,'RATIO 3:2'],[5,4,'RATIO 5:4'],[3,4,'RATIO 3:4'],[1,1,'PLL 1:1 LOCK']];
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var idx=0,phase=.6,speed=.016,raf=0,last=0,cycle=0,sc=1,beam='#C7F000',dot='#EDEDEA';
+
+  function syncTheme(){var s=getComputedStyle(document.documentElement);
+    beam=s.getPropertyValue('--lsj-accent').trim()||beam;dot=s.getPropertyValue('--lsj-text').trim()||dot;}
+  window.addEventListener('message',function(e){
+    var d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);syncTheme();draw();}
+  });
+
+  function size(){var dpr=Math.min(window.devicePixelRatio||1,2),w=cv.clientWidth||210,h=cv.clientHeight||170;
+    cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);sc=w*dpr/210;draw();}
+  new ResizeObserver(size).observe(cv);
+
+  function draw(){
+    var a=P[idx][0],b=P[idx][1];
+    ctx.setTransform(sc,0,0,sc,0,0);ctx.clearRect(0,0,210,170);
+    ctx.save();ctx.translate(105,85);ctx.beginPath();
+    for(var i=0;i<=260;i++){var t=i/260*6.2832,x=Math.sin(a*t+phase)*68,y=Math.sin(b*t)*54;if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);}
+    ctx.strokeStyle=beam;ctx.lineWidth=2.2;ctx.stroke();
+    ctx.beginPath();ctx.arc(Math.sin(a*phase*2+phase)*68,Math.sin(b*phase*2)*54,3.5,0,6.2832);ctx.fillStyle=dot;ctx.fill();
+    ctx.restore();
+  }
+  function setPreset(i){idx=i;ratioEl.textContent=P[i][2];lockEl.textContent=i===3?'LOCKED ●':'TUNING...';draw();}
+  function stopDemo(){demoEnabled=false;}
+  window.addEventListener('forever:interactive',stopDemo);
+  root.addEventListener('pointerdown',stopDemo);
+  root.addEventListener('pointermove',function(e){
+    var r=root.getBoundingClientRect(),nx=(e.clientX-r.left)/r.width;
+    speed=.004+nx*.035;lockEl.textContent='Δφ '+(nx*180).toFixed(0)+'°';
+  });
+  root.addEventListener('click',function(){stopDemo();setPreset((idx+1)%P.length);});
+  root.addEventListener('keydown',function(e){
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();stopDemo();setPreset((idx+1)%P.length);}
+  });
+
+  function frame(now){
+    var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    phase+=speed*dt;cycle+=dt;
+    if(demoEnabled&&cycle>540){cycle=0;setPreset((idx+1)%P.length);}  /* ~9 s: preset cycling is the attract work */
+    draw();raf=requestAnimationFrame(frame);
+  }
+  function start(){if(raf||document.hidden||reduced())return;last=0;raf=requestAnimationFrame(frame);}
+  function stop(){if(raf)cancelAnimationFrame(raf);raf=0;last=0;}
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  mq.addEventListener('change',function(){if(reduced()){stop();phase=.6;draw();}else start();});
+  syncTheme();size();start();
+})();
+</script>
+</body>
+</html>

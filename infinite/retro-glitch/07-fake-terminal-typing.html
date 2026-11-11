@@ -6,18 +6,17 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Fake terminal typing</title>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#05080a}
-  #term{position:fixed;inset:0;padding:5% 6%;box-sizing:border-box;
-    font:600 clamp(11px,3.3vw,18px)/1.55 ui-monospace,"SF Mono",Menlo,monospace;
-    color:#7dffb0;text-shadow:0 0 4px rgba(125,255,176,.5);overflow:hidden}
-  .p{color:#46c8ff}.w{color:#ffe26b}.d{color:#5a8a72}
-  #cur{display:inline-block;width:.6em;height:1.05em;background:#7dffb0;
-    vertical-align:-2px;animation:bl 1s steps(1) infinite;box-shadow:0 0 6px #7dffb0}
-  @keyframes bl{50%{opacity:0}}
-  .scan{position:fixed;inset:0;pointer-events:none;opacity:.5;
-    background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.22) 3px)}
-  .cap{position:fixed;right:8px;bottom:7px;font:600 10px ui-monospace,monospace;
-    color:#7dffb0;opacity:.35;letter-spacing:.5px;pointer-events:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#05080a}
+.ft07-stage{position:fixed;inset:0}
+.ft07-term{position:absolute;inset:0;padding:5% 6% 25px;box-sizing:border-box;font:600 clamp(11px,3vw,18px)/1.55 ui-monospace,"SF Mono",Menlo,monospace;color:#7dffb0;text-shadow:0 0 4px rgba(125,255,176,.5);overflow:hidden;display:flex;flex-direction:column}
+.ft07-line{flex-shrink:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.ft07-p{color:#8aceeb}.ft07-w{color:#ffe26b}.ft07-d{color:#91b39f}
+.ft07-cur{display:inline-block;width:.6em;height:1.05em;background:#7dffb0;vertical-align:-2px;animation:ft07-bl 1s steps(1) infinite;box-shadow:0 0 6px #7dffb0}
+@keyframes ft07-bl{50%{opacity:0}}
+.ft07-scan{position:absolute;inset:0;pointer-events:none;opacity:.5;background:repeating-linear-gradient(to bottom,transparent 0,transparent 2px,rgba(0,0,0,.22) 3px)}
+.ft07-cap{position:fixed;right:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#7dffb0;opacity:.35;letter-spacing:.5px;pointer-events:none}
+.ft07-paused .ft07-cur{animation-play-state:paused}
+@media(prefers-reduced-motion:reduce){.ft07-cur{animation:none}}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -43,7 +42,7 @@
  "knownLimitations": [
   "Background color hardcoded in CSS — must edit to use on light backgrounds",
   "No click-to-skip or replay interaction; fully passive",
-  "innerHTML string concatenation is fragile if line text contains HTML special characters"
+  "Small frames use shorter boot messages and retain complete newest rows"
  ],
  "tier": "curated",
  "labels": [
@@ -67,46 +66,44 @@
 </script>
 </head>
 <body>
-<div id="term"></div>
-<div class="scan"></div>
-<div class="cap">TERMINAL</div>
+<div class="ft07-stage" role="img" aria-label="CRT terminal typing a boot script, kernel and floppy status, then HELLO WORLD."><div class="ft07-term" id="ft07-term"></div><div class="ft07-scan"></div></div>
+<div class="ft07-cap" aria-hidden="true">TERMINAL</div>
 <script>
-const term=document.getElementById('term');
+(()=>{
+'use strict';
+const term=document.getElementById('ft07-term');
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-const lines=[
- {t:'guest@retro:~$ ',c:'p'},{t:'./boot.sh --demo',c:''},{nl:1},
- {t:'[ok] ',c:'d'},{t:'loading kernel modules',c:''},{nl:1},
- {t:'[ok] ',c:'d'},{t:'mounting /dev/floppy0',c:''},{nl:1},
- {t:'[warn] ',c:'w'},{t:'CRT phosphor warm',c:''},{nl:1},
- {t:'guest@retro:~$ ',c:'p'},{t:'echo "HELLO WORLD"',c:''},{nl:1},
- {t:'HELLO WORLD',c:''},{nl:2},
- {t:'guest@retro:~$ ',c:'p'},{t:'_',c:'',cur:1},{nl:1}
-];
-let li=0,ci=0,buf='',raf,delay=0;
-function render(){term.innerHTML=buf+'<span id="cur"></span>';}
-function tick(){
-  if(reduce){ // show full immediately, just blink cursor
-    buf=lines.map(l=>l.nl?'<br>'.repeat(l.nl):(l.c?'<span class="'+l.c+'">'+l.t+'</span>':l.t)).join('');
-    render();return;
-  }
-  if(li<lines.length){
-    const l=lines[li];
-    if(l.nl){buf+='<br>'.repeat(l.nl);li++;ci=0;render();delay=4;}
-    else{
-      if(ci===0&&l.c)buf+='<span class="'+l.c+'">';
-      buf+=l.t[ci];if(l.c&&ci===l.t.length-1)buf+='</span>';
-      ci++;render();
-      if(ci>=l.t.length){li++;ci=0;delay=l.cur?0:3;}
-    }
-  }else{ // pause then restart
-    delay--;if(delay<-80){li=0;ci=0;buf='';}
-  }
-  if(delay>0){delay--;raf=requestAnimationFrame(tick);return;}
-  setTimeout(()=>{raf=requestAnimationFrame(tick);}, li>=lines.length?20:32+Math.random()*40);
+function sequence(){return document.documentElement.clientWidth<300?[
+ ['$ ./boot.sh','ft07-p'],['[ok] kernel ready','ft07-d'],['[ok] floppy mounted','ft07-d'],['[warn] CRT warm','ft07-w'],['$ echo hello','ft07-p'],['HELLO WORLD',''],['guest@retro:~$ ','ft07-p']
+]:[
+ ['guest@retro:~$ ./boot.sh --demo','ft07-p'],['[ok] loading kernel modules','ft07-d'],['[ok] mounting /dev/floppy0','ft07-d'],['[warn] CRT phosphor warm','ft07-w'],['guest@retro:~$ echo "HELLO WORLD"','ft07-p'],['HELLO WORLD',''],['guest@retro:~$ ','ft07-p']
+];}
+let lines=sequence(),li=0,ci=1,hold=0,timer;
+function trim(){while(term.children.length>1&&term.scrollHeight>term.clientHeight)term.firstChild.remove();}
+function render(){
+ term.replaceChildren();
+ lines.slice(0,li+1).forEach(([text,cls],i)=>{
+  const row=document.createElement('div');row.className='ft07-line '+cls;
+  row.textContent=i===li?text.slice(0,ci):text;
+  if(i===li){const cur=document.createElement('span');cur.className='ft07-cur';row.appendChild(cur);}
+  term.appendChild(row);
+ });trim();
 }
-function play(){cancelAnimationFrame(raf);tick();}
-document.addEventListener('visibilitychange',()=>document.hidden?cancelAnimationFrame(raf):play());
-play();
+function tick(){
+ if(document.hidden)return;
+ if(hold){hold--;if(!hold&&li===lines.length-1&&ci===lines[li][0].length){li=0;ci=1;render();}return;}
+ if(ci<lines[li][0].length)ci++;
+ else if(li<lines.length-1){li++;ci=0;hold=3;}
+ else{hold=45;return;}
+ render();
+}
+function stop(){clearInterval(timer);term.classList.add('ft07-paused');}
+function play(){stop();term.classList.remove('ft07-paused');if(!reduce&&!document.hidden)timer=setInterval(tick,65);}
+function resize(){lines=sequence();if(reduce){li=lines.length-1;ci=lines[li][0].length;}render();}
+document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+addEventListener('resize',resize);
+resize();play();
+})();
 </script>
 </body>
 </html>

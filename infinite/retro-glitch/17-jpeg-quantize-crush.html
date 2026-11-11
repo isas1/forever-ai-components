@@ -7,8 +7,8 @@
 <title>JPEG Quantize Crush</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#14060c;}
-  #jqc{display:block;width:100%;height:100%;image-rendering:pixelated;}
-  .jqc-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
+  #rg17-c{display:block;width:100%;height:100%;image-rendering:pixelated;}
+  .rg17-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
        letter-spacing:.14em;color:#ff4040;opacity:.34;text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
@@ -16,10 +16,10 @@
 {
  "file": "infinite/retro-glitch/17-jpeg-quantize-crush.html",
  "title": "JPEG Quantize Crush",
- "description": "Synthetic image oscillates through JPEG-like artifacts: blocky 8x8 DCT cells, color banding, and ringing pulse in waves. Pointer/click boost quality.",
+ "description": "Synthetic image oscillates through JPEG-like block, banding and ringing artifacts. Pointer or touch position sets quality boost.",
  "useWhen": "Retro or glitch-art hero backgrounds, tech/compression-themed visuals where lo-fi digital decay is the aesthetic.",
  "avoidWhen": "Contexts requiring legible content overlays — constant block-smear and ringing compete heavily with text.",
- "agentPrompt": "Change ACC to [64, 255, 128] for a green accent, slow the oscillator by setting phase step from 0.012 to 0.006, and raise max quant levels from 30 to 60 for deeper crush.",
+ "agentPrompt": "Edit ACC within the crimson palette, oscillator speed (t*0.012), and quantization levels. Retain low-resolution block alignment and input-driven reduced-motion redraw.",
  "editableAreas": [
   "accent color (ACC array)",
   "oscillator speed (t*0.012)",
@@ -35,8 +35,8 @@
  ],
  "knownLimitations": [
   "Per-block pixel loop over GRID*GRID Float32Array is CPU-bound — heavy on low-end devices",
-  "Reduced-motion shows only a single static frame at t=120, no graceful fallback animation",
-  "Grid overlay skips every 4 blocks so fine-grid detail is not rendered"
+  "Grid overlay skips every 4 blocks so fine-grid detail is not rendered",
+  "Reduced motion holds a static image; pointer/tap changes quality without an idle loop."
  ],
  "tier": "curated",
  "labels": [
@@ -58,11 +58,11 @@
 </script>
 </head>
 <body>
-<canvas id="jqc"></canvas>
-<div class="jqc-cap">JPEG Quantize Crush</div>
+<canvas id="rg17-c"></canvas>
+<div class="rg17-cap">JPEG Quantize Crush</div>
 <script>
 (function(){
-  const cv=document.getElementById('jqc'),ctx=cv.getContext('2d',{willReadFrequently:true});
+  const cv=document.getElementById('rg17-c'),ctx=cv.getContext('2d',{willReadFrequently:true});
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const BG=[20,6,12], ACC=[255,64,64];
   let W,H,DPR,GRID,BS,src,buf,off,octx;
@@ -99,8 +99,14 @@
   }
   addEventListener('resize',size);size();
   let t=0,nudge=0;
-  cv.addEventListener('pointermove',()=>{nudge=Math.min(1.4,nudge+0.5);});
-  cv.addEventListener('click',()=>{nudge=1.6;});
+  function setQuality(e){
+    const r=cv.getBoundingClientRect();
+    nudge=1.6*Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+    if(reduce)render();
+  }
+  cv.addEventListener('pointerdown',setQuality);
+  cv.addEventListener('pointermove',setQuality);
+  cv.addEventListener('click',setQuality);
 
   // quantize one 8x8 block to `q` levels with a soft DC/ring term
   function crushBlock(bx,by,q,ring){

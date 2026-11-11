@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="Magenta-to-gold gradient button with a layered 3D edge and shadow that depresses and springs back like a tactile key.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>3D Push Button</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -30,7 +31,7 @@
   html,body{margin:0;height:100%;overflow:hidden}
   body{background:var(--c10-bg);display:grid;place-items:center;
     background-image:radial-gradient(60vw 40vw at 30% -10%,var(--c10-glow-a),transparent 60%);}
-  #stage{position:fixed;inset:0;display:grid;place-items:center}
+  #c10-stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c10-push{position:relative;border:0;background:none;cursor:pointer;padding:0;border-radius:var(--r-md);outline-offset:4px;}
   .c10-push__shadow{position:absolute;inset:0;border-radius:var(--r-md);background:rgba(0,0,0,0.55);
@@ -49,6 +50,7 @@
 
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c10-push__face,.c10-push__shadow{transition-duration:.001ms}}
+  .c10-push:focus-visible{outline:2px solid var(--text-0);outline-offset:4px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -56,14 +58,14 @@
  "title": "3D Push Button",
  "description": "Magenta-to-gold gradient button with a layered edge and drop shadow that depresses on press and springs back, mimicking a physical key. Auto-cycles as demo.",
  "useWhen": "CTAs, form submit buttons, or any action trigger that benefits from tactile physical feedback.",
- "avoidWhen": "Passive display contexts — remove the auto-cycle setTimeout loop before shipping in production.",
- "agentPrompt": "Change the button label to 'Subscribe', update the gradient to linear-gradient(120deg,#f97316,#ec4899), and increase the idle press interval from 1800ms to 3000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "avoidWhen": "Passive display contexts — remove the auto-cycle setTimeout loop before shipping in production. Autonomous preview ends at first deliberate input and never resumes.",
+ "agentPrompt": "Change the button label to 'Subscribe', update the gradient to linear-gradient(120deg,#f97316,#ec4899), and increase the idle press interval from 1800ms to 3000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime. Autonomous preview ends at first deliberate input and never resumes.",
  "editableAreas": [
   "button label (Push down text)",
   "gradient colors (--grad-iris-cyan)",
   "press depth (translateY -7px face / 8px shadow)",
   "edge background color (#A18794 / #C0B459)",
-  "idle demo cadence (DEMO_EVERY=3000 ms between presses, HOLD_MS=450 ms depressed)",
+  "autonomous preview until first deliberate input cadence (DEMO_EVERY=3000 ms between presses, HOLD_MS=450 ms depressed)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -72,11 +74,13 @@
   "visibilitychange pause",
   "three-layer structure (shadow / edge / face)",
   ".is-pressed demo class sharing the :active rules + takeover on real hover/press/focus",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
-  "Edge color is a static dusty-mauve/gold pair and must be updated manually if gradient changes"
+  "autonomous preview cycle that stops at first deliberate input runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
+  "Edge color is a static dusty-mauve/gold pair and must be updated manually if gradient changes",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -101,7 +105,7 @@
 </script>
 </head>
 <body>
-<div id="stage">
+<div id="c10-stage">
   <button class="c10-push" type="button">
     <span class="c10-push__shadow"></span>
     <span class="c10-push__edge"></span>
@@ -120,20 +124,19 @@
   // mount, held HOLD_MS, then one press every DEMO_EVERY ms. Real input takes over and hands the
   // key back to :active; the demo resumes after IDLE_RESUME ms of quiet.
   var TICK=100, DEMO_EVERY=3000, HOLD_MS=450, IDLE_RESUME=3600, LEAD=400;
-  var demo=true, down=false, phase=DEMO_EVERY-LEAD, idle=0, clock=null;
+  var demo=window.__foreverPreview?.demoEnabled!==false&&!reduce, down=false, phase=DEMO_EVERY-LEAD, idle=0, clock=null;
   function setPressed(on){ down=on; btn.classList.toggle("is-pressed", on); }
   function tick(){
-    if(!demo){ if(over) idle=0; else idle+=TICK; if(idle>=IDLE_RESUME){ demo=true; idle=0; phase=DEMO_EVERY-LEAD; } return; }
+    if(!demo)return;
     phase+=TICK;
     if(phase >= (down?HOLD_MS:DEMO_EVERY)){ phase=0; setPressed(!down); }
   }
-  function takeover(){ demo=false; idle=0; setPressed(false); }   // real input ends the idle demo
+  function takeover(){ if(!demo)return; demo=false; idle=0; setPressed(false); stop(); }   // real input ends the idle demo
   var over=false;                              // demo stays off while a pointer rests on the control
-  btn.addEventListener("pointerenter", function(){ over=true; takeover(); });
-  btn.addEventListener("pointerleave", function(){ over=false; idle=0; });
-  btn.addEventListener("pointerdown", takeover);
-  btn.addEventListener("focus", takeover);
-  function start(){ if(!clock && !reduce) clock=setInterval(tick, TICK); }
+  window.addEventListener("forever:interactive",takeover);
+  btn.addEventListener("pointerdown",takeover,true);
+  btn.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  function start(){ if(!clock && !reduce && demo) clock=setInterval(tick, TICK); }
   function stop(){ clearInterval(clock); clock=null; setPressed(false); }
   document.addEventListener("visibilitychange", function(){ document.hidden ? stop() : start(); });
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}

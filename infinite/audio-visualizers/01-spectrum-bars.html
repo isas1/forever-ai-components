@@ -1,15 +1,18 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="Mirrored chartreuse-gold frequency bars with gravity peak-hold caps react to synth or live mic input on dark backdrop.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Spectrum Bars</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden}
 body{background:#131B12;display:grid;place-items:center}
 #aav01-c{display:block;width:100%;height:100%}
+.aav01-stage{position:fixed;inset:0}
 .aav01-live{position:fixed;right:8px;top:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:#A9D22D;background:rgba(169,210,45,.08);border:1px solid rgba(169,210,45,.32);
   border-radius:999px;padding:4px 9px;letter-spacing:.06em;cursor:pointer;user-select:none;
   -webkit-tap-highlight-color:transparent;transition:background .25s,border-color .25s,opacity .25s}
 .aav01-live:hover{background:rgba(169,210,45,.18);border-color:rgba(169,210,45,.6)}
+.aav01-live:focus-visible{outline:2px solid #A9D22D;outline-offset:3px}
 .aav01-live[data-on="1"]{color:#07080d;background:#A9D22D;border-color:#A9D22D}
 .aav01-live[data-on="err"]{color:#f87171;border-color:rgba(248,113,113,.5);background:rgba(248,113,113,.08)}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
@@ -34,12 +37,16 @@ body{background:#131B12;display:grid;place-items:center}
   "IIFE wrapper",
   "prefers-reduced-motion guard (reduce check)",
   "visibilitychange pause/resume",
-  "AudioContext never connected to destination (no feedback loop)"
+  "AudioContext never connected to destination (no feedback loop)",
+  "First deliberate control stops synthetic attract data. Live microphone stream remains active until teardown; teardown stops tracks and closes audio context.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded to #131B12 — must edit CSS to change",
   "Live mic mode requires HTTPS or localhost for getUserMedia",
-  "No reduced-motion fallback for live mic — draws one static frame then stops"
+  "Live input depends on browser microphone permission and sandbox capability; user feedback reports unavailable input.",
+  "Microphone acquisition is permission- and sandbox-dependent; mocked tests verify track/context teardown, not hardware access.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -62,14 +69,15 @@ body{background:#131B12;display:grid;place-items:center}
 }
 </script>
 </head><body>
-<canvas id="aav01-c"></canvas>
-<button class="aav01-live" id="aav01-live" aria-label="Switch to live microphone input">&#9834; live</button>
+<div class="aav01-stage"><canvas id="aav01-c"></canvas>
+<button class="aav01-live" id="aav01-live" aria-label="Switch to live microphone input">&#9834; live</button></div>
 <div class="cap">Spectrum Bars</div>
 <script>(function(){
 var cv=document.getElementById('aav01-c'),g=cv.getContext('2d'),btn=document.getElementById('aav01-live');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 var W=0,H=0,dpr=1,N=56,raf=0,running=false,t=0;
-var live=false,analyser=null,freq=null,actx=null;
+var live=false,analyser=null,freq=null,actx=null,stream=null,source=null,destroyed=false;
+var demoEnabled=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true;
 var mag=new Float32Array(N),peak=new Float32Array(N),pvel=new Float32Array(N);
 // synth: per-bin oscillators with slow LFO envelopes + smoothed noise
 var ph=new Float32Array(N),sp=new Float32Array(N),lf=new Float32Array(N),lp=new Float32Array(N),nz=new Float32Array(N);
@@ -140,7 +148,7 @@ function draw(dt){
 }
 
 function loop(ts){
-  if(!running)return;
+  if(!running||(!demoEnabled&&!live)){running=false;raf=0;return;}
   var dt=t?Math.min(.05,(ts/1000)-t):0.016;t=ts/1000;
   draw(dt);
   raf=requestAnimationFrame(loop);
@@ -149,33 +157,41 @@ function loop(ts){
 function start(){if(running)return;running=true;t=0;raf=requestAnimationFrame(loop);}
 function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
 
+function stopDemo(){demoEnabled=false;if(!live)stop();}
+window.addEventListener('forever:interactive',stopDemo);
+document.addEventListener('pointerdown',stopDemo,{capture:true});
+document.addEventListener('click',stopDemo,{capture:true});
+document.addEventListener('keydown',function(e){if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+function stopLive(){if(stream)stream.getTracks().forEach(function(track){track.stop();});if(source)source.disconnect();if(actx&&actx.state!=='closed')actx.close();stream=source=actx=analyser=freq=null;live=false;}
+function cleanup(){destroyed=true;stop();stopLive();}
+window.addEventListener('pagehide',cleanup,{once:true});
 function vis(){
   if(reduce)return;
-  if(document.hidden)stop();else start();
+  if(document.hidden){stop();if(actx)actx.suspend();}else{if(actx&&live)actx.resume();if(demoEnabled||live)start();}
 }
 
 btn.addEventListener('click',function(){
   if(live){ // toggle back to synth
-    live=false;btn.dataset.on='';btn.innerHTML='♪ live';
-    if(actx&&actx.state!=='closed')actx.suspend();
+    stopLive();btn.dataset.on='';btn.innerHTML='♪ paused';
     return;
   }
   try{
     actx=actx||new (window.AudioContext||window.webkitAudioContext)();
     if(actx.state==='suspended')actx.resume();
-    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-      var src=actx.createMediaStreamSource(stream);
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(mediaStream){
+      if(destroyed){mediaStream.getTracks().forEach(function(track){track.stop();});if(actx&&actx.state!=='closed')actx.close();return;}
+      stream=mediaStream;source=actx.createMediaStreamSource(stream);
       analyser=actx.createAnalyser();
       analyser.fftSize=512;analyser.smoothingTimeConstant=.7;
       freq=new Uint8Array(analyser.frequencyBinCount);
-      src.connect(analyser);            // never connect to destination (feedback)
+      source.connect(analyser);            // never connect to destination (feedback)
       live=true;btn.dataset.on='1';btn.innerHTML='♪ live';
-      if(reduce){start();draw(.016);stop();}
-    }).catch(function(){btn.dataset.on='err';btn.innerHTML='no mic';});
+      if(reduce){draw(.016);}else start();
+    }).catch(function(){if(actx&&actx.state!=='closed')actx.close();actx=null;btn.dataset.on='err';btn.innerHTML='no mic';});
   }catch(e){btn.dataset.on='err';btn.innerHTML='no ctx';}
 });
 
-window.addEventListener('resize',function(){size();if(reduce)draw(.016);});
+window.addEventListener('resize',function(){size();if(reduce&&(demoEnabled||live))draw(.016);});
 document.addEventListener('visibilitychange',vis);
 size();
 if(reduce){draw(.016);}else{start();}

@@ -1,15 +1,18 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Cyan concentric rings and radial particles bloom outward on bass beats from a breathing center dot, synth-driven with optional live mic.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Beat Bloom</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden}
 body{background:#07080d;display:grid;place-items:center}
 #aav07-c{display:block;width:100%;height:100%}
+.aav07-stage{position:fixed;inset:0}
 .aav07-live{position:fixed;right:8px;top:8px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:#22d3ee;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.35);
   border-radius:999px;padding:5px 9px;letter-spacing:.06em;cursor:pointer;opacity:.55;
   transition:opacity .25s,background .25s;user-select:none}
 .aav07-live:hover{opacity:1;background:rgba(34,211,238,.18)}
+.aav07-live:focus-visible{outline:2px solid #22d3ee;outline-offset:3px}
 .aav07-live[data-on="1"]{background:#22d3ee;color:#07080d;opacity:1}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
@@ -32,12 +35,16 @@ body{background:#07080d;display:grid;place-items:center}
   "IIFE wrapper",
   "prefers-reduced-motion guard (staticFrame fallback)",
   "visibilitychange pause",
-  "live mic path comment: NEVER connect to destination (feedback)"
+  "live mic path comment: NEVER connect to destination (feedback)",
+  "First deliberate control stops synthetic attract data. Live microphone stream remains active until teardown; teardown stops tracks and closes audio context.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded to dark navy in CSS — must edit to change",
-  "Live mic button triggers once; no way to switch back to synth without reload",
-  "Adaptive beat threshold can miss fast consecutive hits (<140ms cooldown)"
+  "Adaptive beat threshold can miss fast consecutive hits (<140ms cooldown)",
+  "Live input depends on browser microphone permission and sandbox capability; user feedback reports unavailable input.",
+  "Microphone acquisition is permission- and sandbox-dependent; mocked tests verify track/context teardown, not hardware access.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -60,12 +67,13 @@ body{background:#07080d;display:grid;place-items:center}
 }
 </script>
 </head><body>
-<canvas id="aav07-c" role="img" aria-label="Concentric rings blooming on bass peaks"></canvas>
-<button class="aav07-live" id="aav07-live" data-on="0" aria-label="Switch to live microphone input">&#9834; live</button>
+<div class="aav07-stage"><canvas id="aav07-c" role="img" aria-label="Concentric rings blooming on bass peaks"></canvas>
+<button class="aav07-live" id="aav07-live" data-on="0" aria-label="Switch to live microphone input">&#9834; live</button></div>
 <div class="cap">Beat Bloom</div>
 <script>(function(){
 var cv=document.getElementById('aav07-c'),ctx=cv.getContext('2d'),btn=document.getElementById('aav07-live');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var demoEnabled=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,destroyed=false,stream=null,source=null;
 var W=0,H=0,cx=0,cy=0,R=0,dpr=1,raf=0,running=true,t0=performance.now();
 var ACC='#22d3ee';
 function size(){
@@ -98,19 +106,21 @@ function synthLevel(now){
 }
 
 // ---- live audio path ----
-var live=false,an=null,freq=null;
+var live=false,an=null,freq=null,ac=null;
 btn.addEventListener('click',function(){
   if(live)return;
   try{
-    var AC=window.AudioContext||window.webkitAudioContext;var ac=new AC();
-    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-      var src=ac.createMediaStreamSource(stream);
+    var AC=window.AudioContext||window.webkitAudioContext;ac=new AC();
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(mediaStream){
+      if(destroyed){mediaStream.getTracks().forEach(function(track){track.stop();});ac.close();return;}
+      stream=mediaStream;source=ac.createMediaStreamSource(stream);
       an=ac.createAnalyser();an.fftSize=512;an.smoothingTimeConstant=0.6;
       freq=new Uint8Array(an.frequencyBinCount);
-      src.connect(an);            // NEVER connect to destination (feedback)
+      source.connect(an);            // NEVER connect to destination (feedback)
       live=true;btn.setAttribute('data-on','1');
-    }).catch(function(){btn.style.opacity=.3;});
-  }catch(e){btn.style.opacity=.3;}
+      if(!reduce){running=true;raf=requestAnimationFrame(step);}
+    }).catch(function(){if(ac&&ac.state!=='closed')ac.close();ac=null;btn.style.opacity=.3;});
+  }catch(e){if(ac&&ac.state!=='closed')ac.close();ac=null;btn.style.opacity=.3;}
 });
 function liveLevel(){
   an.getByteFrequencyData(freq);
@@ -130,7 +140,7 @@ function spawn(strength){
 }
 
 function step(now){
-  if(!running)return;
+  if(!running||(!demoEnabled&&!live)){running=false;raf=0;return;}
   var lvl=live?liveLevel():synthLevel(now);
   // envelope follower: fast attack, slow release
   env+= (lvl-env)*(lvl>env?0.6:0.06);
@@ -173,8 +183,14 @@ function step(now){
     ctx.beginPath();ctx.arc(cx,cy,R*0.34+bloom*R*0.1,0,6.283);ctx.stroke();
   }
 
-  raf=requestAnimationFrame(step);
+  if(!reduce&&(demoEnabled||live))raf=requestAnimationFrame(step);
 }
+
+function stopDemo(){demoEnabled=false;if(!live){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}}
+window.addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});
+document.addEventListener('keydown',function(e){if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+function cleanup(){destroyed=true;running=false;if(raf)cancelAnimationFrame(raf);raf=0;if(stream)stream.getTracks().forEach(function(track){track.stop();});if(source)source.disconnect();if(ac&&ac.state!=='closed')ac.close();}
+window.addEventListener('pagehide',cleanup,{once:true});
 
 function staticFrame(){
   ctx.clearRect(0,0,W,H);
@@ -189,8 +205,8 @@ if(reduce){staticFrame();}else{raf=requestAnimationFrame(step);}
 
 function vis(){
   if(reduce)return;
-  if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
-  else if(!running){running=true;raf=requestAnimationFrame(step);}
+  if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);raf=0;if(ac)ac.suspend();}
+  else{if(ac&&live)ac.resume();if((demoEnabled||live)&&!running){running=true;raf=requestAnimationFrame(step);}}
 }
 document.addEventListener('visibilitychange',vis);
 })();</script>

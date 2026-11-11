@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A lime quantity stepper with skeuomorphic plus/minus keys rolls digits on a spring with motion-blur as the count bumps up and down.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stepper Quantity Bump</title>
@@ -69,7 +70,7 @@
  "title": "Stepper Quantity Bump",
  "description": "Lime-green digit stepper with skeuomorphic ± keys; pressing rolls the number up or down with a spring overshoot and per-digit motion blur.",
  "useWhen": "Cart quantity selectors, seat pickers, or any numeric input needing satisfying tactile feedback.",
- "avoidWhen": "Large numeric ranges (only shows single digit 0–9 wrap); contexts where the auto-cycle demo loop would be distracting.",
+ "avoidWhen": "Large numeric ranges (only shows single digit 0–9 wrap); contexts where the auto-cycle demo loop would be distracting. Autonomous preview ends at first deliberate input and never resumes.",
  "agentPrompt": "Change the accent color from lime (#A3E635) to cyan (#22D3EE) and slow the roll animation to 700ms by editing the `dur` value in the `anim` object inside `trigger()`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--acc: #A3E635)",
@@ -84,12 +85,14 @@
   "IIFE wrapper",
   "prefers-reduced-motion guard",
   "visibilitychange stop/start",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Only displays the last digit (0–9 mod 10) — wraps silently for values ≥ 10",
-  "Auto-cycle loop runs by default; remove the autoT block before shipping in production",
-  "Buttons are divs without role=button — add ARIA roles for accessibility"
+  "Auto-cycle loop runs by default; remove the autoT block before shipping in production Autonomous preview ends at first deliberate input and never resumes.",
+  "Buttons are divs without role=button — add ARIA roles for accessibility",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -114,9 +117,9 @@
 </head>
 <body>
   <div class="sqb-wrap">
-    <div class="sqb-btn sqb-minus" id="sqbMinus" aria-label="decrease"></div>
-    <div class="sqb-num"><div class="sqb-roll" id="sqbRoll"></div></div>
-    <div class="sqb-btn sqb-plus" id="sqbPlus" aria-label="increase"></div>
+    <div class="sqb-btn sqb-minus" id="sqb-sqbMinus" aria-label="decrease"></div>
+    <div class="sqb-num" data-fit-clip-ok><div class="sqb-roll" id="sqb-sqbRoll"></div></div>
+    <div class="sqb-btn sqb-plus" id="sqb-sqbPlus" aria-label="increase"></div>
   </div>
   <div class="sqb-cap">Stepper Quantity Bump</div>
 <script>
@@ -130,8 +133,8 @@
       document.documentElement.setAttribute('data-theme',d.theme);
     }
   });
-  var roll=document.getElementById('sqbRoll');
-  var plus=document.getElementById('sqbPlus'), minus=document.getElementById('sqbMinus');
+  var roll=document.getElementById('sqb-sqbRoll');
+  var plus=document.getElementById('sqb-sqbPlus'), minus=document.getElementById('sqb-sqbMinus');
   var val=4, prev=4, raf=0;
   // three cells: out / current / next. roll Y in cell-units.
   var cellH=0, cells=[];
@@ -196,7 +199,7 @@
     cells[0].style.filter=cells[1].style.filter=cells[2].style.filter='';
     roll.style.transform='translateY('+(-cellH)+'px)';
   }
-  var autoT=0, autoDir=1, autoCount=0;
+  var autoT=0, autoDir=1, autoCount=0, demo=window.__foreverPreview?.demoEnabled!==false;
   function tick(ts){
     if(!last) last=ts;
     var dt=ts-last; last=ts;
@@ -222,26 +225,28 @@
       if(p>=1) finish();
     }
     // auto loop
-    autoT+=dt;
-    if(!anim && autoT>900){
+    if(demo)autoT+=dt;
+    if(demo&&!anim && autoT>900){
       autoT=0;
       trigger(autoDir);
       autoCount++;
       if(autoDir>0 && val>=9) autoDir=-1;
       if(autoDir<0 && val<=1) autoDir=1;
     }
-    raf=requestAnimationFrame(tick);
+    if(demo||anim)raf=requestAnimationFrame(tick);else raf=0;
   }
   var last=0;
-  function press(dir){ if(!reduce){ autoT=-600; trigger(dir); } }
+  function press(dir){ if(!reduce){ takeover();autoT=-600;trigger(dir);start(); } }
   plus.addEventListener('pointerdown',function(){press(1);});
   minus.addEventListener('pointerdown',function(){press(-1);});
   function start(){ if(!raf&&!reduce){ last=0; raf=requestAnimationFrame(tick);} }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',function(e){if(['Enter',' '].includes(e.key))takeover();},{once:true});
   document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
   addEventListener('resize',function(){ var keep=anim; build(); if(keep){anim=null;} });
   build();
-  if(reduce){ setStatic(); } else start();
+  if(reduce){ setStatic(); } else if(demo)start(); else setStatic();
 })();
 </script>
 </body>

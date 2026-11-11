@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Steam Rise Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Steam Rise Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#16221A;--card:#1E2E24;--ink:#F3D6CE;--mute:#B89B93;--rose:#E8B4A8;--gold:#E9C96A;--car:#8C482A;color-scheme:dark}
+:root[data-theme="light"]{--bg:#F9F4F0;--card:#FFFFFF;--ink:#2E1F18;--mute:#7A5B4D;--rose:#B05D4D;--gold:#C68E17;--car:#6D3E24;color-scheme:light}
+.wtd-root,.wtd-root *{box-sizing:border-box;margin:0}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.wtd-root{width:100%;height:100%;background:var(--bg);display:grid;place-items:center;overflow:hidden}
+#wtd-stage{width:min(92vmin,640px);aspect-ratio:1;touch-action:none;cursor:pointer;user-select:none;border-radius:8px}
+#wtd-stage:focus-visible{outline:2px solid var(--rose);outline-offset:4px}
+.wtd-canvas{width:100%;height:100%;display:block}
+.wtd-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.wtd-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/25-steam-rise-timer.html",
+ "title": "Steam Rise Timer",
+ "description": "Hold to add baking time, then release a steaming countdown bar. Forest pâtisserie palette: pine, rose, pastry gold and caramel.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "hold",
+  "steam",
+  "particles",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wtd-root" role="group" aria-label="Steam Rise Timer">
+<div id="wtd-stage" role="slider" tabindex="0" aria-label="Bake minutes. Press and hold to add time, release to start baking. Space to hold, arrow keys adjust, Enter starts." aria-valuemin="0" aria-valuemax="30" aria-valuenow="0"><canvas class="wtd-canvas"></canvas></div>
+<div class="wtd-sr" id="wtd-status" role="status" data-fit-clip-ok="screen-reader-only"></div>
+</div>
+<div class="wtd-cap" aria-hidden="true">Steam Rise Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||RM.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var MAX=30,T=1500; // demo clock: one baking minute passes in 1.5 s
+var R=document.getElementById('wtd-stage'),C=R.firstElementChild,X=C.getContext('2d'),S=document.getElementById('wtd-status');
+var RM=matchMedia('(prefers-reduced-motion: reduce)'),W=1,P,raf=0,last=0;
+var mode=0,val=0,d=0,v=0,hold=0,hf=0,end=0,tot=1,rem=0,cm=0,fl=0,ac=0,ps=[],lastN=-1;
+function pal(){var s=getComputedStyle(document.documentElement);P={};['bg','card','ink','mute','rose','gold','car'].forEach(function(k){P[k]=s.getPropertyValue('--'+k).trim()})}
+function mx(a,b,t){var o='#',i,p=function(h,j){return parseInt(h.substr(1+j*2,2),16)};for(i=0;i<3;i++)o+=('0'+Math.round(p(a,i)+(p(b,i)-p(a,i))*t).toString(16)).slice(-2);return o}
+function size(){var r=Math.min(devicePixelRatio||1,2);W=R.clientWidth;C.width=C.height=Math.round(W*r);X.setTransform(r,0,0,r,0,0);wake()}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+function tick(now){raf=0;var dt=Math.min(now-last,50)/16.667;last=now;demoBeat(dt*16.667);var b=demoPaused?false:step(dt,now);draw();if((b||(demoEnabled&&!RM.matches))&&!demoPaused&&!document.hidden&&!raf)raf=requestAnimationFrame(tick)}
+var BX=.08,BW=.84,BY=.52,BH=.14;
+function spawn(x,y,vx,vy,l,kind){if(ps.length<90)ps.push({x:x,y:y,vx:vx,vy:vy,l:l,m:l,k:kind})}
+function press(){demoPaused=false;if(hold)return;hold=1;hf=0;if(mode==1)val=rem;else if(mode==2)val=0;mode=0;wake()}
+function release(){demoPaused=false;if(!hold)return;hold=0;if(val>=1){tot=Math.max(1,Math.round(val));val=tot;end=performance.now()+tot*T;mode=1;S.textContent='Baking '+tot+' minutes'}wake()}
+function step(dt,now){
+  var rm=RM.matches,i,s=W;
+  if(hold&&mode==0){hf+=dt;val=Math.min(MAX,val+(.03+Math.min(.2,hf*.0012))*dt)}
+  if(mode==1){rem=Math.max(0,(end-now)/T);if(rem<=0){mode=2;fl=1;S.textContent='Done';if(!rm)for(i=0;i<30;i++)spawn(s*.5,s*(BY+BH/2),(Math.random()-.5)*7,-Math.random()*6-1,40+Math.random()*30,0)}}
+  var g=mode==1?rem:mode==2?0:val;
+  if(rm){d=g;v=0;fl=0}else{v+=(g-d)*.16*dt;v*=Math.pow(.78,dt);d+=v*dt;fl*=Math.pow(.93,dt)}
+  cm+=((mode==1?1:0)-cm)*(rm?1:1-Math.pow(.88,dt));
+  if(!rm){
+    ac+=dt*(hold&&mode==0?1.2:mode==1?.35:0);
+    var fx=s*(BX+BW*Math.min(1,d/MAX));
+    while(ac>=1){ac-=1;
+      if(hold&&mode==0&&val>.5)spawn(fx,s*BY,(Math.random()-.5)*1.6,-1-Math.random()*2.2,28,0);
+      else if(mode==1&&d>.3)spawn(s*(BX+BW*Math.random()*Math.min(1,d/MAX)),s*BY,(Math.random()-.5)*.4,-.5-Math.random()*.5,90,1)}
+    for(i=ps.length-1;i>=0;i--){var q=ps[i];q.x+=(q.vx+(q.k?Math.sin(q.l*.08+i)*.3:0))*dt;q.y+=q.vy*dt;if(!q.k)q.vy+=.12*dt;q.l-=dt;if(q.l<=0)ps.splice(i,1)}
+  }else ps.length=0;
+  var n=mode==1?Math.ceil(rem):Math.round(val);if(n!=lastN){lastN=n;R.setAttribute('aria-valuenow',n)}
+  return hold||mode==1||ps.length>0||Math.abs(g-d)>.002||Math.abs(v)>.002||fl>.01||Math.abs(cm-(mode==1?1:0))>.01;
+}
+function draw(){
+  var s=W,x0=s*BX,w=s*BW,y0=s*BY,h=s*BH,p=mode==1?1-rem/tot:mode==2?1:0,i;
+  X.clearRect(0,0,s,s);
+  X.beginPath();X.roundRect(x0,y0,w,h,h/2);X.fillStyle=P.card;X.fill();
+  X.strokeStyle=P.mute;X.globalAlpha=.4;X.lineWidth=1.5;X.stroke();X.globalAlpha=1;
+  var fw=Math.max(0,Math.min(1,d/MAX))*w;
+  if(fw>0.5){X.beginPath();X.roundRect(x0,y0,Math.max(fw,h*.5),h,h/2);
+    X.fillStyle=mx(P.rose,mx(P.gold,P.car,.6*p),cm);X.fill();
+    if(fl>.01){X.globalAlpha=fl*.6;X.fillStyle=P.gold;X.fill();X.globalAlpha=1}}
+  for(i=0;i<ps.length;i++){var q=ps[i],a=q.l/q.m;
+    if(q.k){X.globalAlpha=Math.sin(a*Math.PI)*.28;X.fillStyle=P.ink;X.beginPath();X.arc(q.x,q.y,s*(.012+.03*(1-a)),0,7);X.fill()}
+    else{X.globalAlpha=Math.min(1,a*1.5);X.fillStyle=i%2?P.gold:P.rose;X.beginPath();X.arc(q.x,q.y,s*.008,0,7);X.fill()}}
+  X.globalAlpha=1;
+  if(mode==2){X.strokeStyle=P.rose;X.lineWidth=s*.02;X.lineCap='round';X.beginPath();X.moveTo(s*.45,s*.3);X.lineTo(s*.485,s*.335);X.lineTo(s*.55,s*.26);X.stroke()}
+  else{X.fillStyle=P.ink;X.font='700 '+s*.2+'px ui-monospace,Menlo,monospace';X.textAlign='center';X.textBaseline='middle';X.fillText(mode==1?Math.ceil(rem):Math.round(val),s/2,s*.3)}
+}
+R.addEventListener('pointerdown',function(e){demoPaused=false;R.setPointerCapture(e.pointerId);press()});
+R.addEventListener('pointerup',release);R.addEventListener('pointercancel',release);
+R.addEventListener('keydown',function(e){demoPaused=false;var k=e.key,dd=0;
+  if(k=='ArrowUp'||k=='ArrowRight')dd=1;else if(k=='ArrowDown'||k=='ArrowLeft')dd=-1;
+  if(dd){e.preventDefault();if(mode==1)val=rem;else if(mode==2)val=0;mode=0;val=Math.max(0,Math.min(MAX,Math.round(val)+dd));wake()}
+  else if(k==' '){e.preventDefault();if(!e.repeat)press()}
+  else if(k=='Enter'){e.preventDefault();if(mode==0&&!hold)release_();else if(mode==2){mode=0;val=0;wake()}}
+  else if(k=='Escape'){hold=0;mode=0;val=0;wake()}});
+function release_(){hold=1;release()}
+R.addEventListener('keyup',function(e){if(e.key==' ')release()});
+document.addEventListener('visibilitychange',function(){if(document.hidden){hiddenAt=performance.now();cancelAnimationFrame(raf);raf=0}else{if(hiddenAt&&mode==1)end+=performance.now()-hiddenAt;hiddenAt=0;wake()}});
+function setTheme(t){document.documentElement.setAttribute('data-theme',t=='light'?'light':'dark');pal();wake()}
+addEventListener('message',function(e){var m=e.data;if(m&&m.type=='forever:theme')setTheme(m.theme)});
+function demoFinished(){return mode==2}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;val=12;d=12;hold=1;release();rem=12}
+new ResizeObserver(size).observe(R);val=12;d=12;if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,performance.now());pal();size();if(demoEnabled&&!RM.matches)demoStart();
+RM.addEventListener('change',function(){if(RM.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

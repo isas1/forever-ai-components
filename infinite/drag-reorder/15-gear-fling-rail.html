@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Gear Fling Rail — Drag &amp; Reorder. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gear Fling Rail</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--wic-bg:#0C0C12;--wic-pn:#181824;--wic-sl:#242436;--wic-ac:#32324C;--wic-go:#FFE600;--wic-cy:#00F0FF;--wic-gr:#39FF14;--wic-cr:#FF1F48;--wic-ink:#FFFFFF;--wic-mu:#8E8EA8;--wic-bd:#000}
+:root[data-theme="light"]{--wic-bg:#D8D8E5;--wic-pn:#EAEAF2;--wic-sl:#FFFFFF;--wic-ac:#E0E0F0;--wic-go:#B38600;--wic-cy:#007A8A;--wic-gr:#008800;--wic-cr:#CC0029;--wic-ink:#101018;--wic-mu:#555566;--wic-bd:#1E1E2E}
+.wic-stage,.wic-stage *{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--wic-bg)}
+.wic-stage{position:absolute;inset:0;min-height:100vh;display:grid;place-items:center;background:var(--wic-bg)}
+.wic-root{width:min(92vmin,640px);aspect-ratio:1;border:4px solid var(--wic-bd);box-shadow:6px 6px 0 rgba(0,0,0,.6);background:var(--wic-pn);touch-action:none;user-select:none;-webkit-user-select:none}
+.wic-root:focus-visible{outline:2px solid var(--wic-cy);outline-offset:4px}
+.wic-cv{display:block;width:100%;height:100%;image-rendering:pixelated}
+.wic-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+.wic-cap{position:fixed;left:8px;bottom:7px;max-width:calc(100% - 16px);font:10px/1.2 system-ui,sans-serif;letter-spacing:.03em;color:var(--wic-ink);opacity:.35;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/drag-reorder/15-gear-fling-rail.html",
+ "title": "Gear Fling Rail",
+ "description": "Arcade ink palette with gold, cyan and green pixel gear; fling items into a weighted rail with elastic settling and capacity feedback.",
+ "useWhen": "A playful item picker with capacity feedback and keyboard alternatives.",
+ "avoidWhen": "Persistent inventory management without connecting real item data and storage.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes.",
+  "Owner-approved light gold accent #B38600 has 2.35:1 contrast on #D8D8E5; catalog accentLight uses actual light ink #101018 for readable placeholder chrome."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "inventory",
+  "fling",
+  "pixel-art",
+  "rail",
+  "capacity"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wic-stage" role="group" aria-label="Gear Fling Rail">
+<div class="wic-root" id="wic-root" role="application" aria-label="Weight rail: fling gear up into the rail or down out of it, capacity 10" tabindex="0"><canvas class="wic-cv" id="wic-cv" aria-hidden="true"></canvas></div>
+<div class="wic-live" id="wic-live" aria-live="polite"></div>
+</div>
+<div class="wic-cap" aria-hidden="true">Gear Fling Rail</div>
+<script>
+(function(){
+var G=80,CAP=10,kb=0,sel=0,raf=0,last=0,C={},
+$=function(i){return document.getElementById(i)},
+cv=$('wic-cv'),cx=cv.getContext('2d'),root=$('wic-root'),live=$('wic-live'),
+mq=matchMedia('(prefers-reduced-motion: reduce)'),
+N=['sword','shield','helm','boots','bow','potion'],
+CL=['cy','go','gr','cr','cy','gr'],
+SP=[[3,6,12,152,240,96,176,192],[255,255,255,255,126,126,60,24],[60,126,255,255,255,195,195,0],[0,0,56,56,56,63,127,127],[24,20,18,17,17,18,20,24],[24,24,24,60,126,255,255,126]],
+F={"0":31599,"1":11415,"2":29671,"3":29647,"4":23497,"5":31183,"6":31215,"7":29266,"8":31727,"9":31695,"/":4772};
+cv.width=cv.height=G;
+function rm(){return mq.matches}
+function cols(){var s=getComputedStyle(document.documentElement);'bg pn sl ac go cy gr cr ink mu bd'.split(' ').forEach(function(k){C[k]=s.getPropertyValue('--wic-'+k).trim()})}
+function say(s){live.textContent=s}
+function R(x,y,w,h,c){cx.fillStyle=c;cx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h))}
+function O(x,y,w,h,c){R(x,y,w,1,c);R(x,y+h-1,w,1,c);R(x,y,1,h,c);R(x+w-1,y,1,h,c)}
+function spr(k,x,y,c){x=Math.round(x);y=Math.round(y);cx.fillStyle=c;SP[k].forEach(function(r,j){for(var i=0;i<8;i++)if(r>>(7-i)&1)cx.fillRect(x+i,y+j,1,1)})}
+function numC(s,y,c){var x=Math.round((G-s.length*4+1)/2);y=Math.round(y);cx.fillStyle=c;for(var n=0;n<s.length;n++){var g=F[s[n]];for(var j=0;j<15;j++)if(g>>(14-j)&1)cx.fillRect(x+n*4+j%3,y+(j/3|0),1,1)}}
+function tot(){return IT.reduce(function(a,t){return a+(t.eq?t.w:0)},0)}
+function pt(e){var r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*G,y:(e.clientY-r.top)/r.height*G,t:e.timeStamp,ty:e.pointerType}}
+function frame(t){var d=Math.min(t-last,50)/16.667;last=t;raf=step(d)?requestAnimationFrame(frame):0;draw()}
+function kick(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(frame)}}
+var IT=[3,4,2,2,3].map(function(w){return{w:w,eq:0,x:0,y:0,vx:0,vy:0,iw:12}}),ord=[],dr=-1,gx=0,gy=0,mv=0,sx=0,sy=0,lx=0,ly=0,lt=0,fl=0;
+function tgt(i){var t=IT[i];if(t.eq){var c=0;for(var k=0;k<ord.length;k++){if(ord[k]===i)return[10+6*(c+t.w/2),22,6*t.w-1];c+=IT[ord[k]].w}}return[10+i*15,60,12]}
+function init(){IT.forEach(function(t,i){var g=tgt(i);t.x=g[0];t.y=g[1];t.iw=g[2]})}
+function put(i,on){var t=IT[i];
+ if(on&&tot()+t.w>CAP){fl=1;say(N[i]+' too heavy');return}
+ if(on){t.eq=1;ord.push(i)}else{t.eq=0;ord.splice(ord.indexOf(i),1)}
+ say(N[i]+(on?' equipped, ':' removed, ')+tot()+' of '+CAP)}
+function step(dt){var b=0,s=rm(),f=Math.pow(.82,dt);
+ IT.forEach(function(t,i){if(i===dr)return;var g=tgt(i);
+  if(s){t.x=g[0];t.y=g[1];t.iw=g[2];t.vx=t.vy=0;return}
+  t.vx=t.vx*f+(g[0]-t.x)*.02*dt;t.vy=t.vy*f+(g[1]-t.y)*.02*dt;
+  t.x+=t.vx*dt;t.y+=t.vy*dt;t.iw+=(g[2]-t.iw)*(1-Math.pow(.8,dt));
+  if(Math.abs(g[0]-t.x)+Math.abs(g[1]-t.y)+Math.abs(t.vx)+Math.abs(t.vy)+Math.abs(g[2]-t.iw)>.08)b=1;else{t.x=g[0];t.y=g[1];t.vx=t.vy=0;t.iw=g[2]}});
+ fl*=Math.pow(.9,dt);if(fl<.02||s)fl=0;return b||fl||dr>=0}
+function draw(){R(0,0,G,G,C.pn);
+ var j=Math.round(fl*3*Math.sin(performance.now()/30)),n=tot(),pw=dr>=0&&mv&&!IT[dr].eq&&IT[dr].y<44?IT[dr].w:0,bad=fl>.05||n+pw>CAP;
+ for(var k=0;k<CAP;k++)R(10+k*6+j,14,5,16,k>=n&&k<n+pw?(n+pw>CAP?C.cr:C.cy):C.sl);
+ O(9+j,13,62,18,bad?C.cr:C.mu);
+ numC((n+pw)+'/'+CAP,4,bad?C.cr:C.go);
+ IT.map(function(_,i){return i}).sort(function(a,b){return(a===dr)-(b===dr)}).forEach(function(i){
+  var t=IT[i],x=t.x-t.iw/2+(t.eq&&i!==dr?j:0),y=t.y-6,c=C[CL[i]];
+  if(i===dr)R(x+1,y+1,t.iw,12,C.bd);
+  R(x,y,t.iw,12,t.eq?C.ac:C.sl);O(x,y,t.iw,12,c);spr(i,x+t.iw/2-4,y+2,c);
+  if(kb&&i===sel)O(x-2,y-2,t.iw+4,16,C.go)})}
+function down(p){for(var i=IT.length;i--;){var t=IT[i];if(Math.abs(p.x-t.x)<=t.iw/2+1&&Math.abs(p.y-t.y)<=7){dr=i;gx=p.x-t.x;gy=p.y-t.y;sx=lx=p.x;sy=ly=p.y;lt=p.t;mv=0;sel=i;t.vx=t.vy=0;return}}}
+function move(p){if(dr<0)return;var t=IT[dr];if(Math.abs(p.x-sx)+Math.abs(p.y-sy)>2)mv=1;if(!mv)return;
+ var d=Math.max(8,p.t-lt)/16.667;t.vx=t.vx*.5+.5*(p.x-lx)/d;t.vy=t.vy*.5+.5*(p.y-ly)/d;
+ lx=p.x;ly=p.y;lt=p.t;t.x=p.x-gx;t.y=p.y-gy}
+function up(p){if(dr<0)return;var i=dr,t=IT[i];dr=-1;
+ if(p.t-lt>90)t.vx=t.vy=0;
+ t.vx=Math.max(-5,Math.min(5,t.vx*1.2));t.vy=Math.max(-5,Math.min(5,t.vy*1.2));
+ var w=!mv?!t.eq:Math.abs(t.vy)>.5?t.vy<0:t.y<42;
+ if(w!==!!t.eq)put(i,w)}
+function leave(){}
+function key(k){var n=IT.length,t=IT[sel],w;
+ if(k==='ArrowRight'||k==='ArrowLeft'){sel=(sel+(k==='ArrowRight'?1:n-1))%n;return 1}
+ if(k==='ArrowUp'||k==='ArrowDown'||k===' '||k==='Enter'){w=k==='ArrowUp'?1:k==='ArrowDown'?0:!t.eq;
+  if(w!==!!t.eq){put(sel,w);if(t.eq===(w?1:0))t.vy=w?-4:4}return 1}}
+cv.addEventListener('pointerdown',function(e){kb=0;cv.setPointerCapture(e.pointerId);down(pt(e));kick()});
+cv.addEventListener('pointermove',function(e){move(pt(e));kick()});
+cv.addEventListener('pointerup',function(e){up(pt(e));kick()});
+cv.addEventListener('pointercancel',function(e){up(pt(e));kick()});
+cv.addEventListener('pointerleave',function(){leave();kick()});
+root.addEventListener('keydown',function(e){kb=1;if(key(e.key)){e.preventDefault()}kick()});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+mq.addEventListener('change',kick);
+addEventListener('message',function(e){var m=e.data;if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){document.documentElement.setAttribute('data-theme',m.theme);cols();kick()}});
+new ResizeObserver(kick).observe(cv);
+cols();init();kick();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoTimer=0,demoIndex=0;
+function demoStop(){demoEnabled=false;clearInterval(demoTimer);demoTimer=0}
+function demoStart(){if(demoTimer||!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;demoTimer=setInterval(function(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;var i=demoIndex++%IT.length;put(i,!IT[i].eq);kick()},1400)}
+window.addEventListener('forever:interactive',demoStop);
+['pointerdown','keydown','wheel','click'].forEach(function(t){document.addEventListener(t,function(e){if(e.isTrusted)demoStop()},{capture:true,passive:true})});
+document.addEventListener('visibilitychange',function(){clearInterval(demoTimer);demoTimer=0;if(!document.hidden)demoStart()});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',function(){clearInterval(demoTimer);demoTimer=0;demoStart()});
+demoStart();
+})();
+</script>
+</body>
+</html>

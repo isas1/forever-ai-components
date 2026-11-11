@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A canvas dual-range slider with two spring-driven thumbs, hatched fill, delta readout and ticks, auto-breathing between bounds.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Dual Range</title>
@@ -24,7 +25,7 @@
 {
  "file": "infinite/drag-reorder/07-range-dual.html",
  "title": "Dual Range",
- "description": "Canvas dual-range slider with two spring-driven thumbs (white lo, amber hi), hatched fill, delta readout, and tick marks. Auto-breathes when idle.",
+ "description": "Canvas dual-range slider with two spring-driven thumbs (white lo, amber hi), hatched fill, delta readout, and tick marks. Initial breathing stops after first input.",
  "useWhen": "Price range filters, date-span pickers, audio EQ bands, any UI needing a two-bound numeric input with tactile spring feel.",
  "avoidWhen": "Contexts requiring native form submission — values live only in JS. Not suitable where accessibility auditors require a true input[type=range].",
  "agentPrompt": "Change accent color from cyan to purple by setting --dr07-acc to #a855f7 and updating ctx.strokeStyle on the filled segment to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
@@ -32,7 +33,7 @@
   "accent color (--dr07-acc / ctx.strokeStyle #22d3ee)",
   "initial lo/hi values (lo.v=32, hi.v=68)",
   "spring stiffness (k=0.18) and damping (damp=0.74)",
-  "idle timeout before demo resumes (IDLE=2600)",
+  "idle demo cadence while demoEnabled; first deliberate input disables it permanently",
   "hatch step density (step=12)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
@@ -41,12 +42,14 @@
   "IIFE wrapper",
   "reduced-motion static-frame branch",
   "visibilitychange pause/resume",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Values not exposed as a real form input — wire lo.v/hi.v to hidden inputs for form use",
   "Spring physics means displayed value lags target during fast drags",
-  "Auto-demo resumes 2.6 s after last interaction — remove demo() call if shipping as a real control"
+  "First deliberate input permanently disables idle demo; manual input, finite feedback and settling remain active. Host demoEnabled=false skips the initial attract cycle.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -79,6 +82,12 @@
 <script>
 (function(){
   "use strict";
+  function wake(){if(document.hidden)return;running=true;if(reduce){clampPair();lo.d=lo.v;hi.d=hi.v;frame();}else if(!rafId)rafId=requestAnimationFrame(loop);}
+  ['pointerdown','pointermove','pointerup','pointercancel','keydown','keyup'].forEach(type=>document.addEventListener(type,wake));
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   var cv=document.getElementById("dr07-c");
   var ctx=cv.getContext("2d");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
@@ -227,27 +236,27 @@
     hi.v=Math.min(100,center+span/2);
     if(hi.v-lo.v<6){hi.v=lo.v+6;}
   }
-  var running=true,last=0;
+  var running=true,last=0,rafId=0;
   function loop(t){
-    if(!running)return;
+    rafId=0;if(!running||document.hidden)return;
     var dt=last?t-last:16; last=t;
     if(dt>60)dt=60;
     var now=performance.now();
-    if(now>idleAt){ demo(dt); }
+    if(demoEnabled&&!reduce&&now>idleAt){demo(dt);}
     clampPair();
     spring(lo); spring(hi);
     frame();
-    requestAnimationFrame(loop);
+    if(!reduce&&(demoEnabled||Math.abs(lo.v-lo.d)>.04||Math.abs(hi.v-hi.d)>.04||Math.abs(lo.vel)>.04||Math.abs(hi.vel)>.04))wake();
   }
   if(reduce){
     resize(); clampPair(); lo.d=lo.v; hi.d=hi.v; frame();
   } else {
-    requestAnimationFrame(loop);
+    if(!reduce&&(demoEnabled||Math.abs(lo.v-lo.d)>.04||Math.abs(hi.v-hi.d)>.04||Math.abs(lo.vel)>.04||Math.abs(hi.vel)>.04))wake();
   }
   document.addEventListener("visibilitychange",function(){
     if(reduce)return;
-    if(document.hidden){running=false;}
-    else if(!running){running=true;last=0;requestAnimationFrame(loop);}
+    if(document.hidden){running=false;cancelAnimationFrame(rafId);rafId=0;}
+    else if(!running){running=true;last=0;cancelAnimationFrame(rafId);rafId=requestAnimationFrame(loop);}
   });
   // ---- pointer interaction ----
   function pick(px){

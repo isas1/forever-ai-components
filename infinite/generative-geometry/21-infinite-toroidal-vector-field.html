@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="description" content="Toroidal Vector Field — Generative Geometry. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generative Geometry — Toroidal Vector Field</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fc02-bg: #0A0A0A;
+    --fc02-text: #EDEDEA;
+    --fc02-accent: #C7F000;
+  }
+  .fc02-vector-wrap * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--fc02-bg);
+    color: var(--fc02-text);
+    font-family: 'Geist Mono', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .fc02-vector-wrap {
+    width: 100%;
+    max-width: 440px;
+    height: min(100%, 400px);
+    min-height: 0;
+    background: var(--fc02-bg);
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.8);
+  } .fc02-canvas{ width: 100%; height: 100%; display: block; cursor: crosshair; }
+  .fc02-meta {
+    position: absolute;
+    bottom: 14px;
+    left: 18px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+    letter-spacing: 0.05em;
+  }
+@media (prefers-reduced-motion: reduce) { .fc02-vector-wrap *, .fc02-vector-wrap *::before, .fc02-vector-wrap *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+.fc02-caption{position:fixed;right:10px;bottom:7px;z-index:5;font-size:9px;opacity:.5;pointer-events:none}
+.fc02-canvas:focus-visible{outline:2px solid var(--fc02-text);outline-offset:-4px}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/generative-geometry/21-infinite-toroidal-vector-field.html",
+ "title": "Toroidal Vector Field",
+ "description": "Toroidal Vector Field control in the Forever system.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "system",
+  "ai",
+  "vector-field",
+  "telemetry",
+  "circuit-breaker",
+  "dashboard",
+  "toroidal-vector-field",
+  "geometry",
+  "generative",
+  "torus",
+  "flow",
+  "mathematics",
+  "forever"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="fc02-vector-wrap" role="region" aria-label="Forever Toroidal Vector Field">
+  <canvas class="fc02-canvas" id="fc02-cv" tabindex="0" role="application" aria-label="Vector field. Use arrow keys to move the field focus." width="440" height="400"></canvas>
+  <div class="fc02-meta">forever · 0-seam laminar</div>
+</div>
+<div class="fc02-caption" aria-hidden="true">Toroidal Vector Field</div>
+<script>
+(()=>{
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+  const canvas = document.getElementById('fc02-cv');
+  const ctx = canvas.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let width = canvas.width = 440, height = canvas.height = 400;
+  let running=true,time=0,raf=0;function wake(){if(document.hidden||raf)return;raf=requestAnimationFrame(render);}
+  document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(!running){cancelAnimationFrame(raf);raf=0;}else if(demoEnabled||sessionActive)wake();});
+
+  const particles = Array.from({ length: 90 }, () => ({
+    x: Math.random() * width,
+    y: Math.random() * height,
+    vx: 0, vy: 0
+  }));
+
+  let pointer = { x: width/2, y: height/2, on: false };
+  canvas.addEventListener('pointermove', (e) => {
+    const r = canvas.getBoundingClientRect();
+    pointer.x = (e.clientX - r.left) * (width / r.width);
+    pointer.y = (e.clientY - r.top) * (height / r.height);
+    pointer.on = true;
+  });
+  canvas.addEventListener('pointerleave', () => { pointer.on = false; });
+  canvas.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 24 : 10;
+    if (e.key === 'ArrowLeft') pointer.x -= step; else if (e.key === 'ArrowRight') pointer.x += step;
+    else if (e.key === 'ArrowUp') pointer.y -= step; else if (e.key === 'ArrowDown') pointer.y += step; else return;
+    e.preventDefault(); pointer.on = true;
+    pointer.x = Math.max(0, Math.min(width, pointer.x)); pointer.y = Math.max(0, Math.min(height, pointer.y));
+  });
+
+  function render() {
+    raf=0;if(!running||document.hidden)return;
+    if(demoEnabled&&!reduce)time+=.008;
+
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.25)';
+    ctx.fillRect(0, 0, width, height);
+
+    particles.forEach(p => {
+      const nx = (p.x / width) * Math.PI * 2;
+      const ny = (p.y / height) * Math.PI * 2;
+      const angle = Math.sin(nx + time * 0.5) * Math.cos(ny) * 1.5;
+
+      p.vx = Math.cos(angle) * 1.6;
+      p.vy = Math.sin(angle) * 1.6;
+
+      const d = Math.hypot(p.x - pointer.x, p.y - pointer.y);
+      let excited = false;
+      if(pointer.on&&d>.01&&d<100) {
+        excited = true;
+        const push = (1 - d / 100) * 3;
+        p.vx += ((p.x - pointer.x) / d) * push;
+        p.vy += ((p.y - pointer.y) / d) * push;
+      }
+
+      if (!reduce) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0) p.x += width; else if (p.x > width) p.x -= width;
+        if (p.y < 0) p.y += height; else if (p.y > height) p.y -= height;
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - p.vx * 6, p.y - p.vy * 6);
+      ctx.strokeStyle = excited ? '#C7F000' : 'rgba(237, 237, 234, 0.3)';
+      ctx.lineWidth = excited ? 1.6 : 1;
+      ctx.stroke();
+    });
+
+    if(!reduce&&(demoEnabled||sessionActive))wake();
+  }
+  canvas.addEventListener('pointermove',()=>{sessionActive=true;wake();});canvas.addEventListener('pointerleave',wake);
+  canvas.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)){sessionActive=true;wake();}});
+  wake();
+})();
+</script>
+</body>
+</html>

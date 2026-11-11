@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A pill magnifier icon elastically expands into a white search bar and types a query with a blinking caret, then collapses back.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Search Bar Morph</title>
@@ -32,6 +33,7 @@
     letter-spacing:.005em;will-change:clip-path,opacity;
   }
   .sbm-text .sbm-ph{color:#94a3b8;}
+  .sbm-bar:focus-visible{outline:2px solid #0284C7;outline-offset:3px}
   .sbm-caret{
     display:inline-block;width:2px;height:1.05em;vertical-align:-.16em;
     margin-left:1px;background:#0EA5E9;border-radius:1px;
@@ -39,6 +41,9 @@
   .sbm-cap{position:fixed;left:11px;bottom:9px;font:600 10px/1.2 ui-monospace,monospace;
        letter-spacing:.14em;color:#0EA5E9;opacity:.34;text-transform:uppercase;
        pointer-events:none;user-select:none;}
+:root[data-theme="light"] .sbm-glass,:root[data-theme="light"] .sbm-caret{stroke:#0284C7;background:#0284C7}
+  :root[data-theme="light"] .sbm-cap{color:#0284C7}
+.sbm-text{max-width:calc(100% - 54px);overflow:hidden;text-overflow:ellipsis}@media(max-width:220px){.sbm-text{font-size:12px}}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -46,7 +51,7 @@
  "title": "Search Bar Morph",
  "description": "A pill-shaped magnifier icon elastically expands into a full search bar, types a query with a blinking caret, then collapses back — looping automatically.",
  "useWhen": "App headers, search entry points, or onboarding flows where you want to demonstrate search affordance without requiring user input.",
- "avoidWhen": "Functional search forms where the bar must be interactive — this is a demo loop; wire click handlers and disable the auto-cycle for production use.",
+ "avoidWhen": "Functional search forms where the bar must be interactive — this is a demo loop; wire click handlers and disable the auto-cycle for production use. Autonomous preview ends at first deliberate input and never resumes.",
  "agentPrompt": "Change the typed query to 'find your next idea', set the accent color to #8B5CF6 by replacing #0EA5E9 everywhere, and slow the open phase to 1100ms by setting its dur to 1100. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "query string (QUERY constant)",
@@ -62,11 +67,14 @@
   "prefers-reduced-motion guard with static fallback render()",
   "visibilitychange pause/start handlers",
   "geo() resize recalculation",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space toggle; manual open/close feedback finishes without enabling the attract cycle; reduced motion commits the selected endpoint."
  ],
  "knownLimitations": [
   "SVG handle length does not actually elongate on open — len is constant (lerp of identical values), so the handle stub stays the same size regardless of open state",
-  "Auto-cycles by default; click only resets to the open phase, not a true interactive toggle"
+  "Auto-cycles by default; click only resets to the open phase, not a true interactive toggle",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -92,11 +100,11 @@
 </head>
 <body>
 <div class="sbm-stage">
-  <div class="sbm-bar" id="sbmBar">
-    <div class="sbm-text" id="sbmText"></div>
-    <svg id="sbmSvg" width="1" height="1">
-      <circle class="sbm-glass" id="sbmRing" cx="0" cy="0" r="0"></circle>
-      <line    class="sbm-glass" id="sbmHandle" x1="0" y1="0" x2="0" y2="0"></line>
+  <div class="sbm-bar" id="sbm-sbmBar" role="button" tabindex="0" aria-label="Open search preview">
+    <div class="sbm-text" id="sbm-sbmText"></div>
+    <svg id="sbm-sbmSvg" width="1" height="1">
+      <circle class="sbm-glass" id="sbm-sbmRing" cx="0" cy="0" r="0"></circle>
+      <line    class="sbm-glass" id="sbm-sbmHandle" x1="0" y1="0" x2="0" y2="0"></line>
     </svg>
   </div>
 </div>
@@ -104,9 +112,9 @@
 <script>
 (function(){
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const bar=document.getElementById('sbmBar'), svg=document.getElementById('sbmSvg'),
-        ring=document.getElementById('sbmRing'), handle=document.getElementById('sbmHandle'),
-        txt=document.getElementById('sbmText');
+  const bar=document.getElementById('sbm-sbmBar'), svg=document.getElementById('sbm-sbmSvg'),
+        ring=document.getElementById('sbm-sbmRing'), handle=document.getElementById('sbm-sbmHandle'),
+        txt=document.getElementById('sbm-sbmText');
   const QUERY="design that breathes";
 
   // geometry tuned per current bar height
@@ -177,6 +185,7 @@
   }
   function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 
+  let demo=window.__foreverPreview?.demoEnabled!==false;
   function tick(now){
     const ph=PHASES[pi]; let p=(now-t0)/ph.dur; if(p>1)p=1;
     let o=last.o, type=0, caret=1;
@@ -191,21 +200,23 @@
     else if(ph.name==='hold'){ o=1; type=1; caret=(Math.floor(now/520)%2)?1:0.15; }
     else if(ph.name==='close'){ o=1-ease(p); type=Math.max(0,1-p*1.6); caret=0; }
     render({o,type,caret});
-    if(p>=1){ pi=(pi+1)%PHASES.length; t0=now; }
+    if(p>=1){ if(demo){pi=(pi+1)%PHASES.length;t0=now;}else{raf=0;return;} }
     raf=requestAnimationFrame(tick);
   }
 
   let raf=0;
   function start(){ if(!raf&&!reduce) raf=requestAnimationFrame(tick); }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
+  function takeover(){demo=false;stop();}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();},{once:true});
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  // click to re-trigger the open sequence
-  bar.addEventListener('click',()=>{ if(reduce)return; pi=1; t0=performance.now(); });
+  bar.addEventListener('click',()=>{takeover();if(reduce){render(last.o?{o:0,type:0,caret:0}:{o:1,type:1,caret:1});return;}pi=last.o>.5?4:1;t0=performance.now();start();});
+  bar.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();bar.click();}});
 
   if(reduce){
     // static resting frame: fully open, query in place
     render({o:1,type:1,caret:1});
-  } else start();
+  } else if(demo)start(); else render({o:0,type:0,caret:0});
 })();
 </script>
 <script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>

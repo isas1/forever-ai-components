@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block. Light keeps the bar's
@@ -31,7 +32,7 @@
     --hds-cap:#0e7699; --hds-cap-o:.6;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--hds-bg);}
-  #hds-stage{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  #hds-stage{position:absolute;inset:0;overflow:clip;display:flex;align-items:center;justify-content:center;
     perspective:760px;perspective-origin:50% 46%;}
   #hds-helix{position:relative;width:1px;height:1px;
     transform-style:preserve-3d;
@@ -72,11 +73,13 @@
   "prefers-reduced-motion guard (static fallback at spin=18)",
   "visibilitychange pause/resume",
   "depth-cue opacity formula (compositor-friendly, no filter)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "All geometry is rebuilt on resize via innerHTML clear — brief flash on window resize",
-  "perspective hardcoded at 760px; very wide viewports may look flat"
+  "perspective hardcoded at 760px; very wide viewports may look flat",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -106,6 +109,12 @@
 <script>
 (function(){
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
   const helix = document.getElementById('hds-helix');
   const STEPS = 26;          // rungs in the ladder
   const STEP_ANGLE = 32;     // degrees of twist per step
@@ -164,14 +173,14 @@
 
   function tick(){
     nudge*=0.92;
-    spin=(spin + (reduce?0:0.42) + nudge)%360;
+    spin=(spin + (demo&&!reduce?0.42:0) + nudge)%360;
     // whole helix also tips gently on X for the front-to-back sweep read
     helix.style.transform='rotateX('+(8+3*Math.sin(spin*Math.PI/180))+'deg)';
     place(spin);
-    raf=requestAnimationFrame(tick);
+    if(demo||performance.now()<interactionUntil)raf=requestAnimationFrame(tick);else raf=0;
   }
 
-  function start(){ if(!raf && !reduce) raf=requestAnimationFrame(tick); }
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(tick);}
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   addEventListener('resize',()=>{ scale(); place(spin); });
@@ -182,7 +191,7 @@
       document.documentElement.setAttribute('data-theme',d.theme); });
 
   scale();
-  if(reduce){ spin=18; helix.style.transform='rotateX(8deg)'; place(spin); }
+  if(reduce||!demo){ spin=18; helix.style.transform='rotateX(8deg)'; place(spin); }
   else start();
 })();
 </script>

@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Ledger of Drops — UI Micro-interactions. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ledger of Drops</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#3cc4a8;--kp:#6b6e74;--hl:rgba(242,242,240,.22)}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#0b7a66;--kp:#8a8c91;--hl:rgba(18,19,22,.26)}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt10-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.dt10-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt10-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dt10-num{position:absolute;left:0;top:0;transform:translate(-50%,-50%);font:600 16px system-ui,-apple-system,"Helvetica Neue",sans-serif;font-variant-numeric:tabular-nums;line-height:1;pointer-events:none;color:var(--bg)}
+.dt10-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/ui-microinteractions/24-ledger-of-drops.html",
+ "title": "Ledger of Drops",
+ "description": "Drag a drop off the badge and fling it onto a shelf; fling it back to add it. Drops are kept, never deleted. Clean modern: off-black and verdigris with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and verdigris (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "The idle demo sheds one drop at 0.6 s and stops on first input. The numeral is positioned from JS.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "badge",
+  "ledger",
+  "drag",
+  "droplet",
+  "physics"
+ ]
+}
+</script>
+</head><body>
+<div class="dt10-root" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="8" aria-label="Forever badge, counted in drops. Drag a drop off the badge and fling it right to shed one; it is kept on the shelf, never deleted. Fling a kept drop left into the badge to add it back. Arrow keys add or shed a drop, Escape settles everything."></div>
+<div class="dt10-cap" aria-hidden="true">Ledger of Drops</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.dt10-root');
+  var cv=document.createElement('canvas');cv.className='dt10-cv';root.appendChild(cv);
+  var num=document.createElement('span');num.className='dt10-num';root.appendChild(num);
+  var ctx=cv.getContext('2d'),fc=document.createElement('canvas'),fx=fc.getContext('2d');
+  var W=0,DPR=1,S=0,F=0,img=null,fs=null,fcl=null;
+  var LY=.6,BX=.2,U=.034,TOT=8,K=1.5,T=Math.pow(1-1/(K*K),2),MIN=2.4*U;
+  var B={n:6,R:0,v:0},D=[],P=null,i;
+  function RT(n){return n?U*(1.5+.75*Math.sqrt(n)):0}
+  B.R=RT(B.n);
+  for(i=0;i<TOT;i++)D.push({x:BX,y:LY-U,vx:0,vy:0,s:i<B.n?'in':'free',c:1,roll:0,g:0,t:0});
+  function free(){return D.filter(function(d){return d.s==='free'})}
+  function slots(){var L=free().sort(function(a,b){return b.x-a.x}),m=Math.max(L.length,1),
+    av=.93-(BX+RT(B.n)+.07),sp=Math.min(2.7*U,av/m);
+    L.forEach(function(d,k){d.t=.93-U-k*sp})}
+  function take(){for(var k=0;k<D.length;k++)if(D[k].s==='in')return D[k]}
+  function sync(){num.textContent=String(B.n);var m=TOT-B.n;
+    root.setAttribute('aria-valuenow',B.n);
+    root.setAttribute('aria-valuetext',B.n+' drops in the badge, '+m+' kept on the shelf')}
+  slots();free().forEach(function(d){d.x=d.t});sync();
+
+  function merge(d){d.s='in';d.vx=d.vy=0;B.n++;B.v+=U*.14;sync()}
+  function step(dt){
+    var mv=!!P,rt=RT(B.n);
+    B.v+=(rt-B.R)*.16*dt;B.v*=Math.pow(.8,dt);B.R+=B.v*dt;if(B.R<0)B.R=0;
+    if(Math.abs(B.v)>1e-5||Math.abs(rt-B.R)>1e-4)mv=true;
+    var by=LY-B.R,rest=LY-U;slots();
+    D.forEach(function(d){
+      if(d.s==='in')return;
+      var ct=d.s==='home'?0:(d.s==='drag'||d.y<rest-.002)?d.c:1;
+      d.c+=(ct-d.c)*Math.min(1,.07*dt);if(Math.abs(ct-d.c)>.005)mv=true;
+      if(d.s==='drag'){var a=Math.min(1,.55*dt);d.x+=(P.x-d.x)*a;d.y+=(Math.min(P.y,rest)-d.y)*a;return}
+      if(d.s==='home'){d.vx+=(BX-d.x)*.2*dt;d.vy+=(by-d.y)*.2*dt;var f=Math.pow(.75,dt);d.vx*=f;d.vy*=f;
+        d.x+=d.vx*dt;d.y+=d.vy*dt;mv=true;
+        if(Math.hypot(d.x-BX,d.y-by)<Math.max(B.R*.45,.008))merge(d);return}
+      var air=d.y<rest-1e-4||d.vy<0;
+      if(air){d.vy+=.0012*dt;d.vx*=Math.pow(.995,dt);mv=true}
+      d.x+=d.vx*dt;d.y+=d.vy*dt;
+      if(d.y>=rest){d.y=rest;d.vy=d.vy>.004?-d.vy*.3:0}
+      if(!air){
+        if(d.roll){d.vx*=Math.pow(.94,dt);if(Math.abs(d.vx)<.0025)d.roll=0}
+        else{d.vx+=(d.t-d.x)*.14*dt;d.vx*=Math.pow(.8,dt)}}
+      if(d.x>.96-U){d.x=.96-U;d.vx=-Math.abs(d.vx)*.4}
+      if(d.x<.03+U){d.x=.03+U;d.vx=Math.abs(d.vx)*.4}
+      if(d.g>0)d.g-=dt;else if(Math.hypot(d.x-BX,d.y-by)<B.R+U*.5){d.s='home';mv=true}
+      if(Math.abs(d.vx)>2e-5||d.vy||Math.abs(d.t-d.x)>2e-4)mv=true});
+    var L=free().filter(function(d){return d.y>=rest-1e-4}).sort(function(a,b){return a.x-b.x});
+    for(var k=0;k+1<L.length;k++){var a=L[k],b=L[k+1],ov=MIN-(b.x-a.x);
+      if(ov>0){a.x-=ov/2;b.x+=ov/2;if(a.vx>b.vx){var q=a.vx;a.vx=b.vx*.9;b.vx=q*.9;
+        if(Math.abs(a.vx)>.003)a.roll=1;if(Math.abs(b.vx)>.003)b.roll=1}mv=true}}
+    return mv}
+
+  function snapToTarget(){
+    if(P){P.d.x=P.x;P.d.y=Math.min(P.y,LY-U)}
+    D.forEach(function(d){if(d.s==='home'||(d.s==='free'&&((d.roll&&d.vx<-.008)||
+      (d.g<=0&&Math.hypot(d.x-BX,d.y-(LY-B.R))<B.R+U*.5))))merge(d)});
+    B.R=RT(B.n);B.v=0;slots();
+    free().forEach(function(d){d.x=d.t;d.y=LY-U;d.vx=d.vy=0;d.roll=0;d.c=1;d.g=0})}
+
+  function hex(s){s=s.trim();return[parseInt(s.substr(1,2),16),parseInt(s.substr(3,2),16),parseInt(s.substr(5,2),16)]}
+  var bb;
+  function add(cx,cy,r,c){var R=r*K*F,X=cx*F,Y=cy*F,R2=R*R,
+    ia=Math.max(0,X-R|0),ib=Math.min(F-1,X+R+1|0),ja=Math.max(0,Y-R|0),jb=Math.min(F-1,Y+R+1|0);
+    if(ia<bb[0])bb[0]=ia;if(ib>bb[1])bb[1]=ib;if(ja<bb[2])bb[2]=ja;if(jb>bb[3])bb[3]=jb;
+    for(var j=ja;j<=jb;j++){var dy=j+.5-Y;for(var x=ia;x<=ib;x++){var dx=x+.5-X,q=(dx*dx+dy*dy)/R2;
+      if(q<1){var w=(1-q)*(1-q),k=j*F+x;fs[k]+=w;fcl[k]+=w*c}}}}
+  function draw(){
+    if(!S)return;
+    var cs=getComputedStyle(document.documentElement),A=hex(cs.getPropertyValue('--acc')),
+      Q=hex(cs.getPropertyValue('--kp'));
+    ctx.setTransform(1,0,0,1,0,0);ctx.clearRect(0,0,S,S);
+    var ly=Math.round(LY*S)+.5;
+    ctx.strokeStyle=cs.getPropertyValue('--hl');ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(.06*S,ly);ctx.lineTo(.94*S,ly);ctx.stroke();
+    fs.fill(0);fcl.fill(0);bb=[F,0,F,0];
+    if(B.R>.002)add(BX,LY-B.R,B.R,0);
+    D.forEach(function(d){if(d.s!=='in')add(d.x,d.y,U,d.c)});
+    var px=img.data,gp=.988/(U*1.3*F);px.fill(0);
+    for(var j=bb[2];j<=bb[3];j++)for(var x=bb[0];x<=bb[1];x++){var k=j*F+x,f=fs[k];
+      if(f>T-gp){var al=Math.min(1,(f-T)/gp+.5),c=fcl[k]/f,o=k*4;
+        px[o]=A[0]+(Q[0]-A[0])*c;px[o+1]=A[1]+(Q[1]-A[1])*c;px[o+2]=A[2]+(Q[2]-A[2])*c;px[o+3]=al*255}}
+    fx.putImageData(img,0,0);ctx.imageSmoothingEnabled=true;ctx.drawImage(fc,0,0,S,S);
+    var y,fsz;
+    if(B.n===0){y=LY-U;fsz=Math.max(11,U*W*.9);num.style.color='var(--ink)';
+      if(B.R<U*.4){ctx.strokeStyle=cs.getPropertyValue('--kp');ctx.beginPath();
+        ctx.arc(BX*S,y*S,U*S,0,7);ctx.stroke()}}
+    else{y=LY-B.R;fsz=Math.max(11,B.R*W*.95);num.style.color='var(--bg)'}
+    num.style.left=BX*100+'%';num.style.top=y*100+'%';num.style.fontSize=fsz.toFixed(1)+'px'}
+
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+
+  new ResizeObserver(function(){W=root.clientWidth;DPR=Math.min(2,window.devicePixelRatio||1);
+    S=Math.max(1,Math.round(W*DPR));cv.width=cv.height=S;F=Math.min(S,520);
+    fc.width=fc.height=F;img=fx.createImageData(F,F);fs=new Float32Array(F*F);fcl=new Float32Array(F*F);
+    draw()}).observe(root);
+
+  function pt(e){var b=root.getBoundingClientRect();return[(e.clientX-b.left)/b.width,(e.clientY-b.top)/b.height]}
+  root.addEventListener('pointerdown',function(e){
+    var p=pt(e),s=W?22/W:.04,best=null,bd=1e9;
+    free().forEach(function(d){var q=Math.hypot(d.x-p[0],d.y-p[1]);if(q<Math.max(U*1.4,s)&&q<bd){bd=q;best=d}});
+    if(!best&&B.n>0&&Math.hypot(BX-p[0],LY-B.R-p[1])<Math.max(B.R*1.15,s)){
+      best=take();best.x=BX;best.y=LY-B.R;best.c=0;best.vx=best.vy=0;B.n--;sync()}
+    if(!best)return;
+    best.s='drag';best.roll=0;P={d:best,x:p[0],y:p[1],vx:0,vy:0,t:performance.now()};
+    try{root.setPointerCapture(e.pointerId)}catch(_){}
+    root.style.cursor='grabbing';e.preventDefault();kick()});
+  root.addEventListener('pointermove',function(e){if(!P)return;var p=pt(e),n=performance.now(),
+    dt=Math.max((n-P.t)/16.667,.5),c=function(v){return Math.max(-.07,Math.min(.07,v))};
+    P.vx=P.vx*.4+c((p[0]-P.x)/dt)*.6;P.vy=P.vy*.4+c((p[1]-P.y)/dt)*.6;P.x=p[0];P.y=p[1];P.t=n;kick()});
+  function up(){if(!P)return;var d=P.d,still=performance.now()-P.t>90;
+    d.vx=still?0:P.vx;d.vy=still?0:P.vy;d.g=0;
+    if(Math.hypot(d.x-BX,d.y-(LY-B.R))<B.R+U*1.3&&d.vx<.012)d.s='home';
+    else{d.s='free';d.roll=1}
+    P=null;root.style.cursor='';kick()}
+  root.addEventListener('pointerup',up);root.addEventListener('pointercancel',up);
+
+  function shed(){if(!B.n)return;var d=take();B.n--;d.x=BX+B.R*.5;d.y=LY-B.R*1.1;
+    d.vx=.022;d.vy=-.012;d.c=0;d.s='free';d.roll=1;d.g=14;sync();kick()}
+  function gather(){var L=free().sort(function(a,b){return a.x-b.x});if(!L.length)return;var d=L[0];
+    if(reduce())merge(d);else{d.vx=-.035;d.vy=-.008;d.roll=1;d.g=0}kick()}
+  root.addEventListener('keydown',function(e){var k=e.key;
+    if(k==='ArrowUp'||k==='ArrowRight'||k==='Enter'||k===' ')gather();
+    else if(k==='ArrowDown'||k==='ArrowLeft'||k==='Backspace'||k==='Delete')shed();
+    else if(k==='Escape'){snapToTarget();draw()}else return;e.preventDefault()});
+
+  draw();
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,demoT=0,demoT2=0;
+  function stopDemo(){demo=false;clearTimeout(demoT);clearInterval(demoT2)}
+  demoT=setTimeout(function(){if(demo&&!reduce()&&!P)shed()},600);
+  window.addEventListener('forever:interactive',stopDemo);
+  root.addEventListener('pointerdown',stopDemo,true);root.addEventListener('keydown',stopDemo,true);
+  document.addEventListener('pointerdown',stopDemo,true);
+})();</script>
+</body></html>

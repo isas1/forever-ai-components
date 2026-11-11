@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A red no-entry disk on diagonal steel slabs head-shakes and buzzes with impact sparks, stamping DENIED on each rejected action.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Denied</title>
@@ -22,7 +23,7 @@
   #fb09-slabB{bottom:4%;background:var(--red);opacity:.10;transform:rotate(-19deg)}
   #fb09-rig{position:relative;width:min(60vmin,360px);height:min(60vmin,360px);will-change:transform}
   #fb09-head{position:absolute;inset:0;will-change:transform}
-  svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  #fb09-stage svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
   .fb09-disk{fill:none;stroke:var(--red);stroke-width:18}
   .fb09-bar{stroke:var(--red);stroke-width:18;stroke-linecap:butt}
   .fb09-stamp{fill:var(--ink);font:800 46px/1 "Helvetica Neue",Arial,sans-serif;
@@ -30,14 +31,14 @@
   #fb09-spark line{stroke:var(--red);stroke-width:4;stroke-linecap:round;opacity:0}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--fb09-cap);opacity:var(--fb09-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
-  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .fb09-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/feedback-states/09-denied-buzz.html",
  "title": "Denied",
- "description": "Red no-entry disk head-shakes with decaying sine spring and lateral buzz; impact sparks radiate on first beat. Auto-cycles, click triggers on demand.",
+ "description": "Red no-entry disk head-shakes with decaying sine spring and lateral buzz; impact sparks radiate on first beat. Initial demo stops after first input; click or keyboard activation runs finite feedback.",
  "useWhen": "Form rejection, access-denied gates, locked-action confirmations where a tactile \"no\" reinforces the message.",
  "avoidWhen": "Calm or neutral feedback contexts. Avoid for users with vestibular sensitivity — the buzzing reads as harsh.",
  "agentPrompt": "Change shake amplitude from 13 degrees to 8, reduce buzz duration to 400ms (var dur = 400), and swap the red accent to orange (#f97316). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
@@ -54,11 +55,13 @@
   "prefers-reduced-motion early-return guard",
   "visibilitychange pause/resume",
   "aria-live polite status region",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "CSS reduced-motion rule only applies to CSS animations; JS animation is guarded separately via matchMedia check",
-  "Sparks are seizure-safe by design — do not increase sp peak opacity above ~0.9"
+  "Sparks are seizure-safe by design — do not increase sp peak opacity above ~0.9",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -106,11 +109,16 @@
     </svg>
   </div>
   <div id="fb09-ring"></div>
-</div>
+<p class="fb09-sr" data-fit-clip-ok id="fb09-live" role="status" aria-li</div>
 <div class="cap">Denied</div>
-<p class="sr" id="fb09-live" role="status" aria-live="polite"></p>
+
 <script>
 (function(){
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   "use strict";
   var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
   var rig   = document.getElementById('fb09-rig');
@@ -125,12 +133,11 @@
   if(reduce){
     rig.style.transform = 'rotate(-1deg)';
     live.textContent = 'Action denied.';
-    return;
   }
 
   var N = spark.length;
   // spring head-shake state (angular wobble) + buzz (xy jitter)
-  var t = 0;            // ms of current buzz, -1 = idle
+  var t = demoEnabled&&!reduce?0:-1;            // ms of current buzz, -1 = idle
   var dur = 620;        // buzz duration
   var idle = 0;         // ms since last user input
   var userHold = false; // user currently driving
@@ -148,14 +155,14 @@
   }
 
   function frame(now){
-    if(!running){return;}
+    raf=0;if(!running||document.hidden||reduce)return;
     if(!last) last = now;
     var dt = now - last; last = now; if(dt>50) dt=50;
 
     // self-demo timer: re-trigger when idle and not mid-buzz
     if(t<0){
       idle += dt;
-      if(!userHold && idle > 1900){ trigger(); idle = 0; }
+      if(demoEnabled&&!userHold && idle > 1900){ trigger(); idle = 0; }
     }
 
     if(t>=0){
@@ -176,14 +183,14 @@
         for(var i=0;i<N;i++){ spark[i].style.opacity = sp.toFixed(2); }
       }
     }
-    raf = requestAnimationFrame(frame);
+    if(demoEnabled||t>=0)wake();
   }
-  raf = requestAnimationFrame(frame);
+  if(!reduce)raf = requestAnimationFrame(frame);
 
   // real interaction: pointer / keyboard hands control to user, then eases back
-  function userAct(){ userHold = true; idle = 0; trigger();
+  function wake(){if(document.hidden||reduce)return;running=true;if(!raf)raf=requestAnimationFrame(frame);}
+  function userAct(){if(reduce){rig.style.transform='rotate(-1deg)';live.textContent='Action denied.';return;}wake(); userHold = true; idle = 0; trigger();
     clearTimeout(userAct._h);
-    userAct._h = setTimeout(function(){ userHold = false; idle = 0; }, 2600);
   }
   stage.addEventListener('pointerdown', userAct);
   stage.addEventListener('keydown', function(e){

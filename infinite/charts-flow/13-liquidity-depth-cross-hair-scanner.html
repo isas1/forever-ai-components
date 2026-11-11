@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Liquidity Depth Scanner — Charts & Flow. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Charts & Flow — Liquidity Depth Scanner</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ig04-ss-ink: #0B0E14;
+    --ig04-ss-coral: #FF4500;
+    --ig04-ss-mint: #00D084;
+  }
+  .ig04-wrap * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: #05070A;
+    color: #EDEDEA;
+    font-family: 'Fira Code', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .ig04-wrap {
+    width: 100%;
+    max-width: 440px;
+    background: var(--ig04-ss-ink);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.8);
+    user-select: none;
+  }
+  .ig04-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+  } .ig04-canvas{
+    width: 100%;
+    height: 130px;
+    background: #06080C;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    display: block;
+    cursor: crosshair;
+  }
+  .ig04-foot {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.4);
+  }
+  .ig04-target {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--ig04-ss-mint);
+  }
+.ig04-inline-1{color:rgba(255,255,255,0.6)}
+.ig04-inline-2{color:var(--ig04-ss-mint)}
+.ig04-inline-3{color:var(--ig04-ss-coral)}
+@media (prefers-reduced-motion: reduce) { .ig04-wrap *, .ig04-wrap *::before, .ig04-wrap *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+.ig04-caption{position:fixed;right:10px;bottom:7px;z-index:5;font-size:9px;opacity:.5;pointer-events:none}
+@container fit-13-liquidity-depth-cross-hair-scanner (max-width:300px){.ig04-wrap{width:calc(100% - 16px);padding:12px;gap:8px}.ig04-hdr{font-size:11px}.ig04-inline-1{max-width:105px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ig04-inline-2{font-size:11px}.ig04-canvas{height:82px}.ig04-foot{font-size:11px}.ig04-target{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ig04-inline-3{display:none}.ig04-caption{display:none}}
+body{width:100%;container-type:inline-size;container-name:fit-13-liquidity-depth-cross-hair-scanner}
+  .ig04-canvas:focus-visible{outline:2px solid var(--ig04-ss-coral);outline-offset:2px}
+@container fit-13-liquidity-depth-cross-hair-scanner (max-width:210px){.ig04-inline-1{white-space:normal;max-width:90px}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/charts-flow/13-liquidity-depth-cross-hair-scanner.html",
+ "title": "Liquidity Depth Scanner",
+ "description": "Liquidity Depth Scanner control in the The Interest Game system.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [],
+ "preserveElements": [
+  "First deliberate pointer/keyboard input stops scanner attract; manual position repaints once.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "fintech",
+  "trading",
+  "leverage",
+  "liquidity",
+  "crypto",
+  "metrics",
+  "liquidity-depth-scanner",
+  "chart",
+  "depth-chart",
+  "orderbook",
+  "crosshair",
+  "bid-ask",
+  "the-interest-game"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="ig04-wrap" role="region" aria-label="Liquidity Depth Scanner">
+  <div class="ig04-hdr">
+    <span class="ig04-inline-1">interest_game · depth_chart</span>
+    <span class="ig04-inline-2" id="ig04-spreadPill">SPREAD: $0.50</span>
+  </div>
+
+  <canvas class="ig04-canvas ig04-canvas" id="ig04-cv" tabindex="0" role="application" aria-label="Order book depth scanner. Use left and right arrow keys to scan bid and ask depth." width="394" height="130"></canvas>
+
+  <div class="ig04-foot">
+    <span class="ig04-target" id="ig04-inspectStat">HOVER TO SCAN DEPTH</span>
+    <span class="ig04-inline-3">SLIPPAGE: 0.02%</span>
+  </div>
+</div>
+
+<div class="ig04-caption" aria-hidden="true">Liquidity Depth Scanner</div>
+<script>
+(()=>{
+  const cv = document.getElementById('ig04-cv');
+  const ctx = cv.getContext('2d');
+  const inspectStat = document.getElementById('ig04-inspectStat');
+  const spreadPill = document.getElementById('ig04-spreadPill');
+
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let running = true,raf=0,demoEnabled=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true;
+  function stopDemo(){demoEnabled=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+  window.addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+  document.addEventListener('visibilitychange', () => { running = !document.hidden;if(running)render();else if(raf)cancelAnimationFrame(raf); });
+
+  let mx = cv.width / 2;
+  cv.addEventListener('pointermove', (e) => {
+    const r = cv.getBoundingClientRect();
+    mx = ((e.clientX - r.left) / r.width) * cv.width;
+    const isBid = mx < cv.width / 2;
+    const depth = Math.round(Math.abs(mx - cv.width / 2) * 8.4);
+    inspectStat.textContent = `${isBid ? 'BID' : 'ASK'} WALL: ${depth} BTC @ $${isBid ? 64240 - depth*2 : 64250 + depth*2}`;
+    inspectStat.style.color = isBid ? 'var(--ig04-ss-mint)' : 'var(--ig04-ss-coral)';
+    if(!demoEnabled)render();
+  });
+  cv.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();mx=Math.max(0,Math.min(cv.width,mx+(e.key==='ArrowRight'?12:-12)));render();}});
+
+  let t = 0;
+  function render() {
+    if (!running) return;
+    t += 0.05;
+
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const w = cv.width, h = cv.height;
+    const midX = w / 2;
+
+    // Draw Cumulative Bids (Left - Mint)
+    ctx.beginPath();
+    ctx.moveTo(0, 20);
+    for (let x = 0; x < midX - 6; x += 4) {
+      const u = (midX - 6 - x) / midX; // 1 at left, 0 at center
+      const y = h - Math.pow(u, 1.8) * (h - 30) + Math.sin(x * 0.1 + t) * 2;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(midX - 6, h);
+    ctx.lineTo(0, h);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(0, 208, 132, 0.15)';
+    ctx.fill();
+    ctx.strokeStyle = '#00D084';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Draw Cumulative Asks (Right - Coral)
+    ctx.beginPath();
+    ctx.moveTo(midX + 6, h);
+    for (let x = midX + 6; x <= w; x += 4) {
+      const u = (x - (midX + 6)) / midX; // 0 at center, 1 at right
+      const y = h - Math.pow(u, 1.8) * (h - 30) + Math.cos(x * 0.1 - t) * 2;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, h);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255, 69, 0, 0.15)';
+    ctx.fill();
+    ctx.strokeStyle = '#FF4500';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Crosshair line at mx
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(mx, 0);
+    ctx.lineTo(mx, h);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Center spread divider
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.beginPath();
+    ctx.moveTo(midX, 0);
+    ctx.lineTo(midX, h);
+    ctx.stroke();
+
+    if (!reduce&&demoEnabled)raf=requestAnimationFrame(render);
+  }
+  render();
+})();
+</script>
+</body>
+</html>

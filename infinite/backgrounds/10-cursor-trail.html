@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="UTF-8">
 <meta name="description" content="Additive glowing particles in sage, tan and stone trail the pointer on dark canvas, drifting on their own when idle.">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -33,9 +34,9 @@
 }
 *,*::before,*::after{box-sizing:border-box;}
 html,body{margin:0;height:100%;overflow:hidden;}
-body{background:var(--bg-900);}
-.frame{position:absolute;inset:0;display:grid;place-items:center;}
-.stage{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-900);}
+html,body{background:var(--bg-900);}
+.c10-frame{position:absolute;inset:0;display:grid;place-items:center;}
+.c10-stage{position:relative;width:100%;height:100%;overflow:hidden;background:var(--bg-900);}
 .c10-trail{position:absolute;inset:0;cursor:crosshair;}
 .c10-trail canvas{display:block;width:100%;height:100%;}
 .c10-trail__hint{position:absolute;inset:0;display:grid;place-items:center;
@@ -45,6 +46,7 @@ body{background:var(--bg-900);}
 .caption{position:absolute;left:12px;bottom:10px;z-index:5;
   font-family:var(--font-display);font-size:11px;font-weight:500;letter-spacing:.14em;
   text-transform:uppercase;color:var(--text-2);opacity:var(--cap-o);pointer-events:none;}
+.c10-trail:focus-visible{outline:2px solid var(--trail-1);outline-offset:-4px;}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -53,7 +55,7 @@ body{background:var(--bg-900);}
  "description": "Glowing sage, tan, and stone particles trail the pointer with additive blending on a dark canvas; idle drift animation keeps the tile alive without interaction.",
  "useWhen": "Dark hero backgrounds, creative portfolio canvases, or interactive demos where pointer feedback adds ambient delight.",
  "avoidWhen": "Light-background UIs (background hardcoded dark), content-heavy layouts where trail competes with text, or contexts without pointer input (pure touch kiosks).",
- "agentPrompt": "Change the COLORS array to [\"#ff6b35\",\"#ffcc00\",\"#00ff88\"] for a warm sunset palette and increase MAX to 180 for a denser trail. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Adjust the existing palette tokens and effect parameters while preserving manual control. Arrow keys steer; first click/touch stops the attract path permanently for this mount. Keep demo-v1 lifecycle marker, __foreverPreview.demoEnabled initialization and forever:interactive handler. Preserve reduced motion, visibility suspension and theme switching.",
  "editableAreas": [
   "COLORS array (iris/cyan/pink palette)",
   "MAX particle count (120)",
@@ -67,11 +69,16 @@ body{background:var(--bg-900);}
   "visibilitychange pause via runLoop",
   "prefers-reduced-motion static fallback",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "sticky demo-v1 preview lifecycle; stop attract work, retain manual feedback and settling",
+  "pointer/touch takeover, keyboard access and visibility suspension",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
-  "Touch support uses passive touchmove so emit fires but no cursor feedback is visible on touch devices"
+  "Touch support uses passive touchmove so emit fires but no cursor feedback is visible on touch devices",
+  "Control state is local to each mount; format changes preserve preview takeover but create a fresh source instance.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -95,10 +102,10 @@ body{background:var(--bg-900);}
 </script>
 </head>
 <body>
-<div class="frame">
-  <div class="stage">
-    <div class="c10-trail" data-c10 aria-hidden="true">
-      <canvas></canvas>
+<div class="c10-frame">
+  <div class="c10-stage">
+    <div class="c10-trail" data-c10 tabindex="0" aria-label="Particle trail. Use arrow keys to steer.">
+      <canvas class="c10-canvas"></canvas>
       <span class="c10-trail__hint">move pointer</span>
     </div>
     <span class="caption">Cursor Trail</span>
@@ -125,13 +132,18 @@ body{background:var(--bg-900);}
     return {ctx:ctx,get w(){return w;},get h(){return h;}};
   }
 
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false,wake=function(){};
+  function stopDemo(){demoEnabled=false;}
+  addEventListener("forever:interactive",stopDemo);
+  document.addEventListener("pointerdown",stopDemo,{capture:true});
+  document.addEventListener("click",stopDemo,{capture:true});
   function runLoop(tick){
     var running=false,id=0;
-    function loop(){tick();id=requestAnimationFrame(loop);}
+    function loop(){id=0;running=false;tick();if(demoEnabled||particles.length)start();}
     function start(){if(running||document.hidden)return;running=true;id=requestAnimationFrame(loop);}
-    function stop(){running=false;cancelAnimationFrame(id);}
+    function stop(){running=false;cancelAnimationFrame(id);id=0;}
     document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
-    start();
+    start();return start;
   }
 
   var host=document.querySelector("[data-c10]");
@@ -142,7 +154,8 @@ body{background:var(--bg-900);}
   var particles=[];
   var pointer={x:0,y:0,active:false};
   var auto={t:Math.random()*1000}; // idle drift keeps tile alive at rest
-  var cv=setupCanvas(host,{});
+  var cv=setupCanvas(host,{onResize:function(){if(cv){if(REDUCED)staticFrame();else render();}}});
+  pointer.x=cv.w/2;pointer.y=cv.h/2;
 
   // Precompute one soft radial-gradient sprite per color once; draw scaled per frame
   // instead of allocating a fresh gradient for every particle every frame.
@@ -173,7 +186,7 @@ body{background:var(--bg-900);}
   addEventListener("message",function(e){
     var d=e.data;
     if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark")){
-      root.setAttribute("data-theme",d.theme);syncTheme();if(REDUCED) staticFrame();
+      root.setAttribute("data-theme",d.theme);syncTheme();if(REDUCED) staticFrame();else render();
     }
   });
   syncTheme();
@@ -193,15 +206,16 @@ body{background:var(--bg-900);}
     var pt=e.touches?e.touches[0]:e;
     pointer.x=pt.clientX-r.left;pointer.y=pt.clientY-r.top;
     if(!pointer.active){pointer.active=true;host.classList.add("c10-trail--active");}
-    emit(pointer.x,pointer.y,3);
+    emit(pointer.x,pointer.y,3);if(REDUCED)render();else wake();
   }
-  host.addEventListener("mousemove",onMove);
-  host.addEventListener("touchmove",function(e){onMove(e);},{passive:true});
+  host.addEventListener("pointermove",onMove);
+  host.addEventListener("pointerdown",onMove);
+
   host.addEventListener("mouseleave",function(){pointer.active=false;});
 
   function render(){
     var ctx=cv.ctx,w=cv.w,h=cv.h;ctx.clearRect(0,0,w,h);
-    if(!pointer.active&&w>0){
+    if(demoEnabled&&!pointer.active&&w>0){
       auto.t+=0.018;
       var ax=w*(0.5+0.32*Math.cos(auto.t*0.9));
       var ay=h*(0.5+0.3*Math.sin(auto.t*1.3));
@@ -233,8 +247,11 @@ body{background:var(--bg-900);}
     ctx.globalAlpha=1;ctx.globalCompositeOperation="source-over";
   }
 
-  if(REDUCED){ staticFrame(); return; }
-  runLoop(render);
+  host.addEventListener('keydown',e=>{if(!/^Arrow(Left|Right|Up|Down)$/.test(e.key))return;e.preventDefault();stopDemo();
+    pointer.x=Math.max(0,Math.min(cv.w,pointer.x+(e.key==='ArrowRight'?12:e.key==='ArrowLeft'?-12:0)));
+    pointer.y=Math.max(0,Math.min(cv.h,pointer.y+(e.key==='ArrowDown'?12:e.key==='ArrowUp'?-12:0)));
+    emit(pointer.x,pointer.y,3);if(REDUCED)render();else wake();});
+  if(REDUCED) staticFrame();else wake=runLoop(render);
 })();
 </script>
 </body>

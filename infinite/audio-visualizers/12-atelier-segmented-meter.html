@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Atelier Segmented Meter — Audio Visualizers. Stereo eight-segment LED meter with decaying peak hold and interactive clip injection.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier Segmented Meter</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  :root {
+    --at19-bg: #171614;
+    --at19-housing: #24221F;
+    --at19-housing-border: #57524A;
+    --at19-seg-off: #12110F;
+    --at19-ink: #F4F1EA;
+    --at19-muted: #ADA699;
+    --at19-border: #57524A;
+    --at19-moss: #4FA37A;
+    --at19-orange: #EC6A43;
+    --at19-peak: #F4F1EA;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --at19-bg: #F4F1EA;
+    --at19-housing: #1C1B19;
+    --at19-housing-border: #1C1B19;
+    --at19-seg-off: #2E2C29;
+    --at19-ink: #1C1B19;
+    --at19-muted: #666158;
+    --at19-border: #C5BEB0;
+    --at19-moss: #3B8864;
+    --at19-orange: #E04F26;
+    --at19-peak: #FAF8F5;
+    color-scheme: light;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background-color: var(--at19-bg); color: var(--at19-ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  .at19-stage {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: clamp(10px, 3vmin, 20px);
+    padding-bottom: clamp(24px, 7vmin, 32px);
+    background-color: var(--at19-bg); color: var(--at19-ink);
+  }
+  .at19-unit {
+    width: min(216px, 100%);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .at19-btn {
+    appearance: none; width: 100%;
+    display: flex; flex-direction: column; gap: clamp(6px, 2vmin, 8px);
+    background: var(--at19-housing);
+    border: 1.5px solid var(--at19-housing-border);
+    padding: clamp(9px, 3vmin, 12px); border-radius: 6px;
+    cursor: pointer; box-shadow: 0 2px 0 var(--at19-border);
+    touch-action: manipulation;
+  }
+  .at19-btn:focus-visible { outline: 2px solid var(--at19-orange); outline-offset: 2px; }
+  .at19-row {
+    display: grid; grid-template-columns: repeat(8, 1fr);
+    gap: clamp(3px, 1vw, 4px); height: clamp(18px, 8vmin, 22px);
+    width: 100%;
+  }
+  .at19-seg {
+    background: var(--at19-seg-off); border-radius: 2px;
+    transition: background-color 60ms linear;
+  }
+  .at19-seg.at19-moss { background: var(--at19-moss); }
+  .at19-seg.at19-orange { background: var(--at19-orange); }
+  .at19-seg.at19-peak { background: var(--at19-peak); }
+  .at19-readout {
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    font-size: clamp(8.5px, 2.3vw, 10px); font-weight: 600;
+    letter-spacing: 0.06em; color: var(--at19-muted);
+    text-transform: uppercase;
+  }
+  .at19-val { color: var(--at19-ink); }
+  .at19-cap {
+    position: absolute; left: 10px; bottom: 8px;
+    font: 500 11px/1 ui-monospace, monospace;
+    color: var(--at19-ink); opacity: 0.45;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    user-select: none; pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .at19-seg { transition-duration: 0.01ms !important; }
+  }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/audio-visualizers/12-atelier-segmented-meter.html",
+ "title": "Atelier Segmented Meter",
+ "description": "Dual-channel eight-segment studio VU meter featuring mossy/orange signal LEDs, peak hold caps, and tap clip injection.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Keep visibilitychange interval cleanup and light/dark meter bezel contrast intact.",
+ "editableAreas": [
+  "tokens",
+  "thresholds"
+ ],
+ "preserveElements": [
+  "visibilitychange"
+ ],
+ "knownLimitations": [],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "audio",
+  "vu-meter",
+  "visualizer",
+  "peak",
+  "stereo",
+  "atelier"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="at19-stage">
+  <div class="at19-unit">
+    <button type="button" class="at19-btn" id="at19-btn" aria-label="Inject Audio Signal Peak">
+      <span class="at19-row" id="at19-rowL" aria-hidden="true"></span>
+      <span class="at19-row" id="at19-rowR" aria-hidden="true"></span>
+    </button>
+    <div class="at19-readout">
+      <span>PEAK HOLD</span>
+      <span class="at19-val" id="at19-out">-12.0 dB</span>
+    </div>
+  </div>
+</div>
+<div class="at19-cap" aria-hidden="true">Atelier Segmented Meter</div>
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var btn = document.getElementById("at19-btn");
+  var rowL = document.getElementById("at19-rowL");
+  var rowR = document.getElementById("at19-rowR");
+  var out = document.getElementById("at19-out");
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var segsL = [], segsR = [];
+
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "forever:theme" && (e.data.theme === "light" || e.data.theme === "dark")) {
+      root.setAttribute("data-theme", e.data.theme);
+    }
+  });
+
+  for (var i = 0; i < 8; i++) {
+    var l = document.createElement("span"); l.className = "at19-seg"; rowL.appendChild(l); segsL.push(l);
+    var r = document.createElement("span"); r.className = "at19-seg"; rowR.appendChild(r); segsR.push(r);
+  }
+
+  var energyL = 5, energyR = 4, peakL = 6, peakR = 5;
+  var iv = null, clipTimer = null;
+
+  function render() {
+    for (var i = 0; i < 8; i++) {
+      segsL[i].className = "at19-seg";
+      if (i < Math.round(energyL)) segsL[i].classList.add(i >= 6 ? "at19-orange" : "at19-moss");
+      else if (i === peakL) segsL[i].classList.add("at19-peak");
+
+      segsR[i].className = "at19-seg";
+      if (i < Math.round(energyR)) segsR[i].classList.add(i >= 6 ? "at19-orange" : "at19-moss");
+      else if (i === peakR) segsR[i].classList.add("at19-peak");
+    }
+  }
+
+  function step() {
+    if (reduce || document.hidden) return;
+    energyL = Math.max(1, energyL * 0.88 + Math.random() * 1.5);
+    energyR = Math.max(1, energyR * 0.88 + Math.random() * 1.5);
+    render();
+  }
+
+  function boost() {
+    energyL = 8; energyR = 8; peakL = 7; peakR = 7;
+    out.textContent = "+0.8 dB CLIP";
+    render();
+    if (clipTimer) clearTimeout(clipTimer);
+    clipTimer = setTimeout(function () {
+      out.textContent = "-3.2 dB";
+      if (reduce) {
+        energyL = 5; energyR = 4; peakL = 6; peakR = 5;
+        render();
+      }
+    }, 900);
+  }
+
+  function startLoop() {
+    if (!iv && !reduce && !document.hidden) iv = setInterval(step, 110);
+  }
+  function stopLoop() {
+    if (iv) { clearInterval(iv); iv = null; }
+  }
+
+  btn.addEventListener("click", boost);
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) stopLoop(); else startLoop();
+  });
+
+  render();
+  startLoop();
+})();
+</script>
+</body>
+</html>

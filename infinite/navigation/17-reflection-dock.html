@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="The glossy shelf dock: five tiles on a receding glass floor, each mirrored beneath itself; a lift wave rolls along the row with the reflections sinking as the tiles rise, and the pointer lifts whatever it touches.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reflection Dock</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --bg:#0d0f16; --glow:rgba(154,212,232,.14);
+    --shelf-top:rgba(255,255,255,.16); --shelf:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.03));
+    --shelf-line:rgba(255,255,255,.28); --shelf-sh:rgba(0,0,0,.6);
+    --item-hl:rgba(255,255,255,.25); --item-sh:rgba(0,0,0,.6);
+    --ref-o:.42;
+    --cap:#fff; --cap-o:.28;
+    --g1:linear-gradient(150deg,#9AD4E8,#3a8fb0);
+    --g2:linear-gradient(150deg,#F06A9B,#a02556);
+    --g3:linear-gradient(150deg,#f4f6fb,#9aa1bd);
+    --g4:linear-gradient(150deg,#E8AB30,#b7741a);
+    --g5:linear-gradient(150deg,#5FB7A1,#237a68);
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow:rgba(31,110,140,.10);
+    --shelf-top:rgba(0,0,0,.06); --shelf:linear-gradient(180deg,rgba(0,0,0,.07),rgba(0,0,0,.01));
+    --shelf-line:rgba(0,0,0,.16); --shelf-sh:rgba(0,0,0,.14);
+    --item-hl:rgba(255,255,255,.55); --item-sh:rgba(0,0,0,.18);
+    --ref-o:.3;
+    --cap:#0f2f3d; --cap-o:.5;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(60vw 40vw at 50% 100%,var(--glow),transparent 60%);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    display:grid;place-items:center;
+  }
+  .c17-stage{--sz:clamp(30px,13vmin,46px);--gap:clamp(6px,2.4vmin,10px);position:relative;padding:0 0 calc(var(--sz) * .9)}
+  /* the shelf: a receding plane the row stands on, with a bright front edge */
+  .c17-shelf{
+    position:absolute;left:-14%;right:-14%;bottom:calc(var(--sz) * .55);height:calc(var(--sz) * .9);
+    background:var(--shelf);border-top:1px solid var(--shelf-line);
+    transform:perspective(220px) rotateX(58deg);transform-origin:50% 100%;
+    box-shadow:0 20px 40px -18px var(--shelf-sh);
+  }
+  .c17-row{position:relative;display:flex;align-items:flex-end;gap:var(--gap)}
+  .c17-item{--lift:0;position:relative;width:var(--sz);height:var(--sz);cursor:pointer}
+  .c17-ico,.c17-ref{position:absolute;left:0;top:0;width:100%;height:100%;border-radius:calc(var(--sz) * .27)}
+  .c17-ico{
+    transform:translateY(calc(var(--lift) * -18px)) scale(calc(1 + var(--lift) * .1));
+    box-shadow:0 6px 14px -5px var(--item-sh),inset 0 1px 0 var(--item-hl);
+    transition:transform 160ms cubic-bezier(.22,1,.36,1);will-change:transform;
+  }
+  /* the mirror: the same tile flipped, faded toward its base, sinking as the icon lifts */
+  .c17-ref{
+    top:calc(100% + 3px);opacity:var(--ref-o);
+    transform:translateY(calc(var(--lift) * 18px)) scaleY(-1) scale(calc(1 + var(--lift) * .1));
+    -webkit-mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 75%);
+    mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 75%);
+    transition:transform 160ms cubic-bezier(.22,1,.36,1);will-change:transform;
+  }
+  .c17-item:nth-child(1) .c17-ico,.c17-item:nth-child(1) .c17-ref{background:var(--g1)}
+  .c17-item:nth-child(2) .c17-ico,.c17-item:nth-child(2) .c17-ref{background:var(--g2)}
+  .c17-item:nth-child(3) .c17-ico,.c17-item:nth-child(3) .c17-ref{background:var(--g3)}
+  .c17-item:nth-child(4) .c17-ico,.c17-item:nth-child(4) .c17-ref{background:var(--g4)}
+  .c17-item:nth-child(5) .c17-ico,.c17-item:nth-child(5) .c17-ref{background:var(--g5)}
+  .c17-cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
+  @media (prefers-reduced-motion:reduce){.c17-ico,.c17-ref{transition:none}}
+@media(max-width:320px){.c17-stage{--sz:clamp(22px,10vmin,32px);--gap:4px}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/17-reflection-dock.html",
+ "title": "Reflection Dock",
+ "description": "The glossy shelf dock: five tiles standing on a receding glass floor, each mirrored beneath itself with a fading mask; a lift wave rolls along the row every 2.6 s — the reflections sinking as the tiles rise — and the pointer lifts whatever it touches.",
+ "useWhen": "Retro-glossy or skeuomorphic launchers, media shelves, and any dock that wants a sense of a surface under the icons.",
+ "avoidWhen": "Flat design systems; very short tiles where the reflection would fall off the bottom.",
+ "agentPrompt": "Flatten the floor by lowering rotateX(58deg) on .c17-shelf; strengthen the mirror with --ref-o and the mask's 75% stop; change the wave pace with the 2.6 period and 1.6 pass in loop(); recolour the tiles through --g1…--g5 (each tile's icon and reflection share one gradient). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "shelf angle and gradient (.c17-shelf)",
+  "reflection opacity (--ref-o) and mask fade",
+  "lift distance (the ±18px in the transforms)",
+  "wave period and pass length (2.6 / 1.6 in loop())",
+  "tile gradients (--g1…--g5) and size (--sz clamp)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "one --lift custom property per item driving both the icon and its mirror",
+  "measure() caching centres on load + resize",
+  "mask-image + -webkit-mask-image pair on .c17-ref",
+  "IIFE wrapper",
+  "visibilitychange stop/start of the rAF loop",
+  "prefers-reduced-motion guard (a still lifted pose)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "The reflection is a flipped copy, so a tile with text or an image inside needs the copy kept in sync",
+  "Hover-only lift — no touch equivalent; the wave is what mobile visitors see",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "dock",
+  "reflection",
+  "glossy",
+  "shelf",
+  "navigation",
+  "mirror",
+  "mask",
+  "wave"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="c17-stage" role="img" aria-label="A glossy dock of five tiles with mirrored reflections">
+  <div class="c17-shelf" aria-hidden="true"></div>
+  <div class="c17-row" id="c17-row">
+    <div class="c17-item"><span class="c17-ref"></span><span class="c17-ico"></span></div>
+    <div class="c17-item"><span class="c17-ref"></span><span class="c17-ico"></span></div>
+    <div class="c17-item"><span class="c17-ref"></span><span class="c17-ico"></span></div>
+    <div class="c17-item"><span class="c17-ref"></span><span class="c17-ico"></span></div>
+    <div class="c17-item"><span class="c17-ref"></span><span class="c17-ico"></span></div>
+  </div>
+</div>
+<div class="c17-cap">Reflection Dock</div>
+<script>
+(function(){
+  var row=document.getElementById('c17-row');
+  if(!row)return;
+  var items=Array.prototype.slice.call(row.querySelectorAll('.c17-item'));
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
+  /* item centres cached once and on resize, never per frame */
+  var centers=[],itemW=1,rowLeft=0,rowWidth=0;
+  function measure(){
+    var r=row.getBoundingClientRect();rowLeft=r.left;rowWidth=r.width;
+    centers=items.map(function(it){var b=it.getBoundingClientRect();itemW=b.width;return b.left+b.width/2;});
+  }
+  function setLift(vals){items.forEach(function(it,i){it.style.setProperty('--lift',vals[i].toFixed(3));});}
+  /* pointer: the tile under it lifts fully, its neighbours a little */
+  function fromPointer(x){
+    setLift(items.map(function(_,i){var d=Math.abs(x-centers[i])/(itemW*1.4);return Math.max(0,1-d);}));
+  }
+  measure();
+  window.addEventListener('resize',measure);
+  var lastInput=0;
+  row.addEventListener('mousemove',function(e){lastInput=Date.now();fromPointer(e.clientX);});
+  row.addEventListener('mouseleave',function(){setLift(items.map(function(){return 0;}));});
+  /* autonomous idle: a lift wave rolls along the row every ~2.6 s, pausing between
+     passes; the real pointer takes over and the wave resumes a few seconds later */
+  var raf=0,t0=null,demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function loop(ts){
+    if(!demoEnabled)return;
+    raf=requestAnimationFrame(loop);
+    if(Date.now()-lastInput<2800){t0=null;return;}
+    if(t0===null)t0=ts;
+    var el=((ts-t0)/1000)%2.6;                       /* 1.6 s pass + 1 s rest */
+    var head=-0.6+el*(items.length+0.8)/1.6;         /* wave head in item units */
+    setLift(items.map(function(_,i){var d=Math.abs(head-i);return el<1.6?Math.max(0,1-d/1.3):0;}));
+  }
+  function takeover(){demoEnabled=false;if(raf){cancelAnimationFrame(raf);raf=0;}}
+  window.addEventListener("forever:interactive",takeover);row.addEventListener("pointerdown",takeover,true);row.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  function start(){
+    if(reduce){setLift([0,.35,1,.35,0]);return;}    /* a still, lifted pose */
+    if(demoEnabled&&!raf){t0=null;raf=requestAnimationFrame(loop);}
+  }
+  function stop(){if(raf){cancelAnimationFrame(raf);raf=0;}}
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  start();
+})();
+</script>
+</body>
+</html>

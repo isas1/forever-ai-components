@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block.
@@ -30,14 +31,14 @@
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c03-bg);
     font-family:system-ui,-apple-system,sans-serif;}
-  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  #cb3-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:800px;}
-  #ring{position:relative;width:22vmin;height:22vmin;transform-style:preserve-3d;
+  #cb3-ring{position:relative;width:22vmin;height:22vmin;transform-style:preserve-3d;
     will-change:transform;}
-  .cover{position:absolute;inset:0;border-radius:8px;
+  .cb3-cover{position:absolute;inset:0;border-radius:8px;
     box-shadow:0 0 24px var(--c03-drop);border:1px solid var(--c03-edge);
     background-size:200% 200%;}
-  .cover::after{content:"";position:absolute;left:0;right:0;bottom:-100%;height:100%;
+  .cb3-cover::after{content:"";position:absolute;left:0;right:0;bottom:-100%;height:100%;
     border-radius:8px;background:inherit;transform:scaleY(-1);
     -webkit-mask-image:linear-gradient(transparent 55%,rgba(0,0,0,.4));
             mask-image:linear-gradient(transparent 55%,rgba(0,0,0,.4));}
@@ -64,12 +65,14 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion guard",
   "cached vw on resize to avoid per-frame layout reads",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Cards have no text or labels — purely visual",
   "Reflection uses CSS mask which may not render on older WebKit",
-  "Rotation speed snaps on pointer leave (no easing back to default vel)"
+  "Rotation speed snaps on pointer leave (no easing back to default vel)",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -94,16 +97,22 @@
 </script>
 </head>
 <body>
-<div id="stage"><div id="ring"></div></div>
+<div id="cb3-stage"><div id="cb3-ring"></div></div>
 <div class="cap">Coverflow Ring</div>
 <script>
 (function(){
-  const ring=document.getElementById('ring');
+  const ring=document.getElementById('cb3-ring');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
   const N=8,R=20;
   const items=[];
   for(let i=0;i<N;i++){
-    const c=document.createElement('div');c.className='cover';
+    const c=document.createElement('div');c.className='cb3-cover';
     // palette stops live in CSS (--c03-g1..g8) so both themes resolve from one source
     c.style.backgroundImage=`linear-gradient(135deg,var(--c03-g${i+1}))`;
     ring.appendChild(c);items.push(c);
@@ -113,7 +122,7 @@
   let vw=innerWidth;
   addEventListener('resize',()=>{vw=innerWidth;});
   function loop(){
-    ang+=vel;
+    if(demo||performance.now()<interactionUntil)ang+=vel;
     items.forEach((c,i)=>{
       const a=(360/N)*i+ang, rad=a*Math.PI/180;
       const depth=Math.cos(rad);
@@ -122,17 +131,17 @@
       c.style.zIndex=Math.round(depth*100)+100;
       c.style.opacity=(0.45+0.55*(depth*0.5+0.5)).toFixed(2);
     });
-    raf=requestAnimationFrame(loop);
+    if(demo||performance.now()<interactionUntil)raf=requestAnimationFrame(loop);else raf=0;
   }
   addEventListener('pointermove',e=>{vel=0.4+(e.clientX/vw-.5)*2.4;});
-  function start(){if(!raf&&!reduce)loop();}
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message',e=>{const d=e.data;
     if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
       document.documentElement.setAttribute('data-theme',d.theme);});
-  if(reduce){vel=0;loop();cancelAnimationFrame(raf);raf=0;}else start();
+  if(reduce||!demo){vel=0;loop();cancelAnimationFrame(raf);raf=0;}else start();
 })();
 </script>
 </body>

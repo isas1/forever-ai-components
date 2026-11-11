@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A vertical battery breathes from amber to lime-mint as a wobbling liquid level rises past segment ticks with bubbles and a pulsing bolt.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Battery Charge Fill</title>
@@ -22,7 +23,7 @@
     --bcf-bolt:#162d1f; --bcf-cap:#162d1f; --bcf-cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bcf-bg);}
-  #bcf-c{display:block;width:100%;height:100%;}
+  #um20-bcf-c{display:block;width:100%;height:100%;}
   .bcf-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
        letter-spacing:.14em;color:var(--bcf-cap);opacity:var(--bcf-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
@@ -49,11 +50,13 @@
   "prefers-reduced-motion guard (reduce variable)",
   "visibilitychange stop/start pattern",
   "DPR-aware canvas sizing",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Charge is purely animated (sine cycle) — no API to bind a real percentage",
-  "Bubble positions are deterministic seed-based, not truly random"
+  "Bubble positions are deterministic seed-based, not truly random",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -78,11 +81,11 @@
 </script>
 </head>
 <body>
-<canvas id="bcf-c"></canvas>
+<canvas id="um20-bcf-c"></canvas>
 <div class="bcf-cap">Battery Charge Fill</div>
 <script>
 (function(){
-  const cv=document.getElementById('bcf-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('um20-bcf-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const root=document.documentElement;
   let BG='#06140C', BOLT_RGB='255,255,255';
@@ -115,8 +118,8 @@
 
   const TICKS=6;
   let t=0,charge=0,phase=0,nudge=0; // charge 0..1, phase tracks breathing
-  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.12,1);});
-  cv.addEventListener('click',()=>{nudge=1;});
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.12,1);start();});
+  cv.addEventListener('click',()=>{nudge=1;start();});
 
   // smooth roundrect path
   function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);
@@ -129,10 +132,11 @@
   function draw(){
     ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
     // ambient breathing charge: ease in to full, hold, drain
-    if(!reduce){phase+=0.0042+nudge*0.004;nudge*=0.95;}
+    if(demo)phase+=0.0042+nudge*0.004;
+    if(!reduce)nudge*=0.95;
     const cyc=(Math.sin(phase)*0.5+0.5); // 0..1
     charge=reduce?0.62:Math.pow(cyc,0.85);
-    t+=reduce?0:1;
+    if(demo)t+=1;
 
     const bw=58*u,bh=92*u,bx=cx-bw/2,by=cy-bh/2,rad=11*u;
     // warm color near full
@@ -235,13 +239,16 @@
     ctx.fillStyle=`rgba(${BOLT_RGB},${0.55+0.4*pulse})`;
     ctx.fill();
 
-    if(!reduce)raf=requestAnimationFrame(draw);
+    if(demo||nudge>.015)raf=requestAnimationFrame(draw);else raf=0;
   }
   let raf=0;
+  let demo=window.__foreverPreview?.demoEnabled!==false;
   function start(){if(!raf)raf=requestAnimationFrame(draw);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();},{once:true});
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){draw();}else start();
+  if(reduce){draw();}else if(demo)start();else draw();
 })();
 </script>
 </body>

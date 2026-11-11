@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Mint-green circular ring sweeps closed and a checkmark draws in with a springy pop and expanding halo on dark.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Success Check</title>
@@ -37,12 +38,14 @@
   #fb01-hint{position:fixed;right:9px;bottom:7px;font:600 9px/1 ui-monospace,Menlo,monospace;
     color:var(--fb01-accent);opacity:var(--fb01-hint-o);letter-spacing:.1em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
+
+.fb01-style1{position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/feedback-states/01-success-check.html",
  "title": "Success Check",
- "description": "Mint-green ring sweeps closed and a checkmark draws in with a springy pop and expanding halo; auto-replays and responds to click or spacebar.",
+ "description": "Mint-green ring sweeps closed and a checkmark draws in with a springy pop and expanding halo; initial replay stops after first input; click or Space runs complete success feedback.",
  "useWhen": "Form submission confirmations, payment success screens, onboarding step completions, or any positive feedback state.",
  "avoidWhen": "Error or warning states — color and motion are hardcoded for success. Avoid in contexts requiring immediate programmatic control without auto-replay.",
  "agentPrompt": "Change accent color from mint (#34d399) to gold (#f59e0b), slow the ring sweep to 800ms by changing the `520` value in `ms < 520`, and increase spring overshoot by raising `0.42` to `0.6`. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
@@ -59,11 +62,13 @@
   "prefers-reduced-motion guard (drawOneFrame fallback)",
   "visibilitychange pause/resume",
   "aria-live region for screen readers",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
-  "Auto-cycles indefinitely — remove nextAuto scheduling before using as a one-shot production component"
+  "First deliberate input permanently disables idle demo; manual input, finite feedback and settling remain active. Host demoEnabled=false skips the initial attract cycle.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -90,20 +95,27 @@
 <body>
 <div id="fb01-stage" role="button" tabindex="0" aria-label="Success check. Activate to replay the confirmation animation.">
   <svg id="fb01-svg" viewBox="0 0 240 240" aria-hidden="true">
-    <circle class="fb01-halo" id="fb01-halo" cx="120" cy="120" r="62"></circle>
-    <circle class="fb01-core" cx="120" cy="120" r="60"></circle>
+    <circle class="fb01-halo" id="fb01-halo" cx="120" cy="120" r="62"/>
+    <circle class="fb01-core" cx="120" cy="120" r="60"/>
     <circle class="fb01-ring" id="fb01-ring" cx="120" cy="120" r="60"
-      stroke-dasharray="377" stroke-dashoffset="377"></circle>
+      stroke-dasharray="377" stroke-dashoffset="377"/>
     <path class="fb01-tick" id="fb01-tick" d="M92 122 L112 143 L152 99"
-      stroke-dasharray="92" stroke-dashoffset="92"></path>
+      stroke-dasharray="92" stroke-dashoffset="92"/>
   </svg>
-</div>
-<div id="fb01-cap">Success Check</div>
 <div id="fb01-hint" aria-hidden="true">tap / space</div>
-<div id="fb01-live" role="status" aria-live="polite" style="position:fixed;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)"></div>
+<div class="fb01-style1" id="fb01-live" role="status" aria-live="polite" data-fit-clip-ok></div>
+</div>
+<div id="fb01-cap" class="cap" aria-hidden="true">Success Check</div>
+
+
 
 <script>
 (function(){
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   "use strict";
   var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
   var stage = document.getElementById("fb01-stage");
@@ -141,7 +153,7 @@
     halo.style.opacity = 0;
     live.textContent = "Success";
   }
-  if(reduce){ drawOneFrame(); return; }
+
 
   // ---- timeline (ms) ----
   // 0–520 ring sweeps + spring pop ; 360–760 tick draws ; 620–1180 halo ring expands+fades
@@ -161,12 +173,11 @@
   }
 
   function frame(now){
-    if(!running) return;
+    rafId=0;if(!running||document.hidden)return;
 
     // autonomous self-demo scheduling
     if(playStart < 0){
-      if(userMode && now - lastInput > IDLE_AFTER) userMode = false;
-      if(now >= nextAuto && !userMode){ trigger(now, false); }
+      if(demoEnabled && now >= nextAuto && !userMode){ trigger(now, false); }
     }
 
     if(playStart >= 0){
@@ -203,14 +214,14 @@
         halo.style.opacity = 0;
       }
     }
-    rafId = requestAnimationFrame(frame);
+    if(demoEnabled||playStart>=0)start();
   }
 
-  function start(){ if(!running){ running = true; rafId = requestAnimationFrame(frame); } }
-  function stop(){ running = false; cancelAnimationFrame(rafId); }
+  function start(){if(document.hidden||reduce)return;running=true;if(!rafId)rafId=requestAnimationFrame(frame);}
+  function stop(){ running = false; cancelAnimationFrame(rafId);rafId=0; }
 
   // reset visuals before a fresh user-driven play so the pop reads
-  function userPlay(){
+  function userPlay(){if(reduce){drawOneFrame();return;}start();
     var now = performance.now();
     set(ring, RING_LEN); set(tick, TICK_LEN); halo.style.opacity = 0;
     live.textContent = "";
@@ -227,6 +238,7 @@
     else { nextAuto = performance.now() + 400; start(); }
   });
 
+  if(reduce){drawOneFrame();return;}
   // init idle visuals, kick first autonomous play shortly after load
   set(ring, RING_LEN); set(tick, TICK_LEN); halo.style.opacity = 0;
   nextAuto = performance.now() + 600;

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="description" content="Balance Pack Inventory — Drag &amp; Reorder. A self-contained, zero-dependency animated web component."><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Balance Pack Inventory</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--paper:#15130F;--ink:#E9E2D0;--mid:#8A8372;--acc:#C9705D}
+:root[data-theme="light"]{--paper:#EFE8D8;--ink:#1E1B16;--mid:#7A705F;--acc:#7A2E22}
+.wif-stage,.wif-stage *{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--paper)}
+.wif-stage{position:absolute;inset:0;display:grid;place-items:center;overflow:hidden}
+.wif-root{position:relative;width:min(92vmin,640px);aspect-ratio:1;touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer;outline:none}
+.wif-root:focus-visible{outline:2px solid var(--acc);outline-offset:6px}
+.wif-cv{width:100%;height:100%;display:block}
+.wif-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.wif-cap{position:fixed;left:8px;bottom:7px;max-width:calc(100% - 16px);font:10px/1.2 system-ui,sans-serif;letter-spacing:.03em;color:var(--ink);opacity:.35;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/drag-reorder/18-balance-pack-inventory.html",
+ "title": "Balance Pack Inventory",
+ "description": "Stone-and-parchment palette with terracotta accents; tap polygon gear onto a balance pan whose beam responds to the weight limit.",
+ "useWhen": "A playful item picker with capacity feedback and keyboard alternatives.",
+ "avoidWhen": "Persistent inventory management without connecting real item data and storage.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "inventory",
+  "balance",
+  "geometry",
+  "click",
+  "weight"
+ ]
+}
+</script>
+</head><body>
+<div class="wif-stage" role="group" aria-label="Balance Pack Inventory">
+<div class="wif-root" id="wif-r" role="application" aria-label="Balance scale. Tap a shape to equip it onto the left pan, tap again to remove. Weight limit 8. Arrow keys select, Enter toggles." tabindex="0"><canvas class="wif-cv" id="wif-c" aria-hidden="true"></canvas><div class="wif-sr" id="wif-s" aria-live="polite"></div></div>
+</div>
+<div class="wif-cap" aria-hidden="true">Balance Pack Inventory</div>
+<script>
+(function(){
+var $=function(i){return document.getElementById('wif-'+i)},R=$('r'),C=$('c'),X=C.getContext('2d'),S=300,D=1,K={},raf=0,last=0,M=Math,P=M.PI,T=P*2;
+function rm(){return matchMedia('(prefers-reduced-motion: reduce)').matches}
+function rd(){var s=getComputedStyle(document.documentElement);['paper','ink','mid','acc'].forEach(function(n){K[n]=s.getPropertyValue('--'+n).trim()})}
+function sp(o,p,t,k,f,dt){if(rm()){o[p]=t;o[p+'v']=0;return 0}var v=o[p+'v']||0;v+=(t-o[p])*k*dt;v*=M.pow(f,dt);o[p]+=v*dt;o[p+'v']=v;return M.abs(v)>.0004||M.abs(t-o[p])>.0004}
+function say(t){$('s').textContent=t}
+function fit(){S=R.clientWidth||300;D=M.min(window.devicePixelRatio||1,2);C.width=C.height=M.round(S*D);kick()}
+function kick(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+function tick(n){raf=0;var dt=M.min(n-last,50)/16.667;last=n;var a=step(dt);X.setTransform(D*S,0,0,D*S,0,0);X.clearRect(0,0,1,1);X.lineJoin='round';X.lineCap='round';draw();if(a)raf=requestAnimationFrame(tick)}
+function pt(e){var r=R.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]}
+function lw(p){X.lineWidth=p/S}
+function poly(x,y,r,n,a){X.beginPath();for(var i=0;i<n;i++){var q=a+i/n*T;X[i?'lineTo':'moveTo'](x+r*M.cos(q),y+r*M.sin(q))}X.closePath()}
+function fa(c,a){X.globalAlpha=a;X.fillStyle=c;X.fill();X.globalAlpha=1}
+function txt(s,x,y,sz,c){X.save();X.setTransform(D,0,0,D,0,0);X.fillStyle=c;X.font=(sz*S)+'px Georgia,"Times New Roman",serif';X.textAlign='center';X.textBaseline='middle';X.fillText(s,x*S,y*S);X.restore()}
+function foc(){return R.matches(':focus-visible')}
+
+var W=[1,2,3,2,4],N=5,CAP=8,I=[],pk=[1,3],A={p:0},sel=0;
+function rw(i){return .04+.011*W[i]}
+function th(i){return .014*W[i]+.005}
+function load(){var s=0;pk.forEach(function(i){s+=W[i]});return s}
+function offOf(j){var s=0;for(var q=0;q<j;q++)s+=th(pk[q]);return s+th(pk[j])/2}
+for(var i=0;i<N;i++)I.push({m:0,e:false,off:0,sh:0,ix:0,iy:0});
+pk.forEach(function(i,j){I[i].m=1;I[i].e=true;I[i].off=offOf(j)});
+A.p=(load()-CAP)/CAP*.2;
+function geo(){var a=A.p;return{Lx:.5-.32*M.cos(a),Ly:.44+.32*M.sin(a),Rx:.5+.32*M.cos(a),Ry:.44-.32*M.sin(a)}}
+function step(dt){var a=0,k=dt*16.667/560;
+I.forEach(function(o,i){var t=o.e?1:0;if(o.m!==t){o.m=rm()?t:M.min(1,M.max(0,o.m+(t?k:-k)));a=1}
+var j=pk.indexOf(i);if(j>=0)a|=sp(o,'off',offOf(j),.14,.78,dt);a|=sp(o,'sh',0,.25,.7,dt)});
+a|=sp(A,'p',(load()-CAP)/CAP*.2,.07,.88,dt);return a}
+function pp(V,t){var n=V.length,u=t*n,e=M.floor(u)%n,f=u-M.floor(u),a=V[e],b=V[(e+1)%n];return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f]}
+function ng(n,r){var V=[];for(var i=0;i<n;i++){var q=-P/2+i/n*T;V.push([r*M.cos(q),r*M.sin(q)])}return V}
+function item(i,g){var o=I[i],em=o.m*o.m*(3-2*o.m),hx=.12+.19*i+o.sh,sx=g.Lx,sy=g.Ly+.2-o.off,x=hx+(sx-hx)*em,y=.89+(sy-.89)*em-M.sin(P*em)*.1;
+o.ix=x;o.iy=y;var A1=ng(i+3,rw(i)),hw=.075,hh=th(i)/2,B=[[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]];
+X.beginPath();for(var j=0;j<36;j++){var a=pp(A1,j/36),b=pp(B,j/36),px=x+a[0]+(b[0]-a[0])*em,py=y+a[1]+(b[1]-a[1])*em;X[j?'lineTo':'moveTo'](px,py)}
+X.closePath();fa(K.acc,.16*em);lw(1.6);X.strokeStyle=em>.5?K.acc:K.ink;X.stroke();
+if(i===sel&&foc()){X.beginPath();X.arc(x,y,.095,0,T);X.setLineDash([.008,.012]);lw(1.2);X.strokeStyle=K.acc;X.stroke();X.setLineDash([])}}
+function draw(){var g=geo();
+X.strokeStyle=K.mid;lw(1.4);X.beginPath();X.moveTo(.5,.44);X.lineTo(.44,.74);X.lineTo(.56,.74);X.closePath();X.moveTo(.38,.74);X.lineTo(.62,.74);X.stroke();
+X.strokeStyle=K.ink;lw(2.4);X.beginPath();X.moveTo(g.Lx,g.Ly);X.lineTo(g.Rx,g.Ry);X.stroke();
+[[g.Lx,g.Ly],[g.Rx,g.Ry]].forEach(function(e){var py=e[1]+.2;lw(1);X.beginPath();X.moveTo(e[0],e[1]);X.lineTo(e[0]-.09,py);X.moveTo(e[0],e[1]);X.lineTo(e[0]+.09,py);X.stroke();lw(2);X.beginPath();X.moveTo(e[0]-.1,py);X.lineTo(e[0]+.1,py);X.stroke()});
+poly(g.Rx,g.Ry+.2-.0606,.07,6,0);fa(K.ink,.08);lw(1.6);X.strokeStyle=K.ink;X.stroke();poly(g.Rx,g.Ry+.2-.0606,.04,6,P/6);lw(1);X.stroke();
+txt(M.round(load())+'/'+CAP,.5,.14,.07,K.ink);
+I.forEach(function(o,i){item(i,g)})}
+function pick(x,y){var b=-1,bd=9;I.forEach(function(o,i){var d=M.hypot(o.ix-x,o.iy-y);if(d<.085&&d<bd){bd=d;b=i}});return b}
+function tog(i){var o=I[i];
+if(o.e){o.e=false;pk.splice(pk.indexOf(i),1);say('Removed item '+(i+1)+'. Load '+load()+' of '+CAP+'.')}
+else if(load()+W[i]<=CAP){o.e=true;pk.push(i);o.off=offOf(pk.length-1);say('Equipped item '+(i+1)+'. Load '+load()+' of '+CAP+'.')}
+else{A.pv=(A.pv||0)+.05;o.shv=.02;say('Too heavy. Limit '+CAP+'.')}kick()}
+R.addEventListener('click',function(e){var p=pt(e),i=pick(p[0],p[1]);if(i<0)return;sel=i;tog(i)});
+R.addEventListener('keydown',function(e){var k=e.key;
+if(k==='ArrowRight'||k==='ArrowDown'){sel=(sel+1)%N;say('Item '+(sel+1)+', weight '+W[sel]+(I[sel].e?', equipped':''))}
+else if(k==='ArrowLeft'||k==='ArrowUp'){sel=(sel+N-1)%N;say('Item '+(sel+1)+', weight '+W[sel]+(I[sel].e?', equipped':''))}
+else if(k==='Enter'||k===' '){tog(sel)}else return;e.preventDefault();kick()});
+
+rd();
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+window.addEventListener('message',function(e){var m=e.data;if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){document.documentElement.setAttribute('data-theme',m.theme);rd();kick()}});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',kick);
+new ResizeObserver(fit).observe(R);fit();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoTimer=0,demoIndex=0;
+function demoStop(){demoEnabled=false;clearInterval(demoTimer);demoTimer=0}
+function demoStart(){if(demoTimer||!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;demoTimer=setInterval(function(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;tog(demoIndex++%N)},1400)}
+window.addEventListener('forever:interactive',demoStop);
+['pointerdown','keydown','wheel','click'].forEach(function(t){document.addEventListener(t,function(e){if(e.isTrusted)demoStop()},{capture:true,passive:true})});
+document.addEventListener('visibilitychange',function(){clearInterval(demoTimer);demoTimer=0;if(!document.hidden)demoStart()});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',function(){clearInterval(demoTimer);demoTimer=0;demoStart()});
+demoStart();
+})();
+</script></body></html>

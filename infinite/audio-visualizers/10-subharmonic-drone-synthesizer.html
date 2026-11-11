@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="description" content="Subharmonic Drone — Audio Visualizers. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio Visualizers — Subharmonic Drone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --fc04-bg: #0A0A0A;
+    --fc04-surface: #141414;
+    --fc04-text: #EDEDEA;
+    --fc04-accent: #C7F000;
+  }
+  .fc04-drone-wrap * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--fc04-bg);
+    color: var(--fc04-text);
+    font-family: 'Geist Mono', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .fc04-drone-wrap {
+    width: 100%;
+    max-width: 400px;
+    background: var(--fc04-surface);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.8);
+  }
+  .fc04-title {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 0.05em;
+  }
+  .fc04-scope {
+    width: 100%;
+    height: 120px;
+    background: #000;
+    border-radius: 4px;
+    overflow: hidden;
+  } .fc04-canvas{ width: 100%; height: 100%; display: block; }
+  .fc04-btn {
+    font-family: 'Geist Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    background: transparent;
+    color: var(--fc04-accent);
+    border: 1px solid var(--fc04-accent);
+    padding: 8px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .fc04-btn:hover { background: var(--fc04-accent); color: var(--fc04-bg); }
+  .fc04-btn:focus-visible { outline: 2px solid var(--fc04-accent, #C7F000); outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .fc04-drone-wrap *, .fc04-drone-wrap *::before, .fc04-drone-wrap *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+.fc04-caption{position:fixed;right:10px;bottom:7px;z-index:5;font-size:9px;opacity:.5;pointer-events:none}
+@container fit-10-subharmonic-drone-synthesizer (max-width:300px){.fc04-drone-wrap{width:calc(100% - 16px);padding:14px;gap:10px}.fc04-title{font-size:12px}.fc04-scope,.fc04-canvas{height:70px}.fc04-btn{font-size:12px;padding:9px 12px}.fc04-caption{display:none}}
+body{width:100%;container-type:inline-size;container-name:fit-10-subharmonic-drone-synthesizer}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/audio-visualizers/10-subharmonic-drone-synthesizer.html",
+ "title": "Subharmonic Drone",
+ "description": "Subharmonic Drone control in the Forever system.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [],
+ "preserveElements": [
+  "Idle attract stops on first control. Explicit engaged drone remains live until user turns it off or frame tears down.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "Audio output depends on browser audio policy and sandbox capability.",
+  "Microphone acquisition is permission- and sandbox-dependent; mocked tests verify track/context teardown, not hardware access.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "system",
+  "ai",
+  "vector-field",
+  "telemetry",
+  "circuit-breaker",
+  "dashboard",
+  "subharmonic-drone",
+  "audio",
+  "drone",
+  "synthesizer",
+  "subharmonic",
+  "frequencies",
+  "harmonics",
+  "forever",
+  "ambient"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="fc04-drone-wrap" role="region" aria-label="Forever Subharmonic Drone">
+  <div class="fc04-title">forever · drone 55 hz</div>
+  <div class="fc04-scope">
+    <canvas class="fc04-canvas fc04-canvas" id="fc04-cv" width="352" height="120"></canvas>
+  </div>
+  <button class="fc04-btn" id="fc04-btn">Engage Drone</button>
+</div>
+<div class="fc04-caption" aria-hidden="true">Subharmonic Drone Synthesizer</div>
+<script>
+(()=>{
+  let audioCtx = null, active = false, running = true, raf = 0;
+  let osc1, osc2, gain;
+  let demoEnabled=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true;
+  const canvas = document.getElementById('fc04-cv');
+  const ctx = canvas.getContext('2d');
+  const btn = document.getElementById('fc04-btn');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let phase = 0;
+
+  document.addEventListener('visibilitychange', () => {
+    running = !document.hidden; if (running&&(demoEnabled||active)) raf=requestAnimationFrame(draw);
+    if (audioCtx && document.hidden) audioCtx.suspend();
+    else if (audioCtx && !document.hidden && active) audioCtx.resume();
+  });
+
+  function initAudio() {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+    gain.connect(audioCtx.destination);
+
+    osc1 = audioCtx.createOscillator();
+    osc1.frequency.setValueAtTime(55, audioCtx.currentTime);
+    osc1.connect(gain); osc1.start();
+
+    osc2 = audioCtx.createOscillator();
+    osc2.frequency.setValueAtTime(82.5, audioCtx.currentTime);
+    osc2.connect(gain); osc2.start();
+  }
+  function stopDemo(){demoEnabled=false;if(!active){if(raf)cancelAnimationFrame(raf);raf=0;}}
+  window.addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+  function releaseAudio(){
+    try{if(osc1)osc1.stop();}catch(_){} try{if(osc2)osc2.stop();}catch(_){}
+    if(audioCtx&&audioCtx.state!=='closed')audioCtx.close();audioCtx=null;osc1=osc2=gain=null;
+  }
+  window.addEventListener('pagehide',()=>{running=false;if(raf)cancelAnimationFrame(raf);releaseAudio();},{once:true});
+
+  btn.addEventListener('click', () => {
+    if (!audioCtx) initAudio();
+    active = !active;
+    if (active) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      gain.gain.setTargetAtTime(0.3, audioCtx.currentTime, 0.4);
+      btn.textContent = 'Silence';
+      running=true;if(reduce)draw();else if(!raf)raf=requestAnimationFrame(draw);
+    } else {
+      gain.gain.setTargetAtTime(0.0001, audioCtx.currentTime, 0.3);
+      btn.textContent = 'Engage Drone';
+      running=false;if(raf)cancelAnimationFrame(raf);raf=0;releaseAudio();
+    }
+  });
+
+  function draw() {
+    if (!running) return;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    if (!reduce) phase += active ? 0.04 : 0.01;
+    ctx.beginPath();
+    ctx.strokeStyle = active ? '#C7F000' : 'rgba(237, 237, 234, 0.25)';
+    ctx.lineWidth = active ? 1.6 : 1;
+
+    const amp = active ? 32 : 10;
+    for (let x = 0; x < canvas.width; x += 2) {
+      const t = x * 0.035;
+      const y = canvas.height * 0.5 + Math.sin(t + phase) * amp * 0.7 + Math.sin(t * 1.5 + phase) * amp * 0.3;
+      if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    if (!reduce&&(demoEnabled||active)) raf=requestAnimationFrame(draw);
+  }
+  if(reduce||!demoEnabled)draw();else raf=requestAnimationFrame(draw);
+})();
+</script>
+</body>
+</html>

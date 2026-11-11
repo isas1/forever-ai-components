@@ -5,26 +5,30 @@
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:clamp(11px,2.2vmin,14px)/1.75 ui-monospace,Menlo,Consolas,"Courier New",monospace}
-.ggr-wrap{position:relative;padding:clamp(9px,2.4vmin,16px) clamp(11px,3vmin,20px);height:100%;display:flex;flex-direction:column;overflow:hidden}
-.ggr-head{color:#2ea043;opacity:.85;border-bottom:1px solid #16241a;padding-bottom:5px;margin-bottom:7px;white-space:pre;flex-shrink:0}
+.ggr-wrap{position:relative;padding:8px 10px 24px;height:100%;display:flex;flex-direction:column;overflow:hidden}
+.ggr-head{color:#2ea043;opacity:1;border-bottom:1px solid #16241a;padding-bottom:5px;margin-bottom:7px;white-space:pre-wrap;overflow-wrap:anywhere;flex-shrink:0}
 .ggr-head b{color:#00ff41;font-weight:600}
-.ggr-log{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:0;overflow:hidden}
-.ggr-row{display:flex;align-items:baseline;gap:.7ch;white-space:pre;animation:ggr-in .28s ease both}
+.ggr-log{flex:1;min-height:0;display:flex;flex-direction:column;gap:0;overflow:hidden}
+.ggr-row{display:flex;flex-shrink:0;align-items:baseline;gap:.7ch;white-space:pre;animation:ggr-in .28s ease both}
 @keyframes ggr-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 .ggr-g{display:inline-block;width:4ch;flex-shrink:0;color:#00ff41;text-shadow:0 0 6px rgba(0,255,65,.35)}
-.ggr-rail .ggr-g{color:#1f7a3d;text-shadow:none}
+.ggr-rail .ggr-g{color:#6b9979;text-shadow:none}
 .ggr-h{color:#c8a24a;flex-shrink:0}
 .ggr-ref{flex-shrink:0;font-weight:600}
 .ggr-ref-main{color:#00ff41}
 .ggr-ref-feat{color:#e5a63b}
 .ggr-ref-tag{color:#e5c33b}
-.ggr-m{color:#9fb0a0;overflow:hidden;text-overflow:ellipsis}
+.ggr-m{color:#9fb0a0;min-width:0;white-space:normal;overflow-wrap:anywhere}
 .ggr-scan{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,0) 0,rgba(0,0,0,0) 3px,rgba(0,0,0,.12) 3px,rgba(0,0,0,.12) 4px);mix-blend-mode:multiply;opacity:.5}
 .ggr-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#00ff41;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+.ggr-log::before{content:"";flex:1}
+.ggr-path{opacity:.6}.ggr-short{display:none}
+@media(max-width:300px){.ggr-long{display:none}.ggr-short{display:inline}.ggr-row{display:grid;grid-template-columns:24px minmax(0,1fr) auto;gap:0 4px}.ggr-g{grid-column:1;grid-row:1/3}.ggr-h{grid-column:2;grid-row:1}.ggr-ref{grid-column:3;grid-row:1}.ggr-m{grid-column:2/-1;grid-row:2}.ggr-rail{display:block}}
+@media(prefers-reduced-motion:reduce){.ggr-row{animation:none}}
 </style>
 </head><body>
-<div class="ggr-wrap">
-  <div class="ggr-head"><b>&#x2b25; git</b> log --graph --oneline --decorate  <span style="opacity:.6">~/svc-gateway</span></div>
+<div class="ggr-wrap" role="img" aria-label="ASCII git graph with commit hashes, branch refs and messages; compact frames keep a complete recent window.">
+  <div class="ggr-head"><b>&#x2b25; git</b><span class="ggr-short"> log --graph</span><span class="ggr-long"> log --graph --oneline --decorate <span class="ggr-path">~/svc-gateway</span></span></div>
   <div class="ggr-log" id="ggr-log" role="img" aria-label="Animated ASCII git commit graph: branches diverge and merge over time as new commits stream in top to bottom, each showing a short hash, occasional ref tag, and message."></div>
   <div class="ggr-scan" aria-hidden="true"></div>
 </div>
@@ -57,8 +61,17 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:clamp(11p
   ];
 
   let idx=0;
-  function addRow(){
-    const spec=cycle[idx%cycle.length]; idx++;
+  function trim(){
+    // Slide-in transforms affect scrollHeight; count row boxes before motion instead.
+    let height=[...log.children].reduce((total,row)=>total+row.getBoundingClientRect().height,0);
+    while(log.children.length>1&&(log.children.length>MAX||height>log.clientHeight)){
+      height-=log.firstChild.getBoundingClientRect().height;
+      log.firstChild.remove();
+    }
+  }
+  addEventListener('resize',trim);
+  function addRow(chosen){
+    const spec=chosen||cycle[idx%cycle.length]; idx++;
     const isCommit=spec.g.indexOf('●')>-1;
     const row=document.createElement('div');
     row.className='ggr-row'+(isCommit?'':' ggr-rail');
@@ -69,16 +82,21 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:clamp(11p
       row.appendChild(h);
       if(spec.ref){
         const r=document.createElement('span'); r.className='ggr-ref '+spec.ref[1];
-        r.textContent='('+spec.ref[0]+')'; row.appendChild(r);
+        r.textContent='('+(document.documentElement.clientWidth<300?spec.ref[0].replace('tag: ',''):spec.ref[0])+')'; row.appendChild(r);
       }
       const m=document.createElement('span'); m.className='ggr-m'; m.textContent=pick(spec.m);
       row.appendChild(m);
     }
     log.appendChild(row);
-    while(log.children.length>MAX)log.removeChild(log.firstChild);
+    trim();
   }
 
-  if(reduce){ for(let i=0;i<MAX;i++)addRow(); return; }
+  if(reduce){
+    if(document.documentElement.clientWidth<300){
+      [{...cycle[0],m:['Harden CORS']},cycle[3],{...cycle[4],m:['Add /v2 routes']},cycle[9]].forEach(addRow);
+    }else for(let i=0;i<MAX;i++)addRow();
+    return;
+  }
 
   let timer=null;
   function stop(){clearInterval(timer);timer=null;}

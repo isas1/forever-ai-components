@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="description" content="Chiptune Soundboard — Audio Visualizers. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Audio Visualizers — Bit Gaming — Chiptune Soundboard</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  .bg01-wrap, .bg01-wrap * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: #000;
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .bg01-wrap {
+    width: 100%;
+    max-width: 360px;
+    background: #000;
+    border: 3px solid #fff;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    box-shadow: 6px 6px 0 #808080;
+  }
+  .bg01-title {
+    font-size: 12px;
+    text-align: center;
+  }
+  .bg01-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .bg01-btn {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    background: #000;
+    color: #fff;
+    border: 2px solid #fff;
+    padding: 14px 8px;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 #808080;
+    text-align: center;
+  }
+  .bg01-btn:hover { background: #fff; color: #000; }
+  .bg01-btn:focus-visible { outline: 2px solid #FFCC00; outline-offset: 3px; }
+  .bg01-btn:active { transform: translate(1px, 1px); box-shadow: none; }
+
+
+.bg01-cap{position:fixed;left:10px;bottom:8px;font:10px system-ui;opacity:.55;pointer-events:none}
+@media(max-width:220px){.bg01-wrap{padding:8px;gap:8px;border-width:2px;box-shadow:3px 3px 0 #808080}.bg01-grid{gap:4px}.bg01-btn{padding:10px 2px;font-size:11px;border-width:1px}.bg01-title{font-size:11px}}
+@media(prefers-reduced-motion:reduce){.bg01-wrap, .bg01-wrap *{animation:none!important;transition:none!important}}
+
+.bg01-wrap[data-paused] *,.bg01-wrap[data-paused]{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.bg01-wrap,.bg01-wrap *{animation:none!important;transition:none!important}}
+.bg01-btn.bg01-demo{background:#FFCC00;color:#000;border-color:#FFCC00}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/audio-visualizers/09-chiptune-soundboard-dungeon-inventory.html",
+ "title": "Chiptune Soundboard",
+ "description": "Chiptune Soundboard control in the 8-Bit Gaming system.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [],
+ "preserveElements": [
+  "First soundboard action stops idle demonstration. User-triggered sound keeps playing to completion; teardown closes audio context.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "Audio playback depends on browser audio permission and sandbox capability.",
+  "Microphone acquisition is permission- and sandbox-dependent; mocked tests verify track/context teardown, not hardware access.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "arcade",
+  "8-bit",
+  "pixel",
+  "retro",
+  "gaming",
+  "microswitch",
+  "chiptune-soundboard",
+  "audio",
+  "soundboard",
+  "chiptune",
+  "synthesizer",
+  "8-bit-gaming",
+  "oscillator",
+  "sfx"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="bg01-wrap" role="region" aria-label="8-Bit Chiptune Soundboard">
+  <div class="bg01-title">8-BIT SFX SYNTH</div>
+  <div class="bg01-grid">
+    <button class="bg01-btn" id="bg01-coin">COIN</button>
+    <button class="bg01-btn" id="bg01-jump">JUMP</button>
+    <button class="bg01-btn" id="bg01-zap">ZAP</button>
+    <button class="bg01-btn" id="bg01-power">POWER</button>
+  </div>
+</div>
+<div class="bg01-cap" aria-hidden="true">Chiptune Soundboard</div>
+<script>
+(()=>{
+  // Local frame lifecycle: stop hidden work, repaint reduced-motion state on input.
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  const frames = new Map(), drivers = new Set(); let painting = false;
+  let demoEnabled=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,idleFrame=0,destroyed=false;
+  function scheduleFrame(fn) {
+    if(fn===idleDemo&&!demoEnabled)return;
+    drivers.add(fn);
+    if (document.hidden || frames.has(fn) || (motion.matches && painting)) return;
+    frames.set(fn, requestAnimationFrame(t => {
+      frames.delete(fn); if (document.hidden) return;
+      painting = true; try { fn(t); } finally { painting = false; }
+    }));
+  }
+  function stopDemo(){demoEnabled=false;userUsed=true;drivers.delete(idleDemo);const id=frames.get(idleDemo);if(id)cancelAnimationFrame(id);frames.delete(idleDemo);idleFrame=0;}
+  window.addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { frames.forEach(cancelAnimationFrame); frames.clear(); }
+    else drivers.forEach(scheduleFrame);
+  });
+  const repaint = () => { if (motion.matches) drivers.forEach(scheduleFrame); };
+  ['click','input','pointermove'].forEach(type => document.addEventListener(type, repaint));
+  motion.addEventListener('change', () => { reduce = motion.matches; drivers.forEach(scheduleFrame); });
+
+  const tileRoot = document.querySelector('.bg01-wrap');
+  const pauseCSS = () => tileRoot.toggleAttribute('data-paused', document.hidden);
+  document.addEventListener('visibilitychange', pauseCSS); pauseCSS();
+
+  let reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let ctx = null;
+  document.addEventListener('visibilitychange', () => { if (ctx) document.hidden ? ctx.suspend() : ctx.resume(); });
+  function getCtx() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  function teardown(){destroyed=true;frames.forEach(cancelAnimationFrame);frames.clear();drivers.clear();if(ctx&&ctx.state!=='closed')ctx.close();}
+  window.addEventListener('pagehide',teardown,{once:true});
+
+  document.getElementById('bg01-coin').onclick = () => {
+    const c = getCtx(), now = c.currentTime;
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(987.7, now);
+    osc.frequency.setValueAtTime(1318.5, now + 0.08);
+    g.gain.setValueAtTime(0.2, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    osc.connect(g); g.connect(c.destination);
+    osc.start(now); osc.stop(now + 0.31);
+  };
+
+  document.getElementById('bg01-jump').onclick = () => {
+    const c = getCtx(), now = c.currentTime;
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(150, now);
+    osc.frequency.exponentialRampToValueAtTime(600, now + 0.15);
+    g.gain.setValueAtTime(0.2, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.connect(g); g.connect(c.destination);
+    osc.start(now); osc.stop(now + 0.19);
+  };
+
+  document.getElementById('bg01-zap').onclick = () => {
+    const c = getCtx(), now = c.currentTime;
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(900, now);
+    osc.frequency.exponentialRampToValueAtTime(100, now + 0.16);
+    g.gain.setValueAtTime(0.2, now);
+    g.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.connect(g); g.connect(c.destination);
+    osc.start(now); osc.stop(now + 0.19);
+  };
+
+  document.getElementById('bg01-power').onclick = () => {
+    const c = getCtx(), now = c.currentTime;
+    [330, 392, 493, 659].forEach((f, i) => {
+      const osc = c.createOscillator(), g = c.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(f, now + i * 0.05);
+      g.gain.setValueAtTime(0.18, now + i * 0.05);
+      g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.05 + 0.12);
+      osc.connect(g); g.connect(c.destination);
+      osc.start(now + i * 0.05); osc.stop(now + i * 0.05 + 0.13);
+    });
+  };
+  let idleAt = 0, userUsed = false;
+  document.addEventListener('pointerdown', () => { userUsed = true; });
+  document.addEventListener('keydown', () => { userUsed = true; });
+  function idleDemo(now) {
+    if (demoEnabled&&!reduce&&!userUsed && now - idleAt > 4000) {
+      idleAt = now;
+      const pads = [...document.querySelectorAll('.bg01-btn')]; pads.forEach(p => p.classList.remove('bg01-demo')); pads[Math.floor(now / 4000) % pads.length].classList.add('bg01-demo');
+    }
+    if(demoEnabled)scheduleFrame(idleDemo);
+  }
+  if(demoEnabled)scheduleFrame(idleDemo);
+
+})();
+</script>
+</body>
+</html>

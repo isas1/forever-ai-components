@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Gear Pack Column — Drag &amp; Reorder. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gear Pack Column</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--wia-bg:#0C0C12;--wia-pn:#181824;--wia-sl:#242436;--wia-ac:#32324C;--wia-go:#FFE600;--wia-cy:#00F0FF;--wia-gr:#39FF14;--wia-cr:#FF1F48;--wia-ink:#FFFFFF;--wia-mu:#8E8EA8;--wia-bd:#000}
+:root[data-theme="light"]{--wia-bg:#D8D8E5;--wia-pn:#EAEAF2;--wia-sl:#FFFFFF;--wia-ac:#E0E0F0;--wia-go:#B38600;--wia-cy:#007A8A;--wia-gr:#008800;--wia-cr:#CC0029;--wia-ink:#101018;--wia-mu:#555566;--wia-bd:#1E1E2E}
+.wia-stage,.wia-stage *{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--wia-bg)}
+.wia-stage{position:absolute;inset:0;min-height:100vh;display:grid;place-items:center;background:var(--wia-bg)}
+.wia-root{width:min(92vmin,640px);aspect-ratio:1;border:4px solid var(--wia-bd);box-shadow:6px 6px 0 rgba(0,0,0,.6);background:var(--wia-pn);touch-action:none;user-select:none;-webkit-user-select:none}
+.wia-root:focus-visible{outline:2px solid var(--wia-cy);outline-offset:4px}
+.wia-cv{display:block;width:100%;height:100%;image-rendering:pixelated}
+.wia-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+.wia-cap{position:fixed;left:8px;bottom:7px;max-width:calc(100% - 16px);font:10px/1.2 system-ui,sans-serif;letter-spacing:.03em;color:var(--wia-ink);opacity:.35;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/drag-reorder/13-gear-pack-column.html",
+ "title": "Gear Pack Column",
+ "description": "Arcade ink palette with gold, cyan and green pixel gear; drag or tap items into a weighted backpack column, with bounce and overflow feedback.",
+ "useWhen": "A playful item picker with capacity feedback and keyboard alternatives.",
+ "avoidWhen": "Persistent inventory management without connecting real item data and storage.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes.",
+  "Owner-approved light gold accent #B38600 has 2.35:1 contrast on #D8D8E5; catalog accentLight uses actual light ink #101018 for readable placeholder chrome."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "inventory",
+  "backpack",
+  "pixel-art",
+  "drag",
+  "capacity"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wia-stage" role="group" aria-label="Gear Pack Column">
+<div class="wia-root" id="wia-root" role="application" aria-label="Backpack column: drag or tap gear in and out, capacity 8" tabindex="0"><canvas class="wia-cv" id="wia-cv" aria-hidden="true"></canvas></div>
+<div class="wia-live" id="wia-live" aria-live="polite"></div>
+</div>
+<div class="wia-cap" aria-hidden="true">Gear Pack Column</div>
+<script>
+(function(){
+var G=80,CAP=10,kb=0,sel=0,raf=0,last=0,C={},
+$=function(i){return document.getElementById(i)},
+cv=$('wia-cv'),cx=cv.getContext('2d'),root=$('wia-root'),live=$('wia-live'),
+mq=matchMedia('(prefers-reduced-motion: reduce)'),
+N=['sword','shield','helm','boots','bow','potion'],
+CL=['cy','go','gr','cr','cy','gr'],
+SP=[[3,6,12,152,240,96,176,192],[255,255,255,255,126,126,60,24],[60,126,255,255,255,195,195,0],[0,0,56,56,56,63,127,127],[24,20,18,17,17,18,20,24],[24,24,24,60,126,255,255,126]],
+F={"0":31599,"1":11415,"2":29671,"3":29647,"4":23497,"5":31183,"6":31215,"7":29266,"8":31727,"9":31695,"/":4772};
+cv.width=cv.height=G;
+function rm(){return mq.matches}
+function cols(){var s=getComputedStyle(document.documentElement);'bg pn sl ac go cy gr cr ink mu bd'.split(' ').forEach(function(k){C[k]=s.getPropertyValue('--wia-'+k).trim()})}
+function say(s){live.textContent=s}
+function R(x,y,w,h,c){cx.fillStyle=c;cx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h))}
+function O(x,y,w,h,c){R(x,y,w,1,c);R(x,y+h-1,w,1,c);R(x,y,1,h,c);R(x+w-1,y,1,h,c)}
+function spr(k,x,y,c){x=Math.round(x);y=Math.round(y);cx.fillStyle=c;SP[k].forEach(function(r,j){for(var i=0;i<8;i++)if(r>>(7-i)&1)cx.fillRect(x+i,y+j,1,1)})}
+function numC(s,y,c){var x=Math.round((G-s.length*4+1)/2);y=Math.round(y);cx.fillStyle=c;for(var n=0;n<s.length;n++){var g=F[s[n]];for(var j=0;j<15;j++)if(g>>(14-j)&1)cx.fillRect(x+n*4+j%3,y+(j/3|0),1,1)}}
+function tot(){return IT.reduce(function(a,t){return a+(t.eq?t.w:0)},0)}
+function pt(e){var r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)/r.width*G,y:(e.clientY-r.top)/r.height*G,t:e.timeStamp,ty:e.pointerType}}
+function frame(t){var d=Math.min(t-last,50)/16.667;last=t;raf=step(d)?requestAnimationFrame(frame):0;draw()}
+function kick(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(frame)}}
+CAP=8;
+var IT=[2,3,2,2,3].map(function(w){return{w:w,eq:0,x:0,y:0,vy:0}}),ord=[],dr=-1,gx=0,gy=0,mv=0,sx=0,sy=0,sh=0,fl=0;
+function H(i){return IT[i].w*5}
+function tgt(i){if(IT[i].eq){var y=53;for(var k=0;k<ord.length;k++){y-=H(ord[k]);if(ord[k]===i)return[33,y]}}return[2+i*15,78-H(i)]}
+function init(){IT.forEach(function(t,i){var g=tgt(i);t.x=g[0];t.y=g[1]})}
+function inPack(t,i){return t.x+7>26&&t.x+7<54&&t.y+H(i)/2<56}
+function put(i,on){var t=IT[i];
+ if(on&&tot()+t.w>CAP){fl=1;sh=3;t.vy=-4;say(N[i]+' too heavy');return}
+ if(on){t.eq=1;ord.push(i)}else{t.eq=0;ord.splice(ord.indexOf(i),1);t.vy=-3}
+ say(N[i]+(on?' equipped, ':' removed, ')+tot()+' of '+CAP)}
+function step(dt){var b=0,s=rm();
+ IT.forEach(function(t,i){if(i===dr)return;var g=tgt(i);
+  if(s){t.x=g[0];t.y=g[1];t.vy=0;return}
+  t.x+=(g[0]-t.x)*(1-Math.pow(.8,dt));if(Math.abs(g[0]-t.x)<.1)t.x=g[0];
+  t.vy+=.5*dt;t.y+=t.vy*dt;
+  if(t.y>=g[1]){t.y=g[1];t.vy=t.vy>1.2?-t.vy*.4:0}
+  if(t.x!==g[0]||t.vy||t.y<g[1])b=1});
+ sh=s?0:sh*Math.pow(.85,dt);if(sh<.1)sh=0;fl*=Math.pow(.92,dt);if(fl<.02||s)fl=0;
+ return b||sh||fl||dr>=0}
+function draw(){R(0,0,G,G,C.pn);
+ var ox=Math.round(sh*Math.sin(performance.now()/25)),w=dr>=0&&!IT[dr].eq&&inPack(IT[dr],dr),n=tot()+(w?IT[dr].w:0),bad=fl>.05||n>CAP;
+ R(31+ox,10,1,44,C.mu);R(48+ox,10,1,44,C.mu);R(31+ox,53,18,1,C.mu);
+ for(var x=32;x<48;x+=2)R(x+ox,13,1,1,bad?C.cr:C.go);
+ numC(n+'/'+CAP,3,bad?C.cr:C.go);
+ IT.map(function(_,i){return i}).sort(function(a,b){return(a===dr)-(b===dr)}).forEach(function(i){
+  var t=IT[i],h=H(i),x=t.x+(t.eq&&i!==dr?ox:0),c=C[CL[i]];
+  if(i===dr)R(x+1,t.y+1,14,h,C.bd);
+  R(x,t.y,14,h,t.eq?C.ac:C.sl);O(x,t.y,14,h,c);spr(i,x+3,t.y+(h-8)/2,c);
+  if(kb&&i===sel)O(x-2,t.y-2,18,h+4,C.go)})}
+function down(p){for(var i=IT.length;i--;){var t=IT[i];if(p.x>=t.x-1&&p.x<=t.x+15&&p.y>=t.y-1&&p.y<=t.y+H(i)+1){dr=i;gx=p.x-t.x;gy=p.y-t.y;sx=p.x;sy=p.y;mv=0;sel=i;t.vy=0;return}}}
+function move(p){if(dr<0)return;var t=IT[dr];if(Math.abs(p.x-sx)+Math.abs(p.y-sy)>2)mv=1;if(mv){t.x=p.x-gx;t.y=p.y-gy}}
+function up(){if(dr<0)return;var i=dr,t=IT[i];dr=-1;
+ if(!mv)put(i,!t.eq);else if(inPack(t,i)){if(!t.eq)put(i,1)}else if(t.eq)put(i,0)}
+function leave(){}
+function key(k){var n=IT.length;if(k==='ArrowRight'||k==='ArrowLeft'){sel=(sel+(k==='ArrowRight'?1:n-1))%n;return 1}if(k===' '||k==='Enter'){put(sel,!IT[sel].eq);return 1}}
+cv.addEventListener('pointerdown',function(e){kb=0;cv.setPointerCapture(e.pointerId);down(pt(e));kick()});
+cv.addEventListener('pointermove',function(e){move(pt(e));kick()});
+cv.addEventListener('pointerup',function(e){up(pt(e));kick()});
+cv.addEventListener('pointercancel',function(e){up(pt(e));kick()});
+cv.addEventListener('pointerleave',function(){leave();kick()});
+root.addEventListener('keydown',function(e){kb=1;if(key(e.key)){e.preventDefault()}kick()});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+mq.addEventListener('change',kick);
+addEventListener('message',function(e){var m=e.data;if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){document.documentElement.setAttribute('data-theme',m.theme);cols();kick()}});
+new ResizeObserver(kick).observe(cv);
+cols();init();kick();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoTimer=0,demoIndex=0;
+function demoStop(){demoEnabled=false;clearInterval(demoTimer);demoTimer=0}
+function demoStart(){if(demoTimer||!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;demoTimer=setInterval(function(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;var i=demoIndex++%IT.length;put(i,!IT[i].eq);kick()},1400)}
+window.addEventListener('forever:interactive',demoStop);
+['pointerdown','keydown','wheel','click'].forEach(function(t){document.addEventListener(t,function(e){if(e.isTrusted)demoStop()},{capture:true,passive:true})});
+document.addEventListener('visibilitychange',function(){clearInterval(demoTimer);demoTimer=0;if(!document.hidden)demoStart()});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',function(){clearInterval(demoTimer);demoTimer=0;demoStart()});
+demoStart();
+})();
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Pink floating action button that rotates plus-to-X and fans out three labeled mini action buttons on a springy arc with a pulse ring.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>FAB Speed Dial</title>
@@ -29,6 +30,7 @@
     box-shadow:0 6px 18px var(--fsd-fab-glow);
     will-change:transform;transform-origin:center;cursor:pointer;z-index:5;
   }
+  .fsd-fab:focus-visible{outline:2px solid var(--fsd-acc,#FB7185);outline-offset:4px}
   /* pulse ring on its own compositor layer (transform/opacity only) */
   .fsd-pulse{
     position:absolute;right:6%;bottom:6%;
@@ -55,13 +57,14 @@
     stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
   .fsd-label{
     position:absolute;right:0;top:50%;transform:translate(8px,-50%);
-    white-space:nowrap;font-size:clamp(9px,3vmin,13px);font-weight:600;letter-spacing:.02em;
+    white-space:nowrap;font-size:clamp(12px,3vmin,13px);font-weight:600;letter-spacing:.02em;
     color:var(--fsd-label-ink);background:var(--fsd-label-bg);padding:.32em .6em;border-radius:6px;
     box-shadow:var(--fsd-label-shadow);pointer-events:none;will-change:transform,opacity;
   }
   .fsd-cap{position:fixed;left:10px;bottom:8px;font-size:10px;letter-spacing:.14em;
     color:var(--fsd-cap);opacity:var(--fsd-cap-o);text-transform:uppercase;pointer-events:none;
     font-family:ui-monospace,monospace;}
+@media(max-width:220px){.fsd-label{font-size:12px;padding:.3em .4em;right:50%;transform:translate(50%,-50%)!important}}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -84,12 +87,15 @@
   "prefers-reduced-motion guard (reduce branch)",
   "visibilitychange pause/start",
   "springPos overshoot easing",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Native button semantics, Enter/Space toggle and immediate reduced-motion open/closed states; third action fans left to remain inside small frames."
  ],
  "knownLimitations": [
   "Auto-cycles open/close — remove phase-transition block in step() for production use",
   "Mini buttons lack aria roles; add role=button + aria-label for accessibility",
-  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -117,7 +123,7 @@
   <div class="fsd-stage">
     <div class="fsd-rig" id="fsd-rig">
       <div class="fsd-pulse" id="fsd-pulse"></div>
-      <div class="fsd-fab" id="fsd-fab"><div class="fsd-x"><i></i><i></i></div></div>
+      <div class="fsd-fab" id="fsd-fab" role="button" tabindex="0" aria-label="Toggle quick actions" aria-expanded="true"><div class="fsd-x"><i></i><i></i></div></div>
     </div>
   </div>
   <div class="fsd-cap">FAB Speed Dial</div>
@@ -139,7 +145,7 @@
   const labels=['Compose','Note','Favorite'];
   const minis=[];
   // arc spread: launch upward, fanning slightly left
-  const ang=[-90,-118,-62];          // degrees, 0 = right
+  const ang=[-90,-118,-145];          // degrees, 0 = right
   for(let k=0;k<3;k++){
     const m=document.createElement('div'); m.className='fsd-mini';
     m.innerHTML='<svg viewBox="0 0 24 24">'+icons[k]+'</svg>';
@@ -171,9 +177,10 @@
     return 1+ (o+1)*Math.pow(x-1,3) + o*Math.pow(x-1,2);
   }
   const T={open:0.62,close:0.42,hold:1.15,gap:0.10};
-  let open=true, clock=0, phaseStart=0, raf=0, last=0;
+  let open=true, clock=0, phaseStart=0, raf=0, last=0, demo=window.__foreverPreview?.demoEnabled!==false;
 
   function render(p){            // p: 0 closed -> 1 fully open (global env)
+    fab.setAttribute('aria-expanded',String(open));
     // FAB rotation + plus->x morph: bars rotate to +/-45
     const rot=p*45;
     bars[0].style.transform='translate(-50%,-50%) rotate('+rot+'deg)';
@@ -216,24 +223,30 @@
     });
 
     // phase transitions
-    if(open && local>=dur+T.hold){ open=false; phaseStart=clock; }
-    if(!open && local>=dur+0.55){ open=true; phaseStart=clock; }
-
-    raf=requestAnimationFrame(step);
+    if(demo&&open&&local>=dur+T.hold){open=false;phaseStart=clock;}
+    if(demo&&!open&&local>=dur+0.55){open=true;phaseStart=clock;}
+    const moving=local<dur+0.65;
+    if(demo||moving)raf=requestAnimationFrame(step);else raf=0;
   }
   function ease(x){return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;}
+  function paintRest(){
+    place();render(open?1:0);
+    minis.forEach(m=>{m.el.style.transform='translate('+(open?m.tx:0)+'px,'+(open?m.ty:0)+'px) scale(1)';m.el.style.opacity=open?1:0;m.lab.style.opacity=open?1:0;});
+  }
 
   function start(){ if(!raf && !reduce){ last=performance.now(); raf=requestAnimationFrame(step);} }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();},{once:true});
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
-  // pointer nudge: click toggles / restarts the cycle
-  fab.addEventListener('click',()=>{ open=!open; phaseStart=clock; });
+  fab.addEventListener('click',()=>{takeover();open=!open;phaseStart=clock;if(reduce)paintRest();else start();});
+  fab.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fab.click();}});
 
   if(reduce){
     place(); render(1);
     minis.forEach(m=>{ m.el.style.transform='translate('+m.tx+'px,'+m.ty+'px) scale(1)';
       m.el.style.opacity=1; m.lab.style.opacity=1; m.lab.style.transform='translate(8px,-50%)'; });
-  } else { start(); }
+  } else if(demo){ start(); } else { place(); render(1); minis.forEach(m=>{m.el.style.transform='translate('+m.tx+'px,'+m.ty+'px) scale(1)';m.el.style.opacity=1;m.lab.style.opacity=1;}); }
 })();
 </script>
 </body>

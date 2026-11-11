@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Bead — UI Microinteractions. A count badge as a droplet: tap to roll a drop in and merge it, minus to split one off. Self-contained, zero-dependency.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bead</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#ff4d5e;--line:#2c2e33;--mute:#8d8f94}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#c8102e;--line:#d4d5d2;--mute:#6a6c70}
+html,body{margin:0;height:100%;display:grid;place-items:center;background:var(--bg)}
+.dt08-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;outline:none}
+.dt08-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt08-cv{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+.dt08-num{position:absolute;left:50%;top:50%;pointer-events:none;color:var(--bg);font:600 40px/1 -apple-system,system-ui,"Helvetica Neue",Arial,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:-.02em;white-space:nowrap;will-change:transform}
+.dt08-minus{position:absolute;left:50%;bottom:5%;width:44px;height:44px;margin-left:-22px;border-radius:50%;border:1px solid var(--line);background:transparent;color:var(--mute);font:300 24px/1 -apple-system,system-ui,sans-serif;padding:0;cursor:pointer;touch-action:manipulation}
+.dt08-minus:active{color:var(--ink);border-color:var(--ink)}
+.dt08-minus:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt08-minus[aria-disabled="true"]{opacity:.35}
+.dt08-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/ui-microinteractions/22-bead-badge.html",
+ "title": "Bead Badge",
+ "description": "A count badge as a droplet: tap to roll a drop in and merge it into the bead, or use the minus button to split one off. Clean modern: off-black and carmine with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and carmine (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "The metaball fill runs per pixel inside a bounding box, which costs more on large frames at DPR 2. The count is capped at 99.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "badge",
+  "counter",
+  "droplet",
+  "metaball",
+  "merge"
+ ]
+}
+</script>
+</head><body>
+<div class="dt08-root" role="slider" tabindex="0" aria-label="Forever plan bead counter. Tap the frame or press Enter to roll a drop in and merge it. Press Down, Backspace, or the minus button to split one drop off." aria-valuemin="0" aria-valuemax="99"></div>
+<div class="dt08-cap" aria-hidden="true">Bead</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,demoT=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  var root=document.querySelector('.dt08-root');
+  var cv=document.createElement('canvas');cv.className='dt08-cv';root.appendChild(cv);
+  var num=document.createElement('span');num.className='dt08-num';num.setAttribute('aria-hidden','true');root.appendChild(num);
+  var minus=document.createElement('button');minus.type='button';minus.className='dt08-minus';
+  minus.setAttribute('aria-label','Split off one drop');minus.textContent='\u2212';root.appendChild(minus);
+  var ctx=cv.getContext('2d'),W=0,H=0,S=1,img=null,col=[255,77,94];
+  var MAX=99,count=6,drops=[];
+  function rFor(n){return n<=0?.05:.1+.028*Math.sqrt(n)}
+  var B={x:.5,y:.5,vx:0,vy:0,r:rFor(6),vr:0,q:0,vq:0,ns:1,vns:0};
+  var a0=-.85;if(demo)drops.push({x:.5+Math.cos(a0)*.3,y:.5+Math.sin(a0)*.3,vx:0,vy:0,r:.055,a:.00022,inc:1});
+  function readCol(){var h=getComputedStyle(document.documentElement).getPropertyValue('--acc').trim().replace('#','');
+    if(h.length===6)col=[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]}
+  function aria(){root.setAttribute('aria-valuenow',count);root.setAttribute('aria-valuetext',count+(count===1?' drop':' drops'));
+    minus.setAttribute('aria-disabled',count<=0?'true':'false')}
+  function plop(){}
+  function pending(){var n=0;for(var i=0;i<drops.length;i++)if(drops[i].inc)n++;return n}
+  function add(tx,ty){
+    if(count+pending()>=MAX){B.vns+=.1;kick();return}
+    var dx=tx-.5,dy=ty-.5,a;
+    if(tx==null||Math.hypot(dx,dy)<B.r*1.1)a=-Math.PI/2+(Math.random()-.5)*2.2;else a=Math.atan2(dy,dx);
+    var c=Math.cos(a),s=Math.sin(a);
+    drops.push({x:.5+c*.64,y:.5+s*.64,vx:-c*.011,vy:-s*.011,r:.055,a:.0011,inc:1});kick();
+  }
+  function merge(d){count++;B.vx+=d.vx*.45;B.vy+=d.vy*.45;B.vr+=.006;B.vq+=.05;B.vns+=.22;aria();plop(1)}
+  function split(){
+    if(count<=0){B.vq+=.03;kick();return}
+    count--;aria();
+    drops.push({x:B.x,y:B.y+B.r*.5,vx:(Math.random()-.5)*.002,vy:.003,r:.055,inc:0});
+    B.vy-=.003;B.vq-=.06;B.vns+=.12;plop(0);kick();
+  }
+  function spr(o,k,v,t,dt){o[v]=(o[v]+(t-o[k])*.16*dt)*Math.pow(.82,dt);o[k]+=o[v]*dt}
+  function step(dt){
+    for(var i=drops.length-1;i>=0;i--){var d=drops[i];
+      if(d.inc){var dx=B.x-d.x,dy=B.y-d.y,L=Math.hypot(dx,dy)||1e-6;
+        d.vx=(d.vx+dx/L*d.a*dt)*Math.pow(.97,dt);d.vy=(d.vy+dy/L*d.a*dt)*Math.pow(.97,dt);
+        d.x+=d.vx*dt;d.y+=d.vy*dt;
+        if(L<B.r*.45){merge(d);drops.splice(i,1)}}
+      else{d.vy+=.0008*dt;d.x+=d.vx*dt;d.y+=d.vy*dt;if(d.y-d.r>1.05)drops.splice(i,1)}}
+    var vx=B.vx;B.vx=(B.vx+(.5-B.x)*.16*dt)*Math.pow(.82,dt);B.x+=B.vx*dt;
+    spr(B,'y','vy',.5,dt);spr(B,'r','vr',rFor(count),dt);spr(B,'q','vq',0,dt);spr(B,'ns','vns',1,dt);
+    var e=Math.abs(B.vx)+Math.abs(B.vy)+Math.abs(B.vr)+Math.abs(B.vq)+Math.abs(B.vns)+Math.abs(B.x-.5)+Math.abs(B.y-.5)+Math.abs(B.r-rFor(count))+Math.abs(B.q)+Math.abs(B.ns-1);
+    return drops.length>0||e>2e-4;
+  }
+  function snapToTarget(){
+    for(var i=0;i<drops.length;i++)if(drops[i].inc&&count<MAX)count++;
+    drops=[];B.x=B.y=.5;B.vx=B.vy=B.vr=B.vq=B.vns=0;B.r=rFor(count);B.q=0;B.ns=1;aria();
+  }
+  function draw(){
+    if(!img)return;
+    var balls=[{x:B.x*W,y:B.y*H,r:B.r*S,sx:1+B.q,sy:1-B.q}];
+    for(var i=0;i<drops.length;i++){var d=drops[i];balls.push({x:d.x*W,y:d.y*H,r:d.r*S,sx:1,sy:1})}
+    var x0=W,y0=H,x1=0,y1=0;
+    for(i=0;i<balls.length;i++){var b=balls[i],m=b.r*1.9;
+      x0=Math.min(x0,b.x-m);y0=Math.min(y0,b.y-m);x1=Math.max(x1,b.x+m);y1=Math.max(y1,b.y+m)}
+    x0=Math.max(0,x0|0);y0=Math.max(0,y0|0);x1=Math.min(W,Math.ceil(x1));y1=Math.min(H,Math.ceil(y1));
+    ctx.clearRect(0,0,W,H);
+    var px=img.data,n=balls.length,R=col[0],G=col[1],Bl=col[2];
+    var bx=[],by=[],br=[],bisx=[],bisy=[];
+    for(i=0;i<n;i++){bx[i]=balls[i].x;by[i]=balls[i].y;br[i]=balls[i].r;bisx[i]=1/balls[i].sx;bisy[i]=1/balls[i].sy}
+    for(var y=y0;y<y1;y++){var row=y*W,yy=y+.5;
+      for(var x=x0;x<x1;x++){var xx=x+.5,f=0,wr=0;
+        for(var k=0;k<n;k++){var dx=(xx-bx[k])*bisx[k],dy=(yy-by[k])*bisy[k],w=br[k]*br[k]/(dx*dx+dy*dy+.01);f+=w;wr+=w*br[k]}
+        var o=(row+x)*4,a=0;
+        if(f>.6){a=(wr/f)*(1-1/Math.sqrt(f))+.5;a=a<0?0:a>1?1:a}
+        px[o]=R;px[o+1]=G;px[o+2]=Bl;px[o+3]=a*255}}
+    if(x1>x0&&y1>y0)ctx.putImageData(img,0,0,x0,y0,x1-x0,y1-y0);
+    var fs=B.r*S/(window.devicePixelRatio>2?2:(window.devicePixelRatio||1))*(count>9?.9:1.12);
+    num.textContent=count;num.style.fontSize=fs.toFixed(1)+'px';
+    num.style.left=(B.x*100)+'%';num.style.top=(B.y*100)+'%';
+    num.style.transform='translate(-50%,-52%) scale('+(B.ns*(1+B.q*.6)).toFixed(3)+','+(B.ns*(1-B.q*.6)).toFixed(3)+')';
+  }
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);readCol();draw()}});
+  cv.addEventListener('pointerdown',function(e){e.preventDefault();root.focus({preventScroll:true});
+    var r=cv.getBoundingClientRect();add((e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height)});
+  minus.addEventListener('pointerdown',function(e){e.stopPropagation()});
+  minus.addEventListener('click',function(e){e.stopPropagation();split()});
+  root.addEventListener('keydown',function(e){if(e.target!==root)return;var k=e.key;
+    if(k==='Enter'||k===' '||k==='ArrowUp'||k==='ArrowRight'||k==='+'||k==='='){e.preventDefault();add(null,null)}
+    else if(k==='ArrowDown'||k==='ArrowLeft'||k==='Backspace'||k==='Delete'||k==='-'){e.preventDefault();split()}
+    else if(k==='Escape'){e.preventDefault();snapToTarget();draw()}});
+  new ResizeObserver(function(){var dpr=Math.min(window.devicePixelRatio||1,2);
+    W=Math.max(1,Math.round(cv.clientWidth*dpr));H=Math.max(1,Math.round(cv.clientHeight*dpr));S=Math.min(W,H);
+    cv.width=W;cv.height=H;img=ctx.createImageData(W,H);draw();kick()}).observe(cv);
+  readCol();aria();
+  draw();
+  kick();
+  window.addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,true);document.addEventListener('keydown',stopDemo,true);document.addEventListener('wheel',stopDemo,true);
+  var di=0;
+  if(demo)demoT=setInterval(function(){if(!demo||document.hidden||reduce())return;var o='aaaas'[di++%5];if(o==='a'&&count+pending()<MAX)add(null,null);else split()},1300);
+})();</script>
+</body></html>

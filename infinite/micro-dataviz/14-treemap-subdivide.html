@@ -25,6 +25,7 @@
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--tms-bg);}
   #tms-c{display:block;width:100%;height:100%;}
+  .tms-canvas:focus-visible{outline:2px solid var(--tms-cap);outline-offset:-4px}
   .tms-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
        letter-spacing:.14em;color:var(--tms-cap);opacity:var(--tms-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
@@ -51,12 +52,15 @@
   "IIFE wrapper",
   "prefers-reduced-motion static draw guard",
   "visibilitychange stop/start",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "First input stops automatic morph cycles; the clicked geometry finishes its own interpolation before the renderer sleeps.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space and pointer morph from current geometry; reduced motion commits the new layout in one paint."
  ],
  "knownLimitations": [
-  "Click triggers immediate morph but only when t>=1 (mid-transition clicks are ignored)",
   "No aria or semantic data — purely decorative, unsuitable as an accessible chart",
-  "Hue is per-index not per-value so color rank does not track value rank across morphs"
+  "Hue is per-index not per-value so color rank does not track value rank across morphs",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -79,14 +83,23 @@
  ]
 }
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 </head>
 <body>
-<canvas id="tms-c"></canvas>
+<canvas id="tms-c" class="tms-canvas" role="button" tabindex="0" aria-label="Morph treemap"></canvas>
 <div class="tms-cap">Treemap Subdivide</div>
 <script>
 (function(){
   const cv=document.getElementById('tms-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const preview=window.__foreverPreview;
+  let demoEnabled=preview?preview.demoEnabled!==false:true;
+  function shouldFrame(){return demoEnabled||(morphTrigger&&t<1);}
+  function takeOver(){demoEnabled=false;cancelAnimationFrame(raf);raf=0;if(!document.hidden&&!reduce)raf=requestAnimationFrame(frame);else if(reduce)frame();}
+  window.addEventListener('forever:interactive',takeOver);
+  document.addEventListener('pointerdown',takeOver,{capture:true});
+  document.addEventListener('click',takeOver,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&e.key!=='Escape'&&!/^(Shift|Control|Alt|Meta)$/.test(e.key)&&!e.metaKey&&!e.ctrlKey&&!e.altKey)takeOver();},{capture:true});
   let W,H,DPR,pad;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -94,7 +107,7 @@
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     pad=Math.max(6,Math.min(W,H)*0.045);
   }
-  addEventListener('resize',()=>{size();retile();});
+  addEventListener('resize',()=>{size();retile();draw();});
   const N=11;                       // leaf count
   const hues=[]; for(let i=0;i<N;i++) hues.push(130+ (i/N)*80 - 20); // green→slate band
   let vals=rand(),from=[],to=[],t=1,hold=0;
@@ -151,7 +164,12 @@
 
   let boost=0;
   cv.addEventListener('pointermove',()=>{boost=Math.min(boost+0.04,1);});
-  cv.addEventListener('click',()=>{if(t>=1){hold=0;t=0;morphTrigger=true;}});
+  cv.addEventListener('click',()=>{
+    if(t<1)to=from.map((a,i)=>({...lerpR(a,to[i],ease(t)),i}));
+    hold=0;morph();morphTrigger=true;
+    if(reduce){t=1;morphTrigger=false;draw();}else start();
+  });
+  cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();cv.click();}});
   let morphTrigger=false;
 
   function draw(){
@@ -197,7 +215,7 @@
   let ready=0;
   function syncTheme(){
     const cs=getComputedStyle(root);
-    C.bg=cs.getPropertyValue('--tms-bg').trim();
+    C.bg=cs.getPropertyValue('--tms-bg').trim()||'#181D1B';
     C.sat=parseFloat(cs.getPropertyValue('--tms-sat'));
     C.lit=parseFloat(cs.getPropertyValue('--tms-lit'));
     C.litr=parseFloat(cs.getPropertyValue('--tms-litr'));
@@ -206,7 +224,7 @@
     C.th=parseFloat(cs.getPropertyValue('--tms-th'));
     C.ts=parseFloat(cs.getPropertyValue('--tms-ts'));
     C.tl=parseFloat(cs.getPropertyValue('--tms-tl'));
-    if(reduce&&ready)draw();                    // running loop repaints itself
+    if(ready&&(reduce||!raf))draw();
   }
   addEventListener('message',e=>{
     const d=e.data;
@@ -219,19 +237,20 @@
   let raf=0;
   function frame(){
     if(t<1){t=Math.min(1,t+(0.012+boost*0.02));}
-    else{
+    else if(demoEnabled){
       hold+=1;
-      if(hold>(morphTrigger?0:130)){hold=0;morphTrigger=false;morph();}
+      if(hold>130){hold=0;morph();}
     }
+    if(t>=1)morphTrigger=false;
     draw();
-    raf=requestAnimationFrame(frame);
+    if(shouldFrame())raf=requestAnimationFrame(frame);else raf=0;
   }
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce&&shouldFrame())raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   ready=1;
   if(reduce){from=layout(vals).map(c=>({...c}));to=from;t=1;draw();}
-  else start();
+  else if(demoEnabled)start();else frame();
 })();
 </script>
 </body>

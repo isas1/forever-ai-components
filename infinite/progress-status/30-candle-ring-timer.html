@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Candle Ring Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Candle Ring Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--wti-bg:#0E1630;--wti-ink:#E6EAF6;--wti-mute:#6F7BA6;--wti-lamp:#F2C230;--wti-warm:#E8893A}
+:root[data-theme="light"]{--wti-bg:#DCE3F2;--wti-ink:#1A2340;--wti-mute:#6A769E;--wti-lamp:#B8860B;--wti-warm:#B8561A}
+.wti-root,.wti-root *{box-sizing:border-box;margin:0}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--wti-bg)}
+.wti-root{background:var(--wti-bg);color:var(--wti-ink);overflow:hidden;font:600 clamp(24px,8vmin,52px)/1 ui-monospace,"SF Mono",Menlo,monospace}
+.wti-root{width:100%;height:100%;display:grid;place-items:center}
+.wti-st{position:relative;width:min(94vmin,640px);aspect-ratio:1;touch-action:none;cursor:pointer;border-radius:12px}
+.wti-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.wti-n{position:absolute;pointer-events:none;text-align:center;font:inherit;color:var(--wti-ink)}
+.wti-st:focus-visible,.wti-n:focus-visible{outline:2px solid var(--wti-lamp);outline-offset:3px}
+.wti-n{left:50%;top:50%;transform:translate(-50%,-50%);width:30%;aspect-ratio:1;border:0;border-radius:50%;background:none;cursor:pointer;pointer-events:auto}
+.wti-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--wti-ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/30-candle-ring-timer.html",
+ "title": "Candle Ring Timer",
+ "description": "Set a glowing candle ring by dragging its rim or using its center button. Indigo nocturne lamplight palette with candle gold and burnt orange.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "candles",
+  "ring",
+  "drag",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wti-root" id="wti-root" role="group" aria-label="Bake timer">
+<div class="wti-st" id="wti-st" role="slider" tabindex="0" aria-label="Bake minutes" aria-valuemin="1" aria-valuemax="30" aria-valuenow="10"><canvas class="wti-canvas" id="wti-cv"></canvas><button type="button" class="wti-n" id="wti-n"></button></div>
+</div>
+<div class="wti-cap" aria-hidden="true">Candle Ring Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||rm.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var R=document.documentElement,$=function(i){return document.getElementById(i)},st=$('wti-st'),cv=$('wti-cv'),g=cv.getContext('2d'),num=$('wti-n'),
+S=300,D=1,C={},raf=0,last=0,rm=matchMedia('(prefers-reduced-motion: reduce)'),
+mode=0,set=10,el=0,pv=0,lt='',at='',TS=2000,MAX=30,onset=null;
+function col(){var s=getComputedStyle(R);['ink','mute','lamp','warm'].forEach(function(k){C[k]=s.getPropertyValue('--wti-'+k).trim()})}
+function fit(){S=st.clientWidth;D=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(S*D);wake()}
+function next(){if(!raf)raf=requestAnimationFrame(loop)}
+function wake(){if(!raf&&!document.hidden){last=performance.now();next()}}
+function loop(now){raf=0;var ms=Math.max(0,Math.min(now-last,50)),dt=ms/16.667;last=now;demoBeat(ms);
+if(mode==1&&!demoPaused){el+=ms/TS;if(el>=set){el=set;mode=2;done()}}
+var b=demoPaused?false:step(dt,ms);g.setTransform(D,0,0,D,0,0);g.clearRect(0,0,S,S);draw();sync();if((b||mode==1||demoEnabled)&&!demoPaused&&!rm.matches)next();else if(mode==1&&!demoPaused&&!demoSession)next()}
+function spr(o,t,dt,k,f){if(rm.matches){o.x=t;o.v=0;return 0}o.v+=(t-o.x)*k*dt;o.v*=Math.pow(f,dt);o.x+=o.v*dt;return Math.abs(o.v)>.002||Math.abs(t-o.x)>.002}
+function ln(x,y,X,Y){g.beginPath();g.moveTo(x,y);g.lineTo(X,Y);g.stroke()}
+function sync(){var t=mode==2?'✓':String(mode==1?Math.ceil(set-el-1e-6):(mode==0&&pv)||set),a;
+if(t!==lt){lt=t;num.textContent=t}
+a=mode==1?'Baking, '+t+' minutes left. Press to cancel':mode==2?'Done. Press to reset':'Start baking '+set+' minutes';
+if(num.tagName=='BUTTON'&&a!==at){at=a;num.setAttribute('aria-label',a)}
+st.setAttribute('aria-valuenow',set);st.setAttribute('aria-valuetext',set+' minutes'+(mode==1?', baking':mode==2?', done':''))}
+function setSet(m){demoPaused=false;set=Math.max(1,Math.min(MAX,m));mode=0;el=0;if(onset)onset();wake()}
+function start(){demoPaused=false;demoSession=demoEnabled;el=0;mode=1;wake()}
+function reset(){demoPaused=false;mode=0;el=0;wake()}
+st.addEventListener('keydown',function(e){demoPaused=false;if(e.target!==st)return;var k=e.key,s=e.shiftKey?5:1,h=1;
+if(k=='ArrowRight'||k=='ArrowUp')setSet(set+s);else if(k=='ArrowLeft'||k=='ArrowDown')setSet(set-s);else if(k=='Home')setSet(1);else if(k=='End')setSet(MAX);else if(k=='Enter'||k==' '){mode==1?reset():start()}else h=0;if(h)e.preventDefault()});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else wake()});
+function setTheme(t){R.setAttribute('data-theme',t=='light'?'light':'dark');col();wake()}
+addEventListener('message',function(e){var d=e.data;if(d&&d.type=='forever:theme')setTheme(d.theme)});
+rm.addEventListener('change',wake);
+new ResizeObserver(fit).observe(st);
+var N=60,vv={x:0,v:0},pl=0,drag=0,tt=0,jt=[],i;
+for(i=0;i<N;i++)jt.push((Math.sin(i*12.9898)*43758.5453)%1/2);
+function done(){pl=1}
+function step(dt,ms){tt+=ms;var b=spr(vv,set,dt,.1,.84);pl*=Math.pow(.95,dt);return b||pl>.01}
+function draw(){var c=S/2,r=S*.37,w=S*.017,i,a,ux,uy,q,L,cl,al,sh,us,hd,o;g.lineCap='round';
+for(i=0;i<N;i++){a=-1.5708+i/N*6.2832+jt[i]*.03;ux=Math.cos(a);uy=Math.sin(a);
+q=Math.max(0,Math.min(1.5,vv.x*2-i));us=mode==1&&i<el*2;hd=mode==1&&i==Math.floor(el*2);
+L=S*.012;cl=C.mute;al=.4;sh=0;
+if(q>0){L=S*(.02+.075*q)*(.85+jt[i]*.5);cl=C.lamp;al=1}
+if(us){L=S*.022;cl=C.mute;al=.5}else if(hd){cl=C.warm;L*=1.1+.2*Math.sin(tt*.012);sh=S*.05}
+if(mode==2&&q>0){cl=C.warm;sh=S*.025}
+o=jt[i]*w;g.strokeStyle=cl;g.shadowColor=cl;g.shadowBlur=sh*D;g.globalAlpha=al;g.lineWidth=w;
+ln(c+ux*(r-L/2),c+uy*(r-L/2),c+ux*(r+L/2),c+uy*(r+L/2));
+g.shadowBlur=0;g.globalAlpha=al*.5;g.lineWidth=w*.4;
+ln(c+ux*(r-L/2)-uy*o,c+uy*(r-L/2)+ux*o,c+ux*(r+L/2)-uy*o,c+uy*(r+L/2)+ux*o)}
+g.globalAlpha=1;
+if(pl>.01){g.globalAlpha=pl;g.strokeStyle=C.warm;g.lineWidth=S*.006;g.beginPath();g.arc(c,c,r*(1+(1-pl)*.3),0,6.2832);g.stroke();g.globalAlpha=1}}
+function ang(e){var b=st.getBoundingClientRect(),a=Math.atan2(e.clientY-b.top-b.height/2,e.clientX-b.left-b.width/2)+1.5708;if(a<0)a+=6.2832;return a/6.2832*MAX}
+function pick(e){var m=ang(e);if(Math.abs(m-set)>15)m=set>15?MAX:1;setSet(Math.max(1,Math.round(m)))}
+num.addEventListener('click',function(){mode==0?start():reset()});
+st.addEventListener('pointerdown',function(e){demoPaused=false;if(e.target===num)return;drag=1;st.setPointerCapture(e.pointerId);pick(e)});
+st.addEventListener('pointermove',function(e){if(drag)pick(e)});
+st.addEventListener('pointerup',function(){if(drag){drag=0;start()}});
+st.addEventListener('pointercancel',function(){drag=0});
+function demoFinished(){return mode==2}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;start()}
+if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,0);col();sync();fit();if(demoEnabled&&!rm.matches)demoStart();
+rm.addEventListener('change',function(){if(rm.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A grid of short rods aligns to a roaming dipole field like iron filings, tinted red/gold by nearest pole, pointer-reactive.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Iron Filings Field</title>
@@ -23,7 +24,7 @@
     --c10-fade:rgba(244,243,242,0.35); --c10-s:72; --c10-l:36; --c10-pos:#db0b0b; --c10-neg:#98613a;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c10-bg)}
-  #c{display:block;width:100%;height:100%}
+  #c10-canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--c10-cap);opacity:var(--c10-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
@@ -49,12 +50,13 @@
   "visibilitychange pause/play",
   "DPR-aware canvas sizing",
   "reduced-motion guard (static frames only)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Reduced-motion path only renders two static frames then stops — no looping static fallback",
   "Background color hardcoded in CSS (#0c0c0e) — must edit to change dark theme",
-  "No IIFE wrapper — globals leak to window scope"
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -77,11 +79,16 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c10-canvas" class="c10-root"></canvas>
 <div class="cap">Iron Filings Field</div>
 <script>
 (function(){
-const cv=document.getElementById('c'),x=cv.getContext('2d');
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+const cv=document.getElementById('c10-canvas'),x=cv.getContext('2d');
 let W,H,DPR,fil=[],t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 let poles=[];
 const root=document.documentElement;
@@ -114,7 +121,7 @@ function field(px,py){
   return Math.atan2(fy,fx);
 }
 function step(){
-  x.fillStyle=FADE;x.fillRect(0,0,W,H);t+=0.012;
+  x.fillStyle=FADE;x.fillRect(0,0,W,H);if(demoEnabled&&!reduce)t+=0.012;
   poles=[{x:W/2+Math.cos(t)*W*0.28,y:H/2+Math.sin(t*1.3)*H*0.28,q:1},
          {x:W/2+Math.cos(t+Math.PI)*W*0.28,y:H/2+Math.sin(t*1.3+Math.PI)*H*0.28,q:-1}];
   for(const f of fil){
@@ -130,10 +137,11 @@ function step(){
   for(const p of poles){x.fillStyle=p.q>0?POS:NEG;
     x.beginPath();x.arc(p.x,p.y,4,0,7);x.fill();}
 }
-let raf;function loop(){step();raf=requestAnimationFrame(loop);}
-function play(){if(!raf&&!document.hidden){if(reduce){step();step();return;}loop();}}
+let raf=0;function loop(){raf=0;if(document.hidden)return;step();if(!reduce&&(demoEnabled||(fil.some(f=>Math.abs(Math.sin(field(f.x,f.y)-f.a))>.002))))play();}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}raf=requestAnimationFrame(loop);}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
-document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+document.addEventListener('visibilitychange',()=>document.hidden?stop():(demoEnabled?play():step()));
+['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;play();}));
 play();
 })();
 </script>

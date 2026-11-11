@@ -9,25 +9,28 @@
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
 <style>
-html,body{margin:0;height:100%;overflow:hidden;background:#e0e5ec;display:flex;align-items:center;justify-content:center}
+html,body{margin:0;height:100%;overflow:hidden;background:#e0e5ec}
+body{box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:8px 12px 24px}
 .neu-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#8a91a8;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
 .neu-panel{
-  background:#e0e5ec;border-radius:24px;padding:28px 36px;
+  box-sizing:border-box;width:min(100%,240px);background:#e0e5ec;border-radius:24px;padding:28px 24px;
   box-shadow:8px 8px 18px #b8bec7,-8px -8px 18px #ffffff;
   display:flex;flex-direction:column;gap:22px;
 }
-.neu-row{display:flex;align-items:center;justify-content:space-between;gap:32px}
+.neu-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px}
 .neu-row-label{font:600 11px/1 system-ui,-apple-system,sans-serif;letter-spacing:2px;color:#8a91a8;min-width:36px}
 .neu-track{
-  width:58px;height:30px;border-radius:15px;background:#e0e5ec;
-  box-shadow:inset 3px 3px 7px #b8bec7,inset -3px -3px 7px #ffffff;
-  position:relative;cursor:pointer;transition:box-shadow 200ms;
+  flex:none;width:58px;height:44px;border:0;border-radius:15px;padding:0;background:transparent;
+  position:relative;cursor:pointer;
 }
+.neu-track::before{content:"";position:absolute;inset:7px 0;border-radius:15px;background:#e0e5ec;
+  box-shadow:inset 3px 3px 7px #b8bec7,inset -3px -3px 7px #ffffff}
+.neu-track:focus-visible{outline:2px solid #816e31;outline-offset:2px}
 .neu-thumb{
   width:22px;height:22px;border-radius:50%;
   background:#e0e5ec;
   box-shadow:3px 3px 7px #b8bec7,-3px -3px 7px #ffffff;
-  position:absolute;top:4px;left:4px;
+  position:absolute;top:11px;left:4px;
   transition:transform 260ms cubic-bezier(.4,0,.2,1),background 260ms;
 }
 .neu-track.neu-on .neu-thumb{
@@ -35,13 +38,15 @@ html,body{margin:0;height:100%;overflow:hidden;background:#e0e5ec;display:flex;a
   background:#A68D3F;
   box-shadow:2px 2px 5px rgba(166,141,63,.4),-2px -2px 5px rgba(255,255,255,.6);
 }
+@media(max-width:280px){.neu-panel{padding:4px 12px;gap:0;border-radius:18px}}
+@media(prefers-reduced-motion:reduce){.neu-thumb{transition:none}}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/neumorphism/02-toggle-switches.html",
  "title": "Toggle Switches",
- "description": "Three neumorphic toggle switches auto-cycle on/off with a smooth ochre-accented thumb slide and inset shadow track.",
+ "description": "Three neumorphic switches auto-cycle with ochre thumbs and inset tracks; a click or keyboard activation takes over the local demo state.",
  "useWhen": "Settings panels or preference UIs where a neumorphic soft-UI aesthetic is desired.",
- "avoidWhen": "Production interactive controls — remove auto-cycle and wire click handlers before shipping. Avoid on dark backgrounds; colors are hardcoded to light gray.",
+ "avoidWhen": "Production settings without real state persistence. Avoid on dark backgrounds; colors are hardcoded to light gray.",
  "agentPrompt": "Change the accent color from #A68D3F to #00c896 and slow the cycle interval from 1400ms to 2200ms by updating setInterval(tick, 1400). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (#A68D3F)",
@@ -58,7 +63,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#e0e5ec;display:flex;a
   "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
  ],
  "knownLimitations": [
-  "Auto-cycles by default — add click handlers and remove setInterval for production use",
+  "Auto-cycles until first activation; changes stay local to this demo and do not change device settings",
   "Background color hardcoded to light gray; does not support dark mode"
  ],
  "tier": "curated",
@@ -86,35 +91,40 @@ html,body{margin:0;height:100%;overflow:hidden;background:#e0e5ec;display:flex;a
 <div class="neu-panel">
   <div class="neu-row">
     <span class="neu-row-label">WIFI</span>
-    <div class="neu-track" id="sw0"><div class="neu-thumb"></div></div>
+    <button class="neu-track" id="neu-sw0" type="button" role="switch" aria-label="Wi-Fi" aria-checked="false"><span class="neu-thumb"></span></button>
   </div>
   <div class="neu-row">
     <span class="neu-row-label">BT</span>
-    <div class="neu-track" id="sw1"><div class="neu-thumb"></div></div>
+    <button class="neu-track" id="neu-sw1" type="button" role="switch" aria-label="Bluetooth" aria-checked="false"><span class="neu-thumb"></span></button>
   </div>
   <div class="neu-row">
     <span class="neu-row-label">VPN</span>
-    <div class="neu-track" id="sw2"><div class="neu-thumb"></div></div>
+    <button class="neu-track" id="neu-sw2" type="button" role="switch" aria-label="VPN" aria-checked="false"><span class="neu-thumb"></span></button>
   </div>
 </div>
 <div class="neu-cap">TOGGLE SWITCHES</div>
 <script>(()=>{
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  const sw=[0,1,2].map(i=>document.getElementById('sw'+i));
+  const sw=[0,1,2].map(i=>document.getElementById('neu-sw'+i));
   const steps=[[0],[1],[2],[0,1,2,'off']];
-  let step=0,timer=null;
+  let step=0,timer=null,manual=false;
+  function setOn(el,on){el.classList.toggle('neu-on',on);el.setAttribute('aria-checked',String(on));}
   function applyStep(s){
     const cur=steps[s];
-    if(cur.includes('off')){sw.forEach(el=>el.classList.remove('neu-on'));}
-    else{cur.forEach(i=>sw[i].classList.add('neu-on'));}
+    if(cur.includes('off')){sw.forEach(el=>setOn(el,false));}
+    else{cur.forEach(i=>setOn(sw[i],true));}
   }
   function tick(){step=(step+1)%steps.length;applyStep(step);}
-  function stop(){clearInterval(timer);}
+  function stop(){clearInterval(timer);timer=null;}
   function play(){
-    if(reduce){applyStep(0);return;}
+    stop();if(reduce||manual||document.hidden)return;
     timer=setInterval(tick,1400);
   }
   document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  sw.forEach(el=>el.addEventListener('click',()=>{
+    manual=true;stop();setOn(el,el.getAttribute('aria-checked')!=='true');
+  }));
+  applyStep(0);
   play();
 })();</script>
 <script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>

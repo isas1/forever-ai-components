@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Radial bursts of colorful glowing sparks explode, fall under gravity and fade against a near-black sky, with extra bursts on click.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Firework Burst</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#06060f}
-  #c{display:block;width:100%;height:100%}
+  #c02-canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:#ffd76b;opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
@@ -15,7 +16,7 @@
 {
  "file": "infinite/particles-physics/02-firework-burst.html",
  "title": "Firework Burst",
- "description": "Colorful glowing sparks burst radially, fall under gravity, and fade against a dark sky. Auto-launches bursts; click anywhere to add more.",
+ "description": "Colorful glowing sparks burst radially, fall under gravity, and fade against a dark sky. Initial automatic launches stop after first input; canvas clicks create bursts that finish fading.",
  "useWhen": "Dark-theme hero backgrounds, celebration screens, loading states that benefit from festive ambient motion.",
  "avoidWhen": "Light backgrounds (sky hardcoded near-black). Contexts where motion competes with readable content or users may have motion sensitivity.",
  "agentPrompt": "Change the hue palette to warm golds only by setting hues=[40,45,50,55,60], increase particle count per burst by changing n=28+(Math.random()*16|0) to n=50+(Math.random()*20|0).",
@@ -30,12 +31,13 @@
   "visibilitychange pause/play guard",
   "DPR-aware canvas sizing",
   "particle cap check (parts.length<110)",
-  "reduced-motion guard (reduce flag)"
+  "reduced-motion guard (reduce flag)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Reduced-motion path fires a single static burst then stops — no ongoing animation, which may look broken rather than calm",
   "Background color hardcoded in CSS (#06060f) — must edit to change from near-black",
-  "No IIFE wrapper — global vars could collide on pages with other scripts"
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -57,11 +59,16 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c02-canvas" class="c02-root"></canvas>
 <div class="cap">Firework Burst</div>
 <script>
 (function(){
-const cv=document.getElementById('c'),x=cv.getContext('2d');
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+const cv=document.getElementById('c02-canvas'),x=cv.getContext('2d');
 let W,H,DPR,parts=[],t=0,nextLaunch=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const hues=[10,45,200,280,330,140];
 function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;
@@ -69,7 +76,7 @@ function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.client
 addEventListener('resize',size);size();
 function burst(cx,cy){
   const hue=hues[(Math.random()*hues.length)|0],n=28+(Math.random()*16|0);
-  for(let i=0;i<n;i++){const a=(i/n)*6.283+Math.random()*0.2,sp=1+Math.random()*2.6;
+  for(let i=0;i<n&&parts.length<110;i++){const a=(i/n)*6.283+Math.random()*0.2,sp=1+Math.random()*2.6;
     parts.push({x:cx,y:cy,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:1,
       hue:hue+(Math.random()*30-15),r:1+Math.random()*1.6});}
 }
@@ -77,7 +84,7 @@ cv.addEventListener('pointerdown',e=>{const r=cv.getBoundingClientRect();burst(e
 function step(){
   x.fillStyle='rgba(6,6,15,0.22)';x.fillRect(0,0,W,H);
   t++;
-  if(t>nextLaunch&&parts.length<110){nextLaunch=t+30+(Math.random()*40|0);
+  if(demoEnabled&&!reduce&&t>nextLaunch&&parts.length<110){nextLaunch=t+30+(Math.random()*40|0);
     burst(W*(0.25+Math.random()*0.5),H*(0.2+Math.random()*0.45));}
   for(let i=parts.length-1;i>=0;i--){const p=parts[i];
     p.vy+=0.035;p.vx*=0.985;p.vy*=0.985;p.x+=p.vx;p.y+=p.vy;p.life-=0.014;
@@ -88,10 +95,11 @@ function step(){
   }
   x.globalAlpha=1;
 }
-let raf;function loop(){step();raf=requestAnimationFrame(loop);}
-function play(){if(!raf&&!document.hidden){if(reduce){burst(W/2,H/2);step();return;}loop();}}
+let raf=0;function loop(){raf=0;if(document.hidden)return;step();if(!reduce&&(demoEnabled||(parts.length>0)))play();}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}raf=requestAnimationFrame(loop);}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+if(reduce)burst(W/2,H/2);['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;play();}));
 play();
 })();
 </script>

@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
 <meta name="description" content="Thanos Snap Delete — Buttons &amp; Toggles. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Thanos Snap Button</title>
   <script>
@@ -23,29 +24,30 @@
       z-index:2;box-shadow:0 4px 15px var(--c11-btn-shadow);transition:transform 0.1s,box-shadow 0.1s;}
     .snap-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px var(--c11-btn-shadow-hover);}
     .snap-btn:active{transform:translateY(1px) scale(0.95);box-shadow:0 2px 10px var(--c11-btn-shadow-active);}
-    .snap-btn.snapping{opacity:0;pointer-events:none;}
+    .snap-btn.snap-snapping{opacity:0;pointer-events:none;}
     /* Dust particles */
-    .dust-particle{position:absolute;background:var(--c11-dust-a);pointer-events:none;z-index:3;border-radius:50%;}
-    .reset-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--c11-reset);
+    .snap-dust-particle{position:absolute;background:var(--c11-dust-a);pointer-events:none;z-index:3;border-radius:50%;}
+    .snap-reset-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--c11-reset);
       background:none;border:none;font-size:14px;cursor:pointer;opacity:0;visibility:hidden;
       transition:opacity 0.5s ease 1s;text-decoration:underline;}
-    .snapped .reset-btn{opacity:1;visibility:visible;}
-  </style>
+    .snap-snapped .snap-reset-btn{opacity:1;visibility:visible;}
+    .snap-btn:focus-visible,.snap-reset-btn:focus-visible{outline:2px solid var(--c11-reset);outline-offset:3px}
+</style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/buttons/11-thanos-snap-button.html",
  "title": "Thanos Snap Delete",
- "description": "Red DELETE button that disintegrates into ~200 drifting dust particles on click. Particles drift right and fade; a Restore link resets the state.",
+ "description": "Red DELETE button that disintegrates into up to 96 drifting dust particles on click. Particles drift right and fade; a Restore link resets the state.",
  "useWhen": "Destructive action confirmations (delete, remove, clear) where dramatic feedback reinforces irreversibility. Fun product demos or portfolio pieces.",
  "avoidWhen": "Frequent-action buttons or flows where users repeat the action often — the animation has no auto-reset. Avoid in low-motion contexts where reduced-motion is common.",
- "agentPrompt": "Change the button label from 'DELETE' to 'ERASE', set particle colors to '#00eaff' and '#0080ff', and increase the grid to 30 cols and 15 rows for denser dust. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Change the button label from 'DELETE' to 'ERASE', set particle colors to dusty clay '#9b6450' and parchment '#ddcdb7', and adjust the 12-column, 8-row grid within the 120-particle cap. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "button label (innerHTML)",
-  "particle grid density (cols=20, rows=10)",
+  "particle grid density (cols=12, rows=8)",
   "particle colors (#ff4757, #ff6b81, #ffffff)",
   "velocity bias (vx, vy values)",
   "particle decay rate (0.015–0.035 range)",
-  "idle demo cadence (LEAD=500 / DEMO_EVERY=4000 / REFORM_AFTER=1300 / IDLE_RESUME=3600 ms)",
+  "autonomous preview until first deliberate input cadence (LEAD=500 / DEMO_EVERY=4000 / REFORM_AFTER=1300 / IDLE_RESUME=3600 ms)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -54,12 +56,12 @@
   "cancelAnimationFrame on reset",
   "isSnapping guard to prevent double-fire",
   "idle demo snap + re-form (the same doSnap()/doReform() the click and Restore paths run)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "No visibility-change pause — particles keep animating if tab is hidden during snap",
   "Particle positions are DOM-absolute, so resizing mid-snap causes misalignment",
-  "Restore button lacks aria attributes for screen readers"
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -85,18 +87,18 @@
 </head>
 <body>
 
-  <div class="snap-btn-container" id="container">
-    <button class="snap-btn" id="snapBtn">DELETE</button>
-    <button class="reset-btn" id="resetBtn">Restore</button>
+  <div class="snap-btn-container" id="snap-container">
+    <button class="snap-btn" id="snap-snapBtn">DELETE</button>
+    <button class="snap-reset-btn" id="snap-resetBtn">Restore</button>
   </div>
 
   <div class="snap-cap">Thanos Snap Button</div>
 
   <script>
     (() => {
-      const btn = document.getElementById('snapBtn');
-      const container = document.getElementById('container');
-      const resetBtn = document.getElementById('resetBtn');
+      const btn = document.getElementById('snap-snapBtn');
+      const container = document.getElementById('snap-container');
+      const resetBtn = document.getElementById('snap-resetBtn');
       const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
       const root = document.documentElement;
 
@@ -108,7 +110,7 @@
 
       const createParticles = () => {
         const rect = btn.getBoundingClientRect();
-        const cols = 20, rows = 10;
+        const cols = 12, rows = 8;
         const pWidth = rect.width / cols, pHeight = rect.height / rows;
         for (let i = 0; i < cols; i++) {
           for (let j = 0; j < rows; j++) {
@@ -116,7 +118,7 @@
             const isCorner = (i < 2 && j < 2) || (i > cols-3 && j < 2) || (i < 2 && j > rows-3) || (i > cols-3 && j > rows-3);
             if (isCorner && Math.random() > 0.3) continue;
             const p = document.createElement('div');
-            p.classList.add('dust-particle');
+            p.classList.add('snap-dust-particle');
             p.style.width = `${pWidth * 1.5}px`;
             p.style.height = `${pHeight * 1.5}px`;
             // Randomly pick a color from the gradient
@@ -156,8 +158,8 @@
           const k = 1 - Math.pow(1 - u, 3);           // ease-out: dust streams back into the slab
           particles.forEach(p => paint(p, p.x + (p.sx - p.x) * k, p.y + (p.sy - p.y) * k,
             p.rotation * (1 - k), Math.min(1, k * 1.3)));
-          if (u >= 1) { clearParticles(); btn.classList.remove('snapping');
-            container.classList.remove('snapped'); isSnapping = false; mode = 'idle'; }
+          if (u >= 1) { clearParticles(); btn.classList.remove('snap-snapping');
+            container.classList.remove('snap-snapped'); isSnapping = false; mode = 'idle'; }
         }
         // 'dust' and 'idle' need no frames — the clock wakes the loop again for the re-form
         animationFrame = (mode === 'out' || mode === 'in') ? requestAnimationFrame(animate) : 0;
@@ -167,14 +169,14 @@
       const doSnap = () => {
         if (isSnapping) return;
         isSnapping = true;
-        btn.classList.add('snapping'); container.classList.add('snapped');
+        btn.classList.add('snap-snapping'); container.classList.add('snap-snapped');
         if (prefersReducedMotion) return;             // no dust: the slab just leaves
         createParticles(); mode = 'out'; run();
       };
       const doReform = () => {                        // Restore: the dust reassembles
         if (!isSnapping) return;
         if (prefersReducedMotion || !particles.length) {
-          btn.classList.remove('snapping'); container.classList.remove('snapped');
+          btn.classList.remove('snap-snapping'); container.classList.remove('snap-snapped');
           isSnapping = false; mode = 'idle'; return;
         }
         u = 0; mode = 'in'; run();
@@ -184,24 +186,24 @@
       // click runs — first snap LEAD ms after mount, the dust re-forming REFORM_AFTER ms later (just
       // after the last mote fades) through
       // doReform() (the Restore path), one round trip every DEMO_EVERY ms. Real input takes over (demo
-      // stops, the Restore link appears); the demo resumes after IDLE_RESUME ms of quiet.
+      // stops permanently and the Restore link appears).
       const TICK = 100, DEMO_EVERY = 4000, REFORM_AFTER = 1300, LEAD = 500, IDLE_RESUME = 3600;
-      let demo = true, phase = DEMO_EVERY - LEAD, idle = 0, reformed = true, clock = null;
+      let demo = window.__foreverPreview?.demoEnabled !== false && !prefersReducedMotion, phase = DEMO_EVERY - LEAD, idle = 0, reformed = true, clock = null;
       resetBtn.hidden = true;                         // the demo re-forms itself; the link is for people
       const tick = () => {
-        if (!demo) { idle += TICK;
-          if (idle >= IDLE_RESUME) { demo = true; idle = 0; resetBtn.hidden = true;
-            phase = DEMO_EVERY - LEAD; reformed = true; doReform(); }
-          return; }
+        if (!demo) return;
         phase += TICK;
         if (phase >= DEMO_EVERY) { phase = 0; reformed = false; doSnap(); }
         else if (!reformed && phase >= REFORM_AFTER) { reformed = true; doReform(); }
       };
-      const takeover = () => { demo = false; idle = 0; resetBtn.hidden = false; };
-      const start = () => { if (!clock && !prefersReducedMotion) clock = setInterval(tick, TICK); };
+      const takeover = () => { demo = false; idle = 0; resetBtn.hidden = false; clearInterval(clock); clock = null; };
+      window.addEventListener("forever:interactive", takeover);
+      container.addEventListener("pointerdown", takeover, true);
+      container.addEventListener("keydown", e => { if (/^(Enter| |Arrow|Escape)/.test(e.key)) takeover(); }, true);
+      const start = () => { if (demo && !clock && !prefersReducedMotion) clock = setInterval(tick, TICK); };
       const stop = () => { clearInterval(clock); clock = null; cancelAnimationFrame(animationFrame); animationFrame = 0; };
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden) stop(); else { start(); if (mode !== 'idle') run(); }
+        if (document.hidden) stop(); else { start(); if (mode === 'out' || mode === 'in') run(); }
       });
 
       btn.addEventListener('click', () => { takeover(); doSnap(); });
@@ -213,7 +215,7 @@
         if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) { root.setAttribute('data-theme', d.theme); syncTheme(); }
       });
 
-      start();                                        // reduced motion: no clock, the slab sits intact
+      if (demo) start();                                  // reduced motion: no clock, the slab sits intact
     })();
   </script>
 </body>

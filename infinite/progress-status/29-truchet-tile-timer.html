@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Truchet Tile Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Truchet Tile Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--paper:#15130F;--ink:#E9E2D0;--mid:#6F6858;--acc:#C9604F}
+:root[data-theme="light"]{--paper:#EFE8D8;--ink:#1E1B16;--mid:#9A917F;--acc:#7A2E22}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--paper)}
+.wth-root{width:100%;height:100%;display:grid;place-items:center;overflow:hidden}
+#wth-r{width:min(88vmin,640px);aspect-ratio:1}
+#wth-c{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;outline:none}
+#wth-c:focus-visible{outline:2px solid var(--acc);outline-offset:4px}
+.wth-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/29-truchet-tile-timer.html",
+ "title": "Truchet Tile Timer",
+ "description": "Paint a Truchet path that fills and turns as baking minutes pass. Charcoal linocut and parchment palette with brick red.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "truchet",
+  "paint",
+  "drag",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wth-root" role="group" aria-label="Truchet Tile Timer">
+<div id="wth-r" role="group" aria-label="Bake timer"><canvas id="wth-c" tabindex="0" role="application" aria-label="Bake minutes, paint tiles"></canvas></div>
+</div>
+<div class="wth-cap" aria-hidden="true">Truchet Tile Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||rm.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var LAB='Bake minutes, paint tiles';
+var R=document.documentElement,box=document.getElementById('wth-r'),cv=document.getElementById('wth-c'),g=cv.getContext('2d'),W=200,dpr=1,C={},raf=0,last=0,U=1000,
+rm=matchMedia('(prefers-reduced-motion: reduce)'),S={dur:8,run:false,done:false,el:0,t0:0},lab='';
+function reduced(){return rm.matches}
+function col(){var s=getComputedStyle(R);['paper','ink','mid','acc'].forEach(function(k){C[k]=s.getPropertyValue('--'+k).trim()})}
+function setTheme(t){R.setAttribute('data-theme',t==='light'?'light':'dark');col();wake()}
+addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme')setTheme(d.theme)});
+function size(){var r=box.getBoundingClientRect();W=r.width||200;dpr=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(W*dpr);wake()}
+new ResizeObserver(size).observe(box);
+function sp(o,k,vk,t,s,d,dt){o[vk]+=(t-o[k])*s*dt;o[vk]*=Math.pow(d,dt);o[k]+=o[vk]*dt;return Math.abs(t-o[k])<.002&&Math.abs(o[vk])<.002}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function pt(e){var r=cv.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*W/r.height]}
+function left(){return S.done?0:S.run?Math.ceil(S.dur-S.el):S.dur}
+function num(t,x,y,sz){g.font=sz+'px ui-monospace,Menlo,monospace';g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';g.lineWidth=sz*.35;g.strokeStyle=C.paper;g.strokeText(t,x,y);g.fillStyle=C.ink;g.fillText(t,x,y)}
+function start(){demoPaused=false;demoSession=demoEnabled;S.run=true;S.done=false;S.el=0;S.t0=performance.now();wake()}
+function reset(){demoPaused=false;S.run=false;S.done=false;S.el=0;wake()}
+function sync(){var t=LAB+': '+(S.done?'done':S.run?left()+' left':S.dur+' set');if(t!==lab){lab=t;cv.setAttribute('aria-label',t);if(cv.getAttribute('role')==='slider')cv.setAttribute('aria-valuenow',S.dur)}}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(frame)}}
+function frame(now){raf=0;var dt=Math.min(now-last,50)/16.667;last=now;demoBeat(dt*16.667);
+if(S.run&&!demoPaused){S.el=(now-S.t0)/U;if(S.el>=S.dur){S.el=S.dur;S.run=false;S.done=true;onDone()}}
+var busy=demoPaused?false:step(dt,now);g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,W);draw();sync();
+if((busy||S.run||demoEnabled)&&!demoPaused&&!rm.matches&&!raf)raf=requestAnimationFrame(frame);else if(S.run&&!demoPaused&&!demoSession&&!raf)raf=requestAnimationFrame(frame)}
+document.addEventListener('visibilitychange',function(){if(document.hidden){hiddenAt=performance.now();cancelAnimationFrame(raf);raf=0}else{if(hiddenAt&&S.run)S.t0+=performance.now()-hiddenAt;hiddenAt=0;wake()}});
+cv.addEventListener('focus',wake);cv.addEventListener('blur',wake);
+var n=8,cell=[],order=[],mode=1,down=false,cur=0,px=-1,py=-1,seed=7;
+for(var k=0;k<n*n;k++){seed=(seed*16807)%2147483647;cell.push({o:seed%2,p:-1,rt:0,rv:0,h:0,hv:0,s:1,sv:0,kt:0})}
+function geo(){var gs=W*.8,cs=gs/n;return{cs:cs,gx:(W-gs)/2,gy:W*.05,gs:gs}}
+function cellAt(x,y){var G=geo(),c=Math.floor((x-G.gx)/G.cs),r=Math.floor((y-G.gy)/G.cs);return(c<0||r<0||c>=n||r>=n)?-1:r*n+c}
+function apply(k){if(k<0)return;var c=cell[k];
+ if(mode===1&&c.p<0){c.p=order.length;order.push(k);c.s=.3;c.sv=0}
+ else if(mode===-1&&c.p>=0){order.splice(c.p,1);c.p=-1;order.forEach(function(q,i){cell[q].p=i})}
+ S.dur=order.length;wake()}
+function clearAll(){cell.forEach(function(c){c.p=-1;c.rt=0});order=[];S.dur=0;reset()}
+function onDone(){var now=performance.now();order.forEach(function(k,i){cell[k].kt=now+i*35})}
+function step(dt,now){
+ var busy=false,G=geo(),rr=reduced();
+ cell.forEach(function(c,k){
+  var cx=G.gx+(k%n+.5)*G.cs,cy=G.gy+(Math.floor(k/n)+.5)*G.cs;
+  var ht=px<0?0:Math.max(0,1-Math.hypot(px-cx,py-cy)/(G.cs*2.4)),done=c.p>=0&&S.el>=c.p+1&&(S.run||S.done);
+  if(c.kt&&now>=c.kt){c.sv+=.1;c.kt=0}if(c.kt)busy=true;
+  if(rr){c.h=ht;c.rt=done?1:0;c.rv=0;c.s=1;c.sv=0;c.kt=0}else{
+   if(!sp(c,'h','hv',ht,.12,.8,dt))busy=true;
+   if(!sp(c,'rt','rv',done?1:0,.06,.84,dt))busy=true;
+   if(!sp(c,'s','sv',1,.1,.8,dt))busy=true}});
+ return busy||down}
+function draw(){
+ var G=geo(),hc=G.cs/2*.86;
+ cell.forEach(function(c,k){
+  var cx=G.gx+(k%n+.5)*G.cs,cy=G.gy+(Math.floor(k/n)+.5)*G.cs;
+  g.save();g.translate(cx,cy);
+  if(c.p<0){g.beginPath();g.arc(0,0,G.cs*(.05+.16*c.h),0,7);g.fillStyle=C.mid;g.fill()}
+  else{
+   var f=(S.run||S.done)?clamp(S.el-c.p,0,1):0,fin=f>=1;
+   g.scale(c.s,c.s);g.rotate(c.o*Math.PI/2+c.rt*Math.PI/2);g.lineCap='round';
+   [[-hc,-hc,0,Math.min(f*2,1)],[hc,hc,Math.PI,Math.max(f*2-1,0)]].forEach(function(a){
+    g.beginPath();g.arc(a[0],a[1],hc,a[2],a[2]+Math.PI/2);g.lineWidth=1.4;g.strokeStyle=C.mid;g.stroke();
+    if(fin||a[3]>0){g.beginPath();g.arc(a[0],a[1],hc,a[2],a[2]+Math.PI/2*(fin?1:a[3]));g.lineWidth=fin?3:2;g.strokeStyle=fin?C.acc:C.ink;g.stroke()}})}
+  g.restore()});
+ if(document.activeElement===cv){var x=G.gx+(cur%n)*G.cs,y=G.gy+Math.floor(cur/n)*G.cs;g.strokeStyle=C.acc;g.lineWidth=2;g.strokeRect(x+2,y+2,G.cs-4,G.cs-4)}
+ if(order.length)num(left(),W/2,G.gy+G.gs+(W-G.gy-G.gs)/2,W*.08)}
+cv.addEventListener('pointerdown',function(e){demoPaused=false;cv.setPointerCapture(e.pointerId);var p=pt(e);px=p[0];py=p[1];
+ if(S.run||S.done)clearAll();var k=cellAt(px,py);if(k<0)return;down=true;mode=cell[k].p>=0?-1:1;apply(k)});
+cv.addEventListener('pointermove',function(e){var p=pt(e);px=p[0];py=p[1];if(down)apply(cellAt(px,py));wake()});
+function up(e){if(down&&order.length)start();down=false;if(e.pointerType!=='mouse'){px=-1}wake()}
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+cv.addEventListener('pointerleave',function(){if(!down)px=-1;wake()});
+cv.addEventListener('keydown',function(e){demoPaused=false;var k=e.key,d={ArrowLeft:-1,ArrowRight:1,ArrowUp:-n,ArrowDown:n}[k];
+ if(d){e.preventDefault();var c2=cur+d;if((d===-1&&cur%n===0)||(d===1&&cur%n===n-1)||c2<0||c2>=n*n)return;cur=c2;wake()}
+ else if(k===' '){e.preventDefault();if(S.run||S.done)clearAll();mode=cell[cur].p>=0?-1:1;apply(cur)}
+ else if(k==='Enter'){e.preventDefault();if(order.length)start()}
+ else if(k==='Escape')clearAll()});
+
+function demoFinished(){return S.done}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;start()}
+[18,19,20,21,29,37,36,35].forEach(apply);if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,performance.now());col();size();if(demoEnabled&&!rm.matches)demoStart();
+rm.addEventListener('change',function(){if(rm.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

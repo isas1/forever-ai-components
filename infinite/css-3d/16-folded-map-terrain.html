@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block. The canvas builds each
@@ -19,17 +20,17 @@
   :root{
     --fmt-bg:#0f2417; --fmt-lo:30,70,45; --fmt-hi:120,130,70;
     --fmt-shade:0.18,0.95; --fmt-seam:123,211,137;
-    --fmt-cap:#7bd389; --fmt-cap-o:.34;
+    --ch16-cap:#7bd389; --ch16-cap-o:.34;
   }
   :root[data-theme="light"]{
     --fmt-bg:#eef6ec; --fmt-lo:150,178,146; --fmt-hi:70,58,40;
     --fmt-shade:0.72,0.30; --fmt-seam:22,86,44;
-    --fmt-cap:#2a7e37; --fmt-cap-o:.6;
+    --ch16-cap:#2a7e37; --ch16-cap-o:.6;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--fmt-bg);}
-  #fmt-c{display:block;width:100%;height:100%;}
+  #ch16-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
-       letter-spacing:.14em;color:var(--fmt-cap);opacity:var(--fmt-cap-o);text-transform:uppercase;
+       letter-spacing:.14em;color:var(--ch16-cap);opacity:var(--ch16-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -54,12 +55,14 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "O(G^2) quads per frame — G beyond 20 may drop FPS on low-end devices",
   "Background color hardcoded in CSS (#0f2417)",
-  "No aria role on canvas — purely decorative"
+  "No aria role on canvas — purely decorative",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -83,12 +86,17 @@
 </script>
 </head>
 <body>
-<canvas id="fmt-c"></canvas>
+<canvas id="ch16-c" class="ch16-root"></canvas>
 <div class="cap">Folded Map Terrain</div>
 <script>
 (function(){
-  const cv=document.getElementById('fmt-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('ch16-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now();if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
   let W,H,DPR,cx,cy,scale;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -183,13 +191,13 @@
         ctx.lineWidth=1;ctx.stroke();
       }
     }
-    if(!reduce) raf=requestAnimationFrame(frame);
+    if(!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);else raf=0;
   }
   let raf=0;
-  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){frame();}else start();
+  if(reduce||!demo){frame();}else start();
 })();
 </script>
 </body>

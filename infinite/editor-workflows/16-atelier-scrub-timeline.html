@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Atelier Scrub Timeline — Editor Workflows. Twenty-four bar audio timeline scrubber with Gaussian playhead focus wave.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier Scrub Timeline</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  :root {
+    --at17-bg: #171614;
+    --at17-surface-hi: #211F1C;
+    --at17-ink: #F4F1EA;
+    --at17-muted: #ADA699;
+    --at17-border: #57524A;
+    --at17-accent: #EC6A43;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --at17-bg: #F4F1EA;
+    --at17-surface-hi: #FAF8F5;
+    --at17-ink: #1C1B19;
+    --at17-muted: #666158;
+    --at17-border: #C5BEB0;
+    --at17-accent: #C43B16;
+    color-scheme: light;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background-color: var(--at17-bg); color: var(--at17-ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  .at17-stage {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: clamp(10px, 3vmin, 20px);
+    padding-bottom: clamp(24px, 7vmin, 32px);
+    background-color: var(--at17-bg); color: var(--at17-ink);
+  }
+  .at17-unit {
+    width: min(224px, 100%);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .at17-wrap {
+    width: 100%;
+    background: var(--at17-surface-hi);
+    border: 1.5px solid var(--at17-ink); border-radius: 6px;
+    padding: clamp(9px, 3vmin, 12px) clamp(8px, 2.5vw, 10px) 8px;
+    box-shadow: 0 2px 0 var(--at17-ink);
+    cursor: ew-resize; touch-action: none;
+  }
+  .at17-wrap:focus-visible { outline: 2px solid var(--at17-accent); outline-offset: 2px; }
+  .at17-bars {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    height: clamp(34px, 18vmin, 46px); gap: 2px;
+  }
+  .at17-bar {
+    flex: 1; background: var(--at17-border);
+    height: 30%; border-radius: 1px;
+    transition: height 90ms ease-out, background-color 90ms ease;
+  }
+  .at17-bar.is-passed { background: var(--at17-ink); }
+  .at17-bar.is-active { background: var(--at17-accent); }
+  .at17-readout {
+    display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    font-size: clamp(9px, 2.4vw, 10px); font-weight: 600;
+    letter-spacing: 0.08em; color: var(--at17-muted);
+    text-transform: uppercase;
+  }
+  .at17-val { color: var(--at17-ink); }
+  .at17-cap {
+    position: absolute; left: 10px; bottom: 8px;
+    font: 500 11px/1 ui-monospace, monospace;
+    color: var(--at17-ink); opacity: 0.45;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    user-select: none; pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .at17-bar { transition-duration: 0.01ms !important; }
+  }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/editor-workflows/16-atelier-scrub-timeline.html",
+ "title": "Atelier Scrub Timeline",
+ "description": "Interactive 24-bar timeline scrubber featuring a Gaussian peak envelope around the active playhead and timecode readout.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Keep Gaussian bar falloff math and role=slider attributes intact.",
+ "editableAreas": [
+  "tokens",
+  "bars"
+ ],
+ "preserveElements": [
+  "demo-v1"
+ ],
+ "knownLimitations": [],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "timeline",
+  "scrubber",
+  "playhead",
+  "audio",
+  "editor",
+  "atelier"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="at17-stage">
+  <div class="at17-unit">
+    <div class="at17-wrap" id="at17-wrap" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="23" aria-valuenow="9" aria-label="Timeline Scrubber">
+      <div class="at17-bars" id="at17-bars"></div>
+    </div>
+    <div class="at17-readout">
+      <span>PLAYHEAD</span>
+      <span class="at17-val" id="at17-out">00:09.12</span>
+    </div>
+  </div>
+</div>
+<div class="at17-cap" aria-hidden="true">Atelier Scrub Timeline</div>
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var wrap = document.getElementById("at17-wrap");
+  var barsWrap = document.getElementById("at17-bars");
+  var out = document.getElementById("at17-out");
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var count = 24, active = 9, bars = [], dragging = false;
+
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "forever:theme" && (e.data.theme === "light" || e.data.theme === "dark")) {
+      root.setAttribute("data-theme", e.data.theme);
+    }
+  });
+
+  for (var i = 0; i < count; i++) {
+    var b = document.createElement("div");
+    b.className = "at17-bar";
+    barsWrap.appendChild(b);
+    bars.push(b);
+  }
+
+  function setPlayhead(idx) {
+    active = Math.max(0, Math.min(count - 1, Math.round(idx)));
+    for (var i = 0; i < bars.length; i++) {
+      var dist = Math.abs(i - active);
+      var h = Math.max(24, Math.round(100 * Math.exp(-(dist * dist) / 4.5)));
+      bars[i].style.height = h + "%";
+      bars[i].classList.toggle("is-active", i === active);
+      bars[i].classList.toggle("is-passed", i < active);
+    }
+    wrap.setAttribute("aria-valuenow", String(active));
+    out.textContent = "00:" + String(active).padStart(2, "0") + ".12";
+  }
+  setPlayhead(active);
+
+  function scrubPointer(e) {
+    var r = wrap.getBoundingClientRect();
+    if (!r.width) return;
+    setPlayhead(((e.clientX - r.left) / r.width) * (count - 1));
+  }
+
+  var demo = !reduce && (!window.__foreverPreview || window.__foreverPreview.demoEnabled !== false);
+  var demoTimer = null, dir = 1;
+
+  function stepDemo() {
+    if (!demo || reduce || document.hidden) return;
+    if (active >= count - 2) dir = -1;
+    else if (active <= 2) dir = 1;
+    setPlayhead(active + dir);
+  }
+  function startDemo() {
+    if (demo && !reduce && !demoTimer) demoTimer = setInterval(stepDemo, 140);
+  }
+  function stopDemo() {
+    if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+  }
+  function takeover() { demo = false; stopDemo(); }
+
+  window.addEventListener("forever:interactive", takeover);
+  wrap.addEventListener("pointerdown", function (e) {
+    takeover();
+    dragging = true;
+    if (wrap.setPointerCapture) wrap.setPointerCapture(e.pointerId);
+    scrubPointer(e);
+  });
+  wrap.addEventListener("pointermove", function (e) {
+    if (dragging) scrubPointer(e);
+  });
+  wrap.addEventListener("pointerup", function () { dragging = false; });
+  wrap.addEventListener("pointercancel", function () { dragging = false; });
+  wrap.addEventListener("keydown", function (e) {
+    takeover();
+    if (e.key === "ArrowRight") { e.preventDefault(); setPlayhead(active + 1); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); setPlayhead(active - 1); }
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) stopDemo(); else if (demo) startDemo();
+  });
+
+  if (demo) startDemo();
+})();
+</script>
+</body>
+</html>

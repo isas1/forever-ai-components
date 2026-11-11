@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Zigzag Bake Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zigzag Bake Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--paper:#15130F;--ink:#E9E2D0;--mid:#6F6858;--acc:#C9604F}
+:root[data-theme="light"]{--paper:#EFE8D8;--ink:#1E1B16;--mid:#9A917F;--acc:#7A2E22}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--paper)}
+.wtf-root{width:100%;height:100%;display:grid;place-items:center;overflow:hidden}
+#wtf-r{width:min(88vmin,640px);aspect-ratio:1}
+#wtf-c{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;outline:none}
+#wtf-c:focus-visible{outline:2px solid var(--acc);outline-offset:4px}
+.wtf-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/27-zigzag-bake-timer.html",
+ "title": "Zigzag Bake Timer",
+ "description": "Choose a triangular tile to bake through a rippling zigzag strip. Charcoal linocut and parchment palette with brick red.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "triangle",
+  "zigzag",
+  "selection",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wtf-root" role="group" aria-label="Zigzag Bake Timer">
+<div id="wtf-r" role="group" aria-label="Bake timer"><canvas id="wtf-c" tabindex="0" role="application" aria-label="Bake minutes, choose a tile"></canvas></div>
+</div>
+<div class="wtf-cap" aria-hidden="true">Zigzag Bake Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||rm.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var LAB='Bake minutes, choose a tile';
+var R=document.documentElement,box=document.getElementById('wtf-r'),cv=document.getElementById('wtf-c'),g=cv.getContext('2d'),W=200,dpr=1,C={},raf=0,last=0,U=1000,
+rm=matchMedia('(prefers-reduced-motion: reduce)'),S={dur:8,run:false,done:false,el:0,t0:0},lab='';
+function reduced(){return rm.matches}
+function col(){var s=getComputedStyle(R);['paper','ink','mid','acc'].forEach(function(k){C[k]=s.getPropertyValue('--'+k).trim()})}
+function setTheme(t){R.setAttribute('data-theme',t==='light'?'light':'dark');col();wake()}
+addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme')setTheme(d.theme)});
+function size(){var r=box.getBoundingClientRect();W=r.width||200;dpr=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(W*dpr);wake()}
+new ResizeObserver(size).observe(box);
+function sp(o,k,vk,t,s,d,dt){o[vk]+=(t-o[k])*s*dt;o[vk]*=Math.pow(d,dt);o[k]+=o[vk]*dt;return Math.abs(t-o[k])<.002&&Math.abs(o[vk])<.002}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function pt(e){var r=cv.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*W/r.height]}
+function left(){return S.done?0:S.run?Math.ceil(S.dur-S.el):S.dur}
+function num(t,x,y,sz){g.font=sz+'px ui-monospace,Menlo,monospace';g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';g.lineWidth=sz*.35;g.strokeStyle=C.paper;g.strokeText(t,x,y);g.fillStyle=C.ink;g.fillText(t,x,y)}
+function start(){demoPaused=false;demoSession=demoEnabled;S.run=true;S.done=false;S.el=0;S.t0=performance.now();wake()}
+function reset(){demoPaused=false;S.run=false;S.done=false;S.el=0;wake()}
+function sync(){var t=LAB+': '+(S.done?'done':S.run?left()+' left':S.dur+' set');if(t!==lab){lab=t;cv.setAttribute('aria-label',t);if(cv.getAttribute('role')==='slider')cv.setAttribute('aria-valuenow',S.dur)}}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(frame)}}
+function frame(now){raf=0;var dt=Math.min(now-last,50)/16.667;last=now;demoBeat(dt*16.667);
+if(S.run&&!demoPaused){S.el=(now-S.t0)/U;if(S.el>=S.dur){S.el=S.dur;S.run=false;S.done=true;onDone()}}
+var busy=demoPaused?false:step(dt,now);g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,W);draw();sync();
+if((busy||S.run||demoEnabled)&&!demoPaused&&!rm.matches&&!raf)raf=requestAnimationFrame(frame);else if(S.run&&!demoPaused&&!demoSession&&!raf)raf=requestAnimationFrame(frame)}
+document.addEventListener('visibilitychange',function(){if(document.hidden){hiddenAt=performance.now();cancelAnimationFrame(raf);raf=0}else{if(hiddenAt&&S.run)S.t0+=performance.now()-hiddenAt;hiddenAt=0;wake()}});
+cv.addEventListener('focus',wake);cv.addEventListener('blur',wake);
+var n=12,T=[],px=-1,py=-1,sel=7,hov=-1,preview=-1;
+for(var i=0;i<n;i++)T.push({y:0,vy:0,kt:0,ka:0});
+function geo(){var b=W*.92/6.5,h=b*1.25;return{b:b,h:h,x0:(W-6.5*b)/2,cy:W*.46}}
+function ripple(k,amp){var now=performance.now();T.forEach(function(t,i){t.kt=now+Math.abs(i-k)*55;t.ka=amp});wake()}
+function onDone(){ripple(n-1,1.6)}
+function at(x,y){var G=geo();if(x<0||Math.abs(y-G.cy)>G.h)return -1;var k=Math.round((x-G.x0-G.b/2)/(G.b/2));return clamp(k,0,n-1)}
+function setK(k){sel=k;S.dur=k+1;start();ripple(k,1)}
+function step(dt,now){
+ var busy=false,G=geo();
+ T.forEach(function(t,i){
+  if(t.kt&&now>=t.kt){t.vy-=t.ka*W*.012;t.kt=0}
+  if(t.kt)busy=true;
+  var cx=G.x0+i*G.b/2+G.b/2,lift=px<0?0:Math.max(0,1-Math.abs(px-cx)/(G.b*1.5))*-G.h*.16;
+  if(reduced()){t.y=0;t.vy=0;t.kt=0}else if(!sp(t,'y','vy',lift,.08,.84,dt))busy=true});
+ return busy}
+function tri(i,G,dy){var x=G.x0+i*G.b/2,t=G.cy-G.h/2+dy,bt=G.cy+G.h/2+dy;g.beginPath();
+ if(i%2===0){g.moveTo(x,bt);g.lineTo(x+G.b,bt);g.lineTo(x+G.b/2,t)}else{g.moveTo(x,t);g.lineTo(x+G.b,t);g.lineTo(x+G.b/2,bt)}g.closePath()}
+function draw(){
+ var G=geo();
+ T.forEach(function(t,i){
+  var on=i<S.dur,f=on?clamp(S.el-i,0,1):0,pv=!S.run&&!S.done&&i<=preview;
+  tri(i,G,t.y);g.lineWidth=on?1.8:1;g.lineJoin='round';
+  g.strokeStyle=pv?C.acc:on?(f>=1||S.done?C.acc:C.ink):C.mid;
+  if(on&&f>0){g.save();tri(i,G,t.y);g.clip();g.strokeStyle=C.ink;g.lineWidth=1.2;g.beginPath();
+   var sp2=G.b*.085,x1=G.x0+i*G.b/2,w=G.b+G.h,lim=x1-G.h+f*w;
+   for(var u=x1-G.h;u<=lim;u+=sp2){g.moveTo(u,G.cy+G.h/2+t.y);g.lineTo(u+G.h,G.cy-G.h/2+t.y)}
+   g.stroke();g.restore();tri(i,G,t.y);g.strokeStyle=pv?C.acc:f>=1||S.done?C.acc:C.ink;g.lineWidth=1.8}
+  g.stroke()});
+ num(left(),W/2,G.cy+G.h*.5+W*.17,W*.1)}
+cv.addEventListener('pointermove',function(e){var p=pt(e);px=p[0];py=p[1];preview=at(px,py);wake()});
+cv.addEventListener('pointerdown',function(e){demoPaused=false;var p=pt(e);px=p[0];py=p[1];preview=at(px,py);wake()});
+cv.addEventListener('pointerleave',function(){px=-1;preview=-1;wake()});
+cv.addEventListener('pointerup',function(e){var p=pt(e),k=at(p[0],p[1]);if(k>=0)setK(k);if(e.pointerType!=='mouse'){px=-1;preview=-1}wake()});
+cv.addEventListener('keydown',function(e){demoPaused=false;var k=e.key;
+ if(k==='ArrowRight'||k==='ArrowLeft'){e.preventDefault();sel=clamp(sel+(k==='ArrowRight'?1:-1),0,n-1);reset();S.dur=sel+1;preview=sel;ripple(sel,.6)}
+ else if(k==='Enter'||k===' '){e.preventDefault();S.dur=sel+1;start();ripple(sel,1)}});
+cv.addEventListener('blur',function(){preview=-1});
+
+function demoFinished(){return S.done}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;start()}
+if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,performance.now());col();size();if(demoEnabled&&!rm.matches)demoStart();
+rm.addEventListener('change',function(){if(rm.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

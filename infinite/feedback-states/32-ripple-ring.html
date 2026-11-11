@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Ripple Ring — Feedback &amp; States. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ripple Ring</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#3cc4a8}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#0b7a66}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt19-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.dt19-root:focus{outline:none}
+.dt19-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt19-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dt19-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/feedback-states/32-ripple-ring.html",
+ "title": "Ripple Ring",
+ "description": "A still pool with a waiting crab: press and hold to weave in an item as a rippling ring, tap to remove the newest. Clean modern: off-black and verdigris with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and verdigris (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "At most 8 items. A hold is about 520 ms per ring; a tap under 240 ms removes.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "empty-state",
+  "list",
+  "ripple",
+  "crab",
+  "rings"
+ ]
+}
+</script>
+</head><body>
+<div class="dt19-root" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="8" aria-valuenow="0" aria-valuetext="0 items, still pool, crab waiting" aria-label="Ripple Ring list. A still pool with one crab waiting. Press and hold, or press Enter or Arrow Up, to weave in an item as a ring. Tap, or press Arrow Down, to remove the newest ring. Escape empties the pool."></div>
+<div class="dt19-cap" aria-hidden="true">Ripple Ring</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.dt19-root'),cv=document.createElement('canvas');
+  cv.className='dt19-cv';cv.setAttribute('aria-hidden','true');root.appendChild(cv);
+  var g=cv.getContext('2d'),S=0,dpr=1,MAX=8,count=0,rings=[],rips=[],hold=null;
+  var crab={s:1,v:0};
+  function R(){return S*0.46}
+  function C(){return S*0.065}
+  function slot(i){var a=C()*2.1;return a+(i+0.6)*(R()-a)/8.6}
+  function alive(){return rings.filter(function(r){return !r.d})}
+  function upd(){root.setAttribute('aria-valuenow',count);
+    root.setAttribute('aria-valuetext',count?count+(count>1?' items':' item'):'0 items, still pool, crab waiting')}
+  function add(from){
+    if(count>=MAX){crab.v+=0.08;rips.push({r:C()*1.4,amp:1.5,a:0.4});kick();return}
+    var t=slot(count);
+    rings.push({r:from||C()*1.5,v:0,t:t,w:0,wv:2.5,ph:Math.random()*6.28,a:1,d:0});
+    count++;crab.v-=0.06;rips.push({r:t,amp:3.2,a:0.7});
+    upd();kick()}
+  function rem(){var a=alive();if(!a.length){crab.v+=0.05;rips.push({r:C()*1.4,amp:1.2,a:0.35});kick();return}
+    var r=a[a.length-1];r.d=1;r.t=C()*1.2;count--;crab.v+=0.07;
+    rips.push({r:C()*1.4,amp:2,a:0.5});upd();kick()}
+  function clearAll(){while(count)rem()}
+  function tick(now){if(!hold)return;
+    var p=(now-hold.t0)/520-hold.n;
+    if(p>=1){add(hold.gr);hold.n++;p=0}
+    if(count>=MAX){hold.p=0;hold.gr=0;return}
+    var e=1-Math.pow(1-Math.min(p,1),3);hold.p=p;hold.gr=C()*1.5+(slot(count)-C()*1.5)*e}
+  function sp(o,k,d,dt){o.v+=(o.t-o.r)*k*dt;o.v*=Math.pow(d,dt);o.r+=o.v*dt}
+  function step(dt){var m=!!hold,Rf=R(),i,j;
+    for(i=rings.length-1;i>=0;i--){var r=rings[i];sp(r,0.17,0.8,dt);
+      r.wv+=-r.w*0.12*dt;r.wv*=Math.pow(0.86,dt);r.w+=r.wv*dt;
+      if(r.d){r.a-=0.05*dt;if(r.a<=0){rings.splice(i,1);continue}}
+      if(Math.abs(r.v)>0.02||Math.abs(r.t-r.r)>0.05||Math.abs(r.w)>0.03||Math.abs(r.wv)>0.03||r.d)m=true}
+    for(i=rips.length-1;i>=0;i--){var p=rips[i],pr=p.r;p.r+=dt*S/260;
+      for(j=0;j<rings.length;j++){var q=rings[j];if(pr<q.r&&p.r>=q.r)q.wv+=p.amp*(1-q.r/Rf)}
+      if(p.r>=Rf)rips.splice(i,1);else m=true}
+    var ct=count?0.74:1;crab.v+=(ct-crab.s)*0.16*dt;crab.v*=Math.pow(0.8,dt);crab.s+=crab.v*dt;
+    if(Math.abs(crab.v)>0.001||Math.abs(ct-crab.s)>0.001)m=true;
+    return m}
+  function snapToTarget(){rings=alive();rings.forEach(function(r){r.r=r.t;r.v=0;r.w=0;r.wv=0});
+    rips=[];crab.s=count?0.74:1;crab.v=0}
+  function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+  function crabDraw(c,s,ink){g.save();g.translate(S/2,S/2);g.scale(s,s);
+    g.strokeStyle=ink;g.fillStyle=ink;g.lineWidth=1.5/s;g.lineCap='round';g.lineJoin='round';
+    g.beginPath();g.ellipse(0,0,c,c*0.72,0,0,6.283);g.stroke();
+    g.save();g.beginPath();g.ellipse(0,0,c,c*0.72,0,0,6.283);g.clip();g.lineWidth=1/s;
+    for(var h=-c*1.6;h<c;h+=c*0.26){g.beginPath();g.moveTo(h,-c*0.05);g.lineTo(h+c*0.7,-c*0.75);g.stroke()}
+    g.restore();g.beginPath();
+    for(var sd=-1;sd<=1;sd+=2){
+      for(var i=0;i<3;i++){var y=c*(-0.05+i*0.27);g.moveTo(sd*c*0.85,y);
+        g.lineTo(sd*c*1.45,y-c*0.22+i*c*0.05);g.lineTo(sd*c*1.75,y+c*0.38)}
+      g.moveTo(sd*c*0.55,-c*0.55);g.lineTo(sd*c*0.9,-c*1.05);
+      g.moveTo(sd*c*0.25,-c*0.66);g.lineTo(sd*c*0.32,-c*1.0)}
+    g.stroke();
+    for(sd=-1;sd<=1;sd+=2){g.beginPath();g.arc(sd*c*0.98,-c*1.32,c*0.3,sd>0?2.2:-0.6,sd>0?7.6:4.8);g.stroke();
+      g.beginPath();g.arc(sd*c*0.32,-c*1.05,c*0.09,0,6.283);g.fill()}
+    g.restore()}
+  function ring(r,w,ph){g.beginPath();for(var k=0;k<=96;k++){var a=k/96*6.283,rr=r+w*Math.sin(6*a+ph);
+    k?g.lineTo(S/2+rr*Math.cos(a),S/2+rr*Math.sin(a)):g.moveTo(S/2+rr*Math.cos(a),S/2+rr*Math.sin(a))}g.stroke()}
+  function draw(){if(!S)return;var bg=col('--bg'),ink=col('--ink'),acc=col('--acc'),Rf=R(),c=C(),cx=S/2,i;
+    g.setTransform(dpr,0,0,dpr,0,0);g.fillStyle=bg;g.fillRect(0,0,S,S);
+    g.strokeStyle=ink;g.lineWidth=1;g.globalAlpha=0.13;g.beginPath();
+    for(i=0;i<24;i++){var a=i/24*6.283;g.moveTo(cx+c*2*Math.cos(a),cx+c*2*Math.sin(a));g.lineTo(cx+Rf*Math.cos(a),cx+Rf*Math.sin(a))}
+    g.stroke();g.globalAlpha=0.32;g.beginPath();g.arc(cx,cx,Rf,0,6.283);g.stroke();
+    if(count<MAX){g.globalAlpha=0.4;g.setLineDash([1,5]);g.beginPath();g.arc(cx,cx,slot(count),0,6.283);g.stroke();g.setLineDash([])}
+    for(i=0;i<rips.length;i++){var p=rips[i];g.globalAlpha=p.a*(1-p.r/Rf);g.beginPath();g.arc(cx,cx,p.r,0,6.283);g.stroke()}
+    var al=alive(),top=al[al.length-1];
+    for(i=0;i<rings.length;i++){var r=rings[i];g.globalAlpha=r.d?Math.max(r.a,0)*0.6:1;
+      g.strokeStyle=r===top?acc:ink;g.lineWidth=r===top?2:1.5;ring(Math.max(r.r,1),r.w,r.ph)}
+    if(hold&&hold.gr){g.globalAlpha=0.35+0.65*Math.min(hold.p,1);g.strokeStyle=acc;g.lineWidth=2;
+      g.beginPath();g.arc(cx,cx,hold.gr,-1.571,-1.571+6.283*Math.min(hold.p,1));g.stroke()}
+    g.globalAlpha=1;crabDraw(c,crab.s,ink)}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;tick(now);
+    var moving=reduce()?(snapToTarget(),!!hold):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  new ResizeObserver(function(){var b=root.getBoundingClientRect();S=b.width;dpr=Math.min(window.devicePixelRatio||1,2);
+    cv.width=Math.round(S*dpr);cv.height=Math.round(S*dpr);
+    alive().forEach(function(r,i){r.t=slot(i);if(reduce())r.r=r.t});
+    if(demo&&!rips.length&&!count&&!reduce())rips.push({r:S*0.17,amp:1.4,a:0.55});
+    draw();kick()}).observe(root);
+  root.addEventListener('pointerdown',function(e){e.preventDefault();root.focus();
+    try{root.setPointerCapture(e.pointerId)}catch(x){}
+    hold={t0:performance.now(),n:0,p:0,gr:0};kick()});
+  function up(){if(!hold)return;var d=performance.now()-hold.t0;
+    if(!hold.n&&d<240)rem();hold=null;kick()}
+  root.addEventListener('pointerup',up);root.addEventListener('pointercancel',function(){hold=null;kick()});
+  root.addEventListener('keydown',function(e){var k=e.key;
+    if(k==='Enter'||k===' '||k==='ArrowUp'||k==='ArrowRight'){add();e.preventDefault()}
+    else if(k==='ArrowDown'||k==='ArrowLeft'||k==='Backspace'||k==='Delete'){rem();e.preventDefault()}
+    else if(k==='Escape'||k==='Home'){clearAll();e.preventDefault()}});
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,di=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  var demoT=setInterval(function(){if(!demo||document.hidden||reduce())return;var o='aaaarrrn'[di++%8];if(hold)return;if(o==='a')add();else if(o==='r')rem();else{rips.push({r:C()*1.5,amp:1.2,a:0.45});kick()}},1000);
+  window.addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,true);document.addEventListener('keydown',stopDemo,true);
+  upd();draw();
+})();</script>
+</body></html>

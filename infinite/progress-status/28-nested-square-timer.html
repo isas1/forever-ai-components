@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Nested Square Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nested Square Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--paper:#15130F;--ink:#E9E2D0;--mid:#6F6858;--acc:#C9604F}
+:root[data-theme="light"]{--paper:#EFE8D8;--ink:#1E1B16;--mid:#9A917F;--acc:#7A2E22}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--paper)}
+.wtg-root{width:100%;height:100%;display:grid;place-items:center;overflow:hidden}
+#wtg-r{width:min(88vmin,640px);aspect-ratio:1}
+#wtg-c{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;outline:none}
+#wtg-c:focus-visible{outline:2px solid var(--acc);outline-offset:4px}
+.wtg-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/28-nested-square-timer.html",
+ "title": "Nested Square Timer",
+ "description": "Drag or scroll nested squares to set time and fill each geometric layer. Charcoal linocut and parchment palette with brick red.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "squares",
+  "inertia",
+  "wheel",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wtg-root" role="group" aria-label="Nested Square Timer">
+<div id="wtg-r" role="group" aria-label="Bake timer"><canvas id="wtg-c" tabindex="0" role="slider" aria-label="Bake minutes, drag up or down" aria-valuemin="1"></canvas></div>
+</div>
+<div class="wtg-cap" aria-hidden="true">Nested Square Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||rm.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var LAB='Bake minutes, drag up or down';
+var R=document.documentElement,box=document.getElementById('wtg-r'),cv=document.getElementById('wtg-c'),g=cv.getContext('2d'),W=200,dpr=1,C={},raf=0,last=0,U=1000,
+rm=matchMedia('(prefers-reduced-motion: reduce)'),S={dur:8,run:false,done:false,el:0,t0:0},lab='';
+function reduced(){return rm.matches}
+function col(){var s=getComputedStyle(R);['paper','ink','mid','acc'].forEach(function(k){C[k]=s.getPropertyValue('--'+k).trim()})}
+function setTheme(t){R.setAttribute('data-theme',t==='light'?'light':'dark');col();wake()}
+addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme')setTheme(d.theme)});
+function size(){var r=box.getBoundingClientRect();W=r.width||200;dpr=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(W*dpr);wake()}
+new ResizeObserver(size).observe(box);
+function sp(o,k,vk,t,s,d,dt){o[vk]+=(t-o[k])*s*dt;o[vk]*=Math.pow(d,dt);o[k]+=o[vk]*dt;return Math.abs(t-o[k])<.002&&Math.abs(o[vk])<.002}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function pt(e){var r=cv.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*W/r.height]}
+function left(){return S.done?0:S.run?Math.ceil(S.dur-S.el):S.dur}
+function num(t,x,y,sz){g.font=sz+'px ui-monospace,Menlo,monospace';g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';g.lineWidth=sz*.35;g.strokeStyle=C.paper;g.strokeText(t,x,y);g.fillStyle=C.ink;g.fillText(t,x,y)}
+function start(){demoPaused=false;demoSession=demoEnabled;S.run=true;S.done=false;S.el=0;S.t0=performance.now();wake()}
+function reset(){demoPaused=false;S.run=false;S.done=false;S.el=0;wake()}
+function sync(){var t=LAB+': '+(S.done?'done':S.run?left()+' left':S.dur+' set');if(t!==lab){lab=t;cv.setAttribute('aria-label',t);if(cv.getAttribute('role')==='slider')cv.setAttribute('aria-valuenow',S.dur)}}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(frame)}}
+function frame(now){raf=0;var dt=Math.min(now-last,50)/16.667;last=now;demoBeat(dt*16.667);
+if(S.run&&!demoPaused){S.el=(now-S.t0)/U;if(S.el>=S.dur){S.el=S.dur;S.run=false;S.done=true;onDone()}}
+var busy=demoPaused?false:step(dt,now);g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,W);draw();sync();
+if((busy||S.run||demoEnabled)&&!demoPaused&&!rm.matches&&!raf)raf=requestAnimationFrame(frame);else if(S.run&&!demoPaused&&!demoSession&&!raf)raf=requestAnimationFrame(frame)}
+document.addEventListener('visibilitychange',function(){if(document.hidden){hiddenAt=performance.now();cancelAnimationFrame(raf);raf=0}else{if(hiddenAt&&S.run)S.t0+=performance.now()-hiddenAt;hiddenAt=0;wake()}});
+cv.addEventListener('focus',wake);cv.addEventListener('blur',wake);
+var v=8,vel=0,drag=false,ly=0,lt=0,pend=false,Z={s:1,sv:0},r=.12,M=24;
+cv.setAttribute('aria-valuemax',M);
+function onDone(){Z.sv+=.012}
+function setV(x){v=clamp(x,1,M);if(!S.run)S.dur=Math.round(v)}
+function levels(m){var V=[[-1,-1],[1,-1],[1,1],[-1,1]].map(function(p){return[p[0]*W*.44,p[1]*W*.44]}),L=[V];
+ for(var i=0;i<m;i++){var P=L[i];L.push(P.map(function(p,j){var q=P[(j+1)%4];return[p[0]+r*(q[0]-p[0]),p[1]+r*(q[1]-p[1])]}))}return L}
+function step(dt){
+ var busy=false;
+ if(!drag){
+  if(reduced()){v=Math.round(v);vel=0}else{
+   v+=vel*dt;vel+=(Math.round(v)-v)*.03*dt;vel*=Math.pow(.93,dt);
+   if(v<1||v>M){v=clamp(v,1,M);vel*=-.3}
+   if(Math.abs(vel)<.003&&Math.abs(v-Math.round(v))<.003){v=Math.round(v);vel=0}else busy=true}
+  if(!S.run)S.dur=Math.round(v);
+  if(!busy&&pend){pend=false;start()}}
+ if(reduced()){Z.s=1;Z.sv=0}else if(!sp(Z,'s','sv',1,.1,.82,dt))busy=true;
+ return busy||drag}
+function eb(x){var c=1.9;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)}
+function draw(){
+ var m=v+1,fl=Math.floor(m),fr=m-fl,L=levels(fl+1);g.save();g.translate(W/2,W/2);g.scale(Z.s,Z.s);
+ g.lineJoin='round';g.lineWidth=1.5;
+ if(S.run||S.done)for(var i=0;i<S.dur;i++){var A=L[i],B=L[i+1];if(!B)break;
+  for(var j=0;j<4;j++){var q=clamp((S.el-i)*4-j,0,1);if(q<=0)continue;
+   var a=A[j],b=B[j],c=B[(j+3)%4],cx=(a[0]+b[0]+c[0])/3,cy=(a[1]+b[1]+c[1])/3,k=eb(q);
+   g.beginPath();[a,b,c].forEach(function(p,n2){g[n2?'lineTo':'moveTo'](cx+(p[0]-cx)*k,cy+(p[1]-cy)*k)});g.closePath();
+   g.fillStyle=q<1?C.acc:C.ink;g.fill()}}
+ g.strokeStyle=S.done?C.acc:C.ink;
+ for(var i2=0;i2<=fl;i2++){var Q=L[i2];if(!Q)break;
+  if(i2===fl&&fr<1){var P=L[i2-1];if(!P)break;Q=Q.map(function(p,j){return[P[j][0]+(p[0]-P[j][0])*fr,P[j][1]+(p[1]-P[j][1])*fr]})}
+  if(i2===fl&&fr===0)break;
+  g.beginPath();Q.forEach(function(p,j){g[j?'lineTo':'moveTo'](p[0],p[1])});g.closePath();g.stroke()}
+ g.restore();num(left(),W/2,W/2,W*.09)}
+cv.addEventListener('pointerdown',function(e){demoPaused=false;cv.setPointerCapture(e.pointerId);if(S.run||S.done)reset();drag=true;pend=false;vel=0;ly=pt(e)[1];lt=performance.now()});
+cv.addEventListener('pointermove',function(e){if(!drag)return;var y=pt(e)[1],n=performance.now(),dv=(ly-y)/(W*.04),ft=Math.max((n-lt)/16.667,.5);
+ vel=.6*vel+.4*dv/ft;ly=y;lt=n;setV(v+dv);wake()});
+function up(){if(!drag)return;drag=false;if(performance.now()-lt>90)vel=0;pend=true;wake()}
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+cv.addEventListener('wheel',function(e){e.preventDefault();if(S.run||S.done)reset();vel+=-e.deltaY*.004;pend=true;wake()},{passive:false});
+cv.addEventListener('keydown',function(e){demoPaused=false;var k=e.key;
+ if(k==='ArrowUp'||k==='ArrowDown'){e.preventDefault();reset();pend=false;vel=0;setV(Math.round(v)+(k==='ArrowUp'?1:-1))}
+ else if(k==='Enter'||k===' '){e.preventDefault();S.dur=Math.round(v);start()}});
+
+function demoFinished(){return S.done}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;start()}
+if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,performance.now());col();size();if(demoEnabled&&!rm.matches)demoStart();
+rm.addEventListener('change',function(){if(rm.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

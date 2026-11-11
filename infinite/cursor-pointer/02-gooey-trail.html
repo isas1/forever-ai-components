@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A chain of pink blobs follows the pointer and merges into liquid metaball goo via an SVG gooey filter, with a bright cursor head.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Gooey Trail</title>
 <script>
@@ -14,11 +15,11 @@
 :root[data-theme="light"]{
   --ccp02-bg:#f2f2f6; --ccp02-acc:#d60064; --cap-o:.55;
 }
-html,body{margin:0;height:100%;overflow:hidden}
-body{background:var(--ccp02-bg);display:grid;place-items:center}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ccp02-bg)}
 .ccp02-stage{position:relative;width:100%;height:100%;cursor:none}
 #ccp02-c{position:absolute;inset:0;width:100%;height:100%;filter:url(#ccp02-goo)}
 .ccp02-svg{position:absolute;width:0;height:0}
+.ccp02-canvas:focus-visible{outline:2px solid var(--ccp02-acc);outline-offset:-4px}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:var(--ccp02-acc);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 @media (prefers-reduced-motion:reduce){#ccp02-c{filter:url(#ccp02-goo)}}
@@ -26,10 +27,10 @@ body{background:var(--ccp02-bg);display:grid;place-items:center}
 {
  "file": "infinite/cursor-pointer/02-gooey-trail.html",
  "title": "Gooey Trail",
- "description": "22 pink blobs chain-follow the pointer via spring physics and merge into liquid goo through an SVG feColorMatrix filter; auto-demos a Lissajous path when idle.",
+ "description": "22 pink blobs chain-follow the pointer via spring physics and merge into liquid goo through an SVG feColorMatrix filter; auto-demos a Lissajous path until first deliberate input.",
  "useWhen": "Creative portfolio heroes, dark-mode landing pages, or any context where a custom cursor with viscous personality adds delight.",
  "avoidWhen": "Utility UIs where the custom cursor (cursor:none) would confuse users, or low-end mobile where canvas+SVG filter stacks strain the GPU.",
- "agentPrompt": "Change blob color from #ff5ca8 to electric blue (#00c8ff), increase chain length from N=22 to N=30, and widen the head radius multiplier from 0.052 to 0.07. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Adjust the existing palette tokens and effect parameters while preserving manual control. Arrow keys steer; first click/touch stops the attract path permanently for this mount. Keep demo-v1 lifecycle marker, __foreverPreview.demoEnabled initialization and forever:interactive handler. Preserve reduced motion, visibility suspension and theme switching.",
  "editableAreas": [
   "blob color (fillStyle '#ff5ca8')",
   "chain length (N=22)",
@@ -44,18 +45,21 @@ body{background:var(--ccp02-bg);display:grid;place-items:center}
   "IIFE wrapper",
   "reduced-motion static draw() fallback",
   "visibilitychange pause guard",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "sticky demo-v1 preview lifecycle; stop attract work, retain manual feedback and settling",
+  "pointer/touch takeover, keyboard access and visibility suspension",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "cursor:none hides the system cursor globally — must be scoped carefully in multi-region layouts",
   "SVG filter applied to canvas via CSS may render incorrectly in some older Safari versions",
-  "No touch fallback — pointermove on touch fires but demo auto-path does not re-engage cleanly on lift"
+  "Control state is local to each mount; format changes preserve preview takeover but create a fresh source instance.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
   "agent-ready",
   "easy-to-modify",
-  "mobile-ready",
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
@@ -74,23 +78,25 @@ body{background:var(--ccp02-bg);display:grid;place-items:center}
 </script>
 </head><body>
 <div class="ccp02-stage" id="ccp02-stage" role="img" aria-label="Gooey liquid trail following the pointer">
-  <canvas id="ccp02-c"></canvas>
-</div>
+  <canvas class="ccp02-canvas" tabindex="0" aria-label="Pointer effect. Use arrow keys to steer." id="ccp02-c"></canvas>
 <svg class="ccp02-svg" aria-hidden="true"><defs>
   <filter id="ccp02-goo"><feGaussianBlur in="SourceGraphic" stdDeviation="7" result="b"/>
     <feColorMatrix in="b" mode="matrix"
       values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" result="g"/>
     <feBlend in="SourceGraphic" in2="g"/></filter>
-</defs></svg>
+</defs></svg></div>
 <div class="cap">Gooey Trail</div>
 <script>(function(){
 var stage=document.getElementById('ccp02-stage'),cv=document.getElementById('ccp02-c'),
     ctx=cv.getContext('2d'),reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+window.addEventListener('forever:interactive',takeover);
+document.addEventListener('pointerdown',function(e){if(e.button===0)takeover();},{capture:true,passive:true});
 var root=document.documentElement;
 var W=0,H=0,DPR=Math.min(2,window.devicePixelRatio||1);
 function size(){W=stage.clientWidth;H=stage.clientHeight;cv.width=W*DPR;cv.height=H*DPR;
   ctx.setTransform(DPR,0,0,DPR,0,0);}
-size();window.addEventListener('resize',size);
+size();window.addEventListener('resize',function(){size();draw();wake();});
 
 // colours JS draws with — read from tokens, re-read + invalidated on theme switch
 var C={};
@@ -104,14 +110,14 @@ addEventListener('message',function(e){
   var d=e.data;
   if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
     root.setAttribute('data-theme',d.theme);syncTheme();
-    if(reduce)draw();      // no rAF loop in reduced motion — force a recolor
+    draw();      // no rAF loop in reduced motion — force a recolor
   }
 });
 syncTheme();
 
 // pointer state: virtual demo path + real-pointer handoff
 var N=22,blobs=[],tx=0,ty=0,t=0,
-    real=false,lastMove=-1e9,rx=0,ry=0;   // rx/ry = smoothed real pointer
+    real=!demoEnabled,lastMove=-1e9,rx=0,ry=0;   // rx/ry = smoothed real pointer
 for(var i=0;i<N;i++)blobs.push({x:0,y:0});
 
 function demoPoint(time){
@@ -124,11 +130,22 @@ function demoPoint(time){
           cy+Math.sin(uy+0.6)*ay*0.78];
 }
 
-stage.addEventListener('pointermove',function(e){
+function move(e){
   var r=stage.getBoundingClientRect();
   rx=e.clientX-r.left;ry=e.clientY-r.top;real=true;lastMove=performance.now();
+  if(reduce){tx=rx;ty=ry;blobs.forEach(function(b){b.x=rx;b.y=ry;});draw();}else wake();
+}
+stage.addEventListener('pointermove',move);stage.addEventListener('pointerdown',move);
+stage.addEventListener('pointerleave',function(){if(demoEnabled)real=false;});
+
+cv.addEventListener('keydown',function(e){
+  if(!/^Arrow(Left|Right|Up|Down)$/.test(e.key))return;
+  e.preventDefault();takeover();var r=stage.getBoundingClientRect(),step=Math.max(8,Math.min(W,H)*.06);
+  var x=rx+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0),y=ry+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0);
+  move({clientX:r.left+Math.max(0,Math.min(W,x)),clientY:r.top+Math.max(0,Math.min(H,y))});
 });
-stage.addEventListener('pointerleave',function(){real=false;});
+function takeover(){if(!demoEnabled)return;demoEnabled=false;real=true;rx=tx;ry=ty;wake();}
+function wake(){if(!reduce&&!document.hidden&&!raf){running=true;raf=requestAnimationFrame(frame);}}
 
 function radius(i){
   // head is largest, tail tapers; min keeps tail visible at 180px
@@ -138,12 +155,12 @@ function radius(i){
 
 var running=true,raf=0;
 function frame(now){
-  if(!running)return;
+  raf=0;if(!running)return;
   t=now;
   // decide target: real pointer if recent, else ease back to demo
   var idle=now-lastMove,dp=demoPoint(now);
   var dx,dy;
-  if(real&&idle<2600){dx=rx;dy=ry;}
+  if(real&&(!demoEnabled||idle<2600)){dx=rx;dy=ry;}
   else{
     // blend from wherever we are toward demo as idle grows past 2.6s
     var b=real?Math.min(1,(idle-2600)/1400):1;
@@ -158,7 +175,7 @@ function frame(now){
     b.x+=(lead.x-b.x)*f;b.y+=(lead.y-b.y)*f;
   }
   draw();
-  raf=requestAnimationFrame(frame);
+  if(demoEnabled||Math.abs(rx-tx)+Math.abs(ry-ty)+blobs.reduce(function(sum,b){return sum+Math.abs(b.x-tx)+Math.abs(b.y-ty);},0)>.05)raf=requestAnimationFrame(frame);
 }
 
 function draw(){
@@ -184,10 +201,11 @@ start();
 if(reduce){draw();return;}
 
 function vis(){
-  if(document.hidden){running=false;cancelAnimationFrame(raf);}
-  else if(!running){running=true;raf=requestAnimationFrame(frame);}
+  if(document.hidden){running=false;cancelAnimationFrame(raf);raf=0;}
+  else wake();
 }
 document.addEventListener('visibilitychange',vis);
-raf=requestAnimationFrame(frame);
+draw();
+if(demoEnabled||Math.abs(rx-tx)+Math.abs(ry-ty)+blobs.reduce(function(sum,b){return sum+Math.abs(b.x-tx)+Math.abs(b.y-ty);},0)>.05)raf=requestAnimationFrame(frame);
 })();</script>
 </body></html>

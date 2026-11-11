@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Oven Ring Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oven Ring Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#16221A;--card:#1E2E24;--ink:#F3D6CE;--mute:#B89B93;--rose:#E8B4A8;--gold:#E9C96A;--car:#8C482A;color-scheme:dark}
+:root[data-theme="light"]{--bg:#F9F4F0;--card:#FFFFFF;--ink:#2E1F18;--mute:#7A5B4D;--rose:#B05D4D;--gold:#C68E17;--car:#6D3E24;color-scheme:light}
+.wta-root,.wta-root *{box-sizing:border-box;margin:0}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.wta-root{width:100%;height:100%;background:var(--bg);display:grid;place-items:center;overflow:hidden}
+#wta-stage{width:min(92vmin,640px);aspect-ratio:1;touch-action:none;cursor:grab;user-select:none;border-radius:50%}
+#wta-stage:focus-visible{outline:2px solid var(--rose);outline-offset:4px}
+.wta-canvas{width:100%;height:100%;display:block}
+.wta-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.wta-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/22-oven-ring-timer.html",
+ "title": "Oven Ring Timer",
+ "description": "A fluted pastry browns inside a draggable oven ring countdown. Forest pâtisserie palette: pine, rose, pastry gold and caramel.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "baking",
+  "ring",
+  "drag",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wta-root" role="group" aria-label="Oven Ring Timer">
+<div id="wta-stage" role="slider" tabindex="0" aria-label="Bake minutes. Drag around the ring, release to start baking. Arrow keys adjust, Enter starts." aria-valuemin="0" aria-valuemax="30" aria-valuenow="0"><canvas class="wta-canvas"></canvas></div>
+<div class="wta-sr" id="wta-status" role="status" data-fit-clip-ok="screen-reader-only"></div>
+</div>
+<div class="wta-cap" aria-hidden="true">Oven Ring Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||RM.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var MAX=30,T=1500; // demo clock: one baking minute passes in 1.5 s
+var R=document.getElementById('wta-stage'),C=R.firstElementChild,X=C.getContext('2d'),S=document.getElementById('wta-status');
+var RM=matchMedia('(prefers-reduced-motion: reduce)'),W=1,P,raf=0,last=0;
+var mode=0,tgt=0,d=0,v=0,end=0,rem=0,pl=0,pv=0,drag=0,moved=0,pa=0,lastN=-1;
+function pal(){var s=getComputedStyle(document.documentElement);P={};['bg','card','ink','mute','rose','gold','car'].forEach(function(k){P[k]=s.getPropertyValue('--'+k).trim()})}
+function mx(a,b,t){var o='#',i,p=function(h,j){return parseInt(h.substr(1+j*2,2),16)};for(i=0;i<3;i++)o+=('0'+Math.round(p(a,i)+(p(b,i)-p(a,i))*t).toString(16)).slice(-2);return o}
+function size(){var r=Math.min(devicePixelRatio||1,2);W=R.clientWidth;C.width=C.height=Math.round(W*r);X.setTransform(r,0,0,r,0,0);wake()}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+function tick(now){raf=0;var dt=Math.min(now-last,50)/16.667;last=now;demoBeat(dt*16.667);var b=demoPaused?false:step(dt,now);draw();if((b||(demoEnabled&&!RM.matches))&&!demoPaused&&!document.hidden&&!raf)raf=requestAnimationFrame(tick)}
+function start(){demoPaused=false;demoSession=demoEnabled;tgt=Math.max(1,Math.round(tgt));end=performance.now()+tgt*T;mode=1;S.textContent='Baking '+tgt+' minutes';wake()}
+function step(dt,now){
+  if(mode==1){rem=Math.max(0,(end-now)/T);if(rem<=0){mode=2;pv=-.07;S.textContent='Done'}}
+  var g=mode==1?rem:mode==2?0:tgt;
+  if(RM.matches){d=g;v=0;pl=0;pv=0}else{v+=(g-d)*.12*dt;v*=Math.pow(.8,dt);d+=v*dt;pv+=-pl*.15*dt;pv*=Math.pow(.85,dt);pl+=pv*dt}
+  var n=mode==1?Math.ceil(rem):Math.round(tgt);if(n!=lastN){lastN=n;R.setAttribute('aria-valuenow',n)}
+  return mode==1||Math.abs(g-d)>.002||Math.abs(v)>.002||Math.abs(pl)>.001||Math.abs(pv)>.001;
+}
+function draw(){
+  var s=W,c=s/2,p=mode==1?1-rem/tgt:mode==2?1:0,i,a;
+  X.clearRect(0,0,s,s);X.lineCap='round';X.lineWidth=s*.035;
+  X.strokeStyle=P.card;X.beginPath();X.arc(c,c,s*.43,0,7);X.stroke();
+  var f=Math.max(0,d)/MAX*Math.PI*2;
+  if(f>.001){X.strokeStyle=mx(P.rose,P.gold,p);X.beginPath();X.arc(c,c,s*.43,-Math.PI/2,-Math.PI/2+f);X.stroke();
+    a=-Math.PI/2+f;X.fillStyle=P.gold;X.beginPath();X.arc(c+Math.cos(a)*s*.43,c+Math.sin(a)*s*.43,s*(mode==0?.03:.018),0,7);X.fill()}
+  X.save();X.translate(c,c);var z=1+pl;X.scale(z,z);
+  X.beginPath();for(i=0;i<=120;i++){a=i/120*Math.PI*2;var r=s*.3*(1+.035*Math.cos(a*14));X[i?'lineTo':'moveTo'](Math.cos(a)*r,Math.sin(a)*r)}
+  X.closePath();X.fillStyle=mx(P.rose,P.car,.15+.5*p);X.fill();
+  X.fillStyle=mx(P.gold,P.car,.3*p);X.beginPath();X.arc(0,0,s*.24,0,7);X.fill();
+  X.fillStyle=P.car;
+  for(i=0;i<14;i++){var al=Math.max(0,Math.min(1,p*1.6-i/20));if(al<=0)continue;a=i*2.4;var q=s*.2*Math.sqrt((i+.5)/14);
+    X.globalAlpha=al*.8;X.beginPath();X.arc(Math.cos(a)*q,Math.sin(a)*q,s*.02,0,7);X.fill()}
+  X.globalAlpha=1;X.fillStyle=P.bg;X.beginPath();X.arc(0,0,s*.1,0,7);X.fill();
+  if(mode==2){X.strokeStyle=P.rose;X.lineWidth=s*.02;X.beginPath();X.moveTo(-s*.04,0);X.lineTo(-s*.01,s*.03);X.lineTo(s*.05,-s*.035);X.stroke()}
+  else{X.fillStyle=P.ink;X.font='700 '+s*.09+'px ui-monospace,Menlo,monospace';X.textAlign='center';X.textBaseline='middle';X.fillText(mode==1?Math.ceil(rem):Math.round(tgt),0,s*.005)}
+  X.restore();
+}
+function ang(e){var b=R.getBoundingClientRect();return Math.atan2(e.clientY-b.top-b.height/2,e.clientX-b.left-b.width/2)}
+R.addEventListener('pointerdown',function(e){demoPaused=false;R.setPointerCapture(e.pointerId);drag=1;moved=0;pa=ang(e);R.style.cursor='grabbing'});
+R.addEventListener('pointermove',function(e){
+  if(!drag)return;var a=ang(e),da=a-pa;pa=a;if(da>Math.PI)da-=Math.PI*2;if(da<-Math.PI)da+=Math.PI*2;
+  if(!moved&&Math.abs(da)<.01)return;
+  if(!moved){moved=1;tgt=mode==1?rem:0;mode=0}
+  tgt=Math.max(0,Math.min(MAX,tgt+da/(Math.PI*2)*MAX));wake()});
+function up(){if(!drag)return;drag=0;R.style.cursor='';
+  if(moved){if(tgt>=1)start();else{tgt=0;wake()}}
+  else if(mode==2){mode=0;tgt=0;wake()}else if(mode==0&&tgt>=1)start()}
+R.addEventListener('pointerup',up);R.addEventListener('pointercancel',up);
+R.addEventListener('keydown',function(e){demoPaused=false;var k=e.key,dd=0;
+  if(k=='ArrowUp'||k=='ArrowRight')dd=1;else if(k=='ArrowDown'||k=='ArrowLeft')dd=-1;
+  if(dd){e.preventDefault();tgt=Math.max(0,Math.min(MAX,Math.round(mode==1?rem:mode==2?0:tgt)+dd));mode=0;wake()}
+  else if(k=='Enter'||k==' '){e.preventDefault();if(mode==0&&tgt>=1)start();else if(mode==2){mode=0;tgt=0;wake()}}
+  else if(k=='Escape'){mode=0;tgt=0;wake()}});
+document.addEventListener('visibilitychange',function(){if(document.hidden){hiddenAt=performance.now();cancelAnimationFrame(raf);raf=0}else{if(hiddenAt&&mode==1)end+=performance.now()-hiddenAt;hiddenAt=0;wake()}});
+function setTheme(t){document.documentElement.setAttribute('data-theme',t=='light'?'light':'dark');pal();wake()}
+addEventListener('message',function(e){var m=e.data;if(m&&m.type=='forever:theme')setTheme(m.theme)});
+function demoFinished(){return mode==2}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;tgt=12;d=12;rem=12;start()}
+new ResizeObserver(size).observe(R);tgt=12;d=12;if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,performance.now());pal();size();if(demoEnabled&&!RM.matches)demoStart();
+RM.addEventListener('change',function(){if(RM.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

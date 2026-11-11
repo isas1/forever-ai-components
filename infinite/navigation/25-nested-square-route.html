@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Nested Square Route — Navigation. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Nested Square Route</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root[data-theme="light"]{--wrf-paper:#EFE8D8;--wrf-ink:#1E1B16;--wrf-mid:#8A8068;--wrf-acc:#7A2E22}
+
+:root{--wrf-paper:#15130F;--wrf-ink:#E9E2D0;--wrf-mid:#8F8670;--wrf-acc:#C8745A}
+
+.wrf-stage,.wrf-stage *{box-sizing:border-box;margin:0;padding:0}
+.wrf-stage{width:100%;height:100%;display:grid;place-items:center;background:var(--wrf-paper);font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+#wrf-root{width:min(100vmin,640px);aspect-ratio:1;touch-action:none;cursor:ns-resize;-webkit-tap-highlight-color:transparent}
+#wrf-root:focus-visible{outline:2px solid var(--wrf-acc);outline-offset:-4px}
+#wrf-c{display:block;width:100%;height:100%}
+
+:root{--bg:var(--wrf-paper)}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.wrf-stage{width:100%;height:100%;display:grid;place-items:center}
+.wrf-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--wrf-ink);opacity:.45;pointer-events:none}
+
+
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/25-nested-square-route.html",
+ "title": "Nested Square Route",
+ "description": "Stone-and-parchment palette with terracotta accents; scroll, drag or tap through seven nested-square checkpoints with geometric zoom and rotation.",
+ "useWhen": "A compact route or multi-stop progress selector with keyboard access.",
+ "avoidWhen": "Real navigation without replacing illustrative elevations and checkpoints.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "route",
+  "checkpoint",
+  "square",
+  "zoom",
+  "scroll"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wrf-stage" role="group" aria-label="Nested Square Route">
+<div id="wrf-root" role="slider" tabindex="0" aria-label="Route checkpoints as nested squares; scroll, drag, tap or use arrow keys to zoom to the next of 7 checkpoints" aria-orientation="vertical" aria-valuemin="1" aria-valuemax="7" aria-valuenow="1" aria-valuetext="Checkpoint 1 of 7"><canvas id="wrf-c" aria-hidden="true"></canvas></div>
+</div>
+<div class="wrf-cap" aria-hidden="true">Nested Square Route</div>
+<script>
+(function(){
+var R=document.getElementById('wrf-root'),C=document.getElementById('wrf-c'),X=C.getContext('2d'),S=0,K={},raf=0,last=0,TAU=Math.PI*2;
+function rm(){return matchMedia('(prefers-reduced-motion: reduce)').matches}
+function cols(){var s=getComputedStyle(document.documentElement);['paper','ink','mid','acc'].forEach(function(k){K[k]=s.getPropertyValue('--wrf-'+k).trim()})}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+function tick(n){raf=0;var dt=Math.min(n-last,50)/16.667;last=n;var l=step(dt);draw();if(l)raf=requestAnimationFrame(tick)}
+function fit(){var d=Math.min(devicePixelRatio||1,2);S=R.clientWidth;C.width=C.height=Math.round(S*d);X.setTransform(d,0,0,d,0,0);layout();wake()}
+function aria(i){R.setAttribute('aria-valuenow',i+1);R.setAttribute('aria-valuetext','Checkpoint '+(i+1)+' of '+7)}
+function clamp(v,a,b){return v<a?a:v>b?b:v}
+function ease(k,dt){return 1-Math.pow(1-k,dt)}
+addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){document.documentElement.setAttribute('data-theme',d.theme);cols();wake()}});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else wake()});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',wake);
+
+var N=7,f=.2,a0=Math.atan2(-1,-1),AL=Math.atan2(-1,-1+2*f)-a0,SC=Math.sqrt(((1-2*f)*(1-2*f)+1)/2),cur=0,tgt=0,drag=false,py0=0,pm=0,lt=0,dv=0,moved=0,wh=0,whT=0;
+var CS=[[-1,-1],[1,-1],[1,1],[-1,1]];
+function layout(){}
+function go(i){tgt=clamp(i,0,N-1);aria(tgt);wake()}
+function step(dt){
+ if(rm()){cur=tgt;return false}
+ if(drag)return false;
+ cur+=(tgt-cur)*ease(.1,dt);
+ if(Math.abs(tgt-cur)<.0005){cur=tgt;return false}
+ return true}
+function pts(i){var k=i-cur,sc=Math.pow(SC,k)*S*.34,r=k*AL,c=Math.cos(r),s=Math.sin(r),o=[];
+ for(var j=0;j<4;j++){var x=CS[j][0],y=CS[j][1];o.push([S/2+sc*(x*c-y*s),S/2+sc*(x*s+y*c)])}return o}
+function poly(p){X.beginPath();X.moveTo(p[0][0],p[0][1]);for(var j=1;j<4;j++)X.lineTo(p[j][0],p[j][1]);X.closePath()}
+function draw(){
+ X.clearRect(0,0,S,S);X.lineJoin='round';var rc=Math.round(clamp(cur,0,N-1));
+ for(var i=Math.floor(cur)-5;i<N+9;i++){
+  var k=i-cur,sc=Math.pow(SC,k)*S*.34;if(sc>S*4||sc<S*.006)continue;
+  var p=pts(i),inr=i>=0&&i<N,w=1+2.2*Math.max(0,1-Math.abs(k));
+  var fl=clamp(cur-i,0,1)*.16;
+  if(inr&&fl>0&&i+1<N+9){var q=pts(i+1);X.fillStyle=K.acc;X.globalAlpha=fl;
+   for(var j=0;j<4;j++){var n=(j+1)%4;X.beginPath();X.moveTo(q[j][0],q[j][1]);X.lineTo(p[n][0],p[n][1]);X.lineTo(q[n][0],q[n][1]);X.closePath();X.fill()}}
+  X.globalAlpha=inr?1:.28;X.lineWidth=w;
+  X.strokeStyle=!inr?K.mid:i<rc?K.acc:i===rc?K.ink:K.mid;poly(p);X.stroke()}
+ X.globalAlpha=1}
+R.addEventListener('pointerdown',function(e){R.setPointerCapture(e.pointerId);drag=true;py0=pm=e.clientY;lt=e.timeStamp;dv=0;moved=0});
+R.addEventListener('pointermove',function(e){if(!drag)return;var dy=e.clientY-pm,dtm=Math.max(e.timeStamp-lt,1);pm=e.clientY;lt=e.timeStamp;moved+=Math.abs(dy);
+ var dp=-dy/(R.clientWidth*.3);dv=dv*.6+(dp/(dtm/16.667))*.4;cur=clamp(cur+dp,-.4,N-.6);wake()});
+function up(){if(!drag)return;drag=false;
+ if(moved<5){go(Math.round(tgt)>=N-1?0:Math.round(tgt)+1);return}
+ go(Math.round(clamp(cur+dv*8,0,N-1)))}
+R.addEventListener('pointerup',up);R.addEventListener('pointercancel',up);
+R.addEventListener('wheel',function(e){e.preventDefault();wh+=e.deltaY;if(Math.abs(wh)>40&&e.timeStamp-whT>120){go(Math.round(tgt)+(wh>0?1:-1));wh=0;whT=e.timeStamp}},{passive:false});
+R.addEventListener('keydown',function(e){var k=e.key,c=Math.round(tgt);
+ if(k==='ArrowRight'||k==='ArrowUp')go(c+1);else if(k==='ArrowLeft'||k==='ArrowDown')go(c-1);else if(k==='Home')go(0);else if(k==='End')go(N-1);else return;e.preventDefault()});
+
+cols();new ResizeObserver(fit).observe(R);fit();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoClock=0;
+function demoStep(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;go((Math.round(tgt)+1)%N);}
+function demoStop(){if(demoClock){clearInterval(demoClock);demoClock=0}}
+function demoStart(){demoStop();if(demoEnabled&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches)demoClock=setInterval(demoStep,1600)}
+function takeover(){if(window.__foreverPreview?.surface==='wall')return;demoEnabled=false;demoStop()}
+window.addEventListener('forever:interactive',takeover);
+var stage=document.querySelector('.wrf-stage');
+stage.addEventListener('pointerdown',takeover,true);stage.addEventListener('keydown',takeover,true);stage.addEventListener('input',takeover,true);stage.addEventListener('wheel',takeover,{capture:true,passive:true});
+document.addEventListener('visibilitychange',function(){document.hidden?demoStop():demoStart()});
+var demoMotion=matchMedia('(prefers-reduced-motion: reduce)');demoMotion.addEventListener('change',function(){demoStart();wake()});
+demoStart();
+})();
+</script>
+</body>
+</html>

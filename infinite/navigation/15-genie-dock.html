@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A window minimises into its dock slot with a genie squeeze — it narrows to a funnel, pours into the dock, and a thumbnail appears — then springs back; loops on its own, or press the amber button.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Genie Dock</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --bg:#0d0f16; --glow:rgba(79,179,240,.16);
+    --win:#181d2b; --win-line:rgba(255,255,255,.1); --win-bar:#222738; --txt:rgba(255,255,255,.16); --thumb:#2a3044; --thumb-line:rgba(255,255,255,.3);
+    --accent:#4FB3F0; --amber:#E8AB30; --red:#E2603F; --green:#5FB7A1;
+    --dock-bg:rgba(28,32,48,.66); --dock-hl:rgba(255,255,255,.07); --border:rgba(255,255,255,.08);
+    --slot-line:rgba(255,255,255,.18);
+    --shadow:0 18px 50px -24px rgba(0,0,0,.9);
+    --item-hl:rgba(255,255,255,.22); --item-sh:rgba(0,0,0,.6);
+    --cap:#fff; --cap-o:.28;
+    --g1:linear-gradient(150deg,#4FB3F0,#1c6ea8);
+    --g2:linear-gradient(150deg,#f4f6fb,#9aa1bd);
+    --g3:linear-gradient(150deg,#5FB7A1,#2c7a66);
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow:rgba(26,106,168,.10);
+    --win:#ffffff; --win-line:rgba(0,0,0,.09); --win-bar:#eaedf4; --txt:rgba(0,0,0,.12); --thumb:#ffffff; --thumb-line:rgba(0,0,0,.25);
+    --accent:#1A6AA8;
+    --dock-bg:rgba(255,255,255,.72); --dock-hl:rgba(255,255,255,.85); --border:rgba(0,0,0,.08);
+    --slot-line:rgba(0,0,0,.2);
+    --shadow:0 18px 40px -24px rgba(0,0,0,.18);
+    --item-hl:rgba(255,255,255,.5); --item-sh:rgba(0,0,0,.16);
+    --cap:#0f2a3d; --cap-o:.5;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(60vw 50vh at 80% 0%,var(--glow),transparent 60%);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  .c15-scene{position:absolute;inset:0}
+  .c15-win{
+    position:absolute;left:14%;right:14%;top:10%;height:50%;
+    background:var(--win);border:1px solid var(--win-line);border-radius:10px;overflow:hidden;
+    box-shadow:var(--shadow);transform-origin:50% 100%;
+  }
+  .c15-bar{height:20px;background:var(--win-bar);display:flex;align-items:center;gap:6px;padding:0 8px}
+  .c15-bar i,.c15-bar button{width:9px;height:9px;border-radius:50%;border:0;padding:0;margin:0;display:block}
+  .c15-bar i:nth-child(1){background:var(--red)}
+  :root[data-preview-taken-over] .c15-bar button{animation-play-state:paused!important}
+  .c15-bar button{background:var(--amber);cursor:pointer;box-shadow:0 0 0 0 rgba(232,171,48,.5);animation:c15-pulse 2.4s ease-out infinite}
+  .c15-bar i:nth-child(3){background:var(--green)}
+  @keyframes c15-pulse{0%{box-shadow:0 0 0 0 rgba(232,171,48,.55)}70%{box-shadow:0 0 0 6px rgba(232,171,48,0)}100%{box-shadow:0 0 0 0 rgba(232,171,48,0)}}
+  .c15-win p{position:absolute;left:10%;height:6px;border-radius:3px;background:var(--txt);margin:0}
+  .c15-win p:nth-of-type(1){top:36%;width:52%}
+  .c15-win p:nth-of-type(2){top:52%;width:74%}
+  .c15-win p:nth-of-type(3){top:68%;width:38%}
+  .c15-win .c15-chip{position:absolute;right:10%;top:34%;width:22%;height:36%;border-radius:6px;background:var(--g1);opacity:.85}
+  /* the genie: pinch to a funnel, then pour into the slot (translate is set from JS) */
+  .c15-win.is-min{animation:c15-genie 1.05s cubic-bezier(.55,0,.35,1) forwards}
+  .c15-win.is-back{animation:c15-genie .9s cubic-bezier(.35,0,.25,1) reverse forwards}
+  @keyframes c15-genie{
+    0%{transform:none;clip-path:polygon(0 0,100% 0,100% 100%,0 100%);opacity:1}
+    45%{transform:translate(calc(var(--tx) * .35),calc(var(--ty) * .12)) scaleY(1.06);clip-path:polygon(0 0,100% 0,62% 100%,38% 100%);opacity:1}
+    100%{transform:translate(var(--tx),var(--ty)) scale(.14,.22);clip-path:polygon(0 0,100% 0,62% 100%,38% 100%);opacity:.15}
+  }
+  .c15-dock{
+    --sz:clamp(30px,12vmin,44px);
+    position:absolute;left:50%;bottom:9%;transform:translateX(-50%);
+    display:flex;align-items:flex-end;gap:clamp(5px,2vmin,8px);padding:8px 10px;
+    background:var(--dock-bg);border:1px solid var(--border);border-radius:14px;
+    box-shadow:inset 0 1px 0 var(--dock-hl),var(--shadow);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  }
+  .c15-item{width:var(--sz);height:var(--sz);border-radius:calc(var(--sz) * .27);box-shadow:0 4px 12px -4px var(--item-sh),inset 0 1px 0 var(--item-hl)}
+  .c15-item:nth-child(1){background:var(--g1)}
+  .c15-item:nth-child(2){background:var(--g2)}
+  .c15-item:nth-child(3){background:var(--g3)}
+  .c15-sep{width:1px;height:calc(var(--sz) * .8);background:var(--slot-line);margin:0 2px;align-self:center}
+  /* the slot the window lands in — a thumbnail pops in once the genie has poured */
+  .c15-slot{position:relative;width:var(--sz);height:var(--sz);border-radius:calc(var(--sz) * .27);border:1px dashed var(--slot-line);cursor:pointer;background:none;padding:0}
+  .c15-thumb{
+    position:absolute;inset:14%;border-radius:3px;background:var(--thumb);border:1px solid var(--thumb-line);
+    transform:scale(.3);opacity:0;transition:transform 260ms cubic-bezier(.34,1.5,.64,1),opacity .2s;
+  }
+  .c15-thumb::before{content:"";position:absolute;left:0;right:0;top:0;height:24%;background:var(--accent);opacity:.9}
+  .c15-thumb::after{content:"";position:absolute;left:18%;right:18%;top:50%;height:2px;background:var(--thumb-line)}
+  .c15-slot.is-in .c15-thumb{transform:scale(1);opacity:1}
+  .c15-cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
+  @media (prefers-reduced-motion:reduce){
+    .c15-win.is-min{animation:none;opacity:0}
+    .c15-win.is-back{animation:none;opacity:1}
+    .c15-thumb{transition:none}.c15-bar button{animation:none}
+  }
+  .c15-bar button:focus-visible,.c15-slot:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/15-genie-dock.html",
+ "title": "Genie Dock",
+ "description": "A window minimises into its dock slot with a genie squeeze — it pinches to a funnel, pours down into the slot, and a thumbnail pops in — then plays back in reverse to restore; it loops as preview until first deliberate input, or press the amber button and the slot to drive it.",
+ "useWhen": "Window managers, multi-document editors, and product tours that need to show where a minimised thing went.",
+ "avoidWhen": "Layouts where the window and the dock are not both on screen (the pour needs a visible destination); reduced-motion audiences (it degrades to a fade).",
+ "agentPrompt": "Slow the pour by raising the 1.05s on .c15-win.is-min (and the 1000 ms timeout that follows it); change the funnel shape in the 45% keyframe's clip-path polygon; move the slot elsewhere in the dock and aim() re-targets it automatically. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "genie duration and curve (.is-min / .is-back animations)",
+  "funnel shape (clip-path polygon at 45%)",
+  "window dressing (.c15-win contents, --win/--win-bar)",
+  "dock items and gradients (--g1…--g3)",
+  "demo cadence (phase 12 minimise / 34 restore on a 100 ms clock)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "aim() measuring the slot once (load + resize), never mid-animation",
+  "transform-origin 50% 100% on the window (the pour starts from its bottom edge)",
+  "the busy/minimised guards so a press mid-animation cannot double-fire",
+  "IIFE wrapper",
+  "visibilitychange stop/start of the phase clock",
+  "prefers-reduced-motion guard (fade instead of genie)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "The genie is an approximation — one clip-path funnel plus a scale, not a true mesh warp",
+  "The reverse animation replays the same keyframes backwards, so the restore shape mirrors the minimise exactly",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "dock",
+  "genie",
+  "minimise",
+  "window",
+  "navigation",
+  "macos",
+  "clip-path",
+  "restore"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="c15-scene" id="c15-scene">
+  <div class="c15-win" id="c15-win" role="img" aria-label="A window that minimises into the dock">
+    <div class="c15-bar"><i></i><button type="button" id="c15-min" aria-label="Minimise window"></button><i></i></div>
+    <p></p><p></p><p></p><span class="c15-chip"></span>
+  </div>
+  <nav class="c15-dock" aria-label="Dock">
+    <span class="c15-item" title="Browser"></span><span class="c15-item" title="Files"></span><span class="c15-item" title="Notes"></span>
+    <span class="c15-sep" aria-hidden="true"></span>
+    <button class="c15-slot" id="c15-slot" type="button" aria-label="Restore minimised window"><span class="c15-thumb"></span></button>
+  </nav>
+</div>
+<div class="c15-cap">Genie Dock</div>
+<script>
+(function(){
+  var win=document.getElementById('c15-win'),slot=document.getElementById('c15-slot'),btn=document.getElementById('c15-min');
+  if(!win||!slot||!btn)return;
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
+  /* where the genie pours: the slot's centre relative to the window's bottom centre —
+     measured on resize, never during the animation */
+  function aim(){
+    var w=win.getBoundingClientRect(),s=slot.getBoundingClientRect();
+    win.style.setProperty('--tx',((s.left+s.width/2)-(w.left+w.width/2))+'px');
+    win.style.setProperty('--ty',((s.top+s.height/2)-(w.top+w.height))+'px');
+  }
+  var minimised=false,busy=false;
+  function minimise(){
+    if(minimised||busy)return;busy=true;
+    win.classList.remove('is-back');void win.offsetWidth;win.classList.add('is-min');
+    setTimeout(function(){minimised=true;busy=false;slot.classList.add('is-in');},reduce?60:1000);
+  }
+  function restore(){
+    if(!minimised||busy)return;busy=true;
+    slot.classList.remove('is-in');
+    win.classList.remove('is-min');void win.offsetWidth;win.classList.add('is-back');
+    setTimeout(function(){minimised=false;busy=false;win.classList.remove('is-back');},reduce?60:900);
+  }
+  var lastInput=0;
+  btn.addEventListener('click',function(){lastInput=Date.now();minimise();});
+  slot.addEventListener('click',function(){lastInput=Date.now();restore();});
+  /* autonomous idle: minimise at 1.2 s, restore 2.2 s later, again 2.4 s after that;
+     a press takes over and the loop resumes a few seconds afterwards */
+  var timer=0,phase=0,demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function tick(){
+    if(document.hidden||Date.now()-lastInput<3200)return;
+    phase=(phase+1)%58;
+    if(phase===12)minimise();
+    if(phase===34)restore();
+  }
+  function start(){if(!timer&&demoEnabled){timer=setInterval(tick,100);}}
+  function stop(){if(timer){clearInterval(timer);timer=0;}}
+  function takeover(){demoEnabled=false;document.documentElement.setAttribute("data-preview-taken-over","");stop();}
+  if(!demoEnabled)document.documentElement.setAttribute("data-preview-taken-over","");
+  window.addEventListener("forever:interactive",takeover);win.addEventListener("pointerdown",takeover,true);win.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  window.addEventListener('resize',aim);
+  aim();
+  start();
+})();
+</script>
+</body>
+</html>

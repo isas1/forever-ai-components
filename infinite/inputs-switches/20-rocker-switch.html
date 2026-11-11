@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Photoreal I/O rocker switch in warm metal that clunks between on and off with specular tilt and a glowing amber LED witness light.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Rocker Switch</title>
@@ -19,6 +20,8 @@
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
        letter-spacing:.14em;color:var(--rk-cap);opacity:var(--rk-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+
+#rk-c{touch-action:none;outline-offset:-4px}#rk-c:focus-visible{outline:2px solid currentColor}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -41,12 +44,13 @@
   "visibilitychange pause/start",
   "reduced-motion static fallback (reduce branch)",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "pointermove hover bias alters target without a click — remove listener for strict click-only behavior",
-  "Auto-cycles every ~2.6s — remove the nextFlip block before shipping in production",
-  "Background color hardcoded in CSS (#1d1a16)"
+  "Background color hardcoded in CSS (#1d1a16)",
+  "Pointer click and Space/Enter toggle the rocker; hover leaves the selected state intact.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -71,16 +75,20 @@
 </script>
 </head>
 <body>
-<canvas id="rk-c"></canvas>
+<canvas class="rk-root" role="button" tabindex="0" aria-label="Rocker switch" aria-pressed="false" id="rk-c"></canvas>
 <div class="cap">Rocker Switch</div>
 <script>
 (function(){
   const cv=document.getElementById('rk-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
   const root=document.documentElement, C={};
-  function syncTheme(){ C.bg=getComputedStyle(root).getPropertyValue('--rk-bg').trim(); }
+  // Empty iframe token snapshots need valid palette values before first layout.
+  function syncTheme(){ C.bg=getComputedStyle(root).getPropertyValue('--rk-bg').trim()||(root.getAttribute('data-theme')==='light'?"#f6f2ea":"#1d1a16"); }
   addEventListener('message',function(e){ const d=e.data;
-    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme();start(); } });
   syncTheme();
   let W,H,DPR,S,raf=0;
   function size(){
@@ -89,14 +97,13 @@
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     S=Math.min(W,H);
   }
-  addEventListener('resize',size);size();
+  // Resizing clears the bitmap; refresh tokens and wake the parked renderer.
+  addEventListener('resize',()=>{syncTheme();size();start();});size();
   // state: tilt in [-1(off,down-left) .. +1(on,down-right)], target snaps between -1 and +1
   let tilt=-1,vel=0,target=-1,nextFlip=0,led=0;
   function flip(){target=-target;}
   cv.addEventListener('pointerdown',flip);
-  cv.addEventListener('pointermove',e=>{ // hover hint: bias toward pointer half
-    const x=e.offsetX; if(x>W*0.62)target=1; else if(x<W*0.38)target=-1;
-  });
+
   const rr=(x,y,w,h,r)=>{ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);
     ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();};
   function draw(){
@@ -228,7 +235,7 @@
     ctx.restore();
   }
   let last=0;
-  function frame(ts){
+  function frame(ts){raf=0;if(document.hidden)return;
     if(!last)last=ts;const dt=Math.min(40,ts-last)/16.67;last=ts;
     // spring toward target with a weighted clunk (overshoot + settle)
     const k=0.20,damp=0.74;
@@ -238,12 +245,14 @@
     const want=tilt>0?1:0;
     led+=(want-led)*0.06*dt;
     // autonomous toggling when no recent interaction
-    if(ts>nextFlip){flip();nextFlip=ts+2600+Math.random()*900;}
-    draw();
-    raf=requestAnimationFrame(frame);
+    if(demoEnabled&&!reduce&&ts>nextFlip){flip();nextFlip=ts+2600+Math.random()*900;}
+    if(reduce){tilt=target;vel=0;led=target>0?1:0;}draw();cv.setAttribute("aria-pressed",target>0);
+    if(!reduce&&(demoEnabled||Math.abs(target-tilt)>.001||Math.abs(vel)>.001||Math.abs(want-led)>.001))start();
   }
-  function start(){if(!raf){last=0;nextFlip=performance.now()+1800;raf=requestAnimationFrame(frame);}}
-  function stop(){cancelAnimationFrame(raf);raf=0;}
+  function start(){if(!raf&&!document.hidden){if(!nextFlip)nextFlip=performance.now()+1800;raf=requestAnimationFrame(frame);}}
+  function stop(){cancelAnimationFrame(raf);raf=0;last=0;}
+  cv.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;flip();e.preventDefault();start();});
+  ['pointerdown','pointermove','pointerup','click'].forEach(type=>document.addEventListener(type,start));
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){tilt=-1;target=-1;led=0;draw();}else start();
 })();

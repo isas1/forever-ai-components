@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Crate Time Picker — scroll-snap hour and minute wheels with a spring AM/PM selector.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crate Time Picker</title>
+<script>/* theme hook: ?theme=light|dark before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+:root{
+  --cr01-bg:#131316;--cr01-ink:#F1F1F4;--cr01-on:#000;--cr01-line:#2B2C31;--cr01-cobalt:#7B95C4;
+  --cr01-r:3px;--cr01-h:clamp(32px,14vmin,52px);--cr01-ease:cubic-bezier(.2,.8,.2,1);--cr01-spr:cubic-bezier(.3,1.45,.5,1);
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --cr01-bg:#EFF0F3;--cr01-ink:#000;--cr01-on:#EFF0F3;--cr01-line:#CDCFD8;--cr01-cobalt:#2B4473;
+  color-scheme:light;
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--cr01-bg);color:var(--cr01-ink);font-family:"Avenir Next",Avenir,"Segoe UI",ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+.cr01-stage,.cr01-stage *,.cr01-stage *::before,.cr01-stage *::after{box-sizing:border-box}
+.cr01-stage{position:relative;width:100%;height:100%;display:grid;place-items:center;padding:clamp(8px,3vmin,20px);background:var(--cr01-bg);color:var(--cr01-ink)}
+.cr01-stage :focus-visible{outline:2px solid var(--cr01-cobalt);outline-offset:2px}
+.cr01-tp{display:flex;align-items:center;gap:clamp(2px,1.2vmin,4px);font-family:Futura,"Avenir Next",Avenir,ui-sans-serif,system-ui,sans-serif;font-weight:600;font-size:clamp(22px,10vmin,40px);line-height:1}
+.cr01-col{position:relative}
+.cr01-col::before,.cr01-col::after{content:"";position:absolute;left:clamp(6px,2vmin,10px);right:clamp(6px,2vmin,10px);height:1.5px;background:var(--cr01-ink);pointer-events:none}
+.cr01-col::before{top:var(--cr01-h)}
+.cr01-col::after{bottom:var(--cr01-h)}
+.cr01-w{list-style:none;margin:0;padding:var(--cr01-h) 0;height:calc(var(--cr01-h) * 3);width:clamp(46px,22vmin,78px);overflow-y:auto;scroll-snap-type:y mandatory;scrollbar-width:none;overscroll-behavior:contain;border-radius:var(--cr01-r);cursor:grab}
+.cr01-w::-webkit-scrollbar{display:none}
+.cr01-li{height:var(--cr01-h);display:grid;place-items:center;user-select:none;-webkit-user-select:none;scroll-snap-align:center}
+.cr01-c{padding-bottom:clamp(3px,1vmin,6px)}
+.cr01-ap{position:relative;display:grid;margin-left:clamp(4px,2vmin,8px);border:1.5px solid var(--cr01-ink);border-radius:999px;font-size:clamp(10px,3vmin,12px);overflow:hidden}
+.cr01-ap-b{position:relative;background:none;border:0;padding:0;margin:0;color:inherit;font:inherit;cursor:pointer;width:clamp(32px,11vmin,44px);height:clamp(28px,10vmin,42px);font-weight:600;transition:color .25s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.cr01-ap-b[aria-checked="true"]{color:var(--cr01-on)}
+.cr01-ap-b:focus-visible{outline-offset:-4px}
+.cr01-th{position:absolute;left:0;top:0;width:100%;height:50%;background:var(--cr01-ink);transition:transform .35s var(--cr01-spr)}
+.cr01-ap[data-v="1"] .cr01-th{transform:translateY(100%)}
+.cr01-cap{position:absolute;left:10px;bottom:8px;font:500 11px/1 ui-monospace,monospace;color:var(--cr01-ink);opacity:.45;letter-spacing:.04em;text-transform:uppercase;pointer-events:none;user-select:none}
+@media (prefers-reduced-motion:reduce){.cr01-stage *,.cr01-stage *::before,.cr01-stage *::after{transition-duration:.01ms!important;animation-duration:.01ms!important;scroll-behavior:auto!important}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/inputs-switches/48-crate-time-picker.html",
+ "title": "Crate Time Picker",
+ "description": "Dual scroll-snap hour and minute drums with pointer-drag inertia, arrow-key stepping, and sliding AM/PM capsule in the matte record-shop register.",
+ "useWhen": "Store hours, pickup windows, and scheduling controls.",
+ "avoidWhen": "Full calendar date-range selection.",
+ "agentPrompt": "Edit --b/--i/--c/--l tokens in :root and [data-theme=\"light\"].",
+ "editableAreas": [
+  "theme CSS tokens (--b/--i/--c/--l), data arrays & timings"
+ ],
+ "preserveElements": [
+  "IIFE + crNN- prefix, reduced-motion, visibilitychange, theme/demo-v1"
+ ],
+ "knownLimitations": [
+  "Demo state resets on remount"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "time-picker",
+  "scroll-snap",
+  "wheel",
+  "segmented-control",
+  "input",
+  "crate"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="cr01-stage" id="cr01-stage"></div>
+<div class="cr01-cap" aria-hidden="true">Time Picker</div>
+<script>(()=>{
+  const s=document.getElementById('cr01-stage');
+  const mq=matchMedia('(prefers-reduced-motion: reduce)');
+  const RM=()=>mq.matches;
+  const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+  const pad=n=>String(n).padStart(2,'0');
+  const cols=[{l:'Hour',v:[...Array(12)].map((_,i)=>i+1),i:3,f:String},{l:'Minute',v:[...Array(12)].map((_,i)=>i*5),i:6,f:pad}];
+  s.innerHTML=`<div class="cr01-tp" role="group" aria-label="Pickup time">${cols.map((c,k)=>`${k?'<span class="cr01-c" aria-hidden="true">:</span>':''}<div class="cr01-col"><ul class="cr01-w" data-fit-clip-ok role="listbox" tabindex="0" aria-label="${c.l}">${c.v.map((v,i)=>`<li class="cr01-li" role="option" id="cr01-${k}-${i}" aria-selected="false">${c.f(v)}</li>`).join('')}</ul></div>`).join('')}<div class="cr01-ap" role="radiogroup" aria-label="AM or PM" data-v="1"><i class="cr01-th"></i><button type="button" class="cr01-ap-b" role="radio" aria-checked="false" tabindex="-1">AM</button><button type="button" class="cr01-ap-b" role="radio" aria-checked="true">PM</button></div></div>`;
+  const wheels=[...s.querySelectorAll('.cr01-w')];
+  const ap=s.querySelector('.cr01-ap'),rs=[...ap.querySelectorAll('.cr01-ap-b')];
+  const rowH=w=>{const li=w.querySelector('.cr01-li');return (li&&li.offsetHeight)||52};
+  const apis=wheels.map((w,k)=>{
+    const c=cols[k],its=[...w.querySelectorAll('.cr01-li')];
+    let idx=-1,tgt=c.i,lastGo=0,raf=0,drag=null,skip=false,rt=0,buf='',bt=0;
+    const paint=()=>{raf=0;const H=rowH(w),st=w.scrollTop;
+      its.forEach((li,i)=>{const d=Math.abs(i*H-st)/H;li.style.transform=`scale(${1-Math.min(d,1.5)*.3})`;li.style.opacity=String(1-Math.min(d,1.25)*.62)});
+      const n=clamp(Math.round(st/H),0,its.length-1);
+      if(n!==idx){if(idx>=0)its[idx].setAttribute('aria-selected','false');idx=n;its[n].setAttribute('aria-selected','true');w.setAttribute('aria-activedescendant',its[n].id)}};
+    const go=n=>{const H=rowH(w);tgt=clamp(n,0,its.length-1);lastGo=performance.now();w.scrollTo({top:tgt*H,behavior:RM()?'auto':'smooth'})};
+    w.addEventListener('scroll',()=>{raf||(raf=requestAnimationFrame(paint))},{passive:true});
+    its.forEach((li,i)=>li.addEventListener('click',()=>{skip||go(i)}));
+    w.addEventListener('keydown',e=>{const key=e.key,base=performance.now()-lastGo<450?tgt:idx;let n=null;
+      if(key==='ArrowDown')n=base+1;else if(key==='ArrowUp')n=base-1;else if(key==='PageDown')n=base+3;else if(key==='PageUp')n=base-3;else if(key==='Home')n=0;else if(key==='End')n=its.length-1;
+      else if(/^\d$/.test(key)){buf+=key;clearTimeout(bt);bt=setTimeout(()=>buf='',900);const f=c.v.indexOf(c.l==='Hour'?+buf:Math.round(+buf/5)*5);if(f>=0)n=f;if(buf.length>1)buf=''}
+      if(n!==null){e.preventDefault();go(n)}});
+    w.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&!e.button)drag={y:e.clientY,st:w.scrollTop,m:false}});
+    const onMove=e=>{if(!drag)return;const dy=e.clientY-drag.y;if(!drag.m&&Math.abs(dy)>4){drag.m=true;w.style.scrollSnapType='none'}if(drag.m)w.scrollTop=drag.st-dy};
+    const onUp=()=>{if(!drag)return;const m=drag.m;drag=null;if(!m)return;skip=true;setTimeout(()=>skip=false,0);go(Math.round(w.scrollTop/rowH(w)));clearTimeout(rt);rt=setTimeout(()=>w.style.scrollSnapType='',450)};
+    document.addEventListener('pointermove',onMove);
+    document.addEventListener('pointerup',onUp);
+    w.scrollTop=c.i*rowH(w);paint();
+    return {go,paint,sync:()=>{w.scrollTop=tgt*rowH(w);paint()}};
+  });
+  const setAP=i=>{rs.forEach((b,j)=>{b.setAttribute('aria-checked',String(j===i));b.tabIndex=j===i?0:-1});ap.dataset.v=String(i)};
+  rs.forEach((b,i)=>b.addEventListener('click',()=>setAP(i)));
+  ap.addEventListener('keydown',e=>{if(e.key.startsWith('Arrow')){e.preventDefault();const i=+ap.dataset.v^1;setAP(i);rs[i].focus()}});
+  if(typeof ResizeObserver==='function')new ResizeObserver(()=>apis.forEach(a=>a.sync())).observe(s);
+
+  let demo=!RM()&&!(window.__foreverPreview&&window.__foreverPreview.demoEnabled===false);
+  let timer=0,kick=0,step=0;
+  const seq=[[4,8,1],[6,2,0],[9,10,1],[3,6,1]];
+  const play=()=>{if(!demo||RM()||document.hidden)return;const [h,m,a]=seq[step++%seq.length];apis[0].go(h);apis[1].go(m);setAP(a)};
+  const stop=()=>{if(timer){clearInterval(timer);timer=0}if(kick){clearTimeout(kick);kick=0}};
+  const start=()=>{if(!timer&&demo&&!RM())timer=setInterval(play,1400)};
+  const takeover=()=>{demo=false;stop()};
+  window.addEventListener('forever:interactive',takeover);
+  s.addEventListener('pointerdown',takeover,true);
+  s.addEventListener('keydown',takeover,true);
+  s.addEventListener('wheel',takeover,{capture:true,passive:true});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else if(demo)start()});
+  window.addEventListener('message',e=>{if(e.data&&e.data.type==='forever:theme'&&(e.data.theme==='light'||e.data.theme==='dark'))document.documentElement.setAttribute('data-theme',e.data.theme)});
+  if(demo){kick=setTimeout(play,650);start()}
+})();</script>
+</body>
+</html>

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Denim-blue cylindrical thumbwheel with curved ribs you fling and scrub; flywheel friction, detent ticks, and a FRAME counter readout.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Thumbwheel Scrubber</title>
@@ -20,6 +21,8 @@
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
        letter-spacing:.16em;color:var(--tws-cap);opacity:var(--tws-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+
+#tws-c{touch-action:none;outline-offset:-4px}#tws-c:focus-visible{outline:2px solid currentColor}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -42,12 +45,13 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion guard (static single frame)",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Reduced-motion renders one static frame — wheel is non-interactive for those users",
-  "No keyboard scrubbing — pointer-only interaction",
-  "FRAME counter is a demo value, not wired to any real data source"
+  "FRAME counter is a demo value, not wired to any real data source",
+  "Drag and arrow keys scrub the local frame value, including reduced-motion mode.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -71,20 +75,24 @@
 </script>
 </head>
 <body>
-<canvas id="tws-c"></canvas>
+<canvas class="tws-root" role="spinbutton" tabindex="0" aria-label="Thumbwheel frame" aria-valuenow="0" id="tws-c"></canvas>
 <div class="cap">Thumbwheel Scrubber</div>
 <script>
 (function(){
   const cv=document.getElementById('tws-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
   const ACC='#507E95';
   const root=document.documentElement, C={};
+  // Empty iframe token snapshots need valid palette values before first layout.
   function syncTheme(){
     const cs=getComputedStyle(root);
-    C.bg=cs.getPropertyValue('--tws-bg').trim(); C.accRgb=cs.getPropertyValue('--tws-acc-rgb').trim();
+    C.bg=cs.getPropertyValue('--tws-bg').trim()||(root.getAttribute('data-theme')==='light'?"#f1f2f5":"#1A1C1E"); C.accRgb=cs.getPropertyValue('--tws-acc-rgb').trim()||(root.getAttribute('data-theme')==='light'?"73,115,136":"80,126,149");
   }
   addEventListener('message',function(e){ const d=e.data;
-    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme(); } });
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){ root.setAttribute('data-theme',d.theme); syncTheme();start(); } });
   syncTheme();
   let W,H,DPR,cx,cy,wW,wH;
   function size(){
@@ -94,10 +102,11 @@
     cx=W/2;cy=H/2;
     wW=Math.min(W*0.74,540);wH=Math.min(H*0.30,150);wH=Math.min(wH,wW*0.34);
   }
-  addEventListener('resize',size);size();
+  // Resizing clears the bitmap; refresh tokens and wake the parked renderer.
+  addEventListener('resize',()=>{syncTheme();size();start();});size();
 
   const PITCH=0.30;            // radians between ribs
-  let ang=0, vel=reduce?0:1.9; // angular position & velocity
+  let ang=0, vel=reduce||!demoEnabled?0:1.9; // angular position & velocity
   let lastTick=Math.round(ang/PITCH);
   let pulse=0, frameIdx=0;
   let drag=null, lastX=0, lastT=0;
@@ -107,7 +116,7 @@
     return (tgt-a)*0.06*Math.max(0,1-Math.abs(vel)/0.18);
   }
 
-  function frame(){
+  function frame(){raf=0;if(document.hidden)return;
     // physics
     if(!drag){
       vel*=0.975;                       // flywheel friction
@@ -142,8 +151,8 @@
 
     // --- ribs: cylinder projection, x = sin(angle) ---
     const R=wW/2/0.96;                   // virtual radius -> fills well width
-    const start=Math.floor((ang-Math.PI/2)/PITCH), end=Math.ceil((ang+Math.PI/2)/PITCH);
-    for(let i=start;i<=end;i++){
+    const firstRib=Math.floor((ang-Math.PI/2)/PITCH), end=Math.ceil((ang+Math.PI/2)/PITCH);
+    for(let i=firstRib;i<=end;i++){
       let ph=i*PITCH-ang;                // -pi/2..pi/2 visible
       const c=Math.cos(ph);
       if(c<=0.02) continue;              // back of cylinder
@@ -213,7 +222,7 @@
     ctx.fillText(vel===0?'AT REST':'COASTING', cx, by+bh+fs+4);
     ctx.textAlign='left';
 
-    if(!reduce) raf=requestAnimationFrame(frame);
+    cv.setAttribute("aria-valuenow",frameIdx);if(!reduce&&(drag||Math.abs(vel)>.0009||Math.abs(detent(ang))>.0001||pulse>.001))start();
   }
 
   function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);
@@ -241,8 +250,10 @@
   cv.addEventListener('pointerleave',release);
 
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!document.hidden)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
+  cv.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowUp')ang+=PITCH;else if(e.key==='ArrowLeft'||e.key==='ArrowDown')ang-=PITCH;else return;vel=0;e.preventDefault();start();});
+  ['pointerdown','pointermove','pointerup','click'].forEach(type=>document.addEventListener(type,start));
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){vel=0;ang=0;lastTick=0;frame();}else start();
 })();

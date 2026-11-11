@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Draggable orange throw lever on a coil spring that snaps home with motion-blur ghosts and a ringing track wobble on impact.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Slide Throw Lever</title>
@@ -27,6 +28,8 @@
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
        letter-spacing:.14em;color:var(--stl-cap);opacity:var(--stl-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+
+#stl-c{touch-action:none;outline-offset:-4px}#stl-c:focus-visible{outline:2px solid currentColor}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -43,7 +46,7 @@
   "spring damping (DAMP=0.62)",
   "coil count (coils=9)",
   "handle radius scale (S*0.085)",
-  "idle demo cadence (PULL_AT=18 / PULL=24 / HOLD=42 / CYCLE=180 / RESUME=216 frames, THROW=0.92)",
+  "idle demo cadence (PULL_AT=18 / PULL=24 / HOLD=42 / CYCLE=180, THROW=0.92)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -52,11 +55,13 @@
   "visibilitychange pause/resume",
   "DPR-aware canvas sizing",
   "idle demo throw (same throw path as a drag; real input takes over)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Click auto-nudge only fires when pos<0.05 — users may not discover the interaction without a hint",
-  "No aria role or keyboard support — not accessible as an interactive control"
+  "Pointer drag and Space/Enter operate the lever; its return spring finishes after release.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -81,23 +86,27 @@
 </script>
 </head>
 <body>
-<canvas id="stl-c"></canvas>
+<canvas role="button" tabindex="0" aria-label="Throw spring lever" id="stl-c"></canvas>
 <div class="cap">Slide Throw Lever</div>
 <script>
 (function(){
   const cv=document.getElementById('stl-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
   const root=document.documentElement, C={};
+  // Empty iframe token snapshots need valid palette values before first layout.
   function syncTheme(){
     const cs=getComputedStyle(root);
-    C.bg=cs.getPropertyValue('--stl-bg').trim();
-    C.acc=cs.getPropertyValue('--stl-acc').trim();
-    C.accRgb=cs.getPropertyValue('--stl-acc-rgb').trim();
+    C.bg=cs.getPropertyValue('--stl-bg').trim()||(root.getAttribute('data-theme')==='light'?"#f7eef2":"#2a0a18");
+    C.acc=cs.getPropertyValue('--stl-acc').trim()||(root.getAttribute('data-theme')==='light'?"#a65a00":"#ff9e2c");
+    C.accRgb=cs.getPropertyValue('--stl-acc-rgb').trim()||(root.getAttribute('data-theme')==='light'?"166,90,0":"255,158,44");
   }
   addEventListener('message',function(e){
     const d=e.data;
     if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
-      root.setAttribute('data-theme',d.theme); syncTheme();
+      root.setAttribute('data-theme',d.theme); syncTheme();start();
     }
   });
   syncTheme();
@@ -109,7 +118,8 @@
     S=Math.min(W,H);trackX=W*0.5;
     topY=H*0.24;botY=H*0.80;
   }
-  addEventListener('resize',size);size();
+  // Resizing clears the bitmap; refresh tokens and wake the parked renderer.
+  addEventListener('resize',()=>{syncTheme();size();start();});size();
 
   // state: pos 0=rest(top), 1=fully pulled(bottom). spring flings back to 0.
   let pos=0,vel=0,prev=0,ghost=[],ring=0,ringV=0,dragging=false,grabOff=0;
@@ -134,17 +144,17 @@
   addEventListener('pointermove',move);
   addEventListener('pointerup',up);
   // auto-pluck on plain click/tap with no drag (nudge)
-  cv.addEventListener('click',()=>{if(!reduce&&pos<0.05&&Math.abs(vel)<0.01){pos=0.55+Math.random()*0.35;vel=0;setTimeout(up,40);}});
+  cv.addEventListener('click',()=>{if(reduce){pos=pos>0?0:THROW;draw();}else if(!reduce&&pos<0.05&&Math.abs(vel)<0.01){pos=0.55+Math.random()*0.35;vel=0;setTimeout(up,40);}});
 
   // idle demo: nobody drags a lever on the wall, so the tile pulls it down through the very same
   // grab -> move -> release path a real drag uses — first pull ~0.3 s after mount, held HOLD
   // frames, then released so the spring throws it home with the same ghosts and ringdown; one
-  // throw every CYCLE frames (~3 s). Real input takes over; demo resumes after RESUME idle frames.
+  // throw every CYCLE frames (~3 s). Real input takes over; demo stays off until reload.
   const PULL_AT=18,PULL=24,HOLD=42,CYCLE=180,RESUME=216,THROW=0.92;
-  let demo=true,demoGrab=false,d=0,idleF=0;
+  let demo=demoEnabled,demoGrab=false,d=0,idleF=0;
   function takeover(){ if(demoGrab){ up();demoGrab=false; } demo=false;idleF=0; }
   function demoStep(){
-    if(!demo){ if(++idleF>RESUME){ demo=true;idleF=0;d=0; } return; }
+    if(!demo||!demoEnabled)return;
     d++;
     if(d===PULL_AT){ grab();demoGrab=true; }                                     // reach for it
     else if(demoGrab&&d<=PULL_AT+PULL){ pos=THROW*(1-Math.pow(1-(d-PULL_AT)/PULL,3));vel=0; }
@@ -235,10 +245,12 @@
     ctx.fillStyle='rgba(255,245,225,0.7)';ctx.fill();
   }
 
-  function frame(){if(!reduce)demoStep();physics();draw();raf=requestAnimationFrame(frame);}
+  function frame(){raf=0;if(document.hidden)return;if(!reduce&&demoEnabled)demoStep();if(!reduce)physics();draw();cv.setAttribute("aria-valuenow",Math.round(pos*100));if(!reduce&&((demoEnabled&&demo)||dragging||Math.abs(pos)>.001||Math.abs(vel)>.001||ring!==0||ringV!==0||ghost.length))start();}
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!document.hidden)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
+  cv.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;takeover();pos=reduce?(pos>0?0:THROW):THROW;vel=0;e.preventDefault();start();});
+  ['pointerdown','pointermove','pointerup','click'].forEach(type=>document.addEventListener(type,start));
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){pos=0.32;draw();}else start();
 })();

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="Ghost button whose chartreuse SVG outline self-draws stroke by stroke on hover and on a quiet looping cycle, brightening its label.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Stroke-Draw Outline</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,7 +30,7 @@
   html,body{margin:0;height:100%;overflow:hidden}
   body{background:var(--c07-bg);display:grid;place-items:center;
     background-image:radial-gradient(60vw 40vw at 20% -10%,var(--c07-glow-a),transparent 60%);}
-  #stage{position:fixed;inset:0;display:grid;place-items:center}
+  #c07-stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c07-draw{position:relative;border:0;background:none;cursor:pointer;padding:18px 38px;
     font-family:var(--font-display);font-size:clamp(15px,4.5vw,18px);font-weight:600;color:var(--text-2);
@@ -49,15 +50,15 @@
 {
  "file": "infinite/buttons/07-stroke-draw-outline.html",
  "title": "Stroke-Draw Outline",
- "description": "Ghost button whose rounded-rect SVG border self-draws via stroke-dashoffset on hover; an idle loop auto-cycles draw/erase every ~2s.",
+ "description": "Ghost button whose rounded-rect SVG border self-draws via stroke-dashoffset on hover; an autonomous preview cycle that stops at first deliberate input cycles autonomously until first deliberate input draw/erase every ~2s.",
  "useWhen": "CTAs on dark backgrounds, hero section buttons, any ghost-style button needing tactile hover feedback without heavy motion.",
  "avoidWhen": "Light backgrounds (bg hardcoded dark). Forms requiring instant-visible borders — the outline starts hidden by default.",
- "agentPrompt": "Change accent to teal (#00d4aa), slow the draw to 1.4s (transition-duration on .c07-draw__rect), and update idle hold time from 2200 to 3500ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Change accent to teal (#00d4aa), slow the draw to 1.4s (transition-duration on .c07-draw__rect), and update idle hold time from 2200 to 3500ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime. Autonomous preview ends at first deliberate input and never resumes.",
  "editableAreas": [
   "accent color (--accent-iris: #A9D22D)",
   "stroke draw duration (0.9s on .c07-draw__rect)",
-  "idle hold time (lit?2200 timeout)",
-  "idle erase pause (1300 timeout)",
+  "idle hold time (lit?2200 timeout) Autonomous preview ends at first deliberate input and never resumes.",
+  "idle erase pause (1300 timeout) Autonomous preview ends at first deliberate input and never resumes.",
   "stroke-dasharray total length (480)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
@@ -66,18 +67,19 @@
   "IIFE wrapper",
   "prefers-reduced-motion guard",
   "visibilitychange pause",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "stroke-dasharray=480 is hardcoded — must recalculate if button size changes significantly",
   "Auto-cycles by default; remove setTimeout loop before shipping in production",
-  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
   "agent-ready",
   "easy-to-modify",
-  "mobile-ready",
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
@@ -96,7 +98,7 @@
 </script>
 </head>
 <body>
-<div id="stage">
+<div id="c07-stage">
   <button class="c07-draw" type="button">
     <svg class="c07-draw__svg" viewBox="0 0 180 60" preserveAspectRatio="none" aria-hidden="true">
       <rect class="c07-draw__rect" x="1" y="1" width="178" height="58" rx="14"/>
@@ -117,16 +119,18 @@
   });
 
   // autonomous idle: draw the outline, hold, undraw, repeat
-  var timer=null, lit=false;
+  var timer=null, lit=false, demoEnabled=window.__foreverPreview?.demoEnabled!==false;
   function loop(){
-    if(reduce) return;
+    if(reduce||!demoEnabled) return;
     lit=!lit;
     btn.classList.toggle("is-lit", lit);
     timer=setTimeout(loop, lit?2200:1300);
   }
   function stop(){ clearTimeout(timer); }
+  function takeover(){demoEnabled=false;stop();}
+  window.addEventListener("forever:interactive",takeover);btn.addEventListener("pointerdown",takeover,true);btn.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
   document.addEventListener("visibilitychange", function(){ document.hidden?stop():loop(); });
-  setTimeout(loop, 600);
+  if(demoEnabled)setTimeout(loop, 600);
 })();
 </script>
 </body>

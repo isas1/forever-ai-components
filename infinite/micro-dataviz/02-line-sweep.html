@@ -23,7 +23,7 @@
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c02-bg);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  canvas{display:block;width:100%;height:100%}
+  .c02-cv{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
     color:var(--c02-cap);opacity:var(--c02-cap-o);text-transform:uppercase}
 </style>
@@ -79,21 +79,22 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas class="c02-cv"></canvas>
 <div class="cap">line sweep</div>
 <script>
 (function(){
-  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const cv=document.querySelector('.c02-cv'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   const root=document.documentElement;
   let W,H,DPR; let COL='#4dd1ff';
   const C={grid:'',dot:'',blur:8};
   const M=120; let data=new Array(M).fill(0.5), head=0, phase=0;
+  function halo(w){if(!C.blur)return;ctx.globalAlpha=.12;ctx.lineWidth=w+C.blur;ctx.stroke();ctx.globalAlpha=.22;ctx.lineWidth=w+C.blur*.5;ctx.stroke();ctx.globalAlpha=1;}   // stacked translucent strokes stand in for per-frame shadowBlur
   function syncTheme(){            // every colour the canvas draws with comes from the tokens
     const cs=getComputedStyle(root);
-    COL=cs.getPropertyValue('--c02-line').trim();   // area gradient + glow are rebuilt from COL each frame
-    C.grid=cs.getPropertyValue('--c02-grid').trim();
-    C.dot=cs.getPropertyValue('--c02-dot').trim();
+    COL=cs.getPropertyValue('--c02-line').trim()||'#4dd1ff';   // area gradient + glow are rebuilt from COL each frame
+    C.grid=cs.getPropertyValue('--c02-grid').trim()||'#ffffff10';
+    C.dot=cs.getPropertyValue('--c02-dot').trim()||'#ffffff';
     C.blur=parseFloat(cs.getPropertyValue('--c02-blur'))||0;
   }
   addEventListener('message',function(e){
@@ -112,7 +113,7 @@
   }
   let last=0,acc=0;
   function draw(t){
-    if(document.hidden){last=t;return raf()}
+    if(document.hidden){last=t;return}
     const dt=Math.min(64,t-last);last=t;acc+=dt;
     const step=reduce?9999:90;
     while(acc>=step){acc-=step;next();}
@@ -132,15 +133,15 @@
     // line
     ctx.beginPath();
     for(let i=0;i<M;i++){const v=data[(head+i)%M];const x=px(i),y=py(v);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
-    ctx.strokeStyle=COL;ctx.lineWidth=2;ctx.shadowColor=COL;ctx.shadowBlur=C.blur;ctx.stroke();ctx.shadowBlur=0;
+    ctx.strokeStyle=COL;halo(2);ctx.lineWidth=2;ctx.stroke();
     // head dot
     const lv=data[(head+M-1)%M];ctx.fillStyle=C.dot;
     ctx.beginPath();ctx.arc(px(M-1),py(lv),3,0,7);ctx.fill();
     raf();
   }
-  function raf(){requestAnimationFrame(draw)}
+  let rafId=0;function raf(){rafId=requestAnimationFrame(draw)}
   addEventListener('resize',resize);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){last=performance.now();cancelAnimationFrame(rafId);raf()}else{cancelAnimationFrame(rafId);rafId=0}});
   syncTheme();resize();raf();
 })();
 </script>

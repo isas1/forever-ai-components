@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A bottom-anchored stack of dark notification toasts springs up, drains a colored progress bar, then slides off.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Toast Stack</title>
@@ -58,12 +59,14 @@
   "reduced-motion static fallback (3-toast snapshot)",
   "visibilitychange stop/start guard",
   "spring() function — drives entrance overshoot",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "No aria-live region — screen readers won't announce new toasts without adding role=status/alert",
-  "Auto-cycles via setTimeout; must remove tick() loop for production use",
-  "Progress bar driven by rAF, not CSS animation — adds frame budget cost"
+  "First deliberate input permanently disables idle demo; manual input, finite feedback and settling remain active. Host demoEnabled=false skips the initial attract cycle.",
+  "Progress bar driven by rAF, not CSS animation — adds frame budget cost",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -90,11 +93,17 @@
 <body>
 <div id="fb03-stage" role="img" aria-label="A stack of toast notifications springing up from the bottom, each draining a progress bar before sliding away; activate to push another." tabindex="0">
   <div id="fb03-rail" role="list" aria-hidden="true"></div>
+<div class="fb03-hint">space ↵</div>
 </div>
 <div class="cap">Toast Stack</div>
-<div class="fb03-hint">space ↵</div>
+
 <script>
 (function(){
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;clearTimeout(demoTimer);}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   "use strict";
   var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
   var rail = document.getElementById('fb03-rail');
@@ -123,7 +132,7 @@
 
   function makeToast(k){
     var el = document.createElement('div');
-    el.className = 't '.replace('t','fb03-t')+k.c;
+    el.className = 'fb03-t '+k.c;
     el.setAttribute('role','listitem');
     el.innerHTML =
       '<span class="fb03-ic">'+G[k.g]+'</span>'+
@@ -140,6 +149,7 @@
   }
 
   function push(k){
+    if(reduce){if(live.length>=MAX)live.shift().el.remove();var o=makeToast(k);o.el.style.opacity="1";o.el.style.transform="none";o.pg.style.transform="scaleX(.6)";live.push(o);return;}wake();
     if (live.length >= MAX){ retire(live[0]); }
     live.push(makeToast(k));
   }
@@ -158,7 +168,7 @@
   var last = 0, running = true, raf = 0;
 
   function frame(now){
-    if(!running) return;
+    raf=0;if(!running||document.hidden)return;
     var i, o, n = live.length;
     for(i=0;i<n;i++){
       o = live[i];
@@ -187,18 +197,18 @@
         }
       }
     }
-    raf = requestAnimationFrame(frame);
+    if(live.length)wake();
   }
 
+  function wake(){if(document.hidden||reduce)return;running=true;if(!raf)raf=requestAnimationFrame(frame);}
   // ---- self-demo timer + handoff ----
   var demoAt = 0, idleSince = performance.now(), userHold = false;
-  function tick(now){
+  function tick(now){if(!demoEnabled||document.hidden||reduce)return;
     if(!userHold && now - demoAt > 1700 && live.length < MAX){
       push(KIND[seq % KIND.length]); seq++;
       demoAt = now;
     }
     // ease back to self-demo after idle
-    if(userHold && now - idleSince > 3400){ userHold = false; demoAt = now - 900; }
     demoTimer = setTimeout(function(){ tick(performance.now()); }, 280);
   }
   var demoTimer = 0;

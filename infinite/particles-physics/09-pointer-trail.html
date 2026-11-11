@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Rainbow particle sparks emit and arc off a cursor (auto-orbits when idle) on near-black, fading into a glowing trail.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pointer Trail</title>
@@ -24,7 +25,7 @@
     --c09-fade:rgba(240,241,246,0.18); --c09-s:90; --c09-l0:30; --c09-lk:-8;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c09-bg)}
-  #c{display:block;width:100%;height:100%}
+  #c09-canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--c09-cap);opacity:var(--c09-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
@@ -32,7 +33,7 @@
 {
  "file": "infinite/particles-physics/09-pointer-trail.html",
  "title": "Pointer Trail",
- "description": "Rainbow spark particles arc off the cursor position, fading with a glow trail on near-black. Auto-orbits in a Lissajous path when the pointer leaves.",
+ "description": "Rainbow spark particles arc off the cursor position, fading with a glow trail on near-black. Initial Lissajous demo stops after first input; manual movement emits sparks that fade without stationary emission.",
  "useWhen": "Dark-background hero sections, creative portfolio landing pages, or ambient interactive demos where cursor magic adds delight.",
  "avoidWhen": "Light backgrounds (hardcoded dark fill), content-dense layouts where cursor trails distract from reading, or reduced-motion contexts needing full animation.",
  "agentPrompt": "Change particle cap from 110 to 60, slow hue cycling by setting t*40 to t*20, and increase gravity from 0.02 to 0.06 so sparks arc downward faster. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
@@ -50,12 +51,14 @@
   "DPR-aware canvas sizing",
   "auto-orbit fallback when pointer absent",
   "reduced-motion guard (single-frame only)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Reduced-motion guard only draws one static frame — not a true static fallback (no meaningful still state)",
   "Background color hardcoded in CSS and JS fill — two places to change",
-  "Particle cap of 110 may still tax very low-end mobile CPUs"
+  "Particle cap of 110 may still tax very low-end mobile CPUs",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -78,11 +81,16 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c09-canvas" class="c09-root"></canvas>
 <div class="cap">Pointer Trail</div>
 <script>
 (function(){
-const cv=document.getElementById('c'),x=cv.getContext('2d');
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;auto=false;pos.x=last.x;pos.y=last.y;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+const cv=document.getElementById('c09-canvas'),x=cv.getContext('2d');
 let W,H,DPR,parts=[],t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 let pos={x:0,y:0},auto=true;
 const root=document.documentElement;
@@ -99,7 +107,7 @@ function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.client
 addEventListener('resize',size);size();
 cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
   pos.x=e.clientX-r.left;pos.y=e.clientY-r.top;auto=false;});
-cv.addEventListener('pointerleave',()=>auto=true);
+cv.addEventListener('pointerleave',()=>{auto=demoEnabled;});
 let last={x:W/2,y:H/2};
 function emit(px,py,vx,vy){
   const sp=Math.hypot(vx,vy),count=Math.min(4,1+(sp/6|0));
@@ -111,11 +119,11 @@ function emit(px,py,vx,vy){
 function step(){
   x.fillStyle=FADE;x.fillRect(0,0,W,H);t+=0.02;
   let tx,ty;
-  if(auto){tx=W/2+Math.cos(t*1.1)*W*0.32+Math.cos(t*2.3)*W*0.1;
+  if(demoEnabled&&!reduce&&auto){tx=W/2+Math.cos(t*1.1)*W*0.32+Math.cos(t*2.3)*W*0.1;
     ty=H/2+Math.sin(t*1.5)*H*0.32+Math.sin(t*3.1)*H*0.08;}
   else{tx=pos.x;ty=pos.y;}
   const vx=tx-last.x,vy=ty-last.y;
-  emit(tx,ty,vx,vy);last.x=tx;last.y=ty;
+  if(Math.hypot(vx,vy)>.05)emit(tx,ty,vx,vy);last.x=tx;last.y=ty;
   for(let i=parts.length-1;i>=0;i--){const p=parts[i];
     p.x+=p.vx;p.y+=p.vy;p.vy+=0.02;p.vx*=0.96;p.vy*=0.96;p.life-=0.022;
     if(p.life<=0){parts.splice(i,1);continue;}
@@ -123,10 +131,11 @@ function step(){
     x.beginPath();x.arc(p.x,p.y,p.r*p.life+0.4,0,7);x.fill();}
   x.globalAlpha=1;
 }
-let raf;function loop(){step();raf=requestAnimationFrame(loop);}
-function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+let raf=0;function loop(){raf=0;if(document.hidden)return;step();if(!reduce&&(demoEnabled||(parts.length>0)))play();}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}raf=requestAnimationFrame(loop);}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;play();}));
 play();
 })();
 </script>

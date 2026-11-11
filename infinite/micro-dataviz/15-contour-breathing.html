@@ -49,12 +49,15 @@
   "prefers-reduced-motion static fallback",
   "visibilitychange pause/start guards",
   "DPR-aware canvas sizing and transform",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "First deliberate input freezes procedural chart drift after its input paint; hover alone keeps idle demonstration running.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Marching-squares loop runs over entire GW*GH grid each frame — heavy on large viewports or high-DPR screens",
   "Background color hardcoded in CSS (#101820) — must change in both CSS and ctx.fillStyle",
-  "No aria semantics — purely decorative canvas"
+  "No aria semantics — purely decorative canvas",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -76,14 +79,23 @@
  ]
 }
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 </head>
 <body>
-<canvas id="cb-c"></canvas>
+<canvas id="cb-c" class="cb-canvas"></canvas>
 <div class="cb-cap">Contour Breathing</div>
 <script>
 (function(){
   const cv=document.getElementById('cb-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const preview=window.__foreverPreview;
+  let demoEnabled=preview?preview.demoEnabled!==false:true;
+  function shouldFrame(){return demoEnabled;}
+  function takeOver(){demoEnabled=false;cancelAnimationFrame(raf);raf=0;if(!document.hidden&&!reduce)raf=requestAnimationFrame(frame);else if(reduce)frame();}
+  window.addEventListener('forever:interactive',takeOver);
+  document.addEventListener('pointerdown',takeOver,{capture:true});
+  document.addEventListener('click',takeOver,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&e.key!=='Escape'&&!/^(Shift|Control|Alt|Meta)$/.test(e.key)&&!e.metaKey&&!e.ctrlKey&&!e.altKey)takeOver();},{capture:true});
   let W,H,DPR,GW,GH,cell,field,px=0.5,py=0.5,pBoost=0;
   // grid resolution scales with size; keep cells ~ constant px for crisp lines
   function size(){
@@ -186,9 +198,9 @@
       ctx.lineWidth=fr>0.82?1.5:1;
       contour(th);
     }
-    if(!reduce)raf=requestAnimationFrame(frame);
+    if(!reduce&&shouldFrame())raf=requestAnimationFrame(frame);else raf=0;
   }
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce&&shouldFrame())raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   cv.addEventListener('pointermove',e=>{
@@ -222,7 +234,7 @@
     }
   });
   syncTheme();ready=1;
-  if(reduce){staticDraw();}else start();
+  if(reduce){staticDraw();}else if(demoEnabled)start();else frame();
 })();
 </script>
 </body>

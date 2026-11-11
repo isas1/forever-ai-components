@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Page Turn — a cloth-bound picture book you turn by the corner.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Page Turn</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+:root{--pg-bg:#1C1B18;--pg-fg:#EEE9DF;--pg-paper:#F3EEE3;--pg-rev:#E3D9C7;--pg-board:#5F6E55;--pg-sh:rgba(0,0,0,.5);color-scheme:dark}
+:root[data-theme="light"]{--pg-bg:#F4F1EA;--pg-fg:#24221E;--pg-paper:#FFFDF8;--pg-rev:#ECE4D4;--pg-board:#6F8063;--pg-sh:rgba(70,50,30,.2);color-scheme:light}
+html,body{margin:0;height:100%;overflow:hidden;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;background:var(--pg-bg);color:var(--pg-fg);font:14px/1.3 ui-serif,Georgia,serif}
+.pg-st{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.pg-bk{position:relative;perspective:1500px;outline:none;touch-action:none;cursor:pointer;transition:transform .5s ease}
+.pg-bk:focus-visible{outline:2px solid;outline-offset:12px}
+.pg-one{clip-path:inset(-12px -12px -12px 0)}
+.pg-b{position:absolute;top:-5px;bottom:-5px;background:var(--pg-board);border-radius:3px;box-shadow:0 8px 18px var(--pg-sh)}
+.pg-s{position:absolute;top:0;height:100%;transform-origin:0 50%;transform-style:preserve-3d}
+.pg-f,.pg-k{position:absolute;inset:0;overflow:hidden;background:var(--pg-paper);backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.pg-k{background:var(--pg-rev);transform:rotateY(180deg)}
+.pg-f::before,.pg-k::before{content:"";position:absolute;top:0;bottom:0;width:6%;background:rgba(60,45,30,.07)}
+.pg-f::before{left:0}.pg-k::before{right:0}
+.pg-p{position:absolute;left:12%;top:10%;width:76%;height:70%}
+.pg-c{position:absolute;inset:0;width:100%;height:100%}
+.pg-x{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+.pg-n{display:flex;align-items:center;gap:2px}
+.pg-n button{width:44px;height:44px;border:0;border-radius:50%;background:none;color:var(--pg-fg);font:22px/1 ui-serif,Georgia,serif;cursor:pointer}
+.pg-n button[aria-disabled="true"]{opacity:.3;cursor:default}
+.pg-n button:focus{outline:none}.pg-n button:focus-visible{outline:2px solid}
+.pg-d{display:flex;gap:6px}
+.pg-d i{width:5px;height:5px;border-radius:50%;background:var(--pg-fg);opacity:.25}
+.pg-d i.pg-on{opacity:.8}
+.pg-g{position:fixed;left:0;top:0;width:30px;height:30px;margin:-15px 0 0 -15px;box-sizing:border-box;border:2px solid var(--pg-fg);border-radius:50%;opacity:0;pointer-events:none;transition:opacity .3s}
+.pg-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.pg-cap{position:absolute;left:10px;bottom:8px;font:500 11px/1 ui-monospace,monospace;color:var(--pg-fg);opacity:.45;letter-spacing:.04em;text-transform:uppercase;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.pg-bk{transition:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/cards/24-page-turn.html",
+ "title": "Page Turn",
+ "description": "A small cloth-bound picture book of wordless scenes: drag a corner across the spine or tap to turn. A spread on wide screens, one page on phones.",
+ "useWhen": "A short visual story, onboarding pictures, a portfolio of a few images.",
+ "avoidWhen": "Long text, or content people must scan quickly.",
+ "agentPrompt": "Matte paper register (cream pages, duskier reverse, moss cloth on #1C1B18 / #F4F1EA). Edit --pg-* tokens; P holds the page SVGs in reading order.",
+ "editableAreas": [
+  "--pg-* tokens",
+  "P page SVG list"
+ ],
+ "preserveElements": [
+  "IIFE + prefix, reduced-motion, visibilitychange, theme hook, demo-v1"
+ ],
+ "knownLimitations": [
+  "A layout change closes the book"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "page-flip",
+  "book",
+  "3d",
+  "carousel",
+  "first-touch"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="pg-st">
+<div class="pg-bk" id="pg-bk" tabindex="0" role="group" aria-roledescription="book" aria-label="Picture book. Arrow keys turn the pages."><div class="pg-b" id="pg-bl"></div></div>
+<div class="pg-n"><button type="button" id="pg-pv" aria-label="Previous page">&#8249;</button><span class="pg-d" id="pg-d" aria-hidden="true"></span><button type="button" id="pg-nx" aria-label="Next page">&#8250;</button></div>
+<span class="pg-g" id="pg-g"></span>
+<p class="pg-live" id="pg-live" aria-live="polite"></p>
+</div>
+<div class="pg-cap" aria-hidden="true">Page Turn</div>
+<script>
+(function(){
+"use strict";
+var D=document,root=D.documentElement,$=function(i){return D.getElementById(i);},bk=$("pg-bk"),bl=$("pg-bl"),pv=$("pg-pv"),nx=$("pg-nx"),dw=$("pg-d"),live=$("pg-live"),gh=$("pg-g"),M=Math;
+function on(e,t,f,o){e.addEventListener(t,f,o);}
+var reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+var demo=!reduce&&(!window.__foreverPreview||window.__foreverPreview.demoEnabled!==false);
+var V='<svg class="pg-p" viewBox="0 0 82 100" preserveAspectRatio="xMidYMid slice">',C='<svg class="pg-c" viewBox="0 0 75 100">',Z="</svg>";
+var P=[
+C+'<rect width="75" height="100" fill="#6F8063"/><rect width="6" height="100" fill="#5F6E55"/><circle cx="39.5" cy="42" r="9" fill="none" stroke="#F1EBDF" stroke-width="1.6"/><path d="M26 57h27" stroke="#F1EBDF" stroke-width="1.6" stroke-linecap="round"/>'+Z,
+V+'<rect width="82" height="100" fill="#E3D6BE"/><circle cx="56" cy="40" r="11" fill="#C98B6E"/><path d="M0 70c18-14 30-14 46-4s26 6 36-2v36H0z" fill="#A4B596"/><path d="M0 82c22-8 40-6 58 2s20 2 24 0v16H0z" fill="#7F9269"/>'+Z,
+V+'<rect width="82" height="100" fill="#D3DBD6"/><rect y="66" width="82" height="34" fill="#93A6BB"/><path d="M42 22v38" stroke="#3E3A33" stroke-width="1.2"/><path d="M43 24l16 34H43z" fill="#F3EEE3"/><path d="M41 30L28 58h13z" fill="#D8C49E"/><path d="M24 60h38l-6 8H30z" fill="#C98B6E"/>'+Z,
+V+'<rect width="82" height="100" fill="#DCE0D2"/><rect y="78" width="82" height="22" fill="#B4C29F"/><path d="M18 52l16-14 16 14v28H18z" fill="#E9E1D0"/><path d="M14 54l20-18 20 18" fill="none" stroke="#9A5E44" stroke-width="3" stroke-linejoin="round"/><rect x="30" y="64" width="8" height="16" fill="#C98B6E"/><path d="M22 56h6v6h-6zM40 56h6v6h-6z" fill="#93A6BB"/><path d="M64 80V58" stroke="#5A4A3A" stroke-width="2.4"/><circle cx="64" cy="50" r="12" fill="#7F9269"/><circle cx="58" cy="56" r="7" fill="#98AA80"/>'+Z,
+V+'<rect width="82" height="100" fill="#4B5A63"/><circle cx="54" cy="30" r="10" fill="#E9E1D0"/><circle cx="58.5" cy="27" r="8.6" fill="#4B5A63"/><rect y="64" width="82" height="36" fill="#3B4850"/><path d="M44 70h14M40 78h22M46 88h10" stroke="#D8C49E" stroke-width="1.2" stroke-linecap="round" opacity=".7"/>'+Z,
+C+'<circle cx="37.5" cy="50" r="2.6" fill="#9A4B2E"/>'+Z];
+var NAMES=["the cover","hills at dusk","a sailboat","a house","the moon","the end"];
+var sh=[],xs=[],K=0,MX=0,idx=0,ang=[],tgt=[],turn=-1,spread=null,pw=200,ph=266,drag=null,raf=0,t0=0,cyc=-1,dd=1,di=0;
+on(window,"message",function(e){
+var t=e.data&&e.data.type==="forever:theme"&&e.data.theme;if(t==="light"||t==="dark")root.setAttribute("data-theme",t);
+});
+function build(){
+sh.forEach(function(s){s.remove();});sh=[];xs=[];
+K=spread?P.length/2:P.length;MX=spread?K:K-1;
+for(var i=0;i<K;i++){
+var s=D.createElement("div");s.className="pg-s";
+s.innerHTML='<div class="pg-f">'+P[spread?2*i:i]+'<i class="pg-x"></i></div><div class="pg-k">'+(spread?P[2*i+1]:"")+'<i class="pg-x"></i></div>';
+bk.appendChild(s);sh.push(s);xs.push(s.querySelectorAll(".pg-x"));
+}
+idx=0;turn=-1;ang=sh.map(function(){return 0;});tgt=ang.slice();
+dw.innerHTML=new Array(MX+2).join("<i></i>");
+}
+function layout(){
+var w=innerWidth,h=innerHeight,sp=w>=460&&w/h>=1.15,mh=h*0.8-56,mw=w*0.92;
+if(sp!==spread){spread=sp;build();}
+pw=M.max(50,M.min(spread?mw/2:mw,mh*0.75,spread?230:300));ph=pw/0.75;
+bk.style.width=(spread?2*pw:pw)+"px";bk.style.height=ph+"px";bk.classList.toggle("pg-one",!spread);
+sh.forEach(function(s){s.style.left=(spread?pw:0)+"px";s.style.width=pw+"px";});
+paint();
+}
+function paint(){
+sh.forEach(function(s,i){
+var a=ang[i],f=a<0&&a>-180?M.sin(-a*M.PI/180)*0.22:0;
+s.style.transform="rotateY("+a.toFixed(2)+"deg)";
+s.style.zIndex=i===turn?K+5:a<-90?i+1:K-i+1;
+xs[i].forEach(function(x){x.style.opacity=f;});
+});
+var o=spread?pw:0,l=spread&&(idx>0||turn===0)?-5:o,r=idx<K||turn===K-1?o+pw+5:o;bl.style.left=l+"px";bl.style.width=r-l+"px";
+bk.style.transform="translateX("+(spread?(idx===0?-pw/2:idx===K?pw/2:0):0)+"px)";
+[].forEach.call(dw.children,function(d,i){d.classList.toggle("pg-on",i===idx);});
+pv.setAttribute("aria-disabled",idx<=0);nx.setAttribute("aria-disabled",idx>=MX);
+}
+function announce(){
+if(demo)return;
+var f=spread?(idx===0?[0]:idx===K?[P.length-1]:[2*idx-1,2*idx]):[idx];
+live.textContent=f.map(function(i){return NAMES[i];}).join(", then ");
+}
+function settle(){if(turn>=0){ang[turn]=tgt[turn];turn=-1;}}
+function go(d){
+if(d>0&&idx>=MX||d<0&&idx<=0)return;
+settle();
+if(d>0){turn=idx;tgt[turn]=-180;idx++;}else{idx--;turn=idx;tgt[turn]=0;}
+if(reduce)settle();
+announce();paint();wake();
+}
+function runDemo(ts){
+if(!t0)t0=ts-550;
+var e=ts-t0,n=M.floor(e/3400),t=e%3400;
+if(cyc!==n){cyc=n;settle();if(idx>=MX)dd=-1;else if(idx<=0)dd=1;di=dd>0?idx:idx-1;turn=di;}
+if(t<1200&&turn===di){
+var q=t/1200;q=q*q*(3-2*q);var a=dd>0?-180*q:-180*(1-q),r=bk.getBoundingClientRect();
+ang[di]=tgt[di]=a;gh.style.opacity=".4";
+gh.style.transform="translate("+(r.left+(spread?pw:0)+pw*M.cos(a*M.PI/180)).toFixed(1)+"px,"+(r.top+ph*0.9).toFixed(1)+"px)";
+}else if(turn===di){ang[di]=tgt[di]=dd>0?-180:0;idx=dd>0?di+1:di;turn=-1;gh.style.opacity="0";announce();}
+}
+function frame(ts){
+raf=0;if(D.hidden)return;
+if(demo)runDemo(ts);
+var m=0;
+if(turn>=0&&!drag&&!demo){var i=turn,g=tgt[i]-ang[i];ang[i]+=A(g)<0.4?g:g*0.16;m=A(g);if(m<0.4&&!drag)turn=-1;}
+paint();
+if((demo||drag||turn>=0||m>0)&&!raf)raf=requestAnimationFrame(frame);
+}
+function A(v){return v<0?-v:v;}
+function wake(){if(reduce){paint();return;}if(!raf&&!D.hidden)raf=requestAnimationFrame(frame);}
+function takeover(){if(!demo)return;demo=false;gh.style.opacity="0";if(turn===di){var f=ang[di]<-90;tgt[di]=f?-180:0;idx=f?di+1:di;announce();}wake();}
+on(window,"forever:interactive",takeover);
+function spine(){var r=bk.getBoundingClientRect();return{x:r.left+(spread?pw:0),y:r.top};}
+on(bk,"pointerdown",function(e){
+if(e.button>0)return;
+takeover();settle();
+var s=spine(),x=e.clientX-s.x,fw=spread?x>0:x>pw*0.3;
+if(fw&&idx>=MX||!fw&&idx<=0){drag=null;return;}
+drag={fw:fw,x0:e.clientX,lx:e.clientX,lt:performance.now(),v:0,mv:0,i:fw?idx:idx-1};
+turn=drag.i;
+try{bk.setPointerCapture(e.pointerId);}catch(_){}
+});
+on(bk,"pointermove",function(e){
+if(!drag)return;
+var dx=e.clientX-drag.x0,n=performance.now();
+drag.mv=M.max(drag.mv,A(dx));drag.v=drag.v*0.6+(e.clientX-drag.lx)/M.max(8,n-drag.lt)*0.4;drag.lx=e.clientX;drag.lt=n;
+if(reduce)return;
+var r=M.max(-1,M.min(1,(drag.fw?1:-1)+dx/pw));ang[drag.i]=tgt[drag.i]=-M.acos(r)*180/M.PI;
+paint();wake();
+});
+function up(e){
+if(!drag)return;
+var d=drag,a=ang[d.i],ok;drag=null;
+if(e.type==="pointercancel")ok=false;
+else if(d.mv<6||reduce)ok=reduce?d.mv<6||d.mv>30:true;
+else ok=d.fw?a<-80||d.v<-0.35:a>-100||d.v>0.35;
+if(ok){if(d.fw){tgt[d.i]=-180;idx++;}else{tgt[d.i]=0;idx--;}announce();}
+else tgt[d.i]=d.fw?0:-180;
+if(reduce)settle();
+paint();wake();
+}
+on(bk,"pointerup",up);on(bk,"pointercancel",up);
+on(bk,"keydown",function(e){
+if(e.key==="ArrowRight"){e.preventDefault();takeover();go(1);}else if(e.key==="ArrowLeft"){e.preventDefault();takeover();go(-1);}
+});
+on(pv,"click",function(){takeover();go(-1);});
+on(nx,"click",function(){takeover();go(1);});
+on(D,"visibilitychange",function(){if(!D.hidden)wake();});
+on(window,"resize",layout);
+layout();wake();
+})();
+</script>
+</body>
+</html>

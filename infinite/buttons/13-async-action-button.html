@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Async Action Button — Buttons &amp; Toggles. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Async Action Button</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  /* forever brand tokens — dark default, warm-paper light in the [data-theme="light"] block */
+  :root{
+    --ab13-bg:#0a0a0a;--ab13-surface:#111111;--ab13-surface-2:#161616;--ab13-text:#ededea;--ab13-muted:#8a8a85;--ab13-faint:#5a5a56;
+    --ab13-border:rgba(255,255,255,.08);--ab13-strong:rgba(255,255,255,.14);
+    --ab13-accent:#3fb680;--ab13-on-accent:#011a0c;--ab13-accent-soft:rgba(63,182,128,.14);--ab13-accent-line:rgba(63,182,128,.32);
+    --ab13-sans:Geist,ui-sans-serif,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --ab13-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;--ab13-ease:cubic-bezier(.22,1,.36,1);
+  }
+  :root[data-theme="light"]{
+    --ab13-bg:#fafaf8;--ab13-surface:#f4f4f0;--ab13-surface-2:#ececE6;--ab13-text:#1a1a18;--ab13-muted:#6b6b66;--ab13-faint:#9a9a93;
+    --ab13-border:rgba(0,0,0,.08);--ab13-strong:rgba(0,0,0,.14);
+    --ab13-accent:#1a7a50;--ab13-on-accent:#e0fff2;--ab13-accent-soft:rgba(26,122,80,.12);--ab13-accent-line:rgba(26,122,80,.35);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--ab13-bg)}
+  .ab13-stage{position:fixed;inset:0;display:grid;place-items:center;align-content:center;gap:clamp(12px,4.5vmin,22px);
+    font-family:var(--ab13-sans);color:var(--ab13-text)}
+  .ab13-btn{position:relative;display:inline-grid;grid-template-columns:auto auto;align-items:center;gap:10px;
+    border:1px solid var(--ab13-strong);background:var(--ab13-surface);color:var(--ab13-text);border-radius:5px;
+    height:clamp(40px,14vmin,56px);padding:0 clamp(18px,7vmin,30px);min-width:clamp(150px,52vmin,240px);justify-content:center;
+    font:500 clamp(13px,4vmin,16px)/1 var(--ab13-sans);letter-spacing:-.01em;cursor:pointer;outline:none;
+    transition:background .3s,border-color .3s,color .3s,transform .12s var(--ab13-ease)}
+  .ab13-btn:active,.ab13-btn.is-down{transform:scale(.97)}
+  .ab13-btn:focus-visible{box-shadow:0 0 0 2px var(--ab13-bg),0 0 0 4px var(--ab13-accent-line)}
+  .ab13-btn.ab13-working{color:var(--ab13-muted);border-color:var(--ab13-accent-line)}
+  .ab13-btn.ab13-done{background:var(--ab13-accent);border-color:var(--ab13-accent);color:var(--ab13-on-accent)}
+  .ab13-ico{width:18px;height:18px;display:block}
+  .ab13-track{stroke:currentColor;opacity:.18}
+  /* the spinner is a short arc of the same single stroke; it only turns while working */
+  .ab13-arc{stroke:var(--ab13-accent);stroke-linecap:round;stroke-dasharray:15.8 56.6;transform-origin:12px 12px;
+    opacity:0;transition:opacity .25s}
+  .ab13-working .ab13-arc{opacity:1;animation:ab13-spin .9s linear infinite}
+  .ab13-working .ab13-track{opacity:.18}
+  .ab13-track,.ab13-arc{transition:opacity .25s}
+  .ab13-idle .ab13-track,.ab13-done .ab13-track{opacity:0}
+  @keyframes ab13-spin{to{transform:rotate(360deg)}}
+  /* the tick draws itself once the work lands */
+  .ab13-tick{stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1 1;stroke-dashoffset:1;transition:stroke-dashoffset .38s var(--ab13-ease)}
+  .ab13-done .ab13-tick{stroke-dashoffset:0}
+  .ab13-plus{stroke:currentColor;stroke-linecap:round;transition:opacity .25s,transform .3s var(--ab13-ease)}
+  .ab13-working .ab13-plus,.ab13-done .ab13-plus{opacity:0;transform:scale(.6);transform-origin:12px 12px}
+  .ab13-label{white-space:nowrap}
+  /* machine-side register under the control */
+  .ab13-log{font:400 clamp(10px,2.8vmin,12px)/1.6 var(--ab13-mono);letter-spacing:.02em;color:var(--ab13-muted);text-align:center;min-height:1.6em}
+  .ab13-log b{font-weight:500;color:var(--ab13-text)}
+  .ab13-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 var(--ab13-mono);color:var(--ab13-muted);opacity:.5;
+    letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+  @media (prefers-reduced-motion:reduce){.ab13-arc{animation:none!important}.ab13-tick,.ab13-btn,.ab13-plus{transition:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/buttons/13-async-action-button.html",
+ "title": "Async Action Button",
+ "description": "A copy button that runs its own three states: idle, working (a short accent arc spins in the icon slot while the label reads 'copying') and done (the button fills accent and a tick draws itself). A mono line under it reports the component id and size. Autonomous preview ends at first deliberate input and never resumes.",
+ "useWhen": "Copy, save, submit or fetch actions where the button itself should confirm the work landed — clipboard copies, form saves, one-shot API calls.",
+ "avoidWhen": "Actions that take longer than a couple of seconds (use a progress line) or need cancel; toolbars with many simultaneous async buttons.",
+ "agentPrompt": "Edit the labels in set() ('copy component' / 'copying' / 'copied'), the items array that the mono line cycles, and the phase lengths WORK=1400, DONE=1700, GAP=1900; change the icon by replacing the .ab13-plus path. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "labels in set() and the items array (id + size pairs)",
+  "phase lengths (WORK, DONE, GAP in ms)",
+  "icon paths (.ab13-plus, .ab13-tick) and spinner arc length (stroke-dasharray 15.8 56.6)",
+  "accent + on-accent tokens (--ab13-accent, --ab13-on-accent)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "IIFE wrapper",
+  "state machine in set()/tick() — a real click and the idle demo run the same trigger()",
+  "prefers-reduced-motion guard (no demo clock, click resolves without the spin)",
+  "visibilitychange pause",
+  "pathLength=1 on the tick path (the draw is a 1→0 dashoffset)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "The autonomous preview until first deliberate input triggers itself every ~2 s — set demo=false (or remove the clock) in a product",
+  "The done state auto-returns to idle after DONE ms; there is no error state Autonomous preview ends at first deliberate input and never resumes.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "button",
+  "async",
+  "loading",
+  "spinner",
+  "check",
+  "state",
+  "clipboard",
+  "copy",
+  "mono"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="ab13-stage">
+  <button class="ab13-btn ab13-idle" id="ab13-btn" type="button">
+    <svg class="ab13-ico" viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true">
+      <circle class="ab13-track" cx="12" cy="12" r="9"/>
+      <circle class="ab13-arc" cx="12" cy="12" r="9"/>
+      <path class="ab13-plus" d="M12 6v12M6 12h12"/>
+      <path class="ab13-tick" d="M6.5 12.5 10.2 16.2 17.5 8.5" pathLength="1"/>
+    </svg>
+    <span class="ab13-label" id="ab13-label">copy component</span>
+  </button>
+  <div class="ab13-log" id="ab13-log" role="status" aria-live="polite">id: <b>orbital-dots</b> · 3.8 kb</div>
+</div>
+<div class="ab13-cap" aria-hidden="true">Async Action Button</div>
+<script>(function(){"use strict";
+  var root=document.documentElement, btn=document.getElementById('ab13-btn'), label=document.getElementById('ab13-label'), log=document.getElementById('ab13-log');
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))root.setAttribute('data-theme',d.theme);});
+  // realistic ids the demo cycles through — first-name-free, product-shaped
+  var items=[['orbital-dots','3.8 kb'],['pricing-stack','9.4 kb'],['hairline-cta','7.1 kb'],['traced-skeleton','6.2 kb']], cur=0;
+  var WORK=1400, DONE=1700, GAP=1900, TICK=100, IDLE_RESUME=3600;
+  var state='idle', t=0, demo=!reduce&&window.__foreverPreview?.demoEnabled!==false, clock=null;
+  function set(s){ state=s; t=0;
+    btn.className='ab13-btn ab13-'+s;
+    label.textContent = s==='idle'?'copy component': s==='working'?'copying': 'copied';
+    log.innerHTML = s==='idle' ? 'id: <b>'+items[cur][0]+'</b> · '+items[cur][1]
+                  : s==='working' ? 'fetching <b>'+items[cur][0]+'</b>'
+                  : '<b>'+items[cur][0]+'</b> in your clipboard';
+  }
+  function trigger(){ if(state!=='idle')return; if(reduce){set('done');setTimeout(function(){cur=(cur+1)%items.length;set('idle');},DONE);return;} set('working'); }
+  function takeover(){demo=false;if(state==='idle')stop();}
+  window.addEventListener("forever:interactive",takeover);
+  btn.addEventListener("pointerdown",takeover,true);
+  btn.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  // one 100 ms phase clock drives the state machine; the idle demo triggers it the way a click would
+  function tick(){
+    t+=TICK;
+    if(state==='working'&&t>=WORK)set('done');
+    else if(state==='done'&&t>=DONE){cur=(cur+1)%items.length;set('idle');}
+    else if(state==='idle'&&!demo){stop();return;} else if(state==='idle'&&t>=GAP)trigger();
+  }
+  btn.addEventListener('click',function(){ takeover(); trigger(); start(); });
+  function start(){ if(!clock)clock=setInterval(tick,TICK); }
+  function stop(){ clearInterval(clock); clock=null; }
+  document.addEventListener('visibilitychange',function(){ document.hidden?stop():start(); });
+  set('idle'); t=GAP-500;          // first demo copy lands ~0.5 s after mount
+  if(!reduce)start();               // reduced motion: idle button, click still resolves without the spin
+})();</script>
+</body>
+</html>

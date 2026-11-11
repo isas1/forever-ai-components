@@ -19,20 +19,23 @@
     --neu-bg:#e6e9ef; --neu-track:#c9cfda; --neu-shadow-a:rgba(163,169,184,.55); --neu-shadow-b:#ffffff;
     --neu-grad-a:#48705c; --neu-grad-b:#4b5560; --neu-pct:#5a6790; --neu-unit:#555e7a; --cap-o:.5;
   }
-html,body{margin:0;height:100%;overflow:hidden;background:var(--neu-bg);display:flex;align-items:center;justify-content:center}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--neu-bg)}
+body{box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:12px 12px 28px}
 .neu-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:var(--neu-unit);opacity:var(--cap-o);letter-spacing:.5px;pointer-events:none;z-index:99}
-.neu-wrap{position:relative;width:180px;height:180px}
-.neu-svg{width:180px;height:180px;transform:rotate(-90deg)}
+.neu-wrap{position:relative;width:min(68vmin,180px);aspect-ratio:1}
+.neu-svg{display:block;width:100%;height:100%;transform:rotate(-90deg)}
 .neu-track{fill:none;stroke:var(--neu-track);stroke-width:14;filter:drop-shadow(2px 2px 4px var(--neu-shadow-a)) drop-shadow(-2px -2px 4px var(--neu-shadow-b))}
-.neu-ring{fill:none;stroke:url(#rg);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 120ms linear}
+.neu-ring{fill:none;stroke:url(#neu-gradient);stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset 120ms linear}
+.neu-ring.neu-reset{transition:none}
 .neu-center{
   position:absolute;inset:0;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:2px;
 }
 .neu-pct{font:700 32px/1 system-ui,-apple-system,sans-serif;color:var(--neu-pct);letter-spacing:-1px}
 .neu-unit{font:600 10px/1 system-ui,-apple-system,sans-serif;letter-spacing:2px;color:var(--neu-unit)}
-#rgA{stop-color:var(--neu-grad-a)}
-#rgB{stop-color:var(--neu-grad-b)}
+#neu-grad-a{stop-color:var(--neu-grad-a)}
+#neu-grad-b{stop-color:var(--neu-grad-b)}
+@media(prefers-reduced-motion:reduce){.neu-ring{transition:none}}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/neumorphism/06-ring-gauge.html",
@@ -84,29 +87,29 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--neu-bg);display:
 <div class="neu-wrap">
   <svg class="neu-svg" viewBox="0 0 180 180" xmlns="http://www.w3.org/2000/svg">
     <defs>
-      <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="0%">
-        <stop id="rgA" offset="0%" stop-color="#5A8C73"/>
-        <stop id="rgB" offset="100%" stop-color="#4B5560"/>
+      <linearGradient id="neu-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop id="neu-grad-a" offset="0%" stop-color="#5A8C73"/>
+        <stop id="neu-grad-b" offset="100%" stop-color="#4B5560"/>
       </linearGradient>
     </defs>
     <circle class="neu-track" cx="90" cy="90" r="72"/>
-    <circle class="neu-ring" id="neuRing" cx="90" cy="90" r="72"/>
+    <circle class="neu-ring" id="neu-ring" cx="90" cy="90" r="72"/>
   </svg>
   <div class="neu-center">
-    <div class="neu-pct" id="neuPct">0</div>
+    <div class="neu-pct" id="neu-pct">0</div>
     <div class="neu-unit">LOAD</div>
   </div>
 </div>
 <div class="neu-cap">RING GAUGE</div>
 <script>(()=>{
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  const ring=document.getElementById('neuRing');
-  const pctEl=document.getElementById('neuPct');
+  const ring=document.getElementById('neu-ring');
+  const pctEl=document.getElementById('neu-pct');
   const C=2*Math.PI*72;
   ring.style.strokeDasharray=C;
   ring.style.strokeDashoffset=C;
   const DURATION=4000,INTERVAL=80;
-  let val=0,timer=null;
+  let val=0,timer=null,resetTimer=null,raf=null;
   function setVal(v){
     ring.style.strokeDashoffset=C-(v/100)*C;
     pctEl.textContent=Math.round(v);
@@ -114,16 +117,20 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--neu-bg);display:
   function step(){
     val=Math.min(100,val+(100/(DURATION/INTERVAL)));
     setVal(val);
-    if(val>=100){clearInterval(timer);setTimeout(reset,700);}
+    if(val>=100){clearInterval(timer);timer=null;resetTimer=setTimeout(reset,700);}
   }
   function reset(){
+    resetTimer=null;if(document.hidden||reduce)return;
     val=0;
-    ring.style.transition='none';
+    ring.classList.add('neu-reset');
     setVal(0);
-    requestAnimationFrame(()=>{ring.style.transition='stroke-dashoffset 120ms linear';play();});
+    raf=requestAnimationFrame(()=>{raf=null;ring.classList.remove('neu-reset');if(!document.hidden)play();});
   }
-  function stop(){clearInterval(timer);}
-  function play(){if(reduce){setVal(65);return;}timer=setInterval(step,INTERVAL);}
+  function stop(){clearInterval(timer);clearTimeout(resetTimer);cancelAnimationFrame(raf);
+    timer=null;resetTimer=null;raf=null;}
+  function play(){stop();if(reduce){setVal(65);return;}if(document.hidden)return;
+    if(val>=100){resetTimer=setTimeout(reset,700);return;}
+    ring.classList.remove('neu-reset');timer=setInterval(step,INTERVAL);}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message',(e)=>{

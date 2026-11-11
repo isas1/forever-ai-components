@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Cream analog VU meter face with a spring-eased needle, red peak zone and a peak-hold pip, fed by synth or live mic.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>VU Meter</title>
 <style>
@@ -10,6 +11,7 @@ body{background:#07080d;display:grid;place-items:center}
   letter-spacing:.06em;color:#22d3ee;background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.32);
   border-radius:999px;padding:5px 9px;cursor:pointer;opacity:.7;transition:opacity .2s,background .2s}
 .aav04-live:hover{opacity:1;background:rgba(34,211,238,.16)}
+.aav04-live:focus-visible{outline:2px solid #22d3ee;outline-offset:3px}
 .aav04-live[data-on="1"]{background:#22d3ee;color:#07080d;opacity:1}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
@@ -33,12 +35,16 @@ body{background:#07080d;display:grid;place-items:center}
   "IIFE wrapper",
   "prefers-reduced-motion static-frame guard",
   "visibilitychange pause/resume",
-  "AudioContext never connected to destination (no feedback)"
+  "AudioContext never connected to destination (no feedback)",
+  "First deliberate control stops synthetic attract data. Live microphone stream remains active until teardown; teardown stops tracks and closes audio context.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Live mic cannot be toggled off without a page reload",
   "Microphone access requires HTTPS in production",
-  "Needle position has no aria live region — visual-only for screen readers"
+  "Needle position has no aria live region — visual-only for screen readers",
+  "Live input depends on browser microphone permission and sandbox capability; user feedback reports unavailable input.",
+  "Microphone acquisition is permission- and sandbox-dependent; mocked tests verify track/context teardown, not hardware access.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -71,6 +77,7 @@ var cv=document.getElementById('aav04-c'),g=cv.getContext('2d'),stage=document.g
 btn=document.getElementById('aav04-live'),reduce=matchMedia('(prefers-reduced-motion:reduce)').matches,
 W=0,H=0,DPR=1,raf=0,running=true,t0=performance.now();
 var ACC='#22d3ee',RED='#ff4d4d',FACE='#f4ede0',INK='#1a1d27';
+var demoEnabled=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,stream=null,source=null,destroyed=false;
 function size(){var r=stage.getBoundingClientRect();DPR=Math.min(2,devicePixelRatio||1);
   W=r.width;H=r.height;cv.width=W*DPR|0;cv.height=H*DPR|0;g.setTransform(DPR,0,0,DPR,0,0);}
 size();addEventListener('resize',size);
@@ -154,29 +161,38 @@ function round(x,y,w,h,rad){g.beginPath();g.moveTo(x+rad,y);
   g.arcTo(x,y+h,x,y,rad);g.arcTo(x,y,x+w,y,rad);g.closePath();}
 
 var last=t0;
-function loop(now){if(!running)return;var dt=Math.min(0.05,(now-last)/1000);last=now;
+function loop(now){if(!running||(!demoEnabled&&!live)){running=false;raf=0;return;}var dt=Math.min(0.05,(now-last)/1000);last=now;
   step(dt);draw();raf=requestAnimationFrame(loop);}
+function start(){if(!reduce&&(demoEnabled||live)&&!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}
+function stopDemo(){demoEnabled=false;if(!live){running=false;cancelAnimationFrame(raf);raf=0;}}
+window.addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});
+document.addEventListener('keydown',function(e){if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+function cleanup(){destroyed=true;running=false;cancelAnimationFrame(raf);if(stream)stream.getTracks().forEach(function(track){track.stop();});if(source)source.disconnect();if(actx&&actx.state!=='closed')actx.close();}
+window.addEventListener('pagehide',cleanup,{once:true});
 
 if(reduce){ // settle to one legible frame: mid-scale, no loop
   target=0;ang=0;peakHold=0.22;draw();
 }else{ raf=requestAnimationFrame(loop); }
 
+var actx=null;
 function vis(){if(reduce)return;
-  if(document.hidden){running=false;cancelAnimationFrame(raf);}
-  else if(!running){running=true;last=performance.now();raf=requestAnimationFrame(loop);}}
+  if(document.hidden){running=false;cancelAnimationFrame(raf);if(actx)actx.suspend();}
+  else{if(actx&&live)actx.resume();start();}}
 document.addEventListener('visibilitychange',vis);
 
 btn.addEventListener('click',function(){
   if(live){return;}
   try{
-    var AC=window.AudioContext||window.webkitAudioContext,ctx=new AC();
-    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-      var src=ctx.createMediaStreamSource(stream),an=ctx.createAnalyser();
+    var AC=window.AudioContext||window.webkitAudioContext,ctx=actx=new AC();
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(mediaStream){
+      if(destroyed){mediaStream.getTracks().forEach(function(track){track.stop();});ctx.close();return;}
+      stream=mediaStream;source=ctx.createMediaStreamSource(stream);var an=ctx.createAnalyser();
       an.fftSize=1024;an.smoothingTimeConstant=0.7;
-      src.connect(an); // NEVER connect to destination (feedback)
+      source.connect(an); // NEVER connect to destination (feedback)
       live={an:an,td:new Uint8Array(an.fftSize)};
       btn.setAttribute('data-on','1');btn.textContent='● live';
-    }).catch(function(){btn.textContent='mic ✗';setTimeout(function(){btn.innerHTML='&#9834; live';},1500);});
+      if(reduce){step(0);draw();}else start();
+    }).catch(function(){if(ctx.state!=='closed')ctx.close();btn.textContent='mic ✗';setTimeout(function(){btn.innerHTML='&#9834; live';},1500);});
   }catch(e){}
 });
 })();</script>

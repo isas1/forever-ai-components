@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Strata Bake Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Strata Bake Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--wtl-bg:#0E1630;--wtl-ink:#E6EAF6;--wtl-mute:#6F7BA6;--wtl-lamp:#F2C230;--wtl-warm:#E8893A}
+:root[data-theme="light"]{--wtl-bg:#DCE3F2;--wtl-ink:#1A2340;--wtl-mute:#6A769E;--wtl-lamp:#B8860B;--wtl-warm:#B8561A}
+.wtl-root,.wtl-root *{box-sizing:border-box;margin:0}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--wtl-bg)}
+.wtl-root{background:var(--wtl-bg);color:var(--wtl-ink);overflow:hidden;font:600 clamp(24px,8vmin,52px)/1 ui-monospace,"SF Mono",Menlo,monospace}
+.wtl-root{width:100%;height:100%;display:grid;place-items:center}
+.wtl-st{position:relative;width:min(94vmin,640px);aspect-ratio:1;touch-action:none;cursor:pointer;border-radius:12px}
+.wtl-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.wtl-n{position:absolute;pointer-events:none;text-align:center;font:inherit;color:var(--wtl-ink)}
+.wtl-st:focus-visible,.wtl-n:focus-visible{outline:2px solid var(--wtl-lamp);outline-offset:3px}
+.wtl-n{left:0;right:0;top:4%}
+.wtl-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--wtl-ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/33-strata-bake-timer.html",
+ "title": "Strata Bake Timer",
+ "description": "Choose stacked lamplight bars and release ember trails as time runs down. Indigo nocturne lamplight palette with candle gold and burnt orange.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "strata",
+  "embers",
+  "selection",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wtl-root" id="wtl-root" role="group" aria-label="Bake timer">
+<div class="wtl-st" id="wtl-st" role="slider" tabindex="0" aria-label="Bake minutes" aria-valuemin="1" aria-valuemax="30" aria-valuenow="10"><canvas class="wtl-canvas" id="wtl-cv"></canvas><div class="wtl-n" id="wtl-n" aria-hidden="true"></div></div>
+</div>
+<div class="wtl-cap" aria-hidden="true">Strata Bake Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||rm.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var R=document.documentElement,$=function(i){return document.getElementById(i)},st=$('wtl-st'),cv=$('wtl-cv'),g=cv.getContext('2d'),num=$('wtl-n'),
+S=300,D=1,C={},raf=0,last=0,rm=matchMedia('(prefers-reduced-motion: reduce)'),
+mode=0,set=10,el=0,pv=0,lt='',at='',TS=2000,MAX=30,onset=null;
+function col(){var s=getComputedStyle(R);['ink','mute','lamp','warm'].forEach(function(k){C[k]=s.getPropertyValue('--wtl-'+k).trim()})}
+function fit(){S=st.clientWidth;D=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(S*D);wake()}
+function next(){if(!raf)raf=requestAnimationFrame(loop)}
+function wake(){if(!raf&&!document.hidden){last=performance.now();next()}}
+function loop(now){raf=0;var ms=Math.max(0,Math.min(now-last,50)),dt=ms/16.667;last=now;demoBeat(ms);
+if(mode==1&&!demoPaused){el+=ms/TS;if(el>=set){el=set;mode=2;done()}}
+var b=demoPaused?false:step(dt,ms);g.setTransform(D,0,0,D,0,0);g.clearRect(0,0,S,S);draw();sync();if((b||mode==1||demoEnabled)&&!demoPaused&&!rm.matches)next();else if(mode==1&&!demoPaused&&!demoSession)next()}
+function spr(o,t,dt,k,f){if(rm.matches){o.x=t;o.v=0;return 0}o.v+=(t-o.x)*k*dt;o.v*=Math.pow(f,dt);o.x+=o.v*dt;return Math.abs(o.v)>.002||Math.abs(t-o.x)>.002}
+function ln(x,y,X,Y){g.beginPath();g.moveTo(x,y);g.lineTo(X,Y);g.stroke()}
+function sync(){var t=mode==2?'✓':String(mode==1?Math.ceil(set-el-1e-6):(mode==0&&pv)||set),a;
+if(t!==lt){lt=t;num.textContent=t}
+a=mode==1?'Baking, '+t+' minutes left. Press to cancel':mode==2?'Done. Press to reset':'Start baking '+set+' minutes';
+if(num.tagName=='BUTTON'&&a!==at){at=a;num.setAttribute('aria-label',a)}
+st.setAttribute('aria-valuenow',set);st.setAttribute('aria-valuetext',set+' minutes'+(mode==1?', baking':mode==2?', done':''))}
+function setSet(m){demoPaused=false;set=Math.max(1,Math.min(MAX,m));mode=0;el=0;if(onset)onset();wake()}
+function start(){demoPaused=false;demoSession=demoEnabled;el=0;mode=1;wake()}
+function reset(){demoPaused=false;mode=0;el=0;wake()}
+st.addEventListener('keydown',function(e){demoPaused=false;if(e.target!==st)return;var k=e.key,s=e.shiftKey?5:1,h=1;
+if(k=='ArrowRight'||k=='ArrowUp')setSet(set+s);else if(k=='ArrowLeft'||k=='ArrowDown')setSet(set-s);else if(k=='Home')setSet(1);else if(k=='End')setSet(MAX);else if(k=='Enter'||k==' '){mode==1?reset():start()}else h=0;if(h)e.preventDefault()});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else wake()});
+function setTheme(t){R.setAttribute('data-theme',t=='light'?'light':'dark');col();wake()}
+addEventListener('message',function(e){var d=e.data;if(d&&d.type=='forever:theme')setTheme(d.theme)});
+rm.addEventListener('change',wake);
+new ResizeObserver(fit).observe(st);
+var K=6,PT=.125,BW=.62,BH=.085,Y0=.9,fk=[0,0,0,0,0,0],em=[],hk=-1,drag=0,acc=0;
+function rem(){return mode==1?set-el:mode==2?0:(pv||set)}
+function kbd(r){return Math.max(0,Math.min(K-1,Math.ceil(r/5)-1))}
+function bx(k){return S*(Y0-(k+.5)*PT)}
+function spark(x,y,vy){if(em.length>=100)return;em.push({x:x,y:y,vx:Math.random()-.5,vy:vy,l:1,d:.01+Math.random()*.012,s:.5+Math.random()*1.4})}
+function done(){var k,j;if(!rm.matches)for(k=0;k<K;k++)for(j=0;j<12;j++)spark(S*(1-BW)/2+Math.random()*S*BW,bx(k),-(1+Math.random()*1.6))}
+function step(dt,ms){var b=0,k,r=rem(),t,f,u=S/300,p,i,kb;
+for(k=0;k<K;k++){t=Math.max(0,Math.min(1,(r-5*k)/5));if(rm.matches)fk[k]=t;else fk[k]+=(t-fk[k])*(1-Math.pow(.84,dt));if(Math.abs(t-fk[k])>.002)b=1}
+if(mode==1&&!rm.matches){kb=kbd(r);f=fk[kb];acc+=dt*.9;while(acc>=1){acc--;if(em.length<100)spark(S*((1-BW)/2+BW*f),bx(kb)+(Math.random()-.5)*S*BH,-(.4+Math.random()*.9))}}
+for(i=em.length-1;i>=0;i--){p=em[i];p.x+=(p.vx*.4+Math.sin(p.l*9+i)*.12)*dt*u;p.y+=p.vy*dt*u;p.vy*=Math.pow(.99,dt);p.l-=p.d*dt;if(p.l<=0)em.splice(i,1)}
+return b||em.length>0}
+function draw(){var k,x0=S*(1-BW)/2,W=S*BW,y,bh=S*BH,hv,f,i,p,kb=kbd(rem()),x1;g.lineCap='round';
+for(k=0;k<K;k++){y=bx(k);hv=k==hk;f=fk[k];g.shadowBlur=0;
+g.globalAlpha=.25;g.strokeStyle=C.mute;g.lineWidth=bh*.25;ln(x0,y,x0+W,y);
+if(f>.003){x1=Math.max(x0+bh/2,x0+W*f-bh/2);g.globalAlpha=mode==0&&pv?.7:1;g.strokeStyle=C.lamp;g.lineWidth=bh*(hv?1.1:.9);ln(x0+bh/2,y,x1,y);
+g.globalAlpha=.18;g.strokeStyle=C.ink;g.lineWidth=bh*.2;ln(x0+bh/2,y-bh*.2,x1,y-bh*.2);
+if(mode==1&&k==kb){g.globalAlpha=1;g.strokeStyle=g.shadowColor=C.warm;g.shadowBlur=S*.04*D;g.lineWidth=bh*.9;ln(Math.max(x0+bh/2,x1-bh*.3),y,x1,y);g.shadowBlur=0}}}
+for(i=0;i<em.length;i++){p=em[i];g.globalAlpha=Math.min(1,p.l*1.5);g.fillStyle=p.l>.5?C.lamp:C.warm;g.beginPath();g.arc(p.x,p.y,p.s*S*.006,0,6.2832);g.fill()}
+g.globalAlpha=1}
+function hit(e){var b=st.getBoundingClientRect(),k=Math.floor((Y0-(e.clientY-b.top)/b.height)/PT);hk=k>=0&&k<K?k:-1;pv=hk<0?0:(hk+1)*5;wake()}
+function off(){hk=-1;pv=0;wake()}
+st.addEventListener('pointerdown',function(e){demoPaused=false;drag=1;st.setPointerCapture(e.pointerId);hit(e)});
+st.addEventListener('pointermove',hit);
+st.addEventListener('pointerup',function(e){if(drag){drag=0;if(hk>=0){setSet(pv);start()}else if(mode)reset()}if(e.pointerType!='mouse')off()});
+st.addEventListener('pointerleave',function(){if(!drag)off()});
+st.addEventListener('pointercancel',function(){drag=0;off()});
+function demoFinished(){return mode==2}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;start()}
+if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,0);col();sync();fit();if(demoEnabled&&!rm.matches)demoStart();
+rm.addEventListener('change',function(){if(rm.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

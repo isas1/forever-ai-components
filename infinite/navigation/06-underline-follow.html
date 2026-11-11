@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="A glowing emerald-to-tan gradient underline glides and resizes to follow hovered nav links, wandering idly when unhovered.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Underline Follow</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -59,19 +60,21 @@
   }
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
   @media (prefers-reduced-motion:reduce){.c06-nav__ink{transition-duration:.001ms!important}}
+@media(max-width:320px){.c06-nav{gap:2px}.c06-nav__link{font-size:12px;padding:6px 2px}}
+  .c06-nav__link:focus-visible{outline:2px solid var(--accent-iris);outline-offset:2px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/navigation/06-underline-follow.html",
  "title": "Underline Follow",
- "description": "A glowing emerald-to-tan gradient underline slides and resizes to follow hovered nav links; wanders idly across links when unhovered.",
+ "description": "A glowing emerald-to-tan gradient underline slides and resizes to follow hovered nav links; wanders until first deliberate input across links when unhovered.",
  "useWhen": "Portfolio or app nav bars needing a polished active-state indicator with ambient motion between interactions.",
- "avoidWhen": "Nav bars with more than 6 items where the idle wander may feel restless; or any context requiring a truly static nav indicator.",
- "agentPrompt": "Change the underline gradient to gold-to-orange by setting --accent-iris:#f59e0b and --accent-cyan:#f97316, and slow the idle cycle to 2400ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "avoidWhen": "Nav bars with more than 6 items where the idle wander may feel restless; or any context requiring a truly static nav indicator. Autonomous preview ends at first deliberate input and never resumes.",
+ "agentPrompt": "Change the underline gradient to gold-to-orange by setting --accent-iris:#f59e0b and --accent-cyan:#f97316, and slow the idle cycle to 2400ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime. Autonomous preview ends at first deliberate input and never resumes.",
  "editableAreas": [
   "accent colors (--accent-iris, --accent-cyan)",
   "transition duration (420ms on .c06-nav__ink)",
-  "idle wander interval (1600ms in setTimeout)",
+  "idle wander interval (1600ms in setTimeout) Autonomous preview ends at first deliberate input and never resumes.",
   "underline height (height:2px on .c06-nav__ink)",
   "gap between nav items (gap:6px)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
@@ -81,18 +84,19 @@
   "visibilitychange stop/loop guard",
   "IIFE wrapper",
   "mouseleave return-to-active logic",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Idle wander uses offsetLeft/offsetWidth — breaks if nav is not laid out when loop starts",
+  "Idle wander uses offsetLeft/offsetWidth — breaks if nav is not laid out when loop starts Autonomous preview ends at first deliberate input and never resumes.",
   "No touch equivalent for hover; on mobile the underline stays on last-active item only",
-  "Autonomous idle cycle must be removed or paused for production click-driven nav"
+  "Autonomous idle cycle must be removed or paused for production click-driven nav Autonomous preview ends at first deliberate input and never resumes.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
   "agent-ready",
   "easy-to-modify",
-  "mobile-ready",
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
@@ -151,17 +155,20 @@
   nav.addEventListener('mouseleave',function(){hovering=false;to(active);});
   requestAnimationFrame(function(){to(active);});
   /* autonomous idle: the ink wanders across links when not hovered */
-  var i=0,timer;
+  var i=0,timer,demoEnabled=window.__foreverPreview?.demoEnabled!==false;
   function loop(){
-    if(reduce)return;
+    if(reduce||!demoEnabled)return;
+    clearTimeout(timer);
     timer=setTimeout(function(){
       if(!hovering){i=(i+1)%links.length;to(links[i]);}
       loop();
     },1600);
   }
   function stop(){clearTimeout(timer);}
-  document.addEventListener('visibilitychange',function(){document.hidden?stop():loop();});
-  loop();
+  function takeover(){demoEnabled=false;stop();}
+  window.addEventListener("forever:interactive",takeover);nav.addEventListener("pointerdown",takeover,true);nav.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():(demoEnabled&&loop());});
+  if(demoEnabled)loop();
 })();
 </script>
 </body>

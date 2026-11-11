@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="Gradient floating action button whose plus rotates to an X while six icon buttons fan out in a radial spring menu.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Morphing Action FAB</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,7 +37,7 @@
   html,body{margin:0;height:100%;overflow:hidden}
   body{background:var(--c03-bg);display:grid;place-items:center;
     background-image:radial-gradient(60vw 50vw at 50% 0%,var(--c03-glow-a),transparent 60%);}
-  #stage{position:fixed;inset:0;display:grid;place-items:center}
+  #c03-stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c03-fab{position:relative;width:168px;height:168px;}
   .c03-fab__main{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:60px;height:60px;border:0;border-radius:50%;cursor:pointer;
@@ -65,6 +66,7 @@
 
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c03-fab__item,.c03-fab__plus{transition-duration:.001ms}}
+  .c03-fab :focus-visible{outline:2px solid var(--accent-cyan);outline-offset:3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -72,7 +74,7 @@
  "title": "Morphing Action FAB",
  "description": "Gradient FAB whose plus icon rotates 135° to an X on click, fanning six icon buttons outward in a staggered radial spring animation. Auto-cycles in demo mode.",
  "useWhen": "Mobile-style action menus, dashboard toolbars, or any context needing quick access to 4–6 secondary actions from a single trigger button.",
- "avoidWhen": "Layouts where the FAB overlaps critical content. Remove the auto-cycle loop before shipping in production — it fires every ~2.6 s regardless of user intent.",
+ "avoidWhen": "Layouts where the FAB overlaps critical content. Remove the auto-cycle loop before shipping in production — it fires every ~2.6 s regardless of user intent. Autonomous preview ends at first deliberate input and never resumes.",
  "agentPrompt": "Change the gradient from marigold-tan to amber-rose by updating --grad-iris-cyan to linear-gradient(120deg,#f97316,#e11d48), and increase the radial spread radius from 64px/55px to 80px/68px. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "gradient color (--grad-iris-cyan)",
@@ -80,7 +82,7 @@
   "stagger delay per item (0ms..250ms)",
   "item count (add/remove .c03-fab__item buttons)",
   "FAB size (60px main / 42px items)",
-  "idle demo cadence (OPEN_MS=1800 open / CLOSED_MS=1600 closed, first open after 500 ms)",
+  "autonomous preview until first deliberate input cadence (OPEN_MS=1800 open / CLOSED_MS=1600 closed, first open after 500 ms)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -89,12 +91,14 @@
   "visibilitychange stop/loop pattern",
   "aria-expanded + tabindex management in setOpen()",
   "idle demo cycle driving setOpen() + takeover on real pointer/key input",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
+  "autonomous preview cycle that stops at first deliberate input runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
   "Six items at 64px/55px spread; adding more items requires manually computing new translate() positions",
-  "tabindex='-1' on items means keyboard nav is absent when closed — Escape closes but Arrow keys not wired"
+  "tabindex='-1' on items means keyboard nav is absent when closed — Escape closes but Arrow keys not wired",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -119,7 +123,7 @@
 </script>
 </head>
 <body>
-<div id="stage">
+<div id="c03-stage">
   <div class="c03-fab">
     <button class="c03-fab__item" type="button" aria-label="Share" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></button>
     <button class="c03-fab__item" type="button" aria-label="Star" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.6l1-5.8L3.5 9.7l5.9-.9z"/></svg></button>
@@ -157,17 +161,18 @@
   // same setOpen() a real click runs — first open ~0.5 s after mount, then OPEN_MS open /
   // CLOSED_MS closed. Real input takes over; the demo resumes after IDLE_RESUME ms of quiet.
   var TICK=100, OPEN_MS=1800, CLOSED_MS=1600, IDLE_RESUME=3600, LEAD=500;
-  var demo=true, phase=CLOSED_MS-LEAD, idle=0, clock=null;
+  var demo=window.__foreverPreview?.demoEnabled!==false&&!reduce, phase=CLOSED_MS-LEAD, idle=0, clock=null;
   function tick(){
-    if(!demo){ idle+=TICK; if(idle>=IDLE_RESUME){ demo=true; idle=0; phase=CLOSED_MS-LEAD; setOpen(false); } return; }
+    if(!demo)return;
     phase+=TICK;
     var isOpen=fab.classList.contains("c03-fab--open");
     if(phase >= (isOpen?OPEN_MS:CLOSED_MS)){ phase=0; setOpen(!isOpen); }
   }
-  function takeover(){ demo=false; idle=0; }   // any real pointer/key input ends the idle demo
+  function takeover(){ if(!demo)return; demo=false; idle=0; stop(); }
+  window.addEventListener("forever:interactive",takeover); fab.addEventListener("pointerdown",takeover,true); fab.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
   document.addEventListener("pointerdown", takeover, true);
-  document.addEventListener("keydown", takeover, true);
-  function start(){ if(!clock && !reduce) clock=setInterval(tick, TICK); }
+  document.addEventListener("keydown", e => { if (e.target.isContentEditable || e.key.length === 1 || /^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key)) takeover(); }, true);
+  function start(){ if(!clock && !reduce && demo) clock=setInterval(tick, TICK); }
   function stop(){ clearInterval(clock); clock=null; }
   document.addEventListener("visibilitychange", function(){ document.hidden ? stop() : start(); });
   if(reduce) setOpen(true);                    // reduced motion: one static open state, no loop

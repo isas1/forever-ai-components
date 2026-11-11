@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="Dark pill button that magnetically drifts toward the cursor with a soft idle orbital float and emerald-to-copper glow on hover.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Magnetic Button</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,48 +37,52 @@
   html,body{margin:0;height:100%;overflow:hidden}
   body{background:var(--bg);display:grid;place-items:center;
     background-image:radial-gradient(60vw 40vw at 20% -10%,var(--glow-a),transparent 60%),radial-gradient(50vw 40vw at 90% 0%,var(--glow-b),transparent 55%);}
-  #stage{position:fixed;inset:0;display:grid;place-items:center}
+  #c01-stage{position:fixed;inset:0;display:grid;place-items:center}
 
   .c01-mag{
     position:relative;border:0;cursor:pointer;padding:18px 34px;
     font-family:var(--font-display);font-size:clamp(15px,4.5vw,18px);font-weight:600;letter-spacing:-0.01em;
     color:var(--text-0);background:var(--bg-surface);border:1px solid var(--border-mid);border-radius:var(--r-pill);
-    transition:transform var(--dur-base) var(--ease-out-soft),border-color var(--dur-fast) var(--ease-out-soft),box-shadow var(--dur-base) var(--ease-out-soft);
+    transition:border-color var(--dur-fast) var(--ease-out-soft),box-shadow var(--dur-base) var(--ease-out-soft);
     will-change:transform;
   }
   .c01-mag::before{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--grad-iris-cyan);opacity:0;transition:opacity var(--dur-base) var(--ease-out-soft);z-index:-1;}
   .c01-mag:hover{border-color:var(--border-glow);box-shadow:var(--glow-iris);}
-  .c01-mag__label{display:inline-block;transition:transform var(--dur-base) var(--ease-out-soft);will-change:transform;}
+  .c01-mag__label{display:inline-block;will-change:transform;}
 
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:var(--font-display)}
   @media (prefers-reduced-motion:reduce){.c01-mag,.c01-mag__label{transition-duration:.001ms}}
+  .c01-mag:focus-visible{outline:2px solid var(--text-0);outline-offset:3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/buttons/01-magnetic-button.html",
  "title": "Magnetic Button",
- "description": "Dark pill button drifts in an idle orbital float; cursor proximity pulls it magnetically with a label inner-parallax and emerald-to-copper glow on hover.",
+ "description": "Dark pill button drifts in an idle orbital float; cursor proximity pulls it magnetically with a label inner-parallax and emerald-to-copper glow on hover. Autonomous preview ends at first deliberate input and never resumes.",
  "useWhen": "CTA buttons on dark hero sections or landing pages where tactile interactivity signals quality.",
  "avoidWhen": "Dense form layouts or light backgrounds — glow and drift assume a dark surface and open space around the button.",
- "agentPrompt": "Change the idle drift amplitude from 14/9 to 6/4 for a subtler float, and set accent color to #ff6b6b by replacing #2BAB6B throughout. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Change the idle drift amplitude from 14/9 to 6/4 for a subtler float, and set accent color to #ff6b6b by replacing #2BAB6B throughout. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime. Autonomous preview ends at first deliberate input and never resumes.",
  "editableAreas": [
   "magnetic pull strength (strength = 0.4)",
-  "idle orbit amplitude (cos/sin multipliers 14, 9, 5, 3)",
+  "pointer settling time (180ms exponential easing) and attraction margin (40px)",
+  "idle orbit amplitude (cos/sin multipliers 14, 9, 5, 3) Autonomous preview ends at first deliberate input and never resumes.",
   "orbit speed (e*0.9, e*0.7, e*0.37, e*1.3)",
   "gradient accent colors (--grad-iris-cyan)",
-  "button label text ('Hover me')",
+  "button labels ('Hover me' / 'Touch me' on coarse pointers)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "IIFE wrapper",
-  "prefers-reduced-motion guard (reduce check before apply)",
+  "prefers-reduced-motion guard (no motion frame under reduce)",
   "visibilitychange stop/start loop",
   "label inner-parallax (separate transform on .c01-mag__label)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "single rAF transform owner, resting-center pointer coordinates, touch release/cancel settling"
  ],
  "knownLimitations": [
-  "CSS transition on transform fights the rAF loop when exiting hover — works fine visually but two systems control transform simultaneously",
-  "Magnetic effect applies only within the button bounding box, not a wider attraction radius"
+  "Touch uses press/drag feedback rather than hover; native vertical scrolling remains available.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -102,7 +107,7 @@
 </script>
 </head>
 <body>
-<div id="stage">
+<div id="c01-stage">
   <button class="c01-mag" type="button"><span class="c01-mag__label">Hover me</span></button>
 </div>
 <div class="cap">Magnetic button</div>
@@ -112,37 +117,59 @@
   var reduce = matchMedia("(prefers-reduced-motion:reduce)").matches;
   var btn = document.querySelector(".c01-mag");
   var label = btn.querySelector(".c01-mag__label");
-  var strength = 0.4, hovering = false;
+  var stage = document.getElementById("c01-stage");
+  var strength = 0.4, demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var x=0,y=0,tx=0,ty=0,near=false,touch=null,raf=0,last=0,t0=null;
+  if(matchMedia("(hover:none) and (pointer:coarse)").matches) label.textContent="Touch me";
 
-  function apply(x,y){
-    btn.style.transform = "translate("+x*strength+"px,"+y*strength+"px)";
-    if(label) label.style.transform = "translate("+x*strength*0.4+"px,"+y*strength*0.4+"px)";
+  // One motion owner; pointer targets use the resting center, never the moving hit box.
+  function aim(e){
+    var r=btn.getBoundingClientRect();
+    var dx=e.clientX-(r.left+r.width/2-x),dy=e.clientY-(r.top+r.height/2-y);
+    near=Math.abs(dx)<r.width/2+40&&Math.abs(dy)<r.height/2+40;
+    tx=near?Math.max(-30,Math.min(30,dx*strength)):0;
+    ty=near?Math.max(-20,Math.min(20,dy*strength)):0;
+    start();
   }
-  function reset(){ btn.style.transform=""; if(label) label.style.transform=""; }
-
-  btn.addEventListener("pointerenter", function(){ hovering = true; });
-  btn.addEventListener("pointermove", function(e){
-    if(reduce) return;
-    var r = btn.getBoundingClientRect();
-    apply(e.clientX-(r.left+r.width/2), e.clientY-(r.top+r.height/2));
+  function release(){near=false;touch=null;tx=ty=0;start();}
+  stage.addEventListener("pointermove",function(e){
+    if(e.pointerType!=="touch"||touch===e.pointerId)aim(e);
   });
-  btn.addEventListener("pointerleave", function(){ hovering = false; reset(); });
+  stage.addEventListener("pointerleave",release);
+  btn.addEventListener("pointerdown",function(e){
+    takeover();
+    if(e.pointerType==="touch")touch=e.pointerId;
+    aim(e);
+  });
+  window.addEventListener("pointerup",function(e){if(touch===e.pointerId)release();});
+  window.addEventListener("pointercancel",release);
 
-  // autonomous idle: gentle orbital drift when not hovered
-  var t0 = null, raf = null;
   function loop(t){
-    if(t0===null) t0=t;
-    var e=(t-t0)/1000;
-    if(!hovering){
-      var x = Math.cos(e*0.9)*14 + Math.cos(e*0.37)*5;
-      var y = Math.sin(e*0.7)*9 + Math.sin(e*1.3)*3;
-      apply(x,y);
+    raf=0;
+    if(document.hidden||reduce)return;
+    if(t0===null)t0=t;
+    var dt=last?Math.min(t-last,50):16.67;last=t;
+    var ax=tx,ay=ty;
+    if(demoEnabled&&!near){
+      var e=(t-t0)/1000;
+      ax=(Math.cos(e*0.9)*14+Math.cos(e*0.37)*5)*strength;
+      ay=(Math.sin(e*0.7)*9+Math.sin(e*1.3)*3)*strength;
     }
-    raf = requestAnimationFrame(loop);
+    var ease=1-Math.exp(-dt/180);
+    x+=(ax-x)*ease;y+=(ay-y)*ease;
+    var settled=Math.abs(ax-x)+Math.abs(ay-y)<0.02;
+    if(settled){x=ax;y=ay;}
+    btn.style.transform="translate("+x+"px,"+y+"px)";
+    label.style.transform="translate("+x*0.4+"px,"+y*0.4+"px)";
+    if(demoEnabled||!settled)raf=requestAnimationFrame(loop);
+    else last=0;
   }
-  function start(){ if(reduce) return; if(!raf){ t0=null; raf=requestAnimationFrame(loop);} }
-  function stop(){ if(raf){ cancelAnimationFrame(raf); raf=null; } reset(); }
-  document.addEventListener("visibilitychange", function(){ document.hidden?stop():start(); });
+  function takeover(){demoEnabled=false;start();}
+  window.addEventListener("forever:interactive",takeover);
+  btn.addEventListener("keydown",function(e){if(/^(Enter| |Arrow|Escape)/.test(e.key)){takeover();release();}},true);
+  function start(){if(!reduce&&!document.hidden&&!raf)raf=requestAnimationFrame(loop);}
+  function stop(){if(raf)cancelAnimationFrame(raf);raf=0;last=0;near=false;touch=null;tx=ty=0;}
+  document.addEventListener("visibilitychange",function(){document.hidden?stop():start();});
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener("message", function(e){
     var d=e.data; if(d && d.type==="forever:theme" && (d.theme==="light"||d.theme==="dark")) document.documentElement.setAttribute("data-theme", d.theme);

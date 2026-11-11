@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block. The canvas draws with
@@ -18,17 +19,17 @@
   :root{
     --pp-bg:#1B1E1A; --pp-fade:rgba(27,30,26,0.30); --pp-blend:lighter;
     --pp-edge-a:140,210,110; --pp-edge-b:230,210,170; --pp-node:224,235,219;
-    --pp-ea:1; --pp-cap:#B1CCA4; --pp-cap-o:.36;
+    --pp-ea:1; --cf12-cap:#B1CCA4; --cf12-cap-o:.36;
   }
   :root[data-theme="light"]{
     --pp-bg:#f1f4ee; --pp-fade:rgba(241,244,238,0.30); --pp-blend:source-over;
     --pp-edge-a:85,121,68; --pp-edge-b:26,62,24; --pp-node:40,74,32;
-    --pp-ea:1.25; --pp-cap:#557944; --pp-cap-o:.5;
+    --pp-ea:1.25; --cf12-cap:#557944; --cf12-cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--pp-bg);}
-  #pp-c{display:block;width:100%;height:100%;}
+  #cf12-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:var(--pp-cap);opacity:var(--pp-cap-o);text-transform:uppercase;
+       letter-spacing:.14em;color:var(--cf12-cap);opacity:var(--cf12-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -52,12 +53,14 @@
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "reduced-motion static frame guard",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Reduced-motion renders only a single static frame — no fallback animation",
   "Background hardcoded (#1B1E1A) — must edit both CSS and ctx.fillStyle to retheme",
-  "No aria semantics on canvas element"
+  "No aria semantics on canvas element",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -82,12 +85,18 @@
 </script>
 </head>
 <body>
-<canvas id="pp-c"></canvas>
+<canvas id="cf12-c" class="cf12-root"></canvas>
 <div class="cap">Phantom Polytope</div>
 <script>
 (function(){
-  const cv=document.getElementById('pp-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('cf12-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
   let W,H,DPR,cx,cy,S;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -116,7 +125,7 @@
     if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){
       root.setAttribute('data-theme',d.theme); syncTheme();
       // reduced motion draws one static frame and stops, so repaint it by hand
-      if(reduce){ctx.fillStyle=C.solid;ctx.fillRect(0,0,W,H);frame();}
+      if(reduce||!demo){ctx.fillStyle=C.solid;ctx.fillRect(0,0,W,H);frame();}
     } });
   syncTheme();
 
@@ -168,7 +177,7 @@
   }
 
   function frame(){
-    if(!reduce){ t+=0.012*(1+boost); boost*=0.95; }
+    if(!reduce){ if(demo)t+=0.012*(1+boost); boost*=0.95; }
     ctx.fillStyle=C.fade;ctx.fillRect(0,0,W,H);
     ctx.globalCompositeOperation=C.blend;
     const pts=project(t);
@@ -194,13 +203,13 @@
       ctx.beginPath();ctx.arc(p.x,p.y,(0.8+dep*2.4)*lw,0,Math.PI*2);ctx.fill();
     });
     ctx.globalCompositeOperation='source-over';
-    if(!reduce) raf=requestAnimationFrame(frame);
+    if(!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);else raf=0;
   }
   let raf=0;
-  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){ctx.fillStyle=C.solid;ctx.fillRect(0,0,W,H);t=0.9;frame();}else start();
+  if(reduce||!demo){ctx.fillStyle=C.solid;ctx.fillRect(0,0,W,H);t=0.9;frame();}else start();
 })();
 </script>
 </body>

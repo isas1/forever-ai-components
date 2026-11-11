@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Cadence Chronometer — Micro Data-Viz. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Micro Data-Viz — Cadence Chronometer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@800&family=IBM+Plex+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --dust: #C9B274;
+    --red: #D93829;
+    --asphalt: #141518;
+  }
+  .sw01-wrap, .sw01-wrap * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: #0d0e10;
+    color: #fff;
+    font-family: 'IBM Plex Mono', monospace;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .sw01-wrap {
+    width: 100%;
+    max-width: 420px;
+    height: 280px;
+    background: var(--asphalt);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+  }
+  .sw01-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    z-index: 10;
+  }
+  .sw01-cadence {
+    font-family: 'Archivo', sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+    line-height: 1;
+    color: #fff;
+  }
+  .sw01-sub {
+    font-size: 12px;
+    color: var(--dust);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+  .sw01-tc {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--red);
+  }
+  .sw01-wrap canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .sw01-meta {
+    font-size: 12px;
+    color: var(--dust);
+    z-index: 10;
+  }
+
+
+.sw01-cap{position:fixed;left:10px;bottom:8px;font:10px system-ui;opacity:.55;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.sw01-wrap, .sw01-wrap *{animation:none!important;transition:none!important}}
+
+.sw01-wrap[data-paused] *,.sw01-wrap[data-paused]{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.sw01-wrap,.sw01-wrap *{animation:none!important;transition:none!important}}
+@container fit-22-continuous-pace-gps-chronometer (max-width:300px){.sw01-wrap{width:calc(100% - 16px);height:min(100% - 16px,220px);padding:14px}.sw01-cadence{font-size:27px}.sw01-tc{font-size:14px}.sw01-sub,.sw01-meta{font-size:12px}}
+body{width:100%;container-type:inline-size;container-name:fit-22-continuous-pace-gps-chronometer}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/micro-dataviz/22-continuous-pace-gps-chronometer.html",
+ "title": "Cadence Chronometer",
+ "description": "Cadence Chronometer control in the Sam Walks system.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [],
+ "preserveElements": [],
+ "knownLimitations": [],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "walking",
+  "chronometer",
+  "cadence",
+  "waypoint",
+  "solar-transit",
+  "compass",
+  "cadence-chronometer",
+  "dataviz",
+  "pace",
+  "gps",
+  "speedometer",
+  "sam-walks",
+  "telemetry"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="sw01-wrap" role="region" aria-label="Sam Walks Cadence">
+  <canvas id="sw01-cv" width="420" height="280"></canvas>
+  <div class="sw01-top">
+    <div>
+      <div class="sw01-cadence">118</div>
+      <div class="sw01-sub">Passos / min · Lisboa</div>
+    </div>
+    <div class="sw01-tc" id="sw01-tc">04:18.4</div>
+  </div>
+  <div class="sw01-meta">single take · no cuts</div>
+</div>
+<div class="sw01-cap" aria-hidden="true">Cadence Chronometer</div>
+<script>
+(()=>{
+  const tileRoot = document.querySelector('.sw01-wrap');
+  const pauseCSS = () => tileRoot.toggleAttribute('data-paused', document.hidden);
+  document.addEventListener('visibilitychange', pauseCSS); pauseCSS();
+
+  // Local frame lifecycle: stop hidden work, repaint reduced-motion state on input.
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  const frames = new Map(), drivers = new Set(); let painting = false;
+  function scheduleFrame(fn) {
+    drivers.add(fn);
+    if (document.hidden || frames.has(fn) || (motion.matches && painting)) return;
+    frames.set(fn, requestAnimationFrame(t => {
+      frames.delete(fn); if (document.hidden) return;
+      painting = true; try { fn(t); } finally { painting = false; }
+    }));
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { frames.forEach(cancelAnimationFrame); frames.clear(); }
+    else drivers.forEach(scheduleFrame);
+  });
+  const repaint = () => { if (motion.matches) drivers.forEach(scheduleFrame); };
+  ['click','input','pointermove'].forEach(type => document.addEventListener(type, repaint));
+  motion.addEventListener('change', () => { reduce = motion.matches; drivers.forEach(scheduleFrame); });
+
+  const canvas = document.getElementById('sw01-cv');
+  const ctx = canvas.getContext('2d');
+  const tc = document.getElementById('sw01-tc');
+  let reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let w = canvas.width = 420, h = canvas.height = 280;
+  let running = true, sec = 258.4, off = 0;
+  document.addEventListener('visibilitychange', () => { running = !document.hidden; });
+
+  function render() {
+    if (!running) return;
+    if (!reduce) {
+      sec += 0.016; off += 1.4;
+      const m = Math.floor(sec / 60), s = Math.floor(sec % 60), ms = Math.floor((sec % 1) * 10);
+      tc.textContent = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}.${ms}`;
+    }
+
+    ctx.fillStyle = '#141518';
+    ctx.fillRect(0, 0, w, h);
+
+    // Hill contour line
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    for (let x = 0; x <= w; x += 4) {
+      const y = h - 60 - Math.sin((x + off) * 0.01) * 40 - Math.sin((x + off) * 0.025) * 15;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, h);
+    ctx.fillStyle = 'rgba(201, 178, 116, 0.15)';
+    ctx.fill();
+
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += 4) {
+      const y = h - 60 - Math.sin((x + off) * 0.01) * 40 - Math.sin((x + off) * 0.025) * 15;
+      if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = '#C9B274';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Walker dot
+    const py = h - 60 - Math.sin((120 + off) * 0.01) * 40 - Math.sin((120 + off) * 0.025) * 15;
+    ctx.beginPath();
+    ctx.arc(120, py, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#D93829';
+    ctx.fill();
+
+    scheduleFrame(render);
+  }
+  scheduleFrame(render);
+})();
+</script>
+</body>
+</html>

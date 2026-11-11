@@ -1,4 +1,5 @@
-<!doctype html><html lang="en"><meta charset="utf-8">
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/drag-reorder/04-pull-refresh.html",
@@ -21,12 +22,14 @@
   "prefers-reduced-motion static-frame guard",
   "visibilitychange pause/resume",
   "pointer capture (setPointerCapture) for reliable drag tracking",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "Refresh action is cosmetic; no network hook or event emitted",
-  "Row stagger lag (r*0.05 multiplier) becomes visually loose at N>8"
+  "Row stagger lag (r*0.05 multiplier) becomes visually loose at N>8",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -65,12 +68,19 @@
   #dr04-stage:focus-visible{outline:2px solid var(--cy);outline-offset:-3px}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
 </style>
+</head><body>
 <div id="dr04-stage" tabindex="0" role="img" aria-label="Pull to refresh: a list pulled down with elastic overscroll, releasing into a spinning geometric indicator">
   <canvas id="dr04-c"></canvas>
 </div>
 <div class="cap">Pull to Refresh</div>
 <script>
 (function(){
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+function wake(){if(document.hidden)return;running=true;if(reduce)draw();else if(!raf)raf=requestAnimationFrame(frame);}
+['pointerdown','pointermove','pointerup','pointercancel','keydown','keyup'].forEach(type=>document.addEventListener(type,wake));
   var stage=document.getElementById('dr04-stage'),cv=document.getElementById('dr04-c'),g=cv.getContext('2d');
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var W=0,H=0,dpr=1,running=true,raf=0;
@@ -96,7 +106,7 @@
   var THRESH=58;     // release threshold
   var MAXP=92;
   var demoPhase=0, demoT=0;
-  function demoIdle(){ return (t-lastInput)>3.0; }
+  function demoIdle(){return demoEnabled&&!reduce&&(t-lastInput)>3;}
   function step(dt){
     t+=dt;
     // self-demo drives target when idle
@@ -125,7 +135,7 @@
       if(refreshT>1.5){ refreshing=false; target=0; }
     }
   }
-  function release(){
+  function release(){if(reduce){refreshing=false;target=pull=vel=0;dragging=false;stage.setAttribute('aria-label','Refreshed');draw();return;}
     if(pull>=THRESH && !refreshing){
       refreshing=true; refreshT=0; spin=0;
     }
@@ -213,10 +223,10 @@
   function rrect(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
   var prev=0;
   function frame(ts){
-    if(!running)return;
+    raf=0;if(!running||document.hidden)return;
     var dt=prev?Math.min(0.05,(ts-prev)/1000):0.016; prev=ts;
     step(dt); draw();
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(demoEnabled||refreshing||dragging||Math.abs(pull)>.01||Math.abs(vel)>.01))wake();
   }
   function start(){ if(!running){running=true;prev=0;raf=requestAnimationFrame(frame);} }
   var startY=0, basePull=0;
@@ -260,4 +270,4 @@
   raf=requestAnimationFrame(frame);
 })();
 </script>
-</html>
+</body></html>

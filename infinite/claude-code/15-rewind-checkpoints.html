@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Rewind checkpoints — Claude Code. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="component-profile" content="tile">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Claude Code · Rewind checkpoints</title>
+<script>
+(function () {
+  var t = new URLSearchParams(location.search).get('theme');
+  if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+<style>
+:root{--bg:#141210;--surface:#1d1a17;--ink:#ede6da;--muted:#9a9084;--line:rgba(237,230,218,.14);--accent:#d97757;--on-accent:#1a0d07;
+      --good:#8fb573;--warn:#e0b350;--bad:#e5694f}
+:root[data-theme="light"]{--bg:#f5f0e6;--surface:#ebe4d6;--ink:#211d18;--muted:#6b6256;--line:rgba(33,29,24,.16);--accent:#b4492b;--on-accent:#fff3ea;
+      --good:#4f7a36;--warn:#8a6410;--bad:#a8341c}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,sans-serif}
+.cc03-root{box-sizing:border-box;width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;display:grid;grid-template-rows:1fr auto;
+  padding:clamp(14px,5vmin,32px);user-select:none;--pad:16px;--f:1}
+.cc03-root *{box-sizing:border-box}
+.cc03-root:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.cc03-track{position:relative;min-height:0;touch-action:none;cursor:grab}
+.cc03-track:active{cursor:grabbing}
+.cc03-base{position:absolute;left:var(--pad);right:var(--pad);top:62%;height:2px;margin-top:-1px;background:var(--line)}
+.cc03-span{position:absolute;left:calc(var(--pad) + var(--f) * (100% - 2 * var(--pad)));right:var(--pad);top:62%;height:4px;margin-top:-2px;
+  background:var(--warn)}
+.cc03-tick{position:absolute;left:calc(var(--pad) + var(--t) * (100% - 2 * var(--pad)));bottom:38%;width:8px;margin-left:-4px;
+  height:calc(var(--e) * 9%);border-radius:2px 2px 0 0;background:var(--ink);border:2px solid var(--ink);margin-bottom:2px}
+.cc03-tick[data-u="1"]{background:transparent;border-color:var(--warn)}
+.cc03-head{position:absolute;left:calc(var(--pad) + var(--f) * (100% - 2 * var(--pad)));top:8%;bottom:6%;width:0;pointer-events:none}
+.cc03-line{position:absolute;left:-1px;top:0;bottom:22px;width:2px;background:var(--accent)}
+.cc03-knob{position:absolute;left:-14px;bottom:0;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--on-accent)}
+.cc03-read{display:flex;align-items:center;justify-content:center;height:44px;white-space:nowrap;
+  font:700 clamp(16px,5.5vmin,30px)/1 ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.cc03-sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.cc03-cap{position:fixed;left:8px;bottom:2px;font:8px/1 system-ui,sans-serif;color:var(--muted);opacity:.65;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code/15-rewind-checkpoints.html",
+ "title": "Rewind checkpoints",
+ "description": "Scrub checkpoints and read the edits undone. Warm graphite and clay instrument palette.",
+ "useWhen": "Illustrative local developer-tool controls.",
+ "avoidWhen": "Real Claude commands or persistent storage are needed.",
+ "agentPrompt": "Keep reviewed graphite/clay palette (clean-modern exception), state mutators, dt springs, theme hook, demo-v1 takeover, reduced motion, visibility guards and keyboard/touch controls. Synthetic data only.",
+ "editableAreas": [
+  "theme tokens",
+  "seed data and demo interval"
+ ],
+ "preserveElements": [
+  "namespace/IIFE and state mutators",
+  "theme, demo-v1 and motion guards"
+ ],
+ "knownLimitations": [
+  "Local simulation; no Claude integration, persistence or physical-device verification."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "claude-code",
+  "developer-tools",
+  "interactive",
+  "instrument",
+  "minimal"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="cc03-root" id="cc03-root" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="7" aria-valuenow="7" aria-valuetext="0 edits, latest"
+   aria-label="Claude Code rewind: scrub back through eight checkpoints; the readout is how many file edits you would undo. Drag the playhead and release to restore, or use Left and Right arrows, Shift for three at a time, Home for oldest, End or Escape for latest.">
+<div class="cc03-track" id="cc03-track">
+  <div class="cc03-base"></div>
+  <div class="cc03-span"></div>
+  <div class="cc03-head" id="cc03-head"><div class="cc03-line"></div><div class="cc03-knob" id="cc03-knob"></div></div>
+</div>
+<div class="cc03-read" id="cc03-read">0 edits</div>
+<span class="cc03-sr" id="cc03-live" aria-live="polite"></span>
+</div>
+<div class="cc03-cap" aria-hidden="true">Rewind checkpoints</div>
+<script>
+(function () {
+'use strict';
+var root = document.getElementById('cc03-root'), track = document.getElementById('cc03-track');
+var knob = document.getElementById('cc03-knob'), readEl = document.getElementById('cc03-read'), live = document.getElementById('cc03-live');
+var EDITS = [3, 1, 4, 2, 2, 5, 1, 3], N = EDITS.length, LAST = N - 1, PAD = 16;
+var mq = matchMedia('(prefers-reduced-motion: reduce)');
+var reduce = function () { return mq.matches; };
+var s = { idx: LAST, said: LAST, pos: LAST, vel: 0, goal: null, press: 0, pv: 0, drag: false, off: 0, hist: [] };
+var raf = 0, last = 0, inView = true;
+var ticks = EDITS.map(function (e, i) {
+  var t = document.createElement('div');
+  t.className = 'cc03-tick'; t.style.setProperty('--t', (i / LAST).toFixed(4)); t.style.setProperty('--e', e);
+  track.insertBefore(t, track.firstChild);
+  return t;
+});
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function rubber(r) { return r < 0 ? r * 0.3 : r > LAST ? LAST + (r - LAST) * 0.3 : r; }
+function undone(i) { var n = 0; for (var j = i + 1; j < N; j++) n += EDITS[j]; return n; }
+function attractor() { return s.goal !== null ? s.goal : clamp(Math.round(s.pos), 0, LAST); }
+// Single mutator of the restored checkpoint: state, ARIA and the announcement.
+function setIdx(i) {
+  s.idx = i;
+  var n = undone(i);
+  root.setAttribute('aria-valuenow', String(i));
+  root.setAttribute('aria-valuetext', n + ' edits' + (i === LAST ? ', latest' : ''));
+  if (i !== s.said) { s.said = i; announce(n ? 'Restored checkpoint ' + (i + 1) + ' of ' + N + ': ' + n + ' edits undone' : 'Latest checkpoint, nothing undone'); }
+}
+function snapToTarget() {
+  s.pos = attractor(); s.vel = 0; s.goal = null; s.press = s.drag ? 1 : 0; s.pv = 0;
+  if (!s.drag) setIdx(s.pos);
+}
+function step(dt) {
+  if (!s.drag) {
+    var a = attractor();
+    s.vel = (s.vel + (a - s.pos) * 0.15 * dt) * Math.pow(0.84, dt);
+    s.pos += s.vel * dt;
+  }
+  var pt = s.drag ? 1 : 0;
+  s.pv = (s.pv + (pt - s.press) * 0.3 * dt) * Math.pow(0.7, dt);
+  s.press += s.pv * dt;
+  var calm = Math.abs(pt - s.press) < 0.01 && Math.abs(s.pv) < 0.01;
+  if (!s.drag && Math.abs(attractor() - s.pos) < 0.003 && Math.abs(s.vel) < 0.003 && calm) { snapToTarget(); return false; }
+  return true;
+}
+function draw() {
+  var idx = clamp(Math.round(s.pos), 0, LAST), n = undone(idx);
+  root.style.setProperty('--f', (s.pos / LAST).toFixed(4));
+  knob.style.transform = 'scale(' + (1 - 0.14 * s.press).toFixed(3) + ')';
+  for (var i = 0; i < N; i++) {
+    var u = i > idx ? '1' : '0';
+    if (ticks[i].dataset.u !== u) ticks[i].dataset.u = u;
+  }
+  var txt = (n ? '\u2212' + n : '0') + ' edits';
+  if (readEl.textContent !== txt) readEl.textContent = txt;
+}
+function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+function frame(now) {
+  var dt = last ? Math.min(now - last, 50) / 16.667 : 1;
+  last = now;
+  var moving = reduce() ? (snapToTarget(), false) : step(dt);
+  draw();
+  raf = moving ? requestAnimationFrame(frame) : 0;
+}
+function kick() {
+  if (reduce()) { stop(); snapToTarget(); draw(); return; }
+  if (!raf && !document.hidden && inView) { last = 0; raf = requestAnimationFrame(frame); }
+}
+function announce(msg) {
+  live.textContent = '';
+  requestAnimationFrame(function () { live.textContent = msg; });
+}
+function rawAt(x) {
+  var r = track.getBoundingClientRect();
+  return (x - r.left - PAD) / Math.max(20, r.width - 2 * PAD) * LAST;
+}
+track.addEventListener('pointerdown', function (e) {
+  if (e.button) return;
+  track.setPointerCapture(e.pointerId);
+  var raw = rawAt(e.clientX);
+  s.hist = [];
+  if (Math.abs(raw - s.pos) > 0.6) { s.goal = clamp(Math.round(raw), 0, LAST); s.said = -1; kick(); return; }
+  s.drag = true; s.goal = null; s.off = raw - s.pos; s.vel = 0; s.said = -1;
+  s.hist.push([s.pos, performance.now()]);
+  kick();
+});
+track.addEventListener('pointermove', function (e) {
+  if (!s.drag) return;
+  s.pos = rubber(rawAt(e.clientX) - s.off);
+  s.hist.push([s.pos, performance.now()]);
+  while (s.hist.length > 3) s.hist.shift();
+  kick();
+});
+function release() {
+  if (!s.drag) return;
+  s.drag = false;
+  var h = s.hist, v = 0;
+  if (h.length > 1) v = (h[h.length - 1][0] - h[0][0]) / Math.max(1, h[h.length - 1][1] - h[0][1]) * 16.667;
+  s.vel = clamp(v, -0.6, 0.6);
+  kick();
+}
+track.addEventListener('pointerup', release);
+track.addEventListener('pointercancel', release);
+root.addEventListener('keydown', function (e) {
+  var k = e.key, i = s.idx, d = e.shiftKey ? 3 : 1;
+  if (k === 'ArrowLeft' || k === 'ArrowDown') i -= d;
+  else if (k === 'ArrowRight' || k === 'ArrowUp') i += d;
+  else if (k === 'Home') i = 0;
+  else if (k === 'End' || k === 'Escape') i = LAST;
+  else return;
+  e.preventDefault();
+  s.goal = clamp(i, 0, LAST); s.press = 1; s.said = -1;
+  kick();
+});
+window.addEventListener('message', function (e) {
+  if (e.source !== parent || !e.data || e.data.type !== 'forever:theme') return;
+  if (e.data.theme === 'light' || e.data.theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', e.data.theme);
+    draw();
+  }
+});
+mq.addEventListener('change', function () { if (reduce()) { stop(); snapToTarget(); draw(); } });
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(function (es) {
+    inView = es[0].isIntersecting;
+    if (!inView) stop(); else draw();
+  }, { threshold: 0 }).observe(root);
+}
+document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else draw(); });
+window.addEventListener('pagehide', stop);
+root.style.setProperty('--pad', PAD + 'px');
+draw();
+// Demo uses the same state mutators as manual controls; no remote Claude session.
+var demoRoot=document.getElementById('cc03-root'),demoClock=0,demoAge=0,demoStep=0,demoVisible=true;
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+function demoTick(){s.goal = s.idx === LAST ? 2 : LAST; kick();}
+function syncDemo(){
+clearInterval(demoClock);demoClock=0;
+if(!demoEnabled||reduce()||document.hidden||!demoVisible)return;
+demoClock=setInterval(function(){demoAge+=250;if(demoAge>=1000){demoAge=-2200;demoTick()}},250);
+}
+function takeover(){
+if(window.__foreverPreview?.surface==='wall')return;
+if(!demoEnabled)return;demoEnabled=false;clearInterval(demoClock);demoClock=0;
+}
+['pointerdown','keydown','input'].forEach(function(type){demoRoot.addEventListener(type,takeover,true)});
+window.addEventListener('forever:interactive',takeover);
+window.addEventListener('pagehide',function(){demoEnabled=false;clearInterval(demoClock)});
+document.addEventListener('visibilitychange',function(){syncDemo();if(!document.hidden)kick()});
+mq.addEventListener('change',syncDemo);
+if('IntersectionObserver' in window)new IntersectionObserver(function(es){demoVisible=es[0].isIntersecting;syncDemo();if(demoVisible)kick()}).observe(demoRoot);
+syncDemo();
+})();
+</script>
+</body>
+</html>

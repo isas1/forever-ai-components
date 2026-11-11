@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Last Coat: tap the cloth to dip it in the bath and it slowly takes the vat color; tap the bath for the next vat. Zero-dependency canvas component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Last Coat</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#1B1713;--ink:#E6DCC7;--acc:#D3A53E}
+:root[data-theme="light"]{--bg:#F4EFE5;--ink:#2B231B;--acc:#8F600E}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt03-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.dt03-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt03-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dt03-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/inputs-switches/31-last-coat.html",
+ "title": "Last Coat",
+ "description": "Tap the cloth to dip it in the bath and it slowly takes the vat color; tap the bath for the next vat. Warm umber palette: dark umber and saffron-gold with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: warm umber, dark umber and saffron-gold. Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "vat colours and the dip time",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "The cloth colour is kept in localStorage inside a try. The vat label uses the system serif italic.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "dye",
+  "dip",
+  "cloth",
+  "bath",
+  "tap"
+ ]
+}
+</script>
+</head><body>
+<div class="dt03-root" id="dt03-root" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="4" aria-label="Last Coat, one swatch of cloth over a dye bath. Tap the cloth to dip it and it slowly takes the bath color. Tap the bath for the next vat. Left and right arrows choose a vat, Enter or Space dips, Escape lifts. Your color is kept for next time on the Forever plan."></div>
+<div class="dt03-cap" aria-hidden="true">Last Coat</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.getElementById('dt03-root'),cv=document.createElement('canvas');
+  cv.className='dt03-cv';root.appendChild(cv);var cx=cv.getContext('2d'),W=1,D=1;
+  function L(c){return c.map(function(v){return Math.pow(v/255,2.2)})}
+  function S(l,al){return 'rgba('+l.map(function(v){return Math.round(255*Math.pow(Math.max(0,Math.min(1,v)),1/2.2))}).join(',')+','+(al==null?1:al)+')'}
+  function mx(a,b,t){return [0,1,2].map(function(i){return a[i]+(b[i]-a[i])*t})}
+  var V=[['Forever Indigo',[44,72,106]],['Madder',[168,66,46]],['Weld',[204,164,56]],['Emotional Baggage',[98,70,47]],['cat-pics-2',[92,94,88]]];
+  var VL=V.map(function(v){return L(v[1])}),LINEN=L([239,230,212]);
+  var KEY='fasthouse.lastcoat',vat=0,base=LINEN.slice(),saved=null;
+  try{saved=JSON.parse(localStorage.getItem(KEY))}catch(e){}
+  if(saved&&saved.base&&saved.base.length===3){base=saved.base;vat=(saved.vat|0)%5}
+  function save(){try{localStorage.setItem(KEY,JSON.stringify({vat:vat,base:base}))}catch(e){}}
+  var bath=VL[vat].slice(),act=false,sub=false,dv=0,st=0,a=0,front=0;
+  var y=-0.05,vy=0.004,m=0,vm=0,rip=-1,ph=0,DROP=0.16;
+  function aria(){root.setAttribute('aria-valuenow',vat);root.setAttribute('aria-valuetext',V[vat][0]+' bath'+(sub?', cloth dipping':''))}
+  function commit(){base=mx(base,VL[dv],a);act=false;save()}
+  function dip(snd){if(sub)return lift();if(act)commit();act=true;sub=true;dv=vat;st=0;a=0;front=0;rip=0;aria();kick()}
+  function lift(){if(sub){sub=false;aria();kick()}}
+  function next(d){if(sub)return;vat=(vat+d+5)%5;save();aria();kick()}
+  function step(dt){var s=dt/60,mv=false;ph+=s;
+    if(act){if(sub){st+=s;a=.62*(1-Math.exp(-st/1.4));if(st>3.2){sub=false;aria()}}
+      front=Math.min(1,front+s/2.6);if(front>=1&&!sub)commit();mv=true}
+    var ty=sub?DROP:0;vy+=(ty-y)*.16*dt;vy*=Math.pow(.8,dt);y+=vy*dt;
+    var tm=sub?1:0;vm+=(tm-m)*.12*dt;vm*=Math.pow(.78,dt);m+=vm*dt;
+    if(Math.abs(ty-y)>4e-4||Math.abs(vy)>4e-4||Math.abs(tm-m)>2e-3||Math.abs(vm)>2e-3)mv=true;
+    var t=VL[vat],dd=0;for(var i=0;i<3;i++){bath[i]+=(t[i]-bath[i])*Math.min(1,.07*dt);dd+=Math.abs(t[i]-bath[i])}
+    if(dd>.003)mv=true;
+    if(rip>=0){rip+=s/1.1;if(rip>=1)rip=-1;else mv=true}
+    return mv}
+  function snapToTarget(){if(act){if(sub){a=.62}front=1;sub=false;commit();aria()}
+    y=0;vy=0;m=0;vm=0;bath=VL[vat].slice();rip=-1}
+  function draw(){var cs=getComputedStyle(document.documentElement),ink=cs.getPropertyValue('--ink').trim()||'#E6DCC7';
+    cx.setTransform(D,0,0,D,0,0);cx.clearRect(0,0,W,W);
+    var c=W/2,sy=.70*W,rx=.34*W,ry=.035*W,by=.86*W;
+    cx.fillStyle=S(mx(bath,[1,1,1],.12));cx.beginPath();cx.ellipse(c,sy,rx,ry,0,0,Math.PI*2);cx.fill();
+    if(rip>=0){cx.strokeStyle=ink;cx.globalAlpha=(1-rip)*.45;cx.lineWidth=Math.max(1,W*.003);
+      cx.beginPath();cx.ellipse(c,sy,rx*(.35+.6*rip),ry*(.35+.6*rip),0,0,Math.PI*2);cx.stroke();cx.globalAlpha=1}
+    var w=.4*W,h=.46*W,top=(.16+y)*W,x0=c-w/2,x1=c+w/2,bot=top+h,pin=m*.025*W,amp=(.007+.016*m)*W;
+    cx.strokeStyle=ink;cx.globalAlpha=.55;cx.lineWidth=Math.max(1.5,W*.004);cx.lineCap='round';
+    cx.beginPath();cx.moveTo(x0-.03*W,top);cx.lineTo(x1+.03*W,top);cx.stroke();cx.globalAlpha=1;
+    var p=new Path2D();p.moveTo(x0,top);p.lineTo(x1,top);p.quadraticCurveTo(x1-pin,top+h*.55,x1,bot);
+    for(var i=1;i<=14;i++){var f=i/14,xx=x1-f*w;p.lineTo(xx,bot+Math.sin(f*Math.PI*2+ph*1.6)*amp*Math.sin(f*Math.PI))}
+    p.quadraticCurveTo(x0+pin,top+h*.55,x0,top);p.closePath();
+    var fill;if(act){var dy=mx(base,VL[dv],a),b=1-front;fill=cx.createLinearGradient(0,top,0,bot);
+      fill.addColorStop(0,S(base));fill.addColorStop(Math.max(0,b-.05),S(base));
+      fill.addColorStop(Math.min(1,b+.03),S(mx(dy,[0,0,0],.12)));fill.addColorStop(1,S(dy))}else fill=S(base);
+    cx.save();cx.shadowColor='rgba(0,0,0,.28)';cx.shadowBlur=W*.04;cx.shadowOffsetY=W*.01;cx.fillStyle=fill;cx.fill(p);cx.restore();
+    cx.save();cx.clip(p);cx.strokeStyle='rgba(0,0,0,.06)';cx.lineWidth=1;cx.beginPath();
+    var g=Math.max(2.5,W*.007);for(var q=x0;q<x1;q+=g){cx.moveTo(q,top);cx.lineTo(q,bot+amp)}
+    for(q=top;q<bot+amp;q+=g){cx.moveTo(x0,q);cx.lineTo(x1,q)}cx.stroke();cx.restore();
+    cx.strokeStyle=ink;cx.globalAlpha=.22;cx.lineWidth=1;cx.stroke(p);cx.globalAlpha=1;
+    cx.beginPath();cx.moveTo(c-rx,sy);cx.lineTo(c-rx*.9,by);cx.ellipse(c,by,rx*.9,ry,0,Math.PI,0,true);
+    cx.lineTo(c+rx,sy);cx.ellipse(c,sy,rx,ry,0,0,Math.PI,false);cx.closePath();
+    cx.fillStyle=S(bath,.93);cx.fill();
+    cx.fillStyle=ink;cx.globalAlpha=.85;cx.textAlign='center';cx.textBaseline='middle';
+    cx.font='italic '+Math.max(12,Math.round(W*.042))+'px ui-serif,Georgia,serif';
+    cx.fillText(V[vat][0],c,.95*W);cx.globalAlpha=1}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  root.addEventListener('pointerdown',function(e){e.preventDefault();root.focus();
+    var r=root.getBoundingClientRect(),fy=(e.clientY-r.top)/r.height;if(fy<.665)dip(true);else next(1)});
+  root.addEventListener('keydown',function(e){var k=e.key;
+    if(k==='ArrowRight'||k==='ArrowUp'){next(1)}else if(k==='ArrowLeft'||k==='ArrowDown'){next(-1)}
+    else if(k==='Enter'||k===' '){dip(true)}else if(k==='Escape'){lift()}else return;e.preventDefault()});
+  new ResizeObserver(function(){var r=root.getBoundingClientRect();W=Math.max(1,r.width);D=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.round(W*D);cv.height=Math.round(W*D);draw()}).observe(root);
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,demoT=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  window.addEventListener('forever:interactive',stopDemo);
+  root.addEventListener('pointerdown',stopDemo,true);root.addEventListener('keydown',stopDemo,true);
+  document.addEventListener('pointerdown',stopDemo,true);
+  var flip=0;
+  demoT=setInterval(function(){if(!demo||document.hidden||reduce()||sub||act)return;
+    if(flip){next(1);flip=0}else{dip(false);flip=1}},1500);
+  aria();if(!saved&&demo)dip(false);
+  draw();kick();
+})();</script>
+</body></html>

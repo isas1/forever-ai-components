@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Multicolored dots fall under gravity with motion trails, bounce off the floor, and scatter away from the cursor on a dark navy canvas.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gravity Dot Rain</title>
@@ -22,7 +23,7 @@
     --c01-pal:#00778f,#6b3bf7,#d01075,#1b7c59,#8e6703;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c01-bg)}
-  #c{display:block;width:100%;height:100%}
+  #c01-canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--c01-cap);opacity:var(--c01-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
@@ -35,7 +36,7 @@
  "avoidWhen": "Light-background UIs (background hardcoded dark navy). Layouts where motion competes with legible content.",
  "agentPrompt": "Increase particle count by changing N cap from 90 to 150, swap pal to warm sunset tones ['#ff6b6b','#fbbf24','#f97316'], and strengthen cursor scatter by changing the repulsion multiplier from 0.02 to 0.05. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
-  "particle count cap (N=90 and density divisor 5200)",
+  "particle count floor 24, cap 90 and density divisor 5200",
   "color palette (pal array)",
   "gravity strength (g=0.16)",
   "bounce damping (-0.62)",
@@ -46,13 +47,15 @@
   "DPR-aware canvas sizing",
   "visibilitychange pause/play",
   "prefers-reduced-motion single-frame guard",
-  "IIFE-free but scoped canvas reference",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "IIFE wrapper",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS — must edit to change from dark navy",
-  "Reduced-motion renders only one static frame with no fallback animation",
-  "No IIFE wrapper — globals (drops, pointer, pal) leak into page scope"
+  "Reduced motion seeds visible static grains and redraws cursor scatter without an ongoing gravity loop.",
+  "After takeover, falling grains settle on the floor without automatic recycling.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -75,11 +78,16 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c01-canvas" class="c01-root"></canvas>
 <div class="cap">Gravity Dot Rain</div>
 <script>
 (function(){
-const cv=document.getElementById('c'),x=cv.getContext('2d');
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+const cv=document.getElementById('c01-canvas'),x=cv.getContext('2d');
 let W,H,DPR,drops=[],reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const root=document.documentElement;
 let pal=['#6ee7ff'],trailA=.25;
@@ -95,8 +103,8 @@ function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.client
 addEventListener('resize',size);size();
 function mk(){return{px:Math.random()*W,py:-10-Math.random()*H,vy:0,
   r:1.6+Math.random()*2.6,ci:(Math.random()*pal.length)|0,b:0,by:0};}
-const N=Math.min(90,Math.round(W*H/5200));
-for(let i=0;i<N;i++)drops.push(mk());
+const N=Math.min(90,Math.max(24,Math.round(W*H/5200)));
+for(let i=0;i<N;i++){const d=mk();d.py=H*(reduce?.15+Math.random()*.65:Math.random()-.15);drops.push(d);}
 let pointer={x:-999,y:-999};
 cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();pointer.x=e.clientX-r.left;pointer.y=e.clientY-r.top;});
 cv.addEventListener('pointerleave',()=>{pointer.x=-999;pointer.y=-999;});
@@ -104,10 +112,10 @@ const g=0.16;
 function step(){
   x.clearRect(0,0,W,H);
   for(const d of drops){
-    d.vy+=g; d.py+=d.vy;
+    if(!reduce){d.vy+=g;d.py+=d.vy;}
     const dx=d.px-pointer.x, dy=d.py-pointer.y, dd=dx*dx+dy*dy;
     if(dd<5000){const f=40/Math.max(8,Math.sqrt(dd));d.px+=dx*f*0.02;}
-    if(d.py>H-d.r){d.py=H-d.r;d.vy*=-0.62;if(Math.abs(d.vy)<1.2){Object.assign(d,mk());continue;}}
+    if(d.py>H-d.r){d.py=H-d.r;d.vy*=-0.62;if(Math.abs(d.vy)<1.2){if(demoEnabled){Object.assign(d,mk());continue;}d.vy=0;}}
     // trail
     x.strokeStyle=pal[d.ci];x.globalAlpha=trailA;x.lineWidth=d.r*0.9;
     x.beginPath();x.moveTo(d.px,d.py);x.lineTo(d.px,d.py-Math.min(18,d.vy*3));x.stroke();
@@ -115,10 +123,11 @@ function step(){
     x.beginPath();x.arc(d.px,d.py,d.r,0,7);x.fill();
   }
 }
-let raf;function loop(){step();raf=requestAnimationFrame(loop);}
-function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+let raf=0;function loop(){raf=0;if(document.hidden)return;step();if(!reduce&&(demoEnabled||(drops.some(d=>d.py<H-d.r-.1||Math.abs(d.vy)>.2))))play();}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}raf=requestAnimationFrame(loop);}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;play();}));
 play();
 })();
 </script>

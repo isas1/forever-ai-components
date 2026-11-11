@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Five glowing gravitational bodies orbit and sling each other on deep space, trailing colored comet tails; pointer perturbs the dance.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>N-Body Waltz</title>
@@ -53,12 +54,14 @@
   "visibilitychange pause/start guard",
   "reduced-motion static fallback (draw after 140 steps)",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "O(N²) gravity loop runs 3 substeps per frame — heavy on low-end CPUs as N grows",
   "Background color hardcoded (#05060f) — must edit CSS to change from deep navy",
-  "Soft recentering and leash may cause subtle energy drift in long runs"
+  "Soft recentering and leash may cause subtle energy drift in long runs",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -82,10 +85,15 @@
 </script>
 </head>
 <body>
-<canvas id="nbw-c"></canvas>
+<canvas id="nbw-c" class="nbw-root"></canvas>
 <div class="cap">N-Body Waltz</div>
 <script>
 (function(){
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   const cv=document.getElementById('nbw-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,cx,cy,S;
@@ -101,7 +109,7 @@
   const PAL=[{},{},{},{},{}];
   const root=document.documentElement, C={};
   function syncTheme(){          // re-read on every theme flip; the bodies keep their PAL refs
-    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    const FB={'--nbw-bg':'#211A17','--nbw-fade':'rgba(33,26,23,0.30)','--nbw-blend':'lighter','--nbw-halo':'rgba(0,0,0,0)','--nbw-ta':'0.5','--nbw-ga':'0.85','--nbw-p1':'#ffd0ec,#D345A4','--nbw-p2':'#ffd9a8,#ff9d4d','--nbw-p3':'#a8ffe6,#39d6a8','--nbw-p4':'#fff0c2,#C0B459','--nbw-p5':'#ffb4c8,#ff5e86'}, cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim()||FB[n];
     C.bg=g('--nbw-bg');C.fade=g('--nbw-fade');C.halo=g('--nbw-halo');C.blend=g('--nbw-blend');
     C.ta=+g('--nbw-ta');C.ga=+g('--nbw-ga');
     for(let i=0;i<5;i++){const p=g('--nbw-p'+(i+1)).split(',');PAL[i].c=p[0].trim();PAL[i].g=p[1].trim();}
@@ -217,14 +225,14 @@
   }
 
   let raf=0;
-  function frame(){
+  function frame(){raf=0;if(document.hidden)return;
     kick*=0.92;
     const sub=3, dt=0.55;
     for(let s=0;s<sub;s++)step(dt);
     draw();
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(demoEnabled||(sessionActive)))start();
   }
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!document.hidden&&!reduce&&(demoEnabled||(sessionActive)))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){
@@ -232,6 +240,7 @@
     for(let s=0;s<140;s++)step(0.55);
     draw();
   }else start();
+  ['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;if(reduce){for(let k=0;k<4;k++)step(.55);draw();}else start();}));
 })();
 </script>
 </body>

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A springy 16-node tail in lime-to-gold gradient whips and follows the cursor, drifting in a figure-eight when idle.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Spring Chain</title>
@@ -24,7 +25,7 @@
     --c05-ss:78; --c05-sl:25; --c05-ds:85; --c05-dl:21; --c05-dk:1.6;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c05-bg)}
-  #c{display:block;width:100%;height:100%}
+  #c05-canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--c05-cap);opacity:var(--c05-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
@@ -32,7 +33,7 @@
 {
  "file": "infinite/particles-physics/05-spring-chain.html",
  "title": "Spring Chain",
- "description": "A 16-node spring chain whips and follows the cursor in a lime-to-gold gradient; drifts in a figure-eight pattern when idle.",
+ "description": "A 16-node spring chain whips and follows the cursor in a lime-to-gold gradient; initial figure-eight attract motion stops after first input; manual chain motion settles normally.",
  "useWhen": "Cursor-follower effects, interactive hero backgrounds, playful physics demos where pointer engagement adds delight.",
  "avoidWhen": "Contexts requiring legible overlaid text (constant motion competes). Touch-only devices where pointer events are limited to taps.",
  "agentPrompt": "Change node count from 16 to 24, set the hue base to 120 (green), and increase spring stiffness constant k from 0.32 to 0.45. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
@@ -50,12 +51,13 @@
   "visibilitychange pause/play guards",
   "reduced-motion guard (single frame only)",
   "IIFE-equivalent scoped vars",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Reduced-motion support is minimal — draws one static frame but the chain is still mid-motion; no true static fallback",
   "Segment length computed at init with W/H at that moment — does not recompute on resize (reinits nodes but seg is const)",
-  "No IIFE wrapper — globals leak into page scope"
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -78,11 +80,16 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c05-canvas" class="c05-root"></canvas>
 <div class="cap">Spring Chain</div>
 <script>
 (function(){
-const cv=document.getElementById('c'),x=cv.getContext('2d');
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;if(!hover){target.x=nodes[0].x;target.y=nodes[0].y;}}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+const cv=document.getElementById('c05-canvas'),x=cv.getContext('2d');
 let W,H,DPR,nodes=[],t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const root=document.documentElement;
 let SS=85,SL=65,DS=90,DL=70,DK=-1.5;   // hsl saturation/lightness for the strokes and the node dots
@@ -104,7 +111,7 @@ const k=0.32,damp=0.74,seg=Math.min(W,H)*0.055;
 function step(){
   x.clearRect(0,0,W,H);t+=0.018;
   let tx,ty;
-  if(hover){tx=target.x;ty=target.y;}
+  if(hover||!demoEnabled){tx=target.x;ty=target.y;}
   else{tx=W/2+Math.cos(t)*W*0.3;ty=H/2+Math.sin(t*1.6)*H*0.3;}
   nodes[0].x+=(tx-nodes[0].x)*0.35;nodes[0].y+=(ty-nodes[0].y)*0.35;
   for(let i=1;i<nodes.length;i++){const n=nodes[i],p=nodes[i-1];
@@ -117,10 +124,11 @@ function step(){
     x.fillStyle='hsl('+h+','+DS+'%,'+(DL+i*DK)+'%)';
     x.beginPath();x.arc(n.x,n.y,Math.max(1.6,6-i*0.27),0,7);x.fill();}
 }
-let raf;function loop(){step();raf=requestAnimationFrame(loop);}
-function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+let raf=0;function loop(){raf=0;if(document.hidden)return;step();if(!reduce&&(demoEnabled||(nodes.slice(1).some(p=>Math.abs(p.vx)+Math.abs(p.vy)>.02))))play();}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}raf=requestAnimationFrame(loop);}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;play();}));
 play();
 })();
 </script>

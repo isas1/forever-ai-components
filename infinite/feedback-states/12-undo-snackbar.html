@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A dark toast slides up over a ledger of deleted rows with a draining countdown ring and UNDO button that restores the item before auto-confi">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Undo Snackbar</title>
@@ -8,14 +9,14 @@
   :root[data-theme="light"]{--fb12-bg:#f2f4f8;--fb12-acc:#1b7c59;--fb12-acc2:#0b7c56;--fb12-err:#df0626;--fb12-ink:#182029;--fb12-mut:#667081;--fb12-acc-rgb:27,124,89;--fb12-err-rgb:223,6,38;--fb12-row-bg:#e4e8ef;--fb12-row-fill:#ccd2dc;--fb12-bar-a:#ffffff;--fb12-bar-b:#f7f8fa;--fb12-line:#dde1e8;--fb12-shadow:rgba(20,24,32,.16);--fb12-cap:#182029;--fb12-cap-o:.5}
   html,body{margin:0;height:100%}
   body{background:var(--fb12-bg);overflow:hidden;font-family:ui-sans-serif,-apple-system,Segoe UI,Roboto,system-ui,sans-serif}
-  #fb12-stage{position:fixed;inset:0;display:grid;place-items:center}
+  #fb12-stage{position:fixed;inset:0;display:grid;grid-template-columns:minmax(0,1fr);place-items:center}
   /* faint ledger of deleted rows — context */
   #fb12-ledger{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;gap:10px;opacity:.5;pointer-events:none}
   .fb12-row{width:min(62%,360px);height:clamp(7px,2.1vw,11px);border-radius:99px;background:var(--fb12-row-bg);position:relative;overflow:hidden;transform:translateZ(0)}
   .fb12-row::after{content:"";position:absolute;inset:0;width:38%;background:var(--fb12-row-fill);border-radius:99px;transform-origin:left}
   .fb12-row.fb12-gone{transition:opacity .5s ease,transform .5s cubic-bezier(.2,.8,.2,1)}
 
-  #fb12-bar{position:relative;width:min(82%,420px);min-height:54px;padding:0 12px 0 16px;display:flex;
+  #fb12-bar{position:relative;width:min(82%,420px);box-sizing:border-box;min-height:54px;padding:0 12px 0 16px;display:flex;
     align-items:center;gap:12px;border-radius:14px;color:var(--fb12-ink);z-index:2;
     background:linear-gradient(180deg,var(--fb12-bar-a),var(--fb12-bar-b));border:1px solid var(--fb12-line);
     box-shadow:0 18px 44px -16px var(--fb12-shadow),0 0 0 1px rgba(var(--fb12-acc-rgb),.05);
@@ -30,7 +31,7 @@
   .fb12-ring circle{fill:none;stroke-width:3.4;stroke-linecap:round}
   .fb12-track{stroke:var(--fb12-line)}
   .fb12-prog{stroke:var(--fb12-acc);transition:stroke .25s}
-  .fb12-icon{position:absolute;left:16px;width:30px;height:30px;display:grid;place-items:center;opacity:0;transform:scale(.4);pointer-events:none}
+  .fb12-icon{position:absolute;left:16px;width:30px;height:30px;display:grid;grid-template-columns:minmax(0,1fr);place-items:center;opacity:0;transform:scale(.4);pointer-events:none}
   .fb12-icon svg{width:18px;height:18px}
   .fb12-icon.fb12-show{animation:fb12chk .5s cubic-bezier(.2,1.6,.3,1) forwards}
   @keyframes fb12chk{to{opacity:1;transform:scale(1)}}
@@ -69,7 +70,7 @@
   "label strings (labels array)",
   "ring radius and stroke width (R=12.5, stroke-width=3.4)",
   "bar width (min(82%,420px))",
-  "idle demo cadence (DEMO_UNDO=1500 ms presses UNDO on alternate cycles; resume IDLE_BACK=3600 ms)",
+  "idle demo cadence (DEMO_UNDO=1500 ms presses UNDO on alternate cycles;)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -78,11 +79,13 @@
   "prefers-reduced-motion static fallback",
   "role=status + aria-live on bar",
   "idle demo (alternate cycles press UNDO through press(); a real press takes over)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Auto-cycles through deletion scenarios by default — remove the dismiss loop and wire real delete logic before production use",
-  "Countdown uses rAF clock, not CSS, so it cannot be paused via CSS alone"
+  "First deliberate input permanently disables idle demo; manual input, finite feedback and settling remain active. Host demoEnabled=false skips the initial attract cycle.",
+  "Countdown uses rAF clock, not CSS, so it cannot be paused via CSS alone",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -121,6 +124,11 @@
 <div class="cap">Undo Snackbar</div>
 <script>
 (function(){
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;demo=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   "use strict";
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var bar=document.getElementById('fb12-bar'), undo=document.getElementById('fb12-undo'),
@@ -146,7 +154,7 @@
     var r=rows[rowIdx%rows.length];   // the ledger row that just went
     r.classList.add('fb12-gone'); r.style.opacity='.12'; r.style.transform='translateX(18px)';
     bar.classList.add('fb12-in'); setProg(1); state='counting'; t0=performance.now();
-    if(demo&&!(turn++&1)) schedule(DEMO_UNDO,function(){ if(demo&&state==='counting')press(); });
+    if(demoEnabled&&demo&&!reduce&&!(turn++&1)) schedule(DEMO_UNDO,function(){ if(demoEnabled&&demo&&!reduce&&state==='counting')press(); });
     if(reduce){ setProg(.55); } // static legible frame, no countdown
   }
 
@@ -165,45 +173,45 @@
 
   function dismiss(){
     bar.classList.remove('fb12-in'); bar.classList.add('fb12-out'); state='idle';
-    schedule(700, function(){ rowIdx++; rows[(rowIdx-1)%rows.length].classList.remove('fb12-gone'); show(); });
+    if(demoEnabled&&!reduce)schedule(700, function(){ rowIdx++; rows[(rowIdx-1)%rows.length].classList.remove('fb12-gone'); show(); });
   }
 
   var timers=[];   // on the rAF clock: they pause with the loop
-  function schedule(ms,fn){ timers.push({due:performance.now()+ms,fn:fn,done:false}); }
+  function wake(){if(document.hidden)return;running=true;if(!raf)raf=requestAnimationFrame(loop);}
+  function schedule(ms,fn){wake(); timers.push({due:performance.now()+ms,fn:fn,done:false}); }
 
   // Idle demo: nobody presses UNDO on the wall, so every other cycle presses it itself through the
   // same press() a click runs — the next cycle lets the countdown run out. A press takes over.
-  var demo=true, turn=0, DEMO_UNDO=1500, IDLE_BACK=3600;
+  var demo=demoEnabled&&!reduce, turn=0, DEMO_UNDO=1500, IDLE_BACK=3600;
   function press(){ undo.classList.remove('fb12-pressed'); void undo.offsetWidth; undo.classList.add('fb12-pressed'); restore(); }
   function userUndo(){ demo=false; idleSince=performance.now(); press(); }
   undo.addEventListener('click',userUndo);
   undo.setAttribute('tabindex','0');
   undo.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){e.preventDefault();userUndo();} });
 
-  function loop(now){ if(!running)return;
-    if(!demo && now-idleSince>IDLE_BACK){ demo=true; turn=0; }   // hands off again
-    if(state==='counting' && !reduce){   // drain the countdown
+  function loop(now){raf=0;if(!running||document.hidden)return;
+    if(demoEnabled&&state==='counting' && !reduce){   // drain the countdown
       var p=1-(now-t0)/DURATION;
       if(p<=0){ setProg(0); confirm(); }
       else setProg(p);
     }
     for(var i=0;i<timers.length;i++){ var tm=timers[i]; if(!tm.done && now>=tm.due){ tm.done=true; tm.fn(); } }
     if(timers.length>40){ timers=timers.filter(function(t){return !t.done;}); }
-    raf=requestAnimationFrame(loop);
+    if((demoEnabled&&!reduce)||timers.some(t=>!t.done))wake();
   }
 
   function start(){
     if(reduce){ show(); setProg(.55); return; }   // one static frame, no loop
-    running=true; show(); raf=requestAnimationFrame(loop);
+    running=true;show();wake();
   }
 
   var hiddenAt=0;
   document.addEventListener('visibilitychange',function(){
-    if(document.hidden){ running=false; cancelAnimationFrame(raf); hiddenAt=performance.now(); }
-    else if(!reduce){
+    if(document.hidden){ running=false; cancelAnimationFrame(raf);raf=0; hiddenAt=performance.now(); }
+    else{
       var gap=performance.now()-hiddenAt;   // rebase clocks so nothing fast-forwards
       t0+=gap; for(var i=0;i<timers.length;i++)timers[i].due+=gap;
-      running=true; raf=requestAnimationFrame(loop);
+      running=true;wake();
     }
   });
 

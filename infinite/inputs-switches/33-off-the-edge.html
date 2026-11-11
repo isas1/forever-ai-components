@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Off the Edge — Inputs and Switches. A drop well: drag the file into the centre, rings burst out, and one ring echoes back when it has arrived. Self-contained, zero-dependency.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Off the Edge</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#f2b705}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#8a6400}
+html,body{margin:0;height:100%;display:grid;place-items:center;background:var(--bg);overflow:hidden}
+.dt05-cv{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;display:block}
+.dt05-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;cursor:grab;-webkit-tap-highlight-color:transparent}
+.dt05-root:focus{outline:none}
+.dt05-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt05-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+.dt05-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.dt05-in{display:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/inputs-switches/33-off-the-edge.html",
+ "title": "Off the Edge",
+ "description": "Drag the file token into the centre of a ring well and it bursts into rings, then one accent ring echoes back when it has arrived. Clean modern: off-black and saffron with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and saffron (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "Hashing a real dropped file needs crypto.subtle. The canvas is full frame so particles travel past the well.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "file-drop",
+  "well",
+  "rings",
+  "drag",
+  "upload"
+ ]
+}
+</script>
+</head><body>
+<div class="dt05-root" role="region" tabindex="0" aria-label="Well. Drag the file cat-pics-2 into the center to drop it, or drop a real file anywhere. Tap the well to pick a file. Arrow keys move the file, Space drops it, Enter picks a file, Escape returns it. The tab title says Arrived once the echo comes back."><canvas class="dt05-cv" aria-hidden="true"></canvas><span class="dt05-sr" aria-live="polite"></span><input class="dt05-in" type="file" tabindex="-1" aria-hidden="true"></div>
+<div class="dt05-cap" aria-hidden="true">Off the Edge</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,demoT=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  var root=document.querySelector('.dt05-root'),cv=document.querySelector('.dt05-cv'),cx=cv.getContext('2d'),
+      live=document.querySelector('.dt05-sr'),inp=document.querySelector('.dt05-in');
+  var NAMES=[['cat-pics-2',3],['Monday',2],['Emotional baggage',8],['Forever plan',4]],ni=0;
+  var cur={n:'cat-pics-2',r:3};
+  var RX=.64,RY=-.64,WR=.34;
+  var tok={x:RX,y:RY,vx:0,vy:0,tx:RX,ty:RY,s:1,vs:0,ts:1,f:0};
+  var mode='idle',P=[],pend=[],echo=null,trace=4,flash=0,hashed=true,failed=false;
+  var drag=false,ox=0,oy=0,tap=null;
+  function geo(){var r=root.getBoundingClientRect();return{cx:r.left+r.width/2,cy:r.top+r.height/2,S:r.width/2}}
+  function maxD(){return Math.hypot(cv.clientWidth,cv.clientHeight)}
+  function tone(){}
+  function ring(k,amb){var g=geo(),W=WR*g.S,n=amb?28:40;for(var i=0;i<n;i++)P.push({a:i/n*6.2832+k*.13,r:W,v:amb?.9+Math.random()*.2:3.2+Math.random()*.5,w:(Math.random()-.5)*.003,amb:amb})}
+  function burst(){mode='burst';tok.s=0;tok.ts=0;flash=1;tone(196,98,.35);for(var k=0;k<cur.r;k++)pend.push({t:k*7,k:k})}
+  function arrive(){echo=null;mode='idle';
+    if(failed){live.textContent=cur.n+' did not arrive';}
+    else{trace=cur.r;flash=1;document.title='Arrived: '+cur.n;live.textContent=cur.n+' arrived';tone(660,990,.25)}
+    var nx=NAMES[++ni%NAMES.length];cur={n:nx[0],r:nx[1]};
+    tok.x=tok.tx=RX;tok.y=tok.ty=RY;tok.vx=tok.vy=0;tok.f=0;tok.s=0;tok.vs=0;tok.ts=1;
+    root.setAttribute('aria-label','Well. Drag the file '+cur.n+' into the center to drop it, or drop a real file anywhere. Tap the well to pick a file. Arrow keys move the file, Space drops it, Enter picks a file, Escape returns it.')}
+  function drop(){if(mode!=='idle')return;mode='fall';tok.tx=0;tok.ty=0;failed=false;kick()}
+  function dropFile(f){if(!f||mode!=='idle')return;cur={n:f.name,r:Math.max(1,Math.min(12,Math.ceil(f.size/1048576)))};
+    hashed=!(window.crypto&&crypto.subtle);failed=false;
+    if(!hashed)f.arrayBuffer().then(function(b){return crypto.subtle.digest('SHA-256',b)}).then(function(){hashed=true;kick()},function(){failed=true;hashed=true;kick()});
+    tok.x=0;tok.y=-1.3;tok.vx=tok.vy=0;tok.s=1;tok.ts=1;tok.f=0;tok.tx=0;tok.ty=0;mode='fall';kick()}
+  function step(dt){var m=false,g=geo(),W=WR*g.S,D=maxD();
+    if(!drag){tok.vx+=(tok.tx-tok.x)*.16*dt;tok.vy+=(tok.ty-tok.y)*.16*dt;var d=Math.pow(.82,dt);tok.vx*=d;tok.vy*=d;tok.x+=tok.vx*dt;tok.y+=tok.vy*dt;
+      if(Math.abs(tok.vx)+Math.abs(tok.vy)+Math.abs(tok.tx-tok.x)+Math.abs(tok.ty-tok.y)>.002)m=true}else m=true;
+    var ts=drag?1.08:tok.ts;tok.vs+=(ts-tok.s)*.2*dt;tok.vs*=Math.pow(.78,dt);tok.s+=tok.vs*dt;if(Math.abs(tok.vs)+Math.abs(ts-tok.s)>.002)m=true;
+    if(mode==='fall'){m=true;if(Math.hypot(tok.x,tok.y)<.1)tok.f=Math.min(1,tok.f+.06*dt);if(tok.f>=1)burst()}
+    for(var i=pend.length-1;i>=0;i--){pend[i].t-=dt;if(pend[i].t<=0){ring(pend[i].k,pend[i].amb);pend.splice(i,1)}}
+    if(pend.length)m=true;
+    for(i=P.length-1;i>=0;i--){var p=P[i];p.r+=p.v*dt;p.v=Math.max(p.amb?.5:1.6,p.v*Math.pow(.988,dt));p.a+=p.w*dt;
+      if(p.r>(p.amb?g.S*1.05:D))P.splice(i,1)}
+    if(P.length)m=true;
+    if(mode==='burst'){m=true;if(!P.some(function(p){return!p.amb})&&!pend.length&&hashed){mode='echo';echo={r:D,v:0}}}
+    if(echo){m=true;echo.v+=(W-echo.r)*.1*dt;echo.v*=Math.pow(.8,dt);echo.r+=echo.v*dt;if(Math.abs(echo.v)<.3&&Math.abs(W-echo.r)<1)arrive()}
+    if(flash>0){flash=Math.max(0,flash-.03*dt);m=true}
+    return m}
+  function snapToTarget(){P=[];pend=[];flash=0;
+    if(mode!=='idle'&&hashed)arrive();
+    if(!drag){tok.x=tok.tx;tok.y=tok.ty}tok.vx=tok.vy=0;tok.s=tok.ts;tok.vs=0}
+  function draw(){var dpr=Math.min(2,devicePixelRatio||1),w=cv.clientWidth,h=cv.clientHeight;
+    if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr)}
+    cx.setTransform(dpr,0,0,dpr,0,0);cx.clearRect(0,0,w,h);
+    var cs=getComputedStyle(document.documentElement),ink=cs.getPropertyValue('--ink').trim(),acc=cs.getPropertyValue('--acc').trim(),bg=cs.getPropertyValue('--bg').trim();
+    var g=geo(),S=g.S,W=WR*S,D=maxD();
+    cx.lineWidth=1;cx.strokeStyle=ink;cx.globalAlpha=.6;cx.beginPath();cx.arc(g.cx,g.cy,W,0,6.2832);cx.stroke();
+    cx.setLineDash([1,5]);cx.globalAlpha=.28;
+    [.5,.76].forEach(function(f){cx.beginPath();cx.arc(g.cx,g.cy,W*f,0,6.2832);cx.stroke()});
+    cx.strokeStyle=acc;var sp=Math.max(6,S*.044);
+    for(var i=0;i<trace;i++){var rr=W+(i+1)*sp;if(rr>S*.98)break;cx.globalAlpha=.75-i*.06;cx.beginPath();cx.arc(g.cx,g.cy,rr,0,6.2832);cx.stroke()}
+    cx.setLineDash([]);
+    cx.fillStyle=ink;
+    for(i=0;i<P.length;i++){var p=P[i];cx.globalAlpha=p.amb?.35*(1-(p.r-W)/(S-W)):Math.max(.2,1-p.r/D);
+      cx.fillRect(g.cx+Math.cos(p.a)*p.r-1,g.cy+Math.sin(p.a)*p.r-1,2,2)}
+    if(echo){cx.globalAlpha=1;cx.strokeStyle=acc;cx.lineWidth=1.5;cx.beginPath();cx.arc(g.cx,g.cy,Math.max(1,echo.r),0,6.2832);cx.stroke();cx.lineWidth=1}
+    cx.globalAlpha=1;cx.fillStyle=acc;cx.beginPath();cx.arc(g.cx,g.cy,2+flash*5,0,6.2832);cx.fill();
+    var sc=Math.max(0,tok.s*(1-tok.f));
+    if(sc>.01){var L=.17*S*sc,x=g.cx+tok.x*S-L/2,y=g.cy+tok.y*S-L/2,c=L*.28;
+      cx.beginPath();cx.moveTo(x,y);cx.lineTo(x+L-c,y);cx.lineTo(x+L,y+c);cx.lineTo(x+L,y+L);cx.lineTo(x,y+L);cx.closePath();
+      cx.fillStyle=bg;cx.fill();cx.strokeStyle=ink;cx.stroke();
+      cx.strokeStyle=acc;cx.beginPath();cx.moveTo(x+L-c,y);cx.lineTo(x+L-c,y+c);cx.lineTo(x+L,y+c);cx.stroke();
+      cx.strokeStyle=ink;cx.globalAlpha=.4;for(var k=0;k<Math.min(cur.r,6);k++){var ly=y+L*.48+k*L*.08;if(ly>y+L*.9)break;cx.beginPath();cx.moveTo(x+L*.2,ly);cx.lineTo(x+L*.8,ly);cx.stroke()}
+      cx.globalAlpha=1}
+  }
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  function loc(e){var g=geo();return{x:(e.clientX-g.cx)/g.S,y:(e.clientY-g.cy)/g.S,S:g.S}}
+  root.addEventListener('pointerdown',function(e){var p=loc(e),hit=Math.max(.13,30/p.S);
+    if(mode==='idle'&&Math.abs(p.x-tok.x)<hit&&Math.abs(p.y-tok.y)<hit){drag=true;ox=p.x-tok.x;oy=p.y-tok.y;root.setPointerCapture(e.pointerId);root.style.cursor='grabbing';kick()}
+    else if(Math.hypot(p.x,p.y)<WR)tap={x:e.clientX,y:e.clientY}});
+  root.addEventListener('pointermove',function(e){if(!drag)return;var p=loc(e),ux=tok.x,uy=tok.y;
+    tok.x=Math.max(-1.2,Math.min(1.2,p.x-ox));tok.y=Math.max(-1.2,Math.min(1.2,p.y-oy));tok.vx=(tok.x-ux)*.5;tok.vy=(tok.y-uy)*.5;kick()});
+  function up(e){if(drag){drag=false;root.style.cursor='';
+      if(Math.hypot(tok.x,tok.y)<WR)drop();else{tok.tx=RX;tok.ty=RY;tone(330,300,.08)}kick()}
+    else if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)<10&&mode==='idle')inp.click();tap=null}
+  root.addEventListener('pointerup',up);root.addEventListener('pointercancel',function(){drag=false;tap=null;tok.tx=RX;tok.ty=RY;kick()});
+  root.addEventListener('keydown',function(e){var k=e.key,d=.1;
+    if(k==='ArrowLeft'||k==='ArrowRight'||k==='ArrowUp'||k==='ArrowDown'){if(mode!=='idle')return;
+      tok.tx=Math.max(-1,Math.min(1,tok.tx+(k==='ArrowLeft'?-d:k==='ArrowRight'?d:0)));tok.ty=Math.max(-1,Math.min(1,tok.ty+(k==='ArrowUp'?-d:k==='ArrowDown'?d:0)));
+      if(Math.hypot(tok.tx,tok.ty)<WR*.6)drop()}
+    else if(k===' '||k==='Spacebar')drop();
+    else if(k==='Enter'){if(mode==='idle')inp.click()}
+    else if(k==='Escape'){if(mode==='idle'){tok.tx=RX;tok.ty=RY}}
+    else return;e.preventDefault();kick()});
+  inp.addEventListener('change',function(){dropFile(inp.files[0]);inp.value=''});
+  window.addEventListener('dragover',function(e){e.preventDefault()});
+  window.addEventListener('drop',function(e){e.preventDefault();if(e.dataTransfer&&e.dataTransfer.files.length)dropFile(e.dataTransfer.files[0])});
+  new ResizeObserver(function(){draw()}).observe(cv);
+  if(demo)pend.push({t:0,k:0,amb:true},{t:40,k:1,amb:true},{t:80,k:2,amb:true});
+  window.addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,true);document.addEventListener('keydown',stopDemo,true);document.addEventListener('wheel',stopDemo,true);
+  demoT=setInterval(function(){if(!demo||document.hidden||reduce()||drag||mode!=='idle')return;drop()},3200);
+  draw();kick();
+})();</script>
+</body></html>

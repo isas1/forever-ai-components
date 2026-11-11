@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Crate Pagination — swipeable vinyl sleeve strip with sliding pill page indicator.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crate Pagination</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+:root{--cr02-bg:#131316;--cr02-ink:#F1F1F4;--cr02-on:#000;--cr02-mute:#9A9CA6;--cr02-line:#2B2C31;--cr02-cobalt:#7B95C4;--cr02-spr:cubic-bezier(.3,1.45,.5,1);color-scheme:dark}
+:root[data-theme="light"]{--cr02-bg:#EFF0F3;--cr02-ink:#000;--cr02-on:#EFF0F3;--cr02-mute:#5F616B;--cr02-line:#CDCFD8;--cr02-cobalt:#2B4473;color-scheme:light}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--cr02-bg);color:var(--cr02-ink);font:14px/1.3 "Avenir Next",Avenir,system-ui,sans-serif}
+.cr02-stage,.cr02-stage *{box-sizing:border-box}
+.cr02-stage{position:relative;width:100%;height:100%;display:grid;place-items:center;padding:clamp(8px,3vmin,20px);background:var(--cr02-bg);color:var(--cr02-ink)}
+.cr02-stage :focus-visible{outline:2px solid var(--cr02-cobalt);outline-offset:2px}
+.cr02-pg{display:grid;gap:clamp(10px,4vmin,24px);justify-items:center;width:100%}
+.cr02-strip{display:grid;width:min(100%,270px);touch-action:pan-y;cursor:grab}
+.cr02-set{grid-area:1/1;display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(6px,2.2vmin,10px)}
+.cr02-cell,.cr02-art{display:block;width:100%}.cr02-art{aspect-ratio:1;border-radius:2px}
+.cr02-nav{display:flex;align-items:center;gap:4px}
+.cr02-ib{display:inline-grid;place-items:center;flex:none;width:clamp(26px,10vmin,40px);height:clamp(26px,10vmin,40px);border-radius:50%;border:1.5px solid var(--cr02-line);background:none;padding:0;color:inherit;cursor:pointer;transition:border-color .2s,scale .15s,opacity .2s;touch-action:manipulation}
+.cr02-ib:hover{border-color:var(--cr02-ink)}.cr02-ib:active{scale:.9}.cr02-ib[aria-disabled="true"]{opacity:.35;cursor:default;border-color:var(--cr02-line)}
+.cr02-i{display:block;width:clamp(13px,4.5vmin,18px);height:clamp(13px,4.5vmin,18px)}
+.cr02-ol{position:relative;display:flex;gap:2px;list-style:none;margin:0;padding:0}
+.cr02-pbtn{position:relative;width:clamp(21px,8vmin,32px);height:clamp(26px,10vmin,40px);font:inherit;font-size:clamp(11px,3.4vmin,14px);font-weight:600;color:inherit;background:none;border:0;padding:0;cursor:pointer;transition:color .2s;touch-action:manipulation}
+.cr02-num{display:block}.cr02-pbtn[aria-current]{color:var(--cr02-on)}.cr02-pbtn:disabled{color:var(--cr02-mute);cursor:default}
+.cr02-dot{position:absolute;left:0;top:clamp(2.5px,1vmin,4px);width:clamp(21px,8vmin,32px);height:clamp(21px,8vmin,32px);border-radius:50%;background:var(--cr02-ink);transition:transform .4s var(--cr02-spr)}
+.cr02-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.cr02-cap{position:absolute;left:10px;bottom:8px;font:500 11px/1 ui-monospace,monospace;color:var(--cr02-ink);opacity:.45;letter-spacing:.04em;text-transform:uppercase;pointer-events:none;user-select:none}
+@media (prefers-reduced-motion:reduce){.cr02-stage *{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/38-crate-pagination.html",
+ "title": "Crate Pagination",
+ "description": "Swipeable 3-sleeve catalog strip paired with a spring-gliding page pill and compact elliptical page window.",
+ "useWhen": "Paginated catalog strips and multi-page media shelves.",
+ "avoidWhen": "Infinite-scroll feeds or large tables needing page-size controls.",
+ "agentPrompt": "Edit --b/--i/--c/--l tokens in :root and [data-theme=\"light\"].",
+ "editableAreas": [
+  "theme CSS tokens (--b/--i/--c/--l), data arrays & timings"
+ ],
+ "preserveElements": [
+  "IIFE + crNN- prefix, reduced-motion, visibilitychange, theme/demo-v1"
+ ],
+ "knownLimitations": [
+  "Demo state resets on remount"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "pagination",
+  "carousel",
+  "swipe",
+  "navigation",
+  "records",
+  "crate"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="cr02-stage" id="cr02-stage"></div>
+<div class="cr02-cap" aria-hidden="true">Pagination</div>
+<script>(()=>{
+  const s=document.getElementById('cr02-stage');
+  const mq=matchMedia('(prefers-reduced-motion: reduce)');
+  const RM=()=>mq.matches;
+  const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+  const NO={finished:Promise.resolve(),cancel(){}};
+  const anim=(el,kf,o={})=>RM()?NO:el.animate(kf,Object.assign({duration:300,easing:'cubic-bezier(.2,.8,.2,1)'},o));
+  const SPR='cubic-bezier(.3,1.45,.5,1)';
+  const C={p:'#F2F0EA',k:'#0A0A0A',b:'#2B4473',r:'#D5412B',m:'#E2B01A',s:'#5E9470',u:'#5A3A5C'};
+  const ART=[
+    `<rect width="100" height="100" fill="${C.p}"/><circle cx="38" cy="62" r="34" fill="${C.b}"/><rect x="64" y="10" width="8" height="80" fill="${C.k}"/><circle cx="85" cy="18" r="6" fill="${C.r}"/>`,
+    `<rect width="100" height="100" fill="${C.k}"/><rect x="14" y="18" width="14" height="66" fill="${C.m}"/><rect x="36" y="30" width="14" height="54" fill="${C.m}"/><rect x="58" y="42" width="14" height="42" fill="${C.m}"/><circle cx="82" cy="20" r="7" fill="${C.p}"/>`,
+    `<rect width="100" height="100" fill="${C.m}"/><circle cx="50" cy="58" r="30" fill="${C.r}"/><rect y="58" width="100" height="42" fill="${C.p}"/><rect y="68" width="100" height="5" fill="${C.r}"/>`,
+    `<rect width="100" height="100" fill="${C.b}"/><circle cx="32" cy="34" r="14" fill="${C.p}"/><circle cx="68" cy="64" r="14" fill="${C.m}"/>`,
+    `<rect width="100" height="100" fill="${C.p}"/><circle cx="0" cy="100" r="88" fill="${C.k}"/><circle cx="0" cy="100" r="62" fill="${C.r}"/><circle cx="0" cy="100" r="34" fill="${C.p}"/>`,
+    `<rect width="100" height="100" fill="${C.s}"/><path d="M0 100L100 0v100z" fill="${C.p}"/><circle cx="70" cy="70" r="14" fill="${C.k}"/>`
+  ];
+  const art=i=>`<svg class="cr02-art" viewBox="0 0 100 100" aria-hidden="true">${ART[i%ART.length]}</svg>`;
+  const I=d=>`<svg class="cr02-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+  const N=24;let cur=1,slots=0,btns=[],alive=true;
+  s.innerHTML=`<div class="cr02-pg"><div class="cr02-strip" aria-hidden="true"></div><nav class="cr02-nav" aria-label="Pagination"><button type="button" class="cr02-ib" aria-label="Previous page">${I('M15 6l-6 6 6 6')}</button><ol class="cr02-ol"><li class="cr02-dot" role="presentation"></li></ol><button type="button" class="cr02-ib" aria-label="Next page">${I('M9 6l6 6-6 6')}</button></nav><div class="cr02-sr" aria-live="polite"></div></div>`;
+  const ol=s.querySelector('.cr02-ol'),strip=s.querySelector('.cr02-strip'),[prev,next]=[...s.querySelectorAll('.cr02-ib')],dot=s.querySelector('.cr02-dot'),sr=s.querySelector('.cr02-sr');
+  const model=()=>slots===5?(cur<=3?[1,2,3,0,N]:cur>=N-2?[1,0,N-2,N-1,N]:[1,0,cur,0,N]):(cur<=4?[1,2,3,4,5,0,N]:cur>=N-3?[1,0,N-4,N-3,N-2,N-1,N]:[1,0,cur-1,cur,cur+1,0,N]);
+  const paintStrip=(dir,init)=>{
+    const olds=[...strip.children];olds.slice(0,-1).forEach(o=>o.remove());
+    const old=olds[olds.length-1],el=document.createElement('div');
+    el.className='cr02-set';el.innerHTML=[0,1,2].map(j=>`<span class="cr02-cell">${art((cur-1)*3+j)}</span>`).join('');
+    strip.appendChild(el);
+    if(!old)return;if(init||RM()){old.remove();return}
+    anim(old,[{transform:'none',opacity:1},{transform:`translateX(${-dir*36}px)`,opacity:0}],{duration:170,fill:'forwards'}).finished.then(()=>old.remove(),()=>old.remove());
+    [...el.children].forEach((c,j)=>anim(c,[{transform:`translateX(${dir*46}px) rotate(${dir*7}deg)`,opacity:0},{transform:'none',opacity:1}],{duration:400,delay:70+(dir>0?j:2-j)*45,easing:SPR,fill:'backwards'}));
+  };
+  const render=(dir,init)=>{
+    const m=model(),had=ol.contains(document.activeElement);let ai=0;
+    m.forEach((v,i)=>{const b=btns[i],sp=b.firstChild,txt=v?String(v):'…';
+      if(sp.textContent!==txt){sp.textContent=txt;if(!init&&dir)anim(sp,[{transform:`translateY(${dir*80}%)`,opacity:0},{transform:'none',opacity:1}],{duration:320,easing:SPR})}
+      b.dataset.p=String(v);b.disabled=!v;
+      if(v){b.setAttribute('aria-label','Page '+v);b.parentNode.removeAttribute('aria-hidden')}else{b.removeAttribute('aria-label');b.parentNode.setAttribute('aria-hidden','true')}
+      if(v===cur){ai=i;b.setAttribute('aria-current','page')}else b.removeAttribute('aria-current')});
+    const x=btns[ai].parentNode.offsetLeft,same=+dot.dataset.x===x;dot.dataset.x=String(x);
+    if(init){dot.style.transition='none';dot.style.transform=`translateX(${x}px)`;dot.offsetWidth;dot.style.transition=''}else dot.style.transform=`translateX(${x}px)`;
+    if(!init&&dir&&same)anim(dot,[{transform:`translateX(${x}px)`},{transform:`translateX(${x+dir*6}px) scale(1.16,.86)`},{transform:`translateX(${x}px)`}],{duration:300});
+    if(had)btns[ai].focus();
+    prev.setAttribute('aria-disabled',String(cur===1));next.setAttribute('aria-disabled',String(cur===N));
+    paintStrip(dir,init);if(!init)sr.textContent=`Page ${cur} of ${N}`;
+  };
+  const build=n=>{slots=n;btns.forEach(b=>b.parentNode.remove());btns=[...Array(n)].map(()=>{const li=document.createElement('li');li.innerHTML='<button type="button" class="cr02-pbtn"><span class="cr02-num"></span></button>';ol.appendChild(li);return li.firstChild});render(0,true)};
+  const go=p=>{if(!alive)return;p=clamp(p,1,N);if(p===cur)return;const dir=p>cur?1:-1;cur=p;render(dir)};
+  ol.addEventListener('click',e=>{const b=e.target.closest('button');if(b&&+b.dataset.p)go(+b.dataset.p)});
+  prev.onclick=()=>go(cur-1);next.onclick=()=>go(cur+1);
+  s.querySelector('.cr02-nav').addEventListener('keydown',e=>{const k=e.key;if(k==='ArrowLeft')go(cur-1);else if(k==='ArrowRight')go(cur+1);else if(k==='Home')go(1);else if(k==='End')go(N);else return;e.preventDefault()});
+  let sx=null;strip.addEventListener('pointerdown',e=>{sx=e.clientX});strip.addEventListener('pointercancel',()=>sx=null);
+  strip.addEventListener('pointerup',e=>{if(sx===null)return;const dx=e.clientX-sx;sx=null;if(Math.abs(dx)>30)go(cur+(dx<0?1:-1))});
+  const fit=()=>{const n=s.clientWidth>=352?7:5;if(n!==slots)build(n);else render(0,true)};
+  fit();if(typeof ResizeObserver==='function')new ResizeObserver(fit).observe(s);
+
+  let demo=!RM()&&!(window.__foreverPreview&&window.__foreverPreview.demoEnabled===false);
+  let timer=0,kick=0,step=0;const seq=[2,3,5,12,1];
+  const play=()=>{if(!demo||RM()||document.hidden)return;go(seq[step++%seq.length])};
+  const stop=()=>{if(timer){clearInterval(timer);timer=0}if(kick){clearTimeout(kick);kick=0}};
+  const start=()=>{if(!timer&&demo&&!RM())timer=setInterval(play,1350)};
+  const takeover=()=>{demo=false;stop()};
+  window.addEventListener('forever:interactive',takeover);
+  s.addEventListener('pointerdown',takeover,true);
+  s.addEventListener('keydown',takeover,true);
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else if(demo)start()});
+  window.addEventListener('message',e=>{if(e.data&&e.data.type==='forever:theme'&&(e.data.theme==='light'||e.data.theme==='dark'))document.documentElement.setAttribute('data-theme',e.data.theme)});
+  if(demo){kick=setTimeout(play,650);start()}
+})();</script>
+</body>
+</html>

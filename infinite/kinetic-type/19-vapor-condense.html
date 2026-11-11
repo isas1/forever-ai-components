@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="utf-8">
 <meta name="description" content="Teal particle haze drifts and condenses into the crisp word VAPOR, then dissolves back into a soft glowing cloud on a near-black field.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -16,19 +17,20 @@
      JS reads these via syncTheme() and switches to normal blending + more opaque particles in light. */
   :root{
     --vc-bg:#0b0f0e; --vc-bg-rgb:11,15,14; --vc-blend:lighter;
-    --vc-vapor-rgb:80,170,180; --vc-core-rgb:168,230,220; --vc-accent:#a8dadc; --vc-accent-rgb:168,218,220;
+    --vc-vapor-rgb:80,170,180; --kt19-core-rgb:168,230,220; --vc-accent:#a8dadc; --vc-accent-rgb:168,218,220;
     --vc-alpha-boost:0; --cap-o:.34;
   }
   :root[data-theme="light"]{
     --vc-bg:#eef4f3; --vc-bg-rgb:238,244,243; --vc-blend:source-over;
-    --vc-vapor-rgb:69,151,161; --vc-core-rgb:35,123,109; --vc-accent:#237b6d; --vc-accent-rgb:35,123,109;
+    --vc-vapor-rgb:69,151,161; --kt19-core-rgb:35,123,109; --vc-accent:#237b6d; --vc-accent-rgb:35,123,109;
     --vc-alpha-boost:.2; --cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--vc-bg);}
-  #vc-c{display:block;width:100%;height:100%;}
-  .vc-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+  #kt19-c{display:block;width:100%;height:100%;}
+  .kt19-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
        letter-spacing:.16em;color:var(--vc-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+#kt19-c:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -36,7 +38,7 @@
  "title": "Vapor Condense",
  "description": "300 teal particles drift as a glowing haze then gradually condense into the crisp word VAPOR via cosine easing, then dissolve back — looping continuously.",
  "useWhen": "Dark-mode hero sections, loading screens, or ambient brand reveals where a word needs to emerge from atmospheric noise.",
- "avoidWhen": "Light backgrounds (hardcoded dark canvas). Contexts requiring fast legibility — the condense phase takes half the cycle.",
+ "avoidWhen": "Long words that exceed canvas width. Contexts requiring fast legibility — the condense phase takes half the cycle.",
  "agentPrompt": "Change WORD to \"DREAM\", increase N to 450, and shift the teal palette by setting r/g/b base to rgba(120,80,220) in the color calculation. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "word content (WORD constant)",
@@ -47,16 +49,19 @@
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
-  "offscreen canvas pixel-sampling for anchor points",
+  "offscreen word sampling only after positive element layout; ResizeObserver repaint; zero-size mounts sleep",
   "visibilitychange pause/start",
   "prefers-reduced-motion static frame",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space activation and visible focus; manual word/geometry changes finish before the renderer sleeps"
  ],
  "knownLimitations": [
-  "Background color hardcoded to near-black #0b0f0e — must edit CSS to change",
-  "Click resets cycle to t=0 but pointermove nudge effect is very subtle",
-  "No aria label on canvas — purely decorative"
+  "Word-mask shapes depend on the available local monospace font.",
+  "Click switches between haze and condensed word; pointer nudge remains subtle.",
+  "Canvas aria-label names activation; update it when adapting the word.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -80,14 +85,14 @@
 </script>
 </head>
 <body>
-<canvas id="vc-c"></canvas>
-<div class="vc-cap">Vapor Condense</div>
+<canvas id="kt19-c" tabindex="0" role="button" aria-label="Activate kinetic text."></canvas>
+<div class="kt19-cap">Vapor Condense</div>
 <script>
 (function(){
-  const cv=document.getElementById('vc-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('kt19-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const WORD="VAPOR", N=300;   // capped particle count (was 900) — keeps the cloud dense but cheap
-  let W,H,DPR,scale,anchors=[],P=[],t=0,nudge=0;
+  let W,H,DPR,scale,anchors=[],P=[],t=0,nudge=0,ready=false;
   // JS-drawn colours — read from tokens so the additive-glow canvas repaints correctly on theme switch
   const htmlEl=document.documentElement;
   const C={bg:'#0b0f0e',bgRgb:'11,15,14',blend:'lighter',vaporRgb:[80,170,180],coreRgb:[168,230,220],accent:'#a8dadc',accentRgb:'168,218,220',alphaBoost:0};
@@ -98,7 +103,7 @@
     C.bgRgb=(cs.getPropertyValue('--vc-bg-rgb')||'11,15,14').trim();
     C.blend=(cs.getPropertyValue('--vc-blend')||'lighter').trim();
     C.vaporRgb=parseRgb((cs.getPropertyValue('--vc-vapor-rgb')||'80,170,180').trim(),[80,170,180]);
-    C.coreRgb=parseRgb((cs.getPropertyValue('--vc-core-rgb')||'168,230,220').trim(),[168,230,220]);
+    C.coreRgb=parseRgb((cs.getPropertyValue('--kt19-core-rgb')||'168,230,220').trim(),[168,230,220]);
     C.accent=(cs.getPropertyValue('--vc-accent')||'#a8dadc').trim();
     C.accentRgb=(cs.getPropertyValue('--vc-accent-rgb')||'168,218,220').trim();
     C.alphaBoost=parseFloat(cs.getPropertyValue('--vc-alpha-boost'))||0;
@@ -125,22 +130,34 @@
   }
 
   function size(){
-    DPR=Math.min(devicePixelRatio||1,2);
-    W=cv.clientWidth;H=cv.clientHeight;
+    const w=cv.clientWidth,h=cv.clientHeight,dpr=Math.min(devicePixelRatio||1,2);
+    if(!w||!h){ready=false;stop();return false;}
+    if(ready&&w===W&&h===H&&dpr===DPR)return false;
+    ready=true;W=w;H=h;DPR=dpr;
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     scale=Math.min(W,H)/400;
     buildAnchors();
     if(!P.length){for(let i=0;i<N;i++)P.push({x:Math.random()*W,y:Math.random()*H,
       px:Math.random()*W,py:Math.random()*H,ph:Math.random()*6.28,sp:0.6+Math.random()*0.8});}
+    return true;
   }
-  addEventListener('resize',size);
+  function layout(){
+    const first=!P.length;
+    if(!size())return;
+    stop();
+    if(first&&!demo&&!reduce){t=.5;P.forEach((p,i)=>{p.x=anchors[i][0];p.y=anchors[i][1];});}
+    if(reduce||(first&&!demo))paintReduced();else start();
+  }
+  addEventListener('resize',layout);
 
-  cv.addEventListener('pointermove',e=>{nudge=1;});
-  cv.addEventListener('click',()=>{t=0;});
+  cv.addEventListener('pointermove',e=>{nudge=1;if(!demo)start();});
+  cv.addEventListener('click',()=>{takeover();t=(t%1<.25?.5:0);nudge=1.2;if(reduce){for(let i=0;i<P.length;i++){P[i].x=anchors[i][0];P[i].y=anchors[i][1];}frame();}else start();});
 
   // cycle: 0..1 scatter-haze, 1..2 condense-sharp hold, then dissolve back
+  let demo=window.__foreverPreview?.demoEnabled!==false;
   function frame(){
-    t+=reduce?0:0.0052;
+    raf=0;if(document.hidden||!ready)return;
+    if(demo)t+=reduce?0:0.0052;
     nudge*=0.93;
     // phase: smooth gather/scatter via cosine; cond=1 fully formed, 0 fully vapor
     const cyc=t%1;
@@ -150,6 +167,7 @@
     ctx.fillStyle='rgba('+C.bgRgb+',0.28)';ctx.fillRect(0,0,W,H);
     ctx.globalCompositeOperation=C.blend;
 
+    let moving=false;
     const tt=t*60, drift=18*scale*(1-cond)+3*scale;
     for(let i=0;i<N;i++){
       const p=P[i],a=anchors[i];
@@ -162,6 +180,7 @@
             cloudY=a[1]+(Math.sin(p.ph*3)*46*scale)*(1-cond);
       const gx=tx*cond+cloudX*(1-cond), gy=ty*cond+cloudY*(1-cond);
       const ease=0.045+0.08*cond + nudge*0.12;
+      if(Math.abs(gx-p.x)+Math.abs(gy-p.y)>.15)moving=true;
       p.x+=(gx-p.x)*ease; p.y+=(gy-p.y)*ease;
 
       const rad=(1.05 + (1-sharp)*3.7 + nudge*1.5)*scale; // blurred big when vapor, tight when sharp (sized up for lower count)
@@ -173,12 +192,13 @@
       ctx.beginPath();ctx.arc(p.x,p.y,rad,0,6.283);ctx.fill();
     }
     ctx.globalCompositeOperation='source-over';
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(demo||nudge>0.02||moving))raf=requestAnimationFrame(frame);else raf=0;
   }
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(ready&&!raf&&!reduce&&!document.hidden)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   function paintReduced(){
+    if(!ready)return;
     // one static resting frame: fully condensed crisp word
     ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     ctx.globalCompositeOperation=C.blend;
@@ -187,6 +207,8 @@
       ctx.beginPath();ctx.arc(a[0],a[1],1.15*scale,0,6.283);ctx.fill();}
     ctx.globalCompositeOperation='source-over';
   }
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();});
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message',e=>{
@@ -198,8 +220,9 @@
     }
   });
 
-  size();
-  if(reduce){ paintReduced(); } else start();
+  new ResizeObserver(layout).observe(cv);
+  layout();
+  cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();cv.click();}});
 })();
 </script>
 </body>

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Inverted Reading Glass — UI Micro-interactions. A self-contained, zero-dependency animated web component.">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Inverted Reading Glass</title>
@@ -14,7 +15,6 @@
       font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
       cursor: none; /* Hide default cursor */
     }
-
     .glass-cap {
       position: absolute;
       bottom: 16px;
@@ -26,8 +26,7 @@
       letter-spacing: 0.5px;
       z-index: 10;
     }
-
-    .container {
+    .um21-container {
       position: relative;
       width: 100%;
       height: 100%;
@@ -35,8 +34,7 @@
       align-items: center;
       justify-content: center;
     }
-
-    .text-content {
+    .um21-text-content {
       color: #ffffff;
       font-size: clamp(2rem, 6vw, 5rem);
       font-weight: 400;
@@ -47,15 +45,13 @@
       pointer-events: none;
       user-select: none;
     }
-
-    .text-content span {
+    .um21-text-content span {
       display: block;
       color: #333333; /* Dark gray, barely visible against black */
       transition: color 0.5s ease;
     }
-
     /* The reading glass */
-    .lens {
+    .um21-lens {
       position: absolute;
       top: 0;
       left: 0;
@@ -71,18 +67,16 @@
       /* Soft edge */
       box-shadow: 0 0 20px 10px rgba(255,255,255,0.1);
     }
-
     /* Inner ring to look like a glass */
-    .lens::after {
+    .um21-lens::after {
       content: "";
       position: absolute;
       inset: 4px;
       border-radius: 50%;
       border: 1px solid rgba(0, 0, 0, 0.1);
     }
-
     /* Little instruction that fades out */
-    .instruction {
+    .um21-instruction {
       position: absolute;
       top: 20%;
       left: 50%;
@@ -96,34 +90,33 @@
       animation: pulse 2s infinite, fadeOut 5s forwards 3s;
       pointer-events: none;
     }
-
     @keyframes pulse {
       0%, 100% { opacity: 0.3; }
       50% { opacity: 0.7; }
     }
-
     @keyframes fadeOut {
       to { opacity: 0; visibility: hidden; }
     }
-
     @media (prefers-reduced-motion: reduce) {
-      .instruction {
+      .um21-instruction {
         animation: none;
         opacity: 0;
       }
-      .lens {
-        transform: translate(calc(50vw - 50%), calc(50vh - 50%));
+      .um21-lens {
         transition: none;
       }
+      .um21-text-content span { color: inherit; transition: none; }
     }
-  </style>
+  :root[data-preview-taken-over] .um21-instruction,:root[data-preview-taken-over] .um21-lens{animation-play-state:paused!important}
+.um21-text-content{font-size:clamp(16px,6vw,80px)}.um21-container{overflow:hidden}.um21-instruction{font-size:clamp(8px,3vw,14px);white-space:nowrap}
+</style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/ui-microinteractions/21-inverted-reading-glass.html",
  "title": "Inverted Reading Glass",
  "description": "A white circular lens tracks the cursor using mix-blend-mode:difference, inverting text colors beneath it to reveal near-invisible dark text on black.",
  "useWhen": "Hero sections with hidden or low-contrast text that rewards exploration. Interactive art installations or editorial reveals.",
- "avoidWhen": "Contexts requiring legible text at all times — text is nearly invisible without the lens. Touch-only devices get limited experience (auto-orbit fallback is narrow).",
+ "avoidWhen": "Contexts requiring legible text without interaction. Touch drag explores the lens; reduced motion reveals all text and moves the lens without easing.",
  "agentPrompt": "Change the lens size from clamp(150px, 20vw, 250px) to clamp(80px, 12vw, 140px) and set the lerp factor from 0.15 to 0.08 for a heavier lag effect.",
  "editableAreas": [
   "lens diameter (clamp(150px, 20vw, 250px))",
@@ -136,12 +129,14 @@
   "mix-blend-mode: difference on .lens",
   "IIFE wrapper",
   "visibilitychange stop/start",
-  "prefersReducedMotion guard"
+  "prefersReducedMotion guard",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Text is nearly invisible without interaction — not accessible as standalone content",
-  "Reduced-motion mode freezes lens at center with no fallback reveal",
-  "Auto-orbit loop runs a second rAF loop alongside animate() — two concurrent rAF chains"
+  "Reduced motion reveals all text; deliberate input moves the lens immediately without ambient motion.",
+  "Auto-orbit loop runs a second rAF loop alongside animate() — two concurrent rAF chains",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -165,92 +160,77 @@
 </script>
 </head>
 <body>
-
-  <div class="container" id="container">
-    <div class="instruction">Seek to Reveal</div>
-    <div class="text-content">
+  <div class="um21-container" id="um21-container">
+    <div class="um21-instruction">Seek to Reveal</div>
+    <div class="um21-text-content">
       <span>The essential things</span>
       <span>are invisible</span>
       <span>to the eyes.</span>
     </div>
-    <div class="lens" id="lens"></div>
+    <div class="um21-lens" id="um21-lens"></div>
   </div>
-
   <div class="glass-cap">Inverted Reading Glass</div>
-
   <script>
     (() => {
-      const lens = document.getElementById('lens');
-      const container = document.getElementById('container');
+      const lens = document.getElementById('um21-lens');
+      const container = document.getElementById('um21-container');
       const prefersReducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      
       let isRunning = true;
       let targetX = window.innerWidth / 2;
       let targetY = window.innerHeight / 2;
       let currentX = window.innerWidth / 2;
       let currentY = window.innerHeight / 2;
-      let animationFrame;
-
+      let animationFrame, demoEnabled=window.__foreverPreview?.demoEnabled!==false;
       const lerp = (start, end, factor) => start + (end - start) * factor;
-
       const handleMove = (e) => {
-        if (!isRunning || prefersReducedMotion) return;
+        if (!isRunning) return;
         targetX = e.clientX ?? e.touches[0].clientX;
         targetY = e.clientY ?? e.touches[0].clientY;
+        if (prefersReducedMotion) {
+          currentX = targetX; currentY = targetY;
+          lens.style.setProperty('--x', `${currentX}px`); lens.style.setProperty('--y', `${currentY}px`);
+          return;
+        }
+        if(!animationFrame)animate();
       };
-
       const animate = () => {
         if (!isRunning || prefersReducedMotion) return;
-        
         currentX = lerp(currentX, targetX, 0.15);
         currentY = lerp(currentY, targetY, 0.15);
-        
         lens.style.setProperty('--x', `${currentX}px`);
         lens.style.setProperty('--y', `${currentY}px`);
-        
-        animationFrame = requestAnimationFrame(animate);
+        if(demoEnabled||Math.abs(currentX-targetX)+Math.abs(currentY-targetY)>.5)animationFrame=requestAnimationFrame(animate);else animationFrame=0;
       };
-
       const start = () => {
-        if (!isRunning && !prefersReducedMotion) {
+        if (!isRunning) {
           isRunning = true;
-          animate();
+          if (!prefersReducedMotion) animate();
         }
       };
-
       const stop = () => {
         isRunning = false;
         cancelAnimationFrame(animationFrame);
       };
-
-      document.addEventListener('visibilitychange', () => {
-        document.hidden ? stop() : start();
-      });
-
+      function takeover(){demoEnabled=false;document.documentElement.dataset.previewTakenOver='';}
+      if(!demoEnabled)document.documentElement.dataset.previewTakenOver='';
+      window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();},{once:true});
+      document.addEventListener('visibilitychange', () => { document.hidden ? stop() : start(); });
       window.addEventListener('mousemove', handleMove);
       window.addEventListener('touchmove', handleMove);
-      
+      window.addEventListener('pointerdown', handleMove);
       // Auto-move slightly for preview if not interacted
       let interactionStarted = false;
       window.addEventListener('mousemove', () => interactionStarted = true, { once: true });
       window.addEventListener('touchstart', () => interactionStarted = true, { once: true });
-
       const autoMove = (timestamp) => {
         if (!interactionStarted && !prefersReducedMotion && isRunning) {
           const radius = Math.min(window.innerWidth, window.innerHeight) * 0.1;
           targetX = window.innerWidth / 2 + Math.cos(timestamp * 0.001) * radius;
           targetY = window.innerHeight / 2 + Math.sin(timestamp * 0.0015) * radius * 0.5;
         }
-        if (isRunning) {
-          requestAnimationFrame(autoMove);
-        }
+        if (isRunning && demoEnabled) requestAnimationFrame(autoMove);
       };
-
-      if (!prefersReducedMotion) {
-        animate();
-        requestAnimationFrame(autoMove);
-      }
-      
+      if (!prefersReducedMotion && demoEnabled) { animate(); requestAnimationFrame(autoMove); }
       window.start = start;
       window.stop = stop;
     })();

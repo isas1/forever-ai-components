@@ -5,9 +5,10 @@
 <meta name="description" content="A teal neon floor-and-ceiling grid tunnel rushing toward a glowing vanishing-point core with horizon haze and vignette on near-black.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Vanishing Point Grid</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#070b14;}
-  #vpg{display:block;width:100%;height:100%;}
+  #cg14-vpg{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
        letter-spacing:.14em;color:#2dd4bf;opacity:.34;text-transform:uppercase;
        pointer-events:none;user-select:none;}
@@ -31,12 +32,14 @@
   "gradients rebuilt on resize only (hazeGrad, coreGrad, vignGrad)",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#070b14) — must change both CSS and canvas fill to retheme",
   "No reduced-motion fallback animation — shows a single static dark frame",
-  "Pointer boost decays but never fully resets until next pointermove"
+  "Pointer boost decays but never fully resets until next pointermove",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -59,12 +62,18 @@
 </script>
 </head>
 <body>
-<canvas id="vpg"></canvas>
+<canvas id="cg14-vpg" class="cg14-root"></canvas>
 <div class="cap">Vanishing Point Grid</div>
 <script>
 (function(){
-  const cv=document.getElementById('vpg'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('cg14-vpg'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
   let W,H,DPR,cx,cy,unit;
   // size-dependent gradients are rebuilt only on resize, never per frame.
   let hazeGrad,coreGrad,vignGrad,coreR;
@@ -127,7 +136,7 @@
   }
 
   function frame(){
-    if(!reduce){ boost*=0.93; z+=speed*(1+boost*2.2); }
+    if(demo){ boost*=0.93; z+=speed*(1+boost*2.2); }else if(performance.now()<interactionUntil){boost*=0.93;z+=speed*(1+boost*2.2);}
     // trail fade -> motion blur down the tunnel
     ctx.fillStyle='rgba(7,11,20,0.34)';ctx.fillRect(0,0,W,H);
 
@@ -144,13 +153,13 @@
     // edge vignette to seat the tunnel (gradient cached in size())
     ctx.fillStyle=vignGrad;ctx.fillRect(0,0,W,H);
 
-    if(!reduce) raf=requestAnimationFrame(frame);
+    if(!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);else raf=0;
   }
   let raf=0;
-  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){ ctx.fillStyle='#070b14';ctx.fillRect(0,0,W,H);frame(); }else start();
+  if(reduce||!demo){ ctx.fillStyle='#070b14';ctx.fillRect(0,0,W,H);frame(); }else start();
 })();
 </script>
 </body>

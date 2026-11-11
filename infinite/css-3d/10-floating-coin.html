@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block */
@@ -29,23 +30,23 @@
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c10-bg);
     font-family:system-ui,-apple-system,sans-serif;}
-  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  #fc10-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:800px;}
-  #wrap{transform-style:preserve-3d;}
-  #coin{position:relative;width:34vmin;height:34vmin;transform-style:preserve-3d;}
-  .face{position:absolute;inset:0;border-radius:50%;backface-visibility:hidden;
+  #fc10-wrap{transform-style:preserve-3d;}
+  #fc10-coin{position:relative;width:34vmin;height:34vmin;transform-style:preserve-3d;}
+  .fc10-face{position:absolute;inset:0;border-radius:50%;backface-visibility:hidden;
     display:flex;align-items:center;justify-content:center;
     background:var(--c10-face);
     box-shadow:inset 0 0 0 1.4vmin var(--c10-rim), inset 0 0 5vmin var(--c10-rim-shade);}
-  .front span{font-size:16vmin;font-weight:800;color:var(--c10-ink);
+  .fc10-front span{font-size:16vmin;font-weight:800;color:var(--c10-ink);
     text-shadow:0 1px 0 var(--c10-emboss);}
-  .back{transform:rotateY(180deg);}
-  .back span{font-size:9vmin;color:var(--c10-ink);text-shadow:0 1px 0 var(--c10-emboss);}
-  .edge{position:absolute;left:50%;top:0;width:2vmin;height:100%;
+  .fc10-back{transform:rotateY(180deg);}
+  .fc10-back span{font-size:9vmin;color:var(--c10-ink);text-shadow:0 1px 0 var(--c10-emboss);}
+  .fc10-edge{position:absolute;left:50%;top:0;width:2vmin;height:100%;
     transform-style:preserve-3d;}
-  #shadow{position:absolute;bottom:14%;left:50%;width:24vmin;height:4vmin;
+  #fc10-shadow{position:absolute;bottom:14%;left:50%;width:24vmin;height:4vmin;
     transform:translateX(-50%);border-radius:50%;
-    background:radial-gradient(ellipse,var(--c10-cast),transparent 70%);filter:blur(2px);}
+    background:radial-gradient(ellipse,var(--c10-cast),transparent 70%);}
   .cap{position:fixed;left:10px;bottom:8px;color:var(--c10-cap);opacity:var(--c10-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
@@ -70,12 +71,14 @@
   "visibilitychange stop/start pair",
   "transform-style:preserve-3d on #coin and #wrap",
   "backface-visibility:hidden on .face",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Coin size in vmin — may appear too large on ultra-wide viewports",
   "No click interactivity; pointer only affects spin speed, not state",
-  "Background color hardcoded in CSS body rule"
+  "Background color hardcoded in CSS body rule",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -100,40 +103,48 @@
 </script>
 </head>
 <body>
-<div id="stage">
-  <div id="shadow"></div>
-  <div id="wrap"><div id="coin">
-    <div class="face front"><span>★</span></div>
-    <div class="face back"><span>3D</span></div>
+<div id="fc10-stage">
+  <div id="fc10-shadow"></div>
+  <div id="fc10-wrap"><div id="fc10-coin">
+    <div class="fc10-face fc10-front"><span>★</span></div>
+    <div class="fc10-face fc10-back"><span>3D</span></div>
   </div></div>
 </div>
 <div class="cap">Floating Coin</div>
 <script>
 (function(){
-  const coin=document.getElementById('coin');
-  const wrap=document.getElementById('wrap');
-  const shadow=document.getElementById('shadow');
+  const coin=document.getElementById('fc10-coin');
+  const wrap=document.getElementById('fc10-wrap');
+  const shadow=document.getElementById('fc10-shadow');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let ry=0,t=0,raf,interacted=false,spin=1.6;
+  let ry=0,t=0,raf,interacted=false,spin=1.6,demo=window.__foreverPreview?.demoEnabled!==false,interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
   function loop(){
-    t+=0.03; ry+=spin;
+    if(demo)t+=0.03;
+    if(demo||performance.now()<interactionUntil)ry+=spin;
     const bob=Math.sin(t)*4;
     wrap.style.transform=`translateY(${bob}vmin)`;
     coin.style.transform=`rotateX(8deg) rotateY(${ry}deg)`;
     shadow.style.transform=`translateX(-50%) scale(${1-bob*0.02})`;
     shadow.style.opacity=(0.5-bob*0.03).toFixed(2);
-    raf=requestAnimationFrame(loop);
+    if(demo||performance.now()<interactionUntil)raf=requestAnimationFrame(loop);else raf=0;
   }
   addEventListener('pointermove',e=>{interacted=true;
-    spin=1.6+(e.clientX/innerWidth-.5)*6;});
-  function start(){if(!raf&&!reduce)loop();}
+    spin=1.6+(e.clientX/innerWidth-.5)*6;
+    if(reduce){ry+=spin;coin.style.transform=`rotateX(8deg) rotateY(${ry}deg)`;}
+  });
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message',e=>{const d=e.data;
     if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))
       document.documentElement.setAttribute('data-theme',d.theme);});
-  if(reduce){coin.style.transform='rotateX(8deg) rotateY(28deg)';}else start();
+  if(reduce||!demo){coin.style.transform='rotateX(8deg) rotateY(28deg)';}else start();
 })();
 </script>
 </body>

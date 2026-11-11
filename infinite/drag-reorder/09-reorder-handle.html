@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A vertical list of dark rows with grip handles that lift, glow cyan and spring into place when dragged or arrow-keyed to reorder.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Drag Handle</title>
@@ -28,12 +29,12 @@
   .dr09-row.dr09-lift .dr09-dot{background:var(--dr09-accent)}
   .dr09-body{flex:1 1 auto;padding:0 13px;min-width:0;display:flex;align-items:center;gap:11px}
   .dr09-num{flex:0 0 auto;width:20px;height:20px;border-radius:5px;display:flex;align-items:center;
-    justify-content:center;font-size:10px;font-weight:700;color:var(--dr09-bg);background:var(--dr09-accent)}
+    justify-content:center;font-size:12px;font-weight:700;color:var(--dr09-bg);background:var(--dr09-accent)}
   .dr09-bar{flex:1 1 auto;height:7px;border-radius:4px;background:var(--dr09-line)}
   .dr09-row.dr09-lift .dr09-bar{background:var(--dr09-bar-lift)}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;color:var(--cap);
     opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
-  .dr09-hint{position:fixed;right:8px;bottom:7px;font:600 9px/1 ui-monospace,Menlo,monospace;
+  .dr09-hint{position:fixed;right:8px;bottom:7px;font:600 12px/1 ui-monospace,Menlo,monospace;
     color:var(--dr09-accent);opacity:.5;letter-spacing:.1em;text-transform:uppercase;user-select:none}
   #dr09-list:focus-visible{box-shadow:0 0 0 2px var(--dr09-accent),0 0 0 6px var(--dr09-focus-glow);border-radius:10px}
   /* prefers-reduced-motion: JS paints one static frame, no rAF loop */
@@ -45,15 +46,15 @@
  "description": "5 dark rows with grip handles spring-animate to new positions when dragged or arrow-keyed; the lifted row glows cyan and scales up slightly.",
  "useWhen": "Settings panels, playlist editors, priority queues, or any sortable list needing tactile drag-to-reorder with keyboard accessibility.",
  "avoidWhen": "Lists longer than ~10 items (absolute positioning covers full height). Touch-only contexts where pointer capture may conflict with scroll.",
- "agentPrompt": "Change accent color to purple (#a855f7), increase row height (ROWH) to 56, and add a 6th row by setting N=6 and extending the order array. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Change accent color to dusty clay (#9b6450), increase the maximum row height in measure() from 44 to 56, keeping the available-height fit, and add a 6th row by setting N=6 and extending the order array. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--dr09-accent)",
   "row count (N=5)",
-  "row height (ROWH=44)",
+  "responsive row height (measure() caps ROWH at 44)",
   "spring stiffness (K=0.18) and damping (D=0.74)",
-  "demo idle timeout (3400ms)",
+  "idle demo cadence while demoEnabled; first deliberate input disables it permanently",
   "bar widths (52+i*9)%",
-  "idle demo cadence (D_FIRST=300 / D_WAIT=1480 / D_LIFT=500 / D_REST=520 ms, resume IDLE_BACK=3400 ms)",
+  "idle demo cadence (D_FIRST=300 / D_WAIT=1480 / D_LIFT=500 / D_REST=520 ms,)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -62,11 +63,13 @@
   "visibilitychange pause/resume",
   "pointerCapture for reliable drag tracking",
   "idle demo hop (the same move routine the drag/keyboard path uses; real input takes over)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Row count is fixed at build time — dynamic add/remove requires structural changes",
-  "Drag handle covers entire row, not just the grip icon — fine for demos but may conflict with row-level click handlers in production"
+  "Drag handle covers entire row, not just the grip icon — fine for demos but may conflict with row-level click handlers in production",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -93,12 +96,18 @@
 <body>
 <div id="dr09-stage">
   <div id="dr09-list" role="listbox" tabindex="0" aria-label="Reorderable list. Use arrow keys to move the selected row."></div>
+  <div class="dr09-hint" aria-hidden="true">drag / ↑ ↓</div>
 </div>
 <div class="cap">Drag Handle</div>
-<div class="dr09-hint" aria-hidden="true">drag / ↑ ↓</div>
 <script>
 (function(){
   "use strict";
+  function wake(){if(document.hidden)return;running=true;if(reduce){for(var i=0;i<N;i++){curY[i]=tgtY[i];vel[i]=0;}liftAmt=liftTgt;paint();}else if(!raf)raf=requestAnimationFrame(frame);}
+  ['pointerdown','pointermove','pointerup','pointercancel','keydown','keyup'].forEach(type=>document.addEventListener(type,wake));
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   var reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
   var list = document.getElementById('dr09-list');
   var N = 5, GAP = 9, ROWH = 44;
@@ -137,7 +146,8 @@
     for(var s=0;s<N;s++){ tgtY[order[s]] = slotY(s); }
     rows.forEach(function(r,idx){ r.el.setAttribute('aria-selected', slotOf(idx)===sel?'true':'false'); });
   }
-  renumber(); retarget();
+  function measure(){GAP=Math.min(9,document.getElementById('dr09-stage').clientHeight*.025);ROWH=Math.min(44,Math.max(20,(document.getElementById('dr09-stage').clientHeight*.8-(N-1)*GAP)/N));rows.forEach(r=>r.el.style.setProperty('--dr09-h',ROWH+'px'));list.style.height=(N*ROWH+(N-1)*GAP)+'px';retarget();for(var i=0;i<N;i++){curY[i]=tgtY[i];vel[i]=0;}paint();}
+  renumber();measure();addEventListener('resize',measure);
 
   function moveSlot(a,b){   // element at slot a -> slot b
     if(a===b||b<0||b>=N) return;
@@ -146,7 +156,7 @@
 
   // ---- self-demo: nobody drags a tile on the wall, so the list hops a row one slot by itself,
   // through the same moveSlot() the handle and keys use. Fixed pairs alternate direction.
-  var demo = !reduce, phase=0, demoEl=0, demoDir=1, HOP=[[1,1],[3,-1],[0,1],[4,-1]], hopI=0;
+  var demo = demoEnabled&&!reduce, phase=0, demoEl=0, demoDir=1, HOP=[[1,1],[3,-1],[0,1],[4,-1]], hopI=0;
   var D_WAIT=1480, D_LIFT=500, D_REST=520, D_FIRST=300, IDLE_BACK=3400;   // ms — a hop per ~2.5s
   var demoT=D_WAIT-D_FIRST;    // first lift ~0.3s in, dropped by ~0.8s
   function startHop(){
@@ -214,7 +224,7 @@
     moveSlot(sel,ns); sel=ns;
     clearTimeout(kbTimer);
     kbTimer=setTimeout(function(){
-      rows[el].el.classList.remove('dr09-lift'); lift=-1; liftTgt=0;
+      rows[el].el.classList.remove('dr09-lift');lift=-1;liftTgt=0;wake();
     },260);
   });
   list.addEventListener('blur',function(){ idleAt=performance.now(); });
@@ -223,17 +233,16 @@
   // ---- loop ----
   var raf=0, running=true, last=0;
   function frame(t){
-    if(!running)return;
+    raf=0;if(!running||document.hidden)return;
     if(!last)last=t; var dt=t-last; last=t;
-    if(!demo && performance.now()-idleAt>IDLE_BACK && dragging<0){ demo=true; demoT=D_WAIT-D_FIRST; phase=0; }
-    if(demo){
+    if(demoEnabled&&!reduce&&demo){
       demoT+=dt;
       if(phase===0 && demoT>D_WAIT){ startHop(); phase=1; demoT=0; }
       else if(phase===1 && demoT>D_LIFT){ endHop(); phase=2; demoT=0; }
       else if(phase===2 && demoT>D_REST){ phase=0; demoT=0; }
     }
     step(); paint();
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&((demoEnabled&&demo)||dragging>=0||curY.some((v,i)=>Math.abs(v-tgtY[i])>.02)||vel.some(v=>Math.abs(v)>.02)||Math.abs(liftAmt-liftTgt)>.001))wake();
   }
 
   if(reduce){

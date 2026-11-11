@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Five glass tiles in a dock that tilt in 3D toward the pointer, the nearest lifting and catching a moving sheen; a virtual pointer sweeps the dock when nobody is over it.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tilt Dock</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --bg:#0d0f16; --glow:rgba(240,106,155,.16);
+    --dock-bg:rgba(30,34,52,.9); --dock-hl:rgba(255,255,255,.07); --border:rgba(255,255,255,.08);
+    --shadow:0 18px 50px -24px rgba(0,0,0,.9);
+    --item-sh:rgba(0,0,0,.65); --sheen:rgba(255,255,255,.55); --edge:rgba(255,255,255,.25);
+    --cap:#fff; --cap-o:.28;
+    --g1:linear-gradient(150deg,#F06A9B,#9c1f4f);
+    --g2:linear-gradient(150deg,#5FB7A1,#2c7a66);
+    --g3:linear-gradient(150deg,#f4f6fb,#9aa1bd);
+    --g4:linear-gradient(150deg,#4FB3F0,#1c6ea8);
+    --g5:linear-gradient(150deg,#F06A9B,#E8AB30);
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow:rgba(176,36,92,.10);
+    --dock-bg:rgba(255,255,255,.92); --dock-hl:rgba(255,255,255,.85); --border:rgba(0,0,0,.08);
+    --shadow:0 18px 40px -24px rgba(0,0,0,.18);
+    --item-sh:rgba(0,0,0,.22); --sheen:rgba(255,255,255,.75); --edge:rgba(255,255,255,.55);
+    --cap:#3a0f22; --cap-o:.5;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(60vw 40vw at 50% 110%,var(--glow),transparent 60%);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    display:grid;place-items:center;
+  }
+  .c16-dock{
+    --sz:clamp(32px,14vmin,48px);
+    display:flex;align-items:flex-end;gap:clamp(6px,2.5vmin,10px);padding:12px 12px;
+    background:var(--dock-bg);border:1px solid var(--border);border-radius:16px;
+    box-shadow:inset 0 1px 0 var(--dock-hl),var(--shadow);
+    perspective:260px;
+  }
+  .c16-item{
+    --rx:0deg; --ry:0deg; --z:0px; --sx:50%; --sy:35%;
+    position:relative;width:var(--sz);height:var(--sz);flex:0 0 auto;
+    border-radius:calc(var(--sz) * .27);
+    transform:translateZ(var(--z)) rotateX(var(--rx)) rotateY(var(--ry));
+    transform-style:preserve-3d;
+    box-shadow:0 6px 14px -5px var(--item-sh),inset 0 1px 0 var(--edge);
+    transition:transform 140ms cubic-bezier(.22,1,.36,1);will-change:transform;
+  }
+  .c16-item:nth-child(1){background:var(--g1)}
+  .c16-item:nth-child(2){background:var(--g2)}
+  .c16-item:nth-child(3){background:var(--g3)}
+  .c16-item:nth-child(4){background:var(--g4)}
+  .c16-item:nth-child(5){background:var(--g5)}
+  /* the sheen: a highlight that sits where the light would, following the tilt */
+  .c16-item::after{
+    content:"";position:absolute;inset:0;border-radius:inherit;
+    background:radial-gradient(circle at var(--sx) var(--sy),var(--sheen),transparent 46%);
+    opacity:.85;mix-blend-mode:screen;pointer-events:none;
+  }
+  .c16-cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
+  @media (prefers-reduced-motion:reduce){.c16-item{transition:none}}
+@media(max-width:220px){.c16-dock{--sz:26px;gap:4px;padding:8px}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/16-tilt-dock.html",
+ "title": "Tilt Dock",
+ "description": "Five glass tiles in a dock that rotate in 3D toward the pointer — up to 34° on the far ones, the nearest lifting 22px toward you — with a sheen that slides across each face as it turns; a virtual pointer sweeps the row in a slow figure when nobody is over it.",
+ "useWhen": "Launchers and hero navs that want tactile depth without magnification; showcases for a small set of apps or tools.",
+ "avoidWhen": "Touch-only interfaces (nothing to tilt toward) and busy backgrounds where the sheen reads as glare.",
+ "agentPrompt": "Tame the effect by lowering MAX_Y (34) and LIFT (22); widen the reach with RANGE (1.6 item-widths); change the tile colours through --g1…--g5; kill the sheen by removing the .c16-item::after rule. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "tilt limits and lift (MAX_Y, MAX_X, LIFT)",
+  "reach (RANGE) and perspective (260px on .c16-dock)",
+  "sheen strength (--sheen) and its radius (46%)",
+  "sweep speed (the 0.9 and 1.7 in loop())",
+  "tile gradients (--g1…--g5) and size (--sz clamp)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "measure() caching centres on load + resize (never getBoundingClientRect per frame)",
+  "update() writing only custom properties (transform + gradient position resolve in CSS)",
+  "IIFE wrapper",
+  "visibilitychange stop/start of the rAF loop",
+  "prefers-reduced-motion guard (a still lit pose)",
+  "lastInput pause so the sweep never fights the real pointer",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "Pointer-only — no touch equivalent; the sweep is what mobile visitors see",
+  "mix-blend-mode:screen on the sheen is a per-tile compositing cost; drop it on very low-end targets",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "dock",
+  "tilt",
+  "3d",
+  "perspective",
+  "sheen",
+  "navigation",
+  "parallax",
+  "pointer"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="c16-dock" id="c16-dock" role="img" aria-label="A dock of five tiles tilting toward the pointer">
+  <div class="c16-item"></div><div class="c16-item"></div><div class="c16-item"></div><div class="c16-item"></div><div class="c16-item"></div>
+</div>
+<div class="c16-cap">Tilt Dock</div>
+<script>
+(function(){
+  var dock=document.getElementById('c16-dock');
+  if(!dock)return;
+  var items=Array.prototype.slice.call(dock.querySelectorAll('.c16-item'));
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
+  var MAX_Y=34,MAX_X=16,LIFT=22,RANGE=1.6;      /* degrees, px, and reach in item-widths */
+  /* geometry cached once and on resize — never measured per frame */
+  var centers=[],cy=0,dockLeft=0,dockWidth=0,itemW=1;
+  function measure(){
+    var dr=dock.getBoundingClientRect();dockLeft=dr.left;dockWidth=dr.width;
+    centers=items.map(function(it){var r=it.getBoundingClientRect();itemW=r.width;cy=r.top+r.height/2;return r.left+r.width/2;});
+  }
+  function update(x,y){
+    var dy=Math.max(-1,Math.min(1,(y-cy)/(itemW*1.5)));
+    items.forEach(function(it,i){
+      var dx=(x-centers[i])/(itemW*RANGE);                 /* -1..1 across the reach */
+      var near=Math.max(0,1-Math.abs(dx));
+      var ry=Math.max(-MAX_Y,Math.min(MAX_Y,dx*MAX_Y));
+      it.style.setProperty('--ry',ry.toFixed(1)+'deg');
+      it.style.setProperty('--rx',(-dy*MAX_X*near).toFixed(1)+'deg');
+      it.style.setProperty('--z',(near*LIFT).toFixed(1)+'px');
+      it.style.setProperty('--sx',(50-dx*45).toFixed(0)+'%');
+      it.style.setProperty('--sy',(35-dy*30).toFixed(0)+'%');
+    });
+  }
+  measure();
+  window.addEventListener('resize',measure);
+  var lastInput=0;
+  dock.addEventListener('mousemove',function(e){lastInput=Date.now();update(e.clientX,e.clientY);});
+  /* autonomous idle: a virtual pointer sweeps the dock in a slow figure — the real
+     pointer takes over on entry and the sweep resumes a few seconds after it leaves */
+  var raf=0,t0=null,demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function loop(ts){
+    if(!demoEnabled)return;
+    raf=requestAnimationFrame(loop);
+    if(Date.now()-lastInput<2600){t0=null;return;}
+    if(t0===null)t0=ts;
+    var el=(ts-t0)/1000;
+    var x=dockLeft+dockWidth*(0.5+0.5*Math.sin(el*0.9));
+    var y=cy+itemW*0.9*Math.sin(el*1.7);
+    update(x,y);
+  }
+  function takeover(){demoEnabled=false;if(raf){cancelAnimationFrame(raf);raf=0;}}
+  window.addEventListener("forever:interactive",takeover);dock.addEventListener("pointerdown",takeover,true);dock.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  function start(){
+    if(reduce){update(dockLeft+dockWidth*0.62,cy-itemW*0.4);return;}   /* a still, lit pose */
+    if(demoEnabled&&!raf){t0=null;raf=requestAnimationFrame(loop);}
+  }
+  function stop(){if(raf){cancelAnimationFrame(raf);raf=0;}}
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  start();
+})();
+</script>
+</body>
+</html>

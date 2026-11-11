@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Animated 16-bit LFSR diagram: lit bit cells shift right, XOR tap wires feed a pulse along the feedback rail with hex clock readout.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shift Register LFSR</title>
@@ -11,6 +12,7 @@
   .lfsr-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
        letter-spacing:.16em;color:#a6ff00;opacity:.34;text-transform:uppercase;
        pointer-events:none;user-select:none;}
+#lfsr-c:focus-visible{outline:2px solid #afcf66;outline-offset:-4px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -31,11 +33,13 @@
   "IIFE wrapper",
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause/resume",
-  "DPR-aware canvas sizing"
+  "DPR-aware canvas sizing",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "TAPS array must be a valid maximal-length polynomial for the chosen N — wrong taps produce short cycles",
-  "Click advances the register by one clock tick but also nudges scroll, coupling two concerns"
+  "Click advances the register by one clock tick but also nudges scroll, coupling two concerns",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -59,10 +63,14 @@
 </script>
 </head>
 <body>
-<canvas id="lfsr-c"></canvas>
+<canvas class="lfsr-root" role="button" tabindex="0" aria-label="Clock shift register one step" id="lfsr-c"></canvas>
 <div class="lfsr-cap">Shift Register LFSR</div>
 <script>
 (function(){
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   const cv=document.getElementById('lfsr-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const BG='#0a0f0a',AC='#a6ff00';
@@ -80,14 +88,14 @@
     oy=cellY; wireY=cellY-cell*0.55; railY=cellY+cell+cell*0.5;
   }
   addEventListener('resize',size);size();
-  function clock(){
+  function clock(){tick++;
     let b=0;for(const t of TAPS)b^=(reg>>(t-1))&1;
     reg=((reg<<1)|b)&0xFFFF;
     bits.push(reg&1); if(bits.length>N*3)bits.shift();
     fb=b; pulse=1;
   }
-  cv.addEventListener('pointermove',()=>{if(!reduce){scroll+=0.6;}});
-  cv.addEventListener('click',()=>{if(!reduce){clock();scroll+=1;}});
+  cv.addEventListener('pointermove',()=>{scroll+=.6;wake();});
+  function userClock(){clock();scroll+=1;wake();}cv.addEventListener('click',userClock);cv.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();userClock();}});
   function draw(){
     ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
     const tapX=[];
@@ -181,16 +189,17 @@
     ctx.textAlign='left';
   }
   let raf=0,acc=0,last=0;
-  function frame(ts){
+  function frame(ts){raf=0;if(document.hidden)return;
     if(!last)last=ts;const dt=Math.min(ts-last,60);last=ts;
-    scroll+=dt*0.0016;pulse*=Math.pow(0.9,dt*0.06);
+    if(demoEnabled)scroll+=dt*.0016;pulse*=Math.pow(0.9,dt*0.06);
     acc+=dt;
-    if(acc>=420){acc-=420;clock();tick++;}
+    if(demoEnabled&&acc>=420){acc-=420;clock();}
     draw();
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(demoEnabled||pulse>.005))start();
   }
-  function start(){if(!raf&&!reduce){last=0;raf=requestAnimationFrame(frame);}}
-  function stop(){cancelAnimationFrame(raf);raf=0;}
+  function wake(){if(document.hidden)return;if(reduce)draw();else start();}
+  function start(){if(!raf&&!reduce&&!document.hidden)raf=requestAnimationFrame(frame);}
+  function stop(){cancelAnimationFrame(raf);raf=0;last=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){pulse=0.4;draw();}else start();
 })();

@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A tick-marked ring fills as you press and hold; a center square rotates 45deg into a green check, or flashes a red cross on abort.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Hold to Confirm</title>
@@ -34,7 +35,7 @@
   "abort color (#f43f5e)",
   "ring radius (R=W*0.30)",
   "tick mark count (i<24)",
-  "demo idle timeout (idle>3600)",
+  "idle demo cadence while demoEnabled; first deliberate input disables it permanently",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -42,12 +43,14 @@
   "visibilitychange pause/resume",
   "reduced-motion static frame fallback",
   "aria-live region for screen-reader announcements",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Hold physics blends spring + linear — changing HOLD_MS without tuning spring constants may feel off",
-  "Auto-demo cycles continuously; remove demoStep() call before shipping in production",
-  "Background hardcoded to #0b0d12 in both CSS and canvas fill — must update both"
+  "First deliberate input permanently disables idle demo; manual input, finite feedback and settling remain active. Host demoEnabled=false skips the initial attract cycle.",
+  "Background hardcoded to #0b0d12 in both CSS and canvas fill — must update both",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -76,11 +79,16 @@
   <button id="fb05-btn" tabindex="0" aria-label="Hold to confirm. Press and hold to commit the action.">
     <canvas id="fb05-c" width="640" height="640"></canvas>
   </button>
-  <span id="fb05-live" class="fb05-sr" role="status" aria-live="polite"></span>
+  <span data-fit-clip-ok id="fb05-live" class="fb05-sr" role="status" aria-live="polite"></span>
 </div>
 <div class="cap">Hold to Confirm</div>
 <script>
 (function(){
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   "use strict";
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var c=document.getElementById('fb05-c'),ctx=c.getContext('2d');
@@ -110,7 +118,7 @@
   var flash=0;
   var pulse=0;
   var userHold=false;
-  var demo=true,demoT=0,demoPhase=0;
+  var demo=demoEnabled&&!reduce,demoT=0,demoPhase=0;
   var idle=0;
   var HOLD_MS=1100;
   var last=0,running=true,raf=0;
@@ -120,9 +128,9 @@
 
   function begin(){
     if(state===ST_OK||state===ST_ABORT){ if(p>0.02) return; }
-    state=ST_HOLD; target=1;
+    state=ST_HOLD; target=1;if(reduce){p=0;clearTimeout(holdTimer);holdTimer=setTimeout(()=>{if(userHold){p=1;commit();wake();}},HOLD_MS);}
   }
-  function release(){
+  function release(){clearTimeout(holdTimer);
     if(state!==ST_HOLD) return;
     if(p>=0.985){ commit(); }
     else { state=ST_ABORT; target=0; flash=1; announce('Released early. Cancelled.'); }
@@ -130,6 +138,8 @@
   function commit(){ state=ST_OK; target=1; flash=1; pulse=0; announce('Confirmed.'); }
   function reset(){ state=ST_IDLE; target=0; }
 
+  var holdTimer=0;function wake(){if(document.hidden)return;running=true;if(reduce){if(!userHold){p=target;pv=flash=0;}draw();}else if(!raf)raf=requestAnimationFrame(frame);}
+ ['pointerdown','pointerup','pointercancel','keydown','keyup'].forEach(type=>document.addEventListener(type,wake));
   function takeover(){ demo=false; idle=0; }
   function down(e){ takeover(); userHold=true; begin(); if(e&&e.cancelable)e.preventDefault(); }
   function up(){ if(userHold){ userHold=false; release(); } }
@@ -144,7 +154,7 @@
   });
 
   function demoStep(dt){
-    if(!demo){ idle+=dt; if(idle>3600){ demo=true; demoT=0; demoPhase=0; reset(); } return; }
+    if(!demoEnabled||!demo||reduce)return;
     demoT+=dt;
     if(demoPhase===0){ if(demoT>400){ demoPhase=1; demoT=0; begin(); } }
     else if(demoPhase===1){
@@ -253,7 +263,7 @@
   }
 
   function step(dt){
-    demoStep(dt);
+    demoStep(dt);if(userHold&&state===ST_HOLD&&p>=.985)commit();
     var k=0.016, d2=0.78;
     var force=(target-p)*k*dt;
     pv=(pv+force)*d2;
@@ -264,19 +274,19 @@
       p=Math.min(1,p+rate*0.65); // blend spring + linear for crisp control
     }
     if(flash>0) flash=Math.max(0,flash-dt/620);
-    if(state===ST_OK){ pulse=(pulse+dt/2600)%1; }
+    if(demoEnabled&&state===ST_OK){ pulse=(pulse+dt/2600)%1; }
   }
 
   function frame(t){
-    if(!running)return;
+    raf=0;if(!running||document.hidden)return;
     var dt=last?Math.min(50,t-last):16; last=t;
     step(dt);
     draw();
-    raf=requestAnimationFrame(frame);
+    if(demoEnabled||userHold||Math.abs(p-target)>.001||Math.abs(pv)>.001||flash>.001)wake();
   }
 
   function start(){ if(!running){running=true;last=0;raf=requestAnimationFrame(frame);} }
-  function stop(){ running=false;cancelAnimationFrame(raf); }
+  function stop(){up();clearTimeout(holdTimer);running=false;cancelAnimationFrame(raf);raf=0;last=0;}
 
   document.addEventListener('visibilitychange',function(){
     if(document.hidden){stop();} else if(!reduce){start();}
@@ -285,7 +295,7 @@
 
   size();
   if(reduce){
-    p=0.66;state=ST_IDLE;flash=0;draw();
+    p=target=0.66;state=ST_IDLE;flash=0;draw();
     announce('Hold to confirm control.');
     return;
   }

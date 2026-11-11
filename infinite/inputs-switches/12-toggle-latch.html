@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Guarded military toggle switch where a hazard-striped red safety cover lifts, the chrome lever throws, and slams shut with a commit flash.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Toggle Latch</title>
@@ -26,6 +27,8 @@
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
        letter-spacing:.14em;color:var(--tl-cap);opacity:var(--tl-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+
+#tl-c{touch-action:none;outline-offset:-4px}#tl-c:focus-visible{outline:2px solid currentColor}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -41,7 +44,7 @@
   "cover swing angle (cover*1.05 rad)",
   "lever travel arc (ang=(lever-0.5)*1.6)",
   "hazard stripe color (#f4d03f) and opacity (0.16)",
-  "idle demo cadence (LEAD=24 / GAP=14 / RESUME=216 frames; ARMED↔SAFE flip every ~2.8 s)",
+  "idle demo cadence (LEAD=24 / GAP=14; ARMED↔SAFE flip every ~2.8 s)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -50,11 +53,12 @@
   "visibilitychange pause/resume",
   "reduced-motion guard with static draw fallback",
   "idle demo flip (the same trigger() a click runs; real input takes over)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "pointermove randomly triggers animation (~1.2% chance per event) — remove before production use",
-  "No aria role or keyboard support on the canvas click target"
+  "Pointer click and Space/Enter toggle the safety latch; manual phases finish without restarting the demo.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -79,21 +83,25 @@
 </script>
 </head>
 <body>
-<canvas id="tl-c"></canvas>
+<canvas class="tl-root" role="button" tabindex="0" aria-label="Toggle safety latch" aria-pressed="false" id="tl-c"></canvas>
 <div class="cap">Toggle Latch</div>
 <script>
 (function(){
   const cv=document.getElementById('tl-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
   const AC='#9fe870';
   const root=document.documentElement, C={};
+  // Empty iframe token snapshots need valid palette values before first layout.
   function syncTheme(){
-    C.pulseRgb=getComputedStyle(root).getPropertyValue('--tl-pulse-rgb').trim();
+    C.pulseRgb=getComputedStyle(root).getPropertyValue('--tl-pulse-rgb').trim()||(root.getAttribute('data-theme')==='light'?"60,123,20":"159,232,112");
   }
   addEventListener('message',function(e){
     const d=e.data;
     if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
-      root.setAttribute('data-theme',d.theme); syncTheme();
+      root.setAttribute('data-theme',d.theme); syncTheme();start();
     }
   });
   syncTheme();
@@ -104,21 +112,22 @@
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     cx=W/2;cy=H/2;S=Math.min(W,H)/300;
   }
-  addEventListener('resize',size);size();
+  // Resizing clears the bitmap; refresh tokens and wake the parked renderer.
+  addEventListener('resize',()=>{syncTheme();size();start();});size();
 
   // phase machine: closed -> lifting -> throwing(commit) -> slamming(recoil) -> closed
   // cover angle: 0 = flat/closed, up to ~1.05rad lifted. lever t: 0 off -> 1 on.
   let phase=0,pt=0,cover=0,lever=0,recoil=0,flash=0,t=0,on=false;
   const DUR={lift:46,throw:14,slam:30,rest:64};
-  function trigger(){ if(phase===0){ phase=1; pt=0; } }
+  function trigger(){if(reduce){on=!on;lever=on?1:0;cover=0;phase=0;}else if(phase===0){phase=1;pt=0;}}
   cv.addEventListener('click',()=>{ takeover(); trigger(); });
-  cv.addEventListener('pointermove',takeover);
+
   // idle demo: nothing on the wall clicks a latch, so it runs the very same trigger() a real click
   // runs — first throw LEAD frames (~0.4 s) after mount, then an ARMED<->SAFE flip every ~2.8 s
-  // (154-frame cycle + GAP). Real input takes over; demo resumes after RESUME frames (~3.6 s) idle.
-  const LEAD=24, GAP=14, RESUME=216; let demo=true, dwell=GAP-LEAD, idleF=0;
+  // (154-frame cycle + GAP). Real input takes over; demo stays off until reload.
+  const LEAD=24, GAP=14, RESUME=216; let demo=demoEnabled, dwell=GAP-LEAD, idleF=0;
   function takeover(){ demo=false; idleF=0; }
-  function demoStep(){ if(!demo){ if(++idleF>RESUME){ demo=true; idleF=0; dwell=0; } return; }
+  function demoStep(){ if(!demo||!demoEnabled)return;
     if(phase===0 && ++dwell>=GAP){ dwell=0; trigger(); } }
 
   function ease(x){ return x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2; }
@@ -236,9 +245,11 @@
   }
 
   let raf=0;
-  function loop(){ step();draw();raf=requestAnimationFrame(loop); }
-  function start(){ if(!raf&&!reduce)raf=requestAnimationFrame(loop); }
+  function loop(){raf=0;if(document.hidden)return;step();draw();cv.setAttribute("aria-pressed",on);if(!reduce&&((demoEnabled&&demo)||phase!==0||flash>.001||recoil>.001))start();}
+  function start(){if(!raf&&!document.hidden)raf=requestAnimationFrame(loop);}
   function stop(){ cancelAnimationFrame(raf);raf=0; }
+  cv.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;takeover();trigger();e.preventDefault();start();});
+  ['pointerdown','pointermove','pointerup','click'].forEach(type=>document.addEventListener(type,start));
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){ cover=1;lever=1;on=true;draw(); } else start();
 })();

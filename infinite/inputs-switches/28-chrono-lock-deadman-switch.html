@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="description" content="Two-step safety interlock: lift the guarded cover, then hold the core until the charge ring completes and latches.">
+<title>Chrono-Lock Deadman Switch</title>
+<script>
+/* theme hook: ?theme=light|dark is applied before first paint */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --bg:#0A0A0A; --bg-sunken:#070707; --surface:#111111; --surface-2:#161616;
+    --text:#EDEDEA; --text-muted:#8A8A85; --text-faint:#5A5A56;
+    --border:rgba(255,255,255,0.08);
+    --accent:#C7F000; --accent-dim:#7BA300; --warning:#E0A23B;
+    --radius-sm:5px; --radius-md:8px;
+    --font-mono:ui-monospace,"SF Mono",Menlo,monospace;
+    --ease-out:cubic-bezier(0.22,1,0.36,1);
+  }
+  :root[data-theme="light"]{
+    --bg:#FAFAF8; --bg-sunken:#F1F1EC; --surface:#F4F4F0; --surface-2:#ECECE6;
+    --text:#1A1A18; --text-muted:#6B6B66; --text-faint:#9A9A93;
+    --border:rgba(0,0,0,0.08);
+    --accent:#4D7A00; --accent-dim:#6B9E00; --warning:#9A6200;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+  .dms-tile{
+    position:absolute;inset:0;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;
+    gap:min(2vmin,8px);padding:clamp(8px,5vmin,22px) clamp(8px,5.5vmin,24px) clamp(14px,8vmin,30px);
+    background:var(--surface);color:var(--text);font-family:var(--font-mono);
+    font-size:clamp(7px,3.1vmin,11px);user-select:none;-webkit-user-select:none;
+  }
+  .dms-tile *{box-sizing:border-box}
+  .dms-row{display:flex;justify-content:space-between;align-items:center;gap:6px;color:var(--text-muted);white-space:nowrap}
+  .dms-badge{padding:2px 7px;border-radius:var(--radius-sm);font-weight:700;border:1px solid var(--border);background:var(--bg-sunken)}
+  .dms-badge[data-s="armed"]{color:var(--accent)}
+  .dms-badge[data-s="open"]{color:var(--warning)}
+  .dms-bay{
+    flex:1;min-height:0;position:relative;border-radius:var(--radius-md);background:var(--bg-sunken);
+    border:1px solid var(--border);display:grid;place-items:center;overflow:hidden;container-type:size;
+  }
+  .dms-core{
+    width:62cqmin;height:62cqmin;border-radius:50%;background:var(--surface);border:2px solid var(--border);
+    display:grid;place-items:center;cursor:pointer;position:relative;touch-action:none;padding:0;color:var(--text);font-family:inherit;
+  }
+  .dms-core:focus-visible,.dms-guard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .dms-svg{width:94%;height:94%;display:block;pointer-events:none}
+  .dms-track{fill:none;stroke:var(--border);stroke-width:5}
+  .dms-ring{fill:none;stroke:var(--text-faint);stroke-width:5;stroke-linecap:round;stroke-dasharray:301.6;stroke-dashoffset:301.6}
+  .dms-in{fill:var(--bg-sunken);stroke:var(--text-faint);stroke-width:1.5}
+  .dms-txt{fill:var(--text);font:700 11px var(--font-mono)}
+  .dms-core[data-c="charge"] .dms-ring,.dms-core[data-c="charge"] .dms-in{stroke:var(--accent-dim)}
+  .dms-core[data-c="armed"] .dms-ring,.dms-core[data-c="armed"] .dms-in{stroke:var(--accent)}
+  .dms-guard{
+    position:absolute;inset:7% 18%;border-radius:var(--radius-md);background:var(--surface-2);border:1.5px solid var(--warning);
+    display:flex;flex-direction:column;justify-content:space-between;align-items:center;padding:min(3.4vmin,10px);cursor:pointer;
+    transform-origin:top center;transition:transform .38s var(--ease-out),opacity .25s;z-index:4;
+  }
+  .dms-guard.dms-open{transform:perspective(600px) rotateX(-84deg);opacity:.7}
+  .dms-gt{font-weight:700;color:var(--warning);background:var(--bg-sunken);padding:3px 8px;border-radius:var(--radius-sm);border:1px solid var(--warning)}
+  .dms-gh{font-size:.9em;color:var(--text);background:var(--bg-sunken);padding:2px 6px;border-radius:var(--radius-sm)}
+  @media (prefers-reduced-motion:reduce){.dms-guard{transition:none}}
+  .dms-cap{position:absolute;left:min(3vmin,10px);bottom:min(2vmin,7px);font:clamp(6px,2.4vmin,9px) var(--font-mono);color:var(--text-muted);opacity:.55;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/inputs-switches/28-chrono-lock-deadman-switch.html",
+ "title": "Chrono-Lock Deadman Switch",
+ "description": "Two-step safety interlock: lift the guarded cover, then hold the core until the charge ring completes and latches.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [
+  "Forever Opus tokens on :root (--bg, --surface*, --text*, --border*, --accent) — one lime accent, no gradients",
+  "copy and data values in markup/script"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "theme hook: ?theme= bootstrap, forever:theme message listener and :root[data-theme=\"light\"] tokens",
+  "IIFE wrapper, visibilitychange sleep, prefers-reduced-motion guard, time-based (dt) animation"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "The hold fill stays gradual under reduced motion because the hold time is the mechanic."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "safety",
+  "interlock",
+  "deadman",
+  "hold-to-confirm",
+  "switch"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="dms-tile" role="group" aria-label="Chrono-lock deadman switch">
+  <div class="dms-row"><span>SAFETY INTERLOCK</span><span class="dms-badge" id="dms-badge" aria-live="polite">GUARDED</span></div>
+  <div class="dms-bay">
+    <button class="dms-core" id="dms-core" type="button" aria-label="Hold to arm core">
+      <svg class="dms-svg" viewBox="0 0 114 114" aria-hidden="true">
+        <circle class="dms-track" cx="57" cy="57" r="48"/>
+        <circle class="dms-ring" id="dms-ring" cx="57" cy="57" r="48" transform="rotate(-90 57 57)"/>
+        <circle class="dms-in" cx="57" cy="57" r="30"/>
+        <text class="dms-txt" id="dms-txt" x="57" y="61" text-anchor="middle">HOLD</text>
+      </svg>
+    </button>
+    <div class="dms-guard" id="dms-guard" role="button" tabindex="0" aria-label="Flip safety cover" aria-pressed="false">
+      <span class="dms-gt">SAFETY COVER</span><span class="dms-gh">CLICK TO LIFT</span>
+    </div>
+  </div>
+  <div class="dms-row"><span id="dms-cap">CHARGE: 0%</span><span id="dms-hint">STEP 1: LIFT COVER</span></div>
+</div>
+<div class="dms-cap" aria-hidden="true">Deadman Switch</div>
+<script>
+(() => {
+  addEventListener('message', (e) => {
+    const d = e.data;
+    if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) document.documentElement.setAttribute('data-theme', d.theme);
+  });
+  const $ = (id) => document.getElementById(id);
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const guard = $('dms-guard'), core = $('dms-core'), ring = $('dms-ring'), txt = $('dms-txt');
+  const badge = $('dms-badge'), capOut = $('dms-cap'), hint = $('dms-hint');
+  let coverOpen = false, holding = false, armed = false, charge = 0, demoClock = 0;
+  let demoEnabled = window.__foreverPreview?.demoEnabled !== false;
+  let raf = 0, last = 0;
+
+  function syncUI() {
+    guard.classList.toggle('dms-open', coverOpen);
+    guard.setAttribute('aria-pressed', coverOpen);
+    if (!coverOpen) { badge.textContent = 'GUARDED'; badge.dataset.s = ''; hint.textContent = 'STEP 1: LIFT COVER'; }
+    else if (armed) { badge.textContent = 'ENGAGED'; badge.dataset.s = 'armed'; hint.textContent = 'CLICK CORE TO DISARM'; }
+    else { badge.textContent = 'UNLATCHED'; badge.dataset.s = 'open'; hint.textContent = 'HOLD CORE TO LATCH'; }
+  }
+  function draw() {
+    ring.setAttribute('stroke-dashoffset', (301.6 * (1 - charge)).toFixed(1));
+    core.dataset.c = armed ? 'armed' : charge > 0.05 ? 'charge' : '';
+    txt.textContent = armed ? 'ARMED' : charge > 0.02 ? Math.round(charge * 100) + '%' : 'HOLD';
+    capOut.textContent = 'CHARGE: ' + Math.round(charge * 100) + '%';
+  }
+
+  // time-based: dt is 1.0 at 60 fps, clamped after tab sleep
+  function tick(now) {
+    raf = 0;
+    if (document.hidden) return;
+    const dt = last ? Math.min(now - last, 50) / 16.667 : 1;
+    last = now;
+    if (demoEnabled && !reduced()) {
+      demoClock += 0.016 * dt;
+      const p = demoClock % 7;
+      coverOpen = p > 1.0 && p < 5.8;
+      holding = p > 1.6 && p < 3.6;
+      if (p > 5.8) armed = false;
+      syncUI();
+    }
+    if (armed) charge = 1;
+    else if (holding && coverOpen) {
+      charge = Math.min(1, charge + 0.024 * dt);
+      if (charge >= 1) { armed = true; holding = false; syncUI(); }
+    } else charge = reduced() ? 0 : Math.max(0, charge - 0.04 * dt);
+    draw();
+    if ((demoEnabled && !reduced()) || holding || (!armed && charge > 0)) raf = requestAnimationFrame(tick);
+  }
+  function kick() { if (!raf && !document.hidden) { last = 0; raf = requestAnimationFrame(tick); } }
+  function takeover() { if (demoEnabled) { demoEnabled = false; holding = false; kick(); } }
+
+  addEventListener('forever:interactive', takeover);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (raf) { cancelAnimationFrame(raf); raf = 0; } } else kick();
+  });
+  matchMedia('(prefers-reduced-motion: reduce)').addEventListener?.('change', kick);
+
+  const toggleCover = () => {
+    takeover();
+    coverOpen = !coverOpen;
+    if (!coverOpen) { holding = false; armed = false; }
+    syncUI(); kick();
+  };
+  guard.addEventListener('pointerdown', takeover, true);
+  guard.addEventListener('click', toggleCover);
+  guard.addEventListener('keydown', (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleCover(); } });
+
+  core.addEventListener('pointerdown', (e) => {
+    takeover();
+    if (!coverOpen) return;
+    if (armed) { armed = false; charge = 0; holding = false; syncUI(); draw(); return; }
+    holding = true;
+    core.setPointerCapture(e.pointerId);
+    kick();
+  });
+  const endHold = () => { holding = false; kick(); };
+  core.addEventListener('pointerup', endHold);
+  core.addEventListener('pointercancel', endHold);
+  core.addEventListener('keydown', (e) => {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    e.preventDefault();
+    takeover();
+    if (!coverOpen) coverOpen = true;
+    else if (armed) { armed = false; charge = 0; }
+    else holding = true;
+    syncUI(); draw(); kick();
+  });
+  core.addEventListener('keyup', (e) => { if (e.key === ' ' || e.key === 'Enter') endHold(); });
+
+  syncUI(); draw();
+  if (reduced()) demoEnabled = false;
+  kick();
+})();
+</script>
+</body>
+</html>

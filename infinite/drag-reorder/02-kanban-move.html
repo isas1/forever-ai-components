@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A three-column kanban board where a cyan-tagged card lifts and springs between Red, Yellow, and Cyan lanes via FLIP transitions.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kanban Move</title>
@@ -37,7 +38,7 @@
 {
  "file": "infinite/drag-reorder/02-kanban-move.html",
  "title": "Kanban Move",
- "description": "Three-column kanban board where a cyan card lifts and spring-animates between lanes via FLIP. Auto-demos on a timer; supports arrow keys and horizontal drag.",
+ "description": "Three-column kanban board where a cyan card lifts and spring-animates between lanes via FLIP. Idle demo stops after first input; supports arrow keys and horizontal drag.",
  "useWhen": "Showcasing drag-to-reorder UI patterns, kanban onboarding demos, or project-management feature previews.",
  "avoidWhen": "Production task management — auto-demo loop and fixed card set must be removed and replaced with real data before shipping.",
  "agentPrompt": "Change the demo interval from 2200ms to 1400ms, add a fourth column, and swap the accent color from cyan (#22d3ee) to violet (#a855f7). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
@@ -54,12 +55,14 @@
   "IIFE wrapper",
   "prefers-reduced-motion static fallback",
   "visibilitychange pause",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Auto-demo loop must be disabled for real user-controlled boards",
+  "First deliberate input permanently disables idle demo; manual input, finite feedback and settling remain active. Host demoEnabled=false skips the initial attract cycle.",
   "Card content is decorative CSS pseudo-elements only — no real text",
-  "Pointer drag uses column-width snapping, not pixel-precise drag"
+  "Pointer drag uses column-width snapping, not pixel-precise drag",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -89,6 +92,12 @@
 <script>
 (function(){
   "use strict";
+  function wake(){if(document.hidden)return;running=true;if(reduce)frame();else if(!raf)raf=requestAnimationFrame(frame);}
+  ['pointerdown','pointermove','pointerup','pointercancel','keydown','keyup'].forEach(type=>document.addEventListener(type,wake));
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;clearInterval(demoTimer);clearTimeout(idleTimer);userActive=true;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   var stage=document.getElementById("dr02-stage");
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var COLS=3, tags=["0","1","2"];
@@ -164,7 +173,7 @@
   // ---- render loop ----
   var running=true, raf=0;
   function frame(){
-    if(!running)return;
+    raf=0;if(!running||document.hidden)return;
     var k,kk=2*Math.PI;
     for(k=0;k<N;k++){
       // critically-ish damped spring toward target
@@ -172,24 +181,25 @@
       var ay=(ty[k]-py[k])*0.18 - vy[k]*0.34;
       vx[k]+=ax; vy[k]+=ay; px[k]+=vx[k]; py[k]+=vy[k];
       var ls=liftScale[k]+(liftTarget[k]-liftScale[k])*0.16; liftScale[k]=ls;
+      if(reduce){px[k]=tx[k];py[k]=ty[k];vx[k]=vy[k]=0;ls=liftScale[k]=liftTarget[k];}
       var s=1+ls*0.05, lift=ls*-3;
       var e=cards[k].el;
       e.style.transform="translate3d("+px[k].toFixed(2)+"px,"+(py[k]+lift).toFixed(2)+"px,0) scale("+s.toFixed(3)+")";
     }
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(px.some((v,i)=>Math.abs(v-tx[i])>.02)||py.some((v,i)=>Math.abs(v-ty[i])>.02)||vx.some(v=>Math.abs(v)>.02)||vy.some(v=>Math.abs(v)>.02)||liftScale.some((v,i)=>Math.abs(v-liftTarget[i])>.001)))wake();
   }
   // ---- self-demo on a gentle timer ----
   var demoTimer=0, idleTimer=0, userActive=false, dir=1;
   function demoStep(){
-    if(userActive)return;
+    if(!demoEnabled||userActive)return;
     setSel(sel);
-    moveSel(dir);
+    moveSel(dir);wake();
     if(sel.col===0)dir=1; else if(sel.col===COLS-1)dir=-1;
   }
-  function startDemo(){clearInterval(demoTimer);if(!reduce)demoTimer=setInterval(demoStep,2200);}
+  function startDemo(){clearInterval(demoTimer);if(demoEnabled&&!reduce&&!document.hidden)demoTimer=setInterval(demoStep,2200);}
   function userInteract(){
     userActive=true; clearTimeout(idleTimer);
-    idleTimer=setTimeout(function(){userActive=false;},4000);
+
   }
   // ---- keyboard ----
   stage.addEventListener("keydown",function(ev){
@@ -239,7 +249,7 @@
         cards[k].el.style.transform="translate3d(0,"+lift+"px,0) scale("+s.toFixed(3)+")";}
       return;
     }
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(px.some((v,i)=>Math.abs(v-tx[i])>.02)||py.some((v,i)=>Math.abs(v-ty[i])>.02)||vx.some(v=>Math.abs(v)>.02)||vy.some(v=>Math.abs(v)>.02)||liftScale.some((v,i)=>Math.abs(v-liftTarget[i])>.001)))wake();
     startDemo();
   });
 })();

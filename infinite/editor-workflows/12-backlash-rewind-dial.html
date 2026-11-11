@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Backlash Rewind Dial — Editor Workflows. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Backlash Rewind Dial</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#3cc4a8}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#0b7a66}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.bkl-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+.bkl-root:active{cursor:grabbing}
+.bkl-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.bkl-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.bkl-num{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;color:var(--ink);font:600 clamp(1.25rem,7vmin,3rem)/1 ui-sans-serif,system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums}
+.bkl-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/editor-workflows/12-backlash-rewind-dial.html",
+ "title": "Backlash Rewind Dial",
+ "description": "Undo as a watch crown: spin the dial counterclockwise, scroll or press Left Arrow to sweep back over every action; the hand springs past and settles. The centre counts steps back; acting from the past drops the redo branch. Clean modern: off-black and verdigris with a light theme. From the daily-team 'Wrong-Way Reel' set (2026-10-20).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and verdigris (docs/style-clean-modern.md) (--bg, --ink, --acc). Edit the V action list for your app's history entries; S sets ticks per turn.",
+ "editableAreas": [
+  "colour tokens on :root (--bg, --ink, --acc) and the light block",
+  "V action names and the seeded history length",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had click sounds; removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "undo",
+  "rewind",
+  "history",
+  "dial",
+  "watch",
+  "redo",
+  "slider"
+ ]
+}
+</script>
+</head><body>
+<div class="bkl-root" role="slider" tabindex="0" aria-label="Rewind dial. Tap to do something. Drag counterclockwise around the dial, scroll, or press Left Arrow to undo; clockwise or Right Arrow to redo. Enter adds an action. Escape returns to the present. The number shows steps back."></div>
+<div class="bkl-cap" aria-hidden="true">Backlash Rewind Dial</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.bkl-root'),cv=document.createElement('canvas'),num=document.createElement('div');
+  cv.className='bkl-cv';num.className='bkl-num';cv.setAttribute('aria-hidden','true');num.setAttribute('aria-hidden','true');
+  root.appendChild(cv);root.appendChild(num);
+  var g=cv.getContext('2d'),T=Math.PI*2,S=60,MAX=59;
+  var V=['Start Forever plan','Rename cat-pics-2','Delete Monday','Pack Emotional baggage','Cancel Tuesday','Copy cat-pics-2','Upgrade Forever plan','Move Emotional baggage','Delete cat-pics-3','Rename Monday','Unpack Emotional baggage','Cancel Forever plan'];
+  var log=[],vi=0;function add(){log.push(V[vi++%V.length])}
+  for(var k=0;k<7;k++)add();
+  var tgt=log.length,a=tgt,v=0,lastR=tgt,pulse=0,pulseI=0,drag=null,wacc=0;
+  function N(){return log.length}
+  function cl(n){return Math.max(0,Math.min(N(),n))}
+  function update(){var p=cl(Math.round(tgt)),sb=N()-p;num.textContent=sb;
+    root.setAttribute('aria-valuemin','0');root.setAttribute('aria-valuemax',N());root.setAttribute('aria-valuenow',sb);
+    root.setAttribute('aria-valuetext',sb+' steps back'+(p>0?'. Next undo: '+log[p-1]:'. Nothing left to undo'))}
+  var ac=null;
+  function snd(){}
+  function step(dt){
+    v+=(tgt-a)*.18*dt;v*=Math.pow(.8,dt);a+=v*dt;
+    var r=Math.round(a);if(r!==lastR){if(r>=0&&r<=N()&&ac)snd(r<lastR,r);lastR=r}
+    if(pulse>0){pulse*=Math.pow(.9,dt);if(pulse<.01)pulse=0}
+    if(!drag&&Math.abs(v)<.002&&Math.abs(tgt-a)<.002){a=tgt;v=0}
+    return !!drag||a!==tgt||v!==0||pulse>0}
+  function snapToTarget(){a=tgt;v=0;pulse=0;lastR=Math.round(a)}
+  function draw(){
+    var W=cv.width;if(!W)return;var s=W/2,cs=getComputedStyle(root),ink=cs.getPropertyValue('--ink').trim(),acc=cs.getPropertyValue('--acc').trim(),n=N();
+    g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,W,W);g.translate(s,s);g.lineCap='round';
+    function ang(i){return -Math.PI/2+i*T/S}
+    for(var i=1;i<=MAX;i++){var th=ang(i),c=Math.cos(th),sn=Math.sin(th);
+      if(i<=n){var done=i<=a+.001,r0=done?.79:.86;
+        g.globalAlpha=done?1:.32;g.strokeStyle=ink;g.lineWidth=s*(done?.016:.012);
+        g.beginPath();g.moveTo(c*r0*s,sn*r0*s);g.lineTo(c*.93*s,sn*.93*s);g.stroke()}
+      else{g.globalAlpha=.14;g.fillStyle=ink;g.beginPath();g.arc(c*.93*s,sn*.93*s,s*.007,0,T);g.fill()}}
+    g.globalAlpha=1;g.fillStyle=acc;g.beginPath();g.arc(0,-.93*s,s*.016,0,T);g.fill();
+    if(n>a+.01){g.globalAlpha=.35;g.strokeStyle=acc;g.lineWidth=s*.012;g.beginPath();
+      g.arc(0,0,.7*s,ang(Math.max(a,0)),ang(n));g.stroke()}
+    if(pulse>0){var pt=ang(pulseI);g.globalAlpha=pulse;g.strokeStyle=acc;g.lineWidth=s*.008;
+      for(var j=0;j<6;j++){var q=pt+(j-2.5)*.05,rr=(.93+(1-pulse)*.12)*s;
+        g.beginPath();g.arc(Math.cos(q)*rr,Math.sin(q)*rr,s*.008,0,T);g.stroke()}}
+    var h=ang(a),hc=Math.cos(h),hs=Math.sin(h);
+    g.globalAlpha=1;g.strokeStyle=acc;g.lineWidth=s*.024;g.beginPath();
+    g.moveTo(hc*.22*s,hs*.22*s);g.lineTo(hc*.76*s,hs*.76*s);g.stroke();
+    g.fillStyle=acc;g.beginPath();g.arc(hc*.76*s,hs*.76*s,s*.03,0,T);g.fill();
+    g.globalAlpha=.45;g.strokeStyle=ink;g.lineWidth=s*.006;g.beginPath();g.arc(0,0,.2*s,0,T);g.stroke();g.globalAlpha=1}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  function setT(n){tgt=cl(n);update();kick()}
+  function act(){var p=cl(Math.round(tgt));snd(false,p+1);log.length=p;add();
+    if(log.length>MAX){log.shift();a-=1;lastR-=1}
+    tgt=log.length;pulse=1;pulseI=tgt;update();kick()}
+  function pa(e){var b=root.getBoundingClientRect();return Math.atan2(e.clientY-b.top-b.height/2,e.clientX-b.left-b.width/2)}
+  root.addEventListener('pointerdown',function(e){root.setPointerCapture(e.pointerId);
+    drag={x:e.clientX,y:e.clientY,m:false,base:cl(Math.round(tgt)),acc:0,prev:pa(e)};kick()});
+  root.addEventListener('pointermove',function(e){if(!drag)return;
+    if(!drag.m&&Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>8)drag.m=true;
+    var q=pa(e),d=q-drag.prev;if(d>Math.PI)d-=T;if(d<-Math.PI)d+=T;drag.acc+=d;drag.prev=q;
+    if(drag.m){var r=drag.base+drag.acc/T*S,n=N();if(r>n)r=n+(r-n)*.3;if(r<0)r*=.3;tgt=r;update();kick()}});
+  function up(){if(!drag)return;var m=drag.m;drag=null;if(m)setT(Math.round(tgt));else act()}
+  root.addEventListener('pointerup',up);root.addEventListener('pointercancel',function(){if(drag){drag.m=true;up()}});
+  root.addEventListener('wheel',function(e){e.preventDefault();wacc+=e.deltaY;
+    while(Math.abs(wacc)>=40){var d=wacc>0?-1:1;wacc-=d*-40;setT(Math.round(tgt)+d)}},{passive:false});
+  root.addEventListener('keydown',function(e){var p=Math.round(tgt),K=e.key;
+    if(K==='ArrowLeft'||K==='ArrowDown'){setT(p-1);snd(true,p-1)}
+    else if(K==='ArrowRight'||K==='ArrowUp'){setT(p+1);snd(false,p+1)}
+    else if(K==='Enter'||K===' ')act();
+    else if(K==='Escape')setT(N());
+    else if(K==='Home')setT(0);
+    else if(K==='End')setT(N());
+    else return;e.preventDefault()});
+  new ResizeObserver(function(){var r=Math.min(devicePixelRatio||1,2);cv.width=Math.round(root.clientWidth*r);cv.height=cv.width;draw()}).observe(root);
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  // Idle demo (demo-v1): performs the control on its own until the first real input.
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,demoI=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  var demoT=setInterval(function(){if(!demo||document.hidden||reduce())return;var o='bbbbfffa'[demoI++%8],q=Math.round(tgt);if(o==='b')setT(q-1);else if(o==='f')setT(q+1);else act()},700);
+  window.addEventListener('forever:interactive',stopDemo);
+  root.addEventListener('pointerdown',stopDemo,true);root.addEventListener('keydown',stopDemo,true);
+  document.addEventListener('pointerdown',stopDemo,true);
+  update();draw();
+})();</script>
+</body></html>

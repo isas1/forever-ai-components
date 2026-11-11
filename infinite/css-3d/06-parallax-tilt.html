@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block.
@@ -30,15 +31,15 @@
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c06-bg);
     font-family:system-ui,-apple-system,sans-serif;}
-  #stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  #cc6-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:700px;}
-  #card{position:relative;width:60vmin;height:60vmin;transform-style:preserve-3d;will-change:transform;}
-  .layer{position:absolute;inset:0;}
-  .sun{position:absolute;left:50%;top:50%;width:24vmin;height:24vmin;border-radius:50%;
+  #cc6-card{position:relative;width:60vmin;height:60vmin;transform-style:preserve-3d;will-change:transform;}
+  .cc6-layer{position:absolute;inset:0;}
+  .cc6-sun{position:absolute;left:50%;top:50%;width:24vmin;height:24vmin;border-radius:50%;
     transform:translate(-50%,-50%);
     background:var(--c06-sun);
     box-shadow:var(--c06-sun-glow);}
-  .dot{position:absolute;left:50%;top:50%;border-radius:50%;}
+  .cc6-dot{position:absolute;left:50%;top:50%;border-radius:50%;}
   .cap{position:fixed;left:10px;bottom:8px;color:var(--c06-cap);opacity:var(--c06-cap-o);
     font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
 </style>
@@ -56,7 +57,7 @@
   "orbit dot counts (spawn calls: 8 mid, 6 near)",
   "tilt intensity (tx*0.18 / ty*0.18 multipliers)",
   "perspective depth (700px on #stage)",
-  "auto-orbit idle speed (auto+=0.02)",
+  "auto-orbit idle speed (auto+=0.02) Autonomous preview ends at first deliberate input and never resumes.",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -64,12 +65,14 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion guard (reduce var)",
   "layer depth cache outside rAF loop",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "No reduced-motion static fallback — tile simply freezes on first frame rather than showing a non-animated state",
   "Background color hardcoded to #1D1917 in CSS — must edit to change theme",
-  "Dot sizes in vmin may appear too small on very large screens"
+  "Dot sizes in vmin may appear too small on very large screens",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -95,26 +98,32 @@
 </script>
 </head>
 <body>
-<div id="stage">
-  <div id="card">
-    <div class="layer" data-d="-50"><div class="sun"></div></div>
-    <div class="layer" data-d="40" id="mid"></div>
-    <div class="layer" data-d="110" id="near"></div>
+<div id="cc6-stage">
+  <div id="cc6-card">
+    <div class="cc6-layer" data-d="-50"><div class="cc6-sun"></div></div>
+    <div class="cc6-layer" data-d="40" id="cc6-mid"></div>
+    <div class="cc6-layer" data-d="110" id="cc6-near"></div>
   </div>
 </div>
 <div class="cap">Parallax Depth</div>
 <script>
 (function(){
-  const card=document.getElementById('card');
+  const card=document.getElementById('cc6-card');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
   // cache layer depth once (dataset parse out of the frame loop)
-  const layers=[...card.querySelectorAll('.layer')].map(el=>({el,d:+el.dataset.d}));
+  const layers=[...card.querySelectorAll('.cc6-layer')].map(el=>({el,d:+el.dataset.d}));
   const dots=[];
   function spawn(host,depth,n){
     for(let i=0;i<n;i++){
       const s=depth>80?(2.4+Math.random()*2.4):(1.4+Math.random()*1.6);
       const ci=(Math.random()*4)|0;                 // palette slot; colour comes from the theme token
-      const d=document.createElement('div');d.className='dot';
+      const d=document.createElement('div');d.className='cc6-dot';
       d.style.cssText=`width:${s}vmin;height:${s}vmin`;
       host.appendChild(d);
       // r stored in vmin (orbit % of the 60vmin card → *0.6)
@@ -122,8 +131,8 @@
         sp:(0.003+Math.random()*0.008)*(Math.random()<.5?-1:1)});
     }
   }
-  spawn(document.getElementById('mid'),40,8);
-  spawn(document.getElementById('near'),110,6);
+  spawn(document.getElementById('cc6-mid'),40,8);
+  spawn(document.getElementById('cc6-near'),110,6);
   // dot colours are JS-drawn: read them from --c06-dots once here and once per theme switch
   const docEl=document.documentElement;
   function syncTheme(){
@@ -140,18 +149,18 @@
   addEventListener('pointermove',e=>{interacted=true;
     tx=(e.clientX/innerWidth-.5)*60;ty=(e.clientY/innerHeight-.5)*46;});
   function loop(){
-    if(!interacted){auto+=0.02;tx=Math.cos(auto)*26;ty=Math.sin(auto*0.8)*20;}
-    dots.forEach(o=>{o.a+=o.sp;
+    if(demo&&!interacted){auto+=0.02;tx=Math.cos(auto)*26;ty=Math.sin(auto*0.8)*20;}
+    dots.forEach(o=>{if(demo)o.a+=o.sp;
       o.el.style.transform=`translate(-50%,-50%) translate(${Math.cos(o.a)*o.r}vmin,${Math.sin(o.a)*o.r}vmin)`;});
     layers.forEach(l=>{const d=l.d;
       l.el.style.transform=`translateZ(${d}px) translate(${tx*d/110}px,${ty*d/110}px)`;});
     card.style.transform=`rotateY(${tx*0.18}deg) rotateX(${-ty*0.18}deg)`;
-    raf=requestAnimationFrame(loop);
+    if(demo||performance.now()<interactionUntil)raf=requestAnimationFrame(loop);else raf=0;
   }
-  function start(){if(!raf&&!reduce)loop();}
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))loop();}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
-  if(reduce){loop();cancelAnimationFrame(raf);raf=0;}else start();
+  if(reduce||!demo){loop();cancelAnimationFrame(raf);raf=0;}else start();
 })();
 </script>
 </body>

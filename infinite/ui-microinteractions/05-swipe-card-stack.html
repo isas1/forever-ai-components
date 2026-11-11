@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Tinder-style draggable card stack with emoji faces, LIKE/NOPE stamps, and a fling-away gesture revealing the next card.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Swipe Cards</title>
@@ -26,12 +27,13 @@
     --c05-cap:#16241c; --c05-cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c05-bg);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  #wrap{position:fixed;inset:0;display:grid;place-items:center;cursor:grab;touch-action:none}
-  #stage{position:relative;width:54%;max-width:180px;aspect-ratio:.74}
-  .card{position:absolute;inset:0;border-radius:18px;display:grid;place-items:center;color:#fff;font-size:42px;box-shadow:0 14px 34px var(--c05-shadow);will-change:transform}
-  .stamp{position:absolute;top:12px;font-size:13px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:6px;border:2px solid;opacity:0}
-  .like{right:12px;color:var(--c05-like);border-color:var(--c05-like);transform:rotate(12deg)}
-  .nope{left:12px;color:var(--c05-nope);border-color:var(--c05-nope);transform:rotate(-12deg)}
+  #um05-wrap{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:grab;touch-action:pan-y pinch-zoom}
+  #um05-stage{position:relative;width:min(54%,180px,calc((100vh - 96px)*.74));aspect-ratio:.74}
+  .um05-card{position:absolute;inset:0;border-radius:18px;display:grid;place-items:center;color:#fff;font-size:42px;box-shadow:0 14px 34px var(--c05-shadow);will-change:transform}
+  .um05-stamp{position:absolute;top:12px;font-size:13px;font-weight:800;letter-spacing:.1em;padding:3px 8px;border-radius:6px;border:2px solid;opacity:0}
+  .um05-like{right:12px;color:var(--c05-like);border-color:var(--c05-like);transform:rotate(12deg)}
+  .um05-nope{left:12px;color:var(--c05-nope);border-color:var(--c05-nope);transform:rotate(-12deg)}
+  .um05-actions{display:flex;gap:8px}.um05-choice{min-height:32px;padding:6px 12px;border:1px solid currentColor;border-radius:6px;background:var(--c05-bg);color:var(--c05-cap);font:600 12px system-ui;cursor:pointer}.um05-choice:focus-visible{outline:2px solid currentColor;outline-offset:2px}.um05-choice:active{filter:brightness(.8)}.um05-choice:disabled{opacity:.4;cursor:default}@media(min-height:250px){.um05-choice{min-height:44px}}
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--c05-cap);opacity:var(--c05-cap-o);text-transform:uppercase}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -47,20 +49,22 @@
   "fling threshold (Math.abs(dx)>50)",
   "fling distance (dir*400)",
   "stamp colors (.like color/#2BAB6B, .nope color/#ff5c7a)",
-  "idle demo cadence (FIRST=600 / DEMO_EVERY=2500 / IDLE_BACK=3600 ms)",
+  "autonomous preview until first deliberate input cadence (FIRST=600 / DEMO_EVERY=2500 ms)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "visibilitychange stop/loop guard",
-  "touch event listeners for mobile support",
+  "single pointer ownership and cancellation rollback; vertical pan and pinch zoom remain available",
   "drag=null null-guard before fling",
   "drag guard in tick() — the demo never fires while a card is held",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "shade() function is a no-op stub — gradient end color equals start color",
-  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
-  "Card pool is only 5 items; idx wraps modulo data.length so short lists repeat quickly"
+  "Autonomous demo stops at first input; drag, Skip/Keep buttons and left/right arrows remain available. Explicit preview restart restores the demo.",
+  "Card pool is only 5 items; idx wraps modulo data.length so short lists repeat quickly",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -84,11 +88,12 @@
 </script>
 </head>
 <body>
-<div id="wrap"><div id="stage"></div></div>
+<div id="um05-wrap" tabindex="0" role="group" aria-label="Swipe cards. Left arrow skips; right arrow keeps."><div id="um05-stage"></div><div class="um05-actions"><button class="um05-choice" type="button" data-dir="-1">Skip</button><button class="um05-choice" type="button" data-dir="1">Keep</button></div></div>
 <div class="cap">Swipe stack</div>
 <script>
 (()=>{
-const stage=document.getElementById('stage'),wrap=document.getElementById('wrap');
+const stage=document.getElementById('um05-stage'),wrap=document.getElementById('um05-wrap');
+const choices=[...wrap.querySelectorAll('.um05-choice')];
 const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const cs=getComputedStyle(document.documentElement);
 const sw=(n)=>cs.getPropertyValue('--c05-swatch-'+n).trim();
@@ -98,47 +103,63 @@ function build(){
   stage.innerHTML='';cards=[];
   for(let i=2;i>=0;i--){
     const d=data[(idx+i)%data.length];
-    const c=document.createElement('div');c.className='card';c.style.background='linear-gradient(150deg,'+d[0]+','+shade(d[0])+')';
-    c.innerHTML='<span>'+d[1]+'</span><div class="stamp like">LIKE</div><div class="stamp nope">NOPE</div>';
+    const c=document.createElement('div');c.className='um05-card';c.style.background='linear-gradient(150deg,'+d[0]+','+shade(d[0])+')';
+    c.innerHTML='<span>'+d[1]+'</span><div class="um05-stamp um05-like">LIKE</div><div class="um05-stamp um05-nope">NOPE</div>';
     const s=1-i*.06,y=i*10;c.style.transform='translateY('+y+'px) scale('+s+')';c.style.zIndex=10-i;c.dataset.depth=i;
     stage.appendChild(c);cards.unshift(c);
   }
 }
 function shade(h){return h.replace(/^#/,'#').slice(0,1)+h.slice(1);}
 function topCard(){return cards.find(c=>c.dataset.depth==='0');}
-let drag=null,sx=0,dx=0;
+let drag=null,sx=0,dx=0,pointer=null,settle=0,flight=null;
 function setT(c,x,extra){const r=x/12;c.style.transform='translate('+x+'px,0) rotate('+r+'deg)'+(extra||'');}
-function down(e){const t=topCard();if(!t)return;takeover();drag=t;sx=(e.touches?e.touches[0].clientX:e.clientX);dx=0;wrap.style.cursor='grabbing';}
-function move(e){if(!drag)return;const x=(e.touches?e.touches[0].clientX:e.clientX);dx=x-sx;setT(drag,dx);
-  drag.querySelector('.like').style.opacity=Math.max(0,Math.min(1,dx/60));
-  drag.querySelector('.nope').style.opacity=Math.max(0,Math.min(1,-dx/60));}
-function up(){if(!drag)return;wrap.style.cursor='grab';if(Math.abs(dx)>50){fling(dx>0?1:-1);}else{drag.style.transition='transform .3s';setT(drag,0);drag.querySelector('.like').style.opacity=0;drag.querySelector('.nope').style.opacity=0;setTimeout(()=>{if(drag)drag.style.transition='';drag=null;},300);}}
-function fling(dir){const c=drag||topCard();if(!c)return;drag=null;
-  c.querySelector(dir>0?'.like':'.nope').style.opacity=1;
-  c.animate([{transform:c.style.transform||'translate(0,0)'},{transform:'translate('+dir*400+'px,-40px) rotate('+dir*30+'deg)',opacity:0}],{duration:420,easing:'ease-in'}).onfinish=()=>{idx=(idx+1)%data.length;build();};
+function resetDrag(){const c=drag;drag=null;pointer=null;dx=0;wrap.style.cursor='grab';if(!c)return;
+  c.style.transition=reduce?'':'transform .3s';setT(c,0);c.querySelectorAll('.um05-stamp').forEach(el=>el.style.opacity=0);
+  clearTimeout(settle);settle=setTimeout(()=>{c.style.transition='';},reduce?0:300);
 }
-wrap.addEventListener('mousedown',down);wrap.addEventListener('mousemove',move);window.addEventListener('mouseup',up);
-wrap.addEventListener('touchstart',down,{passive:true});wrap.addEventListener('touchmove',move,{passive:true});wrap.addEventListener('touchend',up);
+function down(e){if(e.button!==0||pointer!==null||flight||!e.target.closest('.um05-card'))return;
+  const t=topCard();if(!t)return;takeover();clearTimeout(settle);t.style.transition='';drag=t;pointer=e.pointerId;sx=e.clientX;dx=0;
+  wrap.style.cursor='grabbing';wrap.setPointerCapture(pointer);
+}
+function move(e){if(!drag||e.pointerId!==pointer)return;dx=e.clientX-sx;setT(drag,dx);
+  drag.querySelector('.um05-like').style.opacity=Math.max(0,Math.min(1,dx/60));
+  drag.querySelector('.um05-nope').style.opacity=Math.max(0,Math.min(1,-dx/60));}
+function up(e){if(!drag||e.pointerId!==pointer)return;pointer=null;wrap.style.cursor='grab';if(Math.abs(dx)>50)fling(dx>0?1:-1);else resetDrag();}
+function fling(dir){const c=drag||topCard();if(!c||flight)return;drag=null;pointer=null;
+  c.querySelector(dir>0?'.um05-like':'.um05-nope').style.opacity=1;
+  const finish=()=>{flight=null;choices.forEach(b=>b.disabled=false);idx=(idx+1)%data.length;build();};
+  if(reduce){finish();return;}
+  choices.forEach(b=>b.disabled=true);
+  flight=c.animate([{transform:c.style.transform||'translate(0,0)'},{transform:'translate('+dir*400+'px,-40px) rotate('+dir*30+'deg)',opacity:0}],{duration:420,easing:'ease-in'});
+  flight.onfinish=finish;
+}
+wrap.addEventListener('pointerdown',down);wrap.addEventListener('pointermove',move);wrap.addEventListener('pointerup',up);
+wrap.addEventListener('pointercancel',e=>{if(e.pointerId===pointer)resetDrag();});wrap.addEventListener('lostpointercapture',e=>{if(e.pointerId===pointer)resetDrag();});
+choices.forEach(b=>b.addEventListener('click',()=>{takeover();fling(+b.dataset.dir);}));
+wrap.addEventListener('keydown',e=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();takeover();fling(e.key==='ArrowRight'?1:-1);});
 /* Idle demo: a stack nobody swipes just sits there on the wall, so it swipes itself — the first
    card flies off ~FIRST ms after mount, then one every DEMO_EVERY ms, alternating LIKE/NOPE,
    through the same fling() a real drag ends in; build() recycles the deck so it never runs out.
-   A real drag takes over (demo off) and the demo returns after IDLE_BACK ms of quiet. */
-const TICK=100,FIRST=600,DEMO_EVERY=2500,IDLE_BACK=3600;
-let demo=true,t=0,idle=0,timer=0,firstRun=true,flip=0;
-function takeover(){demo=false;idle=0;}
+   Deliberate input stops the demo for this visit; explicit preview restart restores it. */
+const TICK=100,FIRST=600,DEMO_EVERY=2500;
+let demo=window.__foreverPreview?.demoEnabled!==false,t=0,idle=0,timer=0,firstRun=true,flip=0;
+function takeover(){if(!demo)return;demo=false;idle=0;stop();}
+window.addEventListener('forever:interactive',takeover,{once:true});
+document.addEventListener('pointerdown',takeover,{once:true});
+document.addEventListener('keydown',e=>{if(['Enter',' ' ,'ArrowLeft','ArrowRight'].includes(e.key))takeover();},{once:true});
 function tick(){
   if(drag){idle=0;return;}                       // hands on the deck — nothing automatic
-  if(!demo){idle+=TICK;if(idle>=IDLE_BACK){demo=true;t=0;firstRun=true;}return;}
+  if(!demo)return;
   t+=TICK;if(t<(firstRun?FIRST:DEMO_EVERY))return;
   t=0;firstRun=false;fling(flip++%2?-1:1);
 }
-function start(){if(!timer&&!reduce)timer=setInterval(tick,TICK);}
+function start(){if(demo&&!timer&&!reduce)timer=setInterval(tick,TICK);}
 function stop(){clearInterval(timer);timer=0;}
-document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stop();resetDrag();if(flight)flight.pause();}else{start();if(flight)flight.play();}});
 // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
 addEventListener('message',(e)=>{const d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))document.documentElement.setAttribute('data-theme',d.theme);});
 build();
-if(!reduce)start();   // reduced motion: no auto-swipe — the stack rests, drag still works
+if(!reduce&&demo)start();   // reduced motion: no auto-swipe — the stack rests, drag still works
 })();
 </script>
 </body>

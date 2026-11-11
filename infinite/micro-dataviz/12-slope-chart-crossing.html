@@ -23,7 +23,7 @@
     --scc-hue:33; --scc-sat:74; --scc-lit:30;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--scc-bg);}
-  #scc{display:block;width:100%;height:100%;}
+  #scc-canvas{display:block;width:100%;height:100%;}
   .scc-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
        letter-spacing:.14em;color:var(--scc-accent);opacity:var(--scc-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
@@ -49,12 +49,15 @@
   "visibilitychange pause/start",
   "reduced-motion static frame",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "First deliberate input freezes procedural chart drift after its input paint; hover alone keeps idle demonstration running.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded (#1a1410) — must edit CSS to change dark theme",
   "Pointer nudge only speeds up animation, no interactive selection of lines",
-  "Label collision possible if N exceeds 9 at small canvas heights"
+  "Label collision possible if N exceeds 9 at small canvas heights",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -77,14 +80,23 @@
  ]
 }
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 </head>
 <body>
-<canvas id="scc"></canvas>
+<canvas id="scc-canvas" class="scc-canvas"></canvas>
 <div class="scc-cap">Slope Chart Crossing</div>
 <script>
 (function(){
-  const cv=document.getElementById('scc'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('scc-canvas'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const preview=window.__foreverPreview;
+  let demoEnabled=preview?preview.demoEnabled!==false:true;
+  function shouldFrame(){return demoEnabled;}
+  function takeOver(){demoEnabled=false;cancelAnimationFrame(raf);raf=0;if(!document.hidden&&!reduce)raf=requestAnimationFrame(draw);else if(reduce)draw();}
+  window.addEventListener('forever:interactive',takeOver);
+  document.addEventListener('pointerdown',takeOver,{capture:true});
+  document.addEventListener('click',takeOver,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&e.key!=='Escape'&&!/^(Shift|Control|Alt|Meta)$/.test(e.key)&&!e.metaKey&&!e.ctrlKey&&!e.altKey)takeOver();},{capture:true});
   const N=9;                       // series
   const NAMES="ABCDEFGHI";
   let W,H,DPR,padX,padY,colL,colR,scale;
@@ -175,11 +187,11 @@
     ctx.fillText('BEFORE',colL,padY-14*scale);
     ctx.fillText('AFTER',colR,padY-14*scale);
 
-    raf=requestAnimationFrame(draw);
+    if(shouldFrame())raf=requestAnimationFrame(draw);else raf=0;
   }
 
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(draw);}
+  function start(){if(!raf&&!reduce&&shouldFrame())raf=requestAnimationFrame(draw);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
 
@@ -204,7 +216,7 @@
     }
   });
   syncTheme();
-  if(reduce){phase=loopDur*0.5;ready=1;draw();stop();}else start();
+  if(reduce){phase=loopDur*0.5;ready=1;draw();stop();}else if(demoEnabled)start();else draw();
 })();
 </script>
 </body>

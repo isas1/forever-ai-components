@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Five gold stars that light up in sequence with a pop scale bounce on the active star as the rating sweeps up and down.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Star Rating</title>
@@ -20,16 +21,18 @@
     --c07-cap:#8a6900; --c07-cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c07-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  .wrap{height:100%;display:flex;align-items:center;justify-content:center}
-  .stage{width:min(86vmin,360px)}
-  svg{width:100%;height:auto;overflow:visible}
+  .c07-wrap{height:100%;display:flex;align-items:center;justify-content:center}
+  .c07-stage{width:min(86vmin,360px)}
+  .c07-svg{width:100%;height:auto;overflow:visible}
   .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c07-cap);opacity:var(--c07-cap-o);text-transform:uppercase}
+
+.c07-svg [role=radio]{cursor:pointer;outline:none}.c07-svg [role=radio]:focus-visible{filter:drop-shadow(0 0 3px var(--c07-fill))}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/inputs-switches/07-star-rating.html",
  "title": "Star Rating",
- "description": "Five gold stars auto-sweep ratings up and down; the active star pops with a scale bounce. Pointer sets the hover rating instantly.",
+ "description": "Five gold SVG star radio controls commit ratings on click or keyboard input and settle with a scale bounce. First input stops automatic sweeping.",
  "useWhen": "Review forms, product cards, feedback widgets — anywhere a star rating input needs a lively, self-demonstrating idle state.",
  "avoidWhen": "Production forms requiring a fixed, committed rating — the auto-cycle must be removed and a click-to-set handler added before shipping.",
  "agentPrompt": "Change star count to 10 by setting N=10 and adjusting the viewBox to \"0 0 640 80\", update spacing from 62 to 62, and change gold color from #ffd23f to #f59e0b. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
@@ -46,17 +49,18 @@
   "prefers-reduced-motion static fallback",
   "visibilitychange pause",
   "SVG role/aria-label",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Auto-cycles by default — remove dir sweep and add click handler for real input use",
-  "No keyboard navigation — not accessible as a form control without added tabindex/keydown handlers"
+  "First deliberate input permanently disables idle demo; manual input, finite feedback and settling remain active. Host demoEnabled=false skips the initial attract cycle.",
+  "Star radio controls support Space/Enter and arrow keys; committed rating remains until changed or reload.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
   "agent-ready",
   "easy-to-modify",
-  "mobile-ready",
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
@@ -75,15 +79,19 @@
 </script>
 </head>
 <body>
-<div class="wrap"><div class="stage">
-<svg id="svg" viewBox="0 0 320 80" role="img" aria-label="Star rating"></svg>
+<div class="c07-wrap"><div class="c07-stage">
+<svg class="c07-svg" id="c07-svg" viewBox="0 0 320 80" role="group" aria-label="Star rating"></svg>
 </div></div>
 <div class="cap">Star Rating</div>
 <script>
 (function(){
-  const svg=document.getElementById('svg');
+  const svg=document.getElementById('c07-svg');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   const root=document.documentElement;
+
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
   const NS='http://www.w3.org/2000/svg';
   const N=5,stars=[],backs=[];
   const path='M0 -22 L6.5 -7 L23 -7 L9.5 3 L15 19 L0 9 L-15 19 L-9.5 3 L-23 -7 L-6.5 -7 Z';
@@ -94,7 +102,7 @@
     g.appendChild(back);g.appendChild(fill);svg.appendChild(g);
     stars.push({g,fill,lit:0,scale:1});
     backs.push(back);
-    g.addEventListener('pointerenter',()=>setTarget(i+1));
+    g.setAttribute('role','radio');g.setAttribute('tabindex','0');g.setAttribute('aria-label',(i+1)+' stars');g.setAttribute('aria-checked',i===3);g.addEventListener('click',()=>setTarget(i+1));g.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setTarget(i+1);}else if(e.key==='ArrowRight'||e.key==='ArrowUp'){e.preventDefault();setTarget(Math.min(N,target+1));}else if(e.key==='ArrowLeft'||e.key==='ArrowDown'){e.preventDefault();setTarget(Math.max(1,target-1));}});
   }
   function syncTheme(){          // star fill/back colors are JS-set attributes, not CSS — re-read + re-apply on flip
     const cs=getComputedStyle(root);
@@ -111,25 +119,26 @@
     }
   });
   syncTheme();
-  let target=0,running=true,clock=0,dir=1;
-  function setTarget(n){target=n;}
+  let target=4,running=true,clock=0,dir=1,raf=0;
+  function setTarget(n){target=n;stars.forEach((s,i)=>s.g.setAttribute("aria-checked",i===n-1));if(reduce){stars.forEach((s,i)=>s.fill.setAttribute("opacity",i<n?1:0));}else wake();}
   function frame(){
-    if(!running)return;
+    raf=0;if(!running)return;
     clock++;
-    if(clock%18===0){target+=dir;if(target>=N){dir=-1;}if(target<=0){dir=1;}}
+    if(demoEnabled&&!reduce&&clock%18===0){target+=dir;if(target>=N){dir=-1;}if(target<=0){dir=1;}}
     stars.forEach((s,i)=>{
       const want=i<target?1:0;
-      s.lit+=(want-s.lit)*0.25;
+      s.lit=Math.abs(want-s.lit)<.001?want:s.lit+(want-s.lit)*.25;
       const popTarget = (i===Math.round(target)-1 && want>0.5)?1.25:1;
-      s.scale+=(popTarget-s.scale)*0.2;
+      s.scale=Math.abs(popTarget-s.scale)<.001?popTarget:s.scale+(popTarget-s.scale)*.2;
       s.fill.setAttribute('opacity',s.lit);
       s.g.setAttribute('transform','translate('+(36+i*62)+',40) scale('+s.scale+')');
     });
-    requestAnimationFrame(frame);
+    if((demoEnabled&&!reduce)||stars.some((s,i)=>s.lit!==(i<target?1:0)||s.scale!==(i===target-1?1.25:1)))wake();
   }
-  document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
+  function wake(){if(!raf&&!document.hidden)raf=requestAnimationFrame(frame);}
+  document.addEventListener('visibilitychange',()=>{running=!document.hidden;cancelAnimationFrame(raf);raf=0;if(running)wake();});
   if(reduce){target=4;stars.forEach((s,i)=>s.fill.setAttribute('opacity',i<4?1:0));}
-  else requestAnimationFrame(frame);
+  else wake();
 })();
 </script>
 </body>

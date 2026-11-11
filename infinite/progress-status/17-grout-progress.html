@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Grout Progress — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grout Progress</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  /* Urban Azulejo register — dark glaze by default, light glaze in the [data-theme="light"] block */
+  :root{
+    --gp17-bg:#111b25;--gp17-surface:#1b2934;--gp17-face:#223140;--gp17-shade:#1a2733;--gp17-ink:#eef1ec;--gp17-muted:#adb8bc;
+    --gp17-cobalt:#7a9cc4;--gp17-aqua:#75b2b0;--gp17-poster:#e3bf58;--gp17-grout:#0b141d;--gp17-grout-deep:#060c13;--gp17-sheen:rgba(255,255,255,.08);
+    --gp17-display:"Archivo Black","Arial Black",Impact,sans-serif;--gp17-body:"Source Sans 3",ui-sans-serif,system-ui,sans-serif;--gp17-mono:"Recursive Mono",ui-monospace,Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --gp17-bg:#ded9cf;--gp17-surface:#f6f1e7;--gp17-face:#fbf8f1;--gp17-shade:#e7e0d2;--gp17-ink:#17263b;--gp17-muted:#616b72;
+    --gp17-cobalt:#1d5295;--gp17-aqua:#4f8889;--gp17-poster:#c99a20;--gp17-grout:#c7bfb0;--gp17-grout-deep:#a79e8d;--gp17-sheen:rgba(255,255,255,.22);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--gp17-bg)}
+  .gp17-stage{position:fixed;inset:0;display:grid;place-items:center;padding:4vmin;font-family:var(--gp17-body);color:var(--gp17-ink)}
+  /* the panel sits inside a 3px grout frame — grout is the only structural border */
+  .gp17-frame{width:min(100%,420px);background:var(--gp17-grout);padding:3px;border-radius:2px}
+  .gp17-panel{background:var(--gp17-surface);border-radius:2px;padding:clamp(12px,4.4vmin,22px);display:grid;gap:clamp(8px,3vmin,14px)}
+  .gp17-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+  .gp17-label{font:400 clamp(10px,3vmin,14px)/1 var(--gp17-display);letter-spacing:.08em;text-transform:uppercase}
+  .gp17-read{font:400 clamp(9px,2.7vmin,12px)/1 var(--gp17-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--gp17-muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .gp17-track{position:relative;height:clamp(16px,6vmin,24px);background:var(--gp17-shade);box-shadow:inset 0 0 0 1px var(--gp17-grout-deep);border-radius:2px;overflow:hidden}
+  .gp17-fill{position:absolute;inset:0;transform-origin:left center;transform:scaleX(0);background:var(--gp17-cobalt);transition:transform 500ms cubic-bezier(.2,0,0,1),opacity 300ms}
+  .gp17-track.is-firing .gp17-fill{transform:scaleX(1);opacity:.35;animation:gp17-fire 1.2s cubic-bezier(.45,0,.55,1) infinite alternate}
+  @keyframes gp17-fire{from{opacity:.22}to{opacity:.48}}
+  /* grout channels divide the fill into eight modules; a sheen sits on the top 40% of the glaze */
+  .gp17-channels{position:absolute;inset:0;background:repeating-linear-gradient(90deg,#0000 0 calc(100%/8 - 3px),var(--gp17-grout-deep) calc(100%/8 - 3px) calc(100%/8))}
+  .gp17-glaze{position:absolute;inset:0;background:linear-gradient(180deg,var(--gp17-sheen) 0 40%,#0000 41%)}
+  .gp17-coords{display:grid;grid-template-columns:repeat(8,1fr);font:400 clamp(8px,2.2vmin,10px)/1 var(--gp17-mono);letter-spacing:.06em;color:var(--gp17-muted);text-align:center}
+  .gp17-coords span{transition:color .3s}.gp17-coords span.gp17-on{color:var(--gp17-cobalt)}
+  .gp17-foot{margin:0;font-size:clamp(9px,2.6vmin,12px);line-height:1.4;color:var(--gp17-muted);display:flex;justify-content:space-between;gap:8px}
+  .gp17-foot i{font:400 1em var(--gp17-mono);font-style:normal;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+  @media (max-width:220px){.gp17-foot span{display:none}}
+  .gp17-foot i.is-done{color:var(--gp17-aqua)}.gp17-foot i.is-firing{color:var(--gp17-poster)}
+  .gp17-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 var(--gp17-mono);color:var(--gp17-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+  @media (prefers-reduced-motion:reduce){.gp17-fill{transition:none;animation:none!important}.gp17-coords span{transition:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/17-grout-progress.html",
+ "title": "Grout Progress",
+ "description": "A glazed track inside a grout frame, divided into eight modules by grout channels, filling module by module in cobalt with a firm 500 ms grout-fill gesture; a mono readout ('5/8 · 62%'), a row of A–H bay coordinates that light with the fill, and a caption that reads queued, firing, module n, fired. Before each pass the track fires indeterminate.",
+ "useWhen": "Batch or stage progress in operations, manufacturing, build and deploy surfaces where discrete steps matter more than a smooth bar.",
+ "avoidWhen": "Continuous percentages with no natural steps, or very narrow placements where eight modules drop under 34 px.",
+ "agentPrompt": "Change SEG (segments — update the channel gradient's 8 too), the phase lengths FIRE=1500, STEP=600, HOLD=2000, the caption copy, and the pigment via --gp17-cobalt; aqua marks fired, poster marks firing. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "segment count SEG (and the /8 in .gp17-channels)",
+  "phase lengths (FIRE, STEP, HOLD, RESET)",
+  "caption copy and the coordinate row",
+  "pigments (--gp17-cobalt, --gp17-aqua, --gp17-poster, --gp17-grout-deep)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "IIFE wrapper",
+  "role=progressbar with aria-valuenow removed while firing",
+  "grout is the only structural border (3 px gap colour, no 1 px box borders)",
+  "prefers-reduced-motion guard (five of eight fired, still)",
+  "visibilitychange pause",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+ ],
+ "knownLimitations": [
+  "Archivo Black / Source Sans 3 / Recursive Mono fall back to Arial Black / system sans / ui-monospace",
+  "The pass is a demo loop — drive paint(n) from real events in a product"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "progress",
+  "segmented",
+  "grout",
+  "ceramic",
+  "azulejo",
+  "kiln",
+  "cobalt",
+  "coordinates"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="gp17-stage">
+  <div class="gp17-frame">
+    <div class="gp17-panel" role="img" aria-label="Kiln firing progress: an eight-module glazed track divided by grout channels fills module by module in cobalt, with a mono readout and bay coordinates">
+      <div class="gp17-head"><span class="gp17-label">Kiln 2</span><span class="gp17-read" id="gp17-read">0/8 · 0%</span></div>
+      <div class="gp17-track" id="gp17-track" role="progressbar" aria-valuemin="0" aria-valuemax="8" aria-valuenow="0" aria-label="Modules fired"><div class="gp17-fill" id="gp17-fill"></div><div class="gp17-channels" aria-hidden="true"></div><div class="gp17-glaze" aria-hidden="true"></div></div>
+      <div class="gp17-coords" id="gp17-coords" aria-hidden="true"></div>
+      <p class="gp17-foot"><span>Bay C4 · repointing</span><i id="gp17-state">queued</i></p>
+    </div>
+  </div>
+</div>
+<div class="gp17-cap" aria-hidden="true">Grout Progress</div>
+<script>(function(){"use strict";
+  var root=document.documentElement, track=document.getElementById('gp17-track'), fill=document.getElementById('gp17-fill'), read=document.getElementById('gp17-read'), coords=document.getElementById('gp17-coords'), state=document.getElementById('gp17-state');
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))root.setAttribute('data-theme',d.theme);});
+  var SEG=8; coords.innerHTML='ABCDEFGH'.split('').map(function(c){return '<span>'+c+'4</span>';}).join('');
+  function paint(n,firing){ track.classList.toggle('is-firing',firing); if(!firing)fill.style.transform='scaleX('+(n/SEG)+')';
+    read.textContent=firing?'FIRING…':n+'/'+SEG+' · '+Math.round(n/SEG*100)+'%'; if(firing)track.removeAttribute('aria-valuenow'); else track.setAttribute('aria-valuenow',n);
+    for(var i=0;i<SEG;i++)coords.children[i].classList.toggle('gp17-on',!firing&&i<n);
+    state.className=firing?'is-firing':n>=SEG?'is-done':''; state.textContent=firing?'firing':n>=SEG?'fired':n?'module '+n:'queued'; }
+  // the gesture is the grout fill, 500 ms per module, firm easing; one 100 ms clock runs: fire (indeterminate) → fill 8 modules → fired → reset
+  var TICK=100, FIRE=1500, STEP=600, HOLD=2000, RESET=600, phase='fire', t=-300, n=0, clock=null;
+  function tick(){ t+=TICK;
+    if(phase==='fire'){ if(t>=FIRE){phase='fill';t=0;n=0;paint(0,false);} else if(t>=0)paint(0,true); }
+    else if(phase==='fill'){ if(t>=STEP){t=0;n++;paint(n,false);if(n>=SEG){phase='hold';}} }
+    else if(phase==='hold'){ if(t>=HOLD){phase='reset';t=0;paint(0,false);} }
+    else if(phase==='reset'&&t>=RESET){ phase='fire'; t=0; } }
+  function start(){ if(!clock&&!reduce)clock=setInterval(tick,TICK); }
+  function stop(){ clearInterval(clock); clock=null; }
+  document.addEventListener('visibilitychange',function(){ document.hidden?stop():start(); });
+  if(reduce){ paint(5,false); } else { n=3; phase='fill'; t=0; paint(3,false); } // pre-roll: three modules fired at first paint
+  start();
+})();</script>
+</body>
+</html>

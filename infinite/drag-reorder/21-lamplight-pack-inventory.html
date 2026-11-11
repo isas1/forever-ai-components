@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Lamplight Capacity Orbit — Drag &amp; Reorder. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lamplight Capacity Orbit</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--sky:#0E1630;--s1:#16224A;--s2:#2B3D71;--s3:#3E66A8;--lamp:#F2C230;--warm:#E8893A;--ink:#FFF6D6;--mut:#A9B4D6}
+:root[data-theme="light"]{--sky:#DCE3F2;--s1:#C5D0E8;--s2:#B3C2E0;--s3:#8FA3CC;--lamp:#B8860B;--warm:#B8651A;--ink:#1A2340;--mut:#4A5578}
+.wii-stage,.wii-stage *{box-sizing:border-box;margin:0;padding:0}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--sky)}
+.wii-stage{position:absolute;inset:0;background:var(--sky);color:var(--ink);font-family:"Gill Sans",Optima,Candara,system-ui,sans-serif;display:grid;place-items:center;overflow:hidden}
+.wii-s{position:relative;width:min(92vmin,640px);aspect-ratio:1;touch-action:none;user-select:none;-webkit-user-select:none}
+.wii-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+.wii-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.wii-b{position:absolute;left:0;top:0;border:2px solid var(--s3);background:var(--s1);color:var(--ink);font:700 calc(var(--u)*4.4)/1 inherit;font-family:inherit;cursor:pointer;touch-action:none;transition:background .25s,color .25s,border-color .25s}
+.wii-b:hover{border-color:var(--lamp)}
+.wii-b[aria-pressed=true]{background:var(--lamp);color:var(--sky);border-color:var(--lamp)}
+.wii-n{position:absolute;pointer-events:none;color:var(--lamp);font-weight:600;line-height:1;font-variant-numeric:tabular-nums;transition:color .2s}
+.wii-unit{font-style:normal;color:var(--mut)}
+.wii-n.wii-w{color:var(--warm)}
+.wii-stage :focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.wii-stage *{transition:none!important}}
+.wii-b{width:calc(var(--u)*13);height:calc(var(--u)*13);margin:calc(var(--u)*-6.5) 0 0 calc(var(--u)*-6.5);border-radius:50%}
+.wii-n{left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;font-size:calc(var(--u)*17)}
+.wii-unit{display:block;font-size:calc(var(--u)*5);margin-top:calc(var(--u)*1.5)}
+
+.wii-cap{position:fixed;left:8px;bottom:7px;max-width:calc(100% - 16px);font:10px/1.2 system-ui,sans-serif;letter-spacing:.03em;color:var(--ink);opacity:.35;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/drag-reorder/21-lamplight-pack-inventory.html",
+ "title": "Lamplight Capacity Orbit",
+ "description": "Lamplight-on-navy palette with warm gold accents; tap equipment around a capacity orbit with painterly ring strokes and spring settling.",
+ "useWhen": "A playful item picker with capacity feedback and keyboard alternatives.",
+ "avoidWhen": "Persistent inventory management without connecting real item data and storage.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes.",
+  "Owner-approved light lamp accent #B8860B has 2.53:1 contrast on #DCE3F2; catalog accentLight uses actual light ink #1A2340 for readable placeholder chrome."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "inventory",
+  "orbit",
+  "lamplight",
+  "spring",
+  "capacity"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wii-stage" role="group" aria-label="Lamplight Capacity Orbit">
+<main id="wii-root" class="wii-s" role="group" aria-label="Pack equipment, limit 36 pounds">
+<canvas id="wii-cv" class="wii-c" aria-hidden="true"></canvas>
+<div class="wii-n" id="wii-n"><span id="wii-t">22</span><i class="wii-unit">/36</i></div>
+<div id="wii-live" class="wii-sr" role="status" aria-live="polite"></div>
+</main>
+</div>
+<div class="wii-cap" aria-hidden="true">Lamplight Capacity Orbit</div>
+<script>
+(function(){
+
+var $=function(i){return document.getElementById(i)},root=document.documentElement,st=$('wii-root'),cv=$('wii-cv'),cx=cv.getContext('2d'),W=100,H=100,U=1,D=1,C={},raf=0,last=0,tm=0,mo=matchMedia('(prefers-reduced-motion: reduce)');
+var IT=[{n:'Emotional baggage',w:16},{n:'Laptop',w:14},{n:'Snacks',w:6},{n:'Phone charger',w:6}],CAP=36,ord=[0,2],BT=[];
+function has(i){return ord.indexOf(i)>=0}
+function tot(){return ord.reduce(function(a,i){return a+IT[i].w},0)}
+function say(s){$('wii-live').textContent=s}
+function toggle(i){var e=has(i),n=IT[i].n;
+if(e)ord.splice(ord.indexOf(i),1);else if(tot()+IT[i].w>CAP){say(n+' does not fit. '+tot()+' of '+CAP+' pounds');return -1}else ord.push(i);
+say(n+(e?' removed. ':' equipped. ')+tot()+' of '+CAP+' pounds');return e?0:1}
+function sync(){BT.forEach(function(b,i){b.setAttribute('aria-pressed',has(i))})}
+function mk(){IT.forEach(function(x,i){var b=document.createElement('button');b.type='button';b.className='wii-b';b.textContent=x.w;b.setAttribute('aria-label',x.n+', '+x.w+' pounds');b.setAttribute('aria-pressed',has(i));st.appendChild(b);BT.push(b)})}
+function pt(e){var r=cv.getBoundingClientRect();return[(e.clientX-r.left)/U,(e.clientY-r.top)/U]}
+function clr(){cx.setTransform(D,0,0,D,0,0);cx.clearRect(0,0,W,H)}
+function ln(x1,y1,x2,y2,col,al,sd,n,wd){var L=Math.hypot(x2-x1,y2-y1)||1,nx=-(y2-y1)/L,ny=(x2-x1)/L;cx.strokeStyle=col;cx.lineCap='round';cx.lineWidth=wd;
+for(var k=0;k<n;k++){var o=(k-(n-1)/2)*wd*.7;cx.globalAlpha=al*(.4+.5*Math.abs(Math.sin(k*2.3+sd)));cx.beginPath();cx.moveTo(x1+nx*o,y1+ny*o);cx.lineTo(x2+nx*o,y2+ny*o);cx.stroke()}cx.globalAlpha=1}
+function cols(){var s=getComputedStyle(root);'sky s1 s2 s3 lamp warm ink mut'.split(' ').forEach(function(k){C[k]=s.getPropertyValue('--'+k).trim()})}
+function fit(){var r=cv.getBoundingClientRect();W=r.width;H=r.height;U=W/100;D=Math.min(devicePixelRatio||1,2);cv.width=Math.round(W*D);cv.height=Math.round(H*D);st.style.setProperty('--u',U+'px');onfit();kick()}
+function frame(t){raf=0;var dt=Math.min(Math.max(t-last,0),50)/16.667;last=t;tm+=dt;var b=step(dt);draw();if(b&&!document.hidden)raf=requestAnimationFrame(frame)}
+function kick(){if(document.hidden||raf)return;last=performance.now();raf=requestAnimationFrame(frame)}
+function theme(t){root.setAttribute('data-theme',t);cols();kick()}
+var A0=[-2.356,-.785,.785,2.356],TAU=6.2832,u=[1,0,1,0],uv=[0,0,0,0],sh=[0,0,0,0],len=[16,0,6,0],so=[0,2],fl=0,dv=22,tE=$('wii-t'),nE=$('wii-n');
+function onfit(){}
+function A(k){return -1.5708+TAU*k/CAP}
+function ring(r,a1,a2,col,al,sd){if(a2<=a1)return;cx.strokeStyle=col;cx.lineCap='round';cx.lineWidth=U*1.5;
+for(var k=0;k<6;k++){cx.globalAlpha=al*(.45+.4*Math.abs(Math.sin(k*1.9+sd)));cx.beginPath();cx.arc(W/2,H/2,r+(k-2.5)*U*.9+Math.sin(k*2.7+sd*5+a1)*U*.35,a1+k%3*.012,a2-k%2*.02);cx.stroke()}cx.globalAlpha=1}
+function step(dt){var b=0,m=mo.matches,k=1-Math.pow(1-.14,dt),f=Math.pow(.81,dt),T=tot();
+IT.forEach(function(x,i){var t=has(i)?1:0,lt=t*x.w;
+if(m){u[i]=t;uv[i]=0;len[i]=lt;sh[i]=0;return}
+uv[i]=(uv[i]+(t-u[i])*.12*dt)*f;u[i]+=uv[i]*dt;len[i]+=(lt-len[i])*k;sh[i]*=Math.pow(.9,dt);
+if(Math.abs(t-u[i])>.002||Math.abs(uv[i])>.002||Math.abs(lt-len[i])>.05||sh[i]>.02)b=1;else{u[i]=t;uv[i]=0;len[i]=lt;sh[i]=0}});
+so=so.filter(function(i){return has(i)||len[i]>.05});
+fl=m?0:fl*Math.pow(.92,dt);if(fl>.02)b=1;else fl=0;
+dv+=(T-dv)*(m?1:k);if(Math.abs(T-dv)>.05)b=1;else dv=T;return b}
+function draw(){clr();var c=W/2,R=29*U,s={},a=0;
+so.forEach(function(i){s[i]=a;a+=len[i]});
+ring(R,A(0),A(CAP),C.s2,.9,0);
+if(fl>0)ring(R,A(0),A(CAP),C.warm,fl*.8,1);
+cx.shadowColor=C.lamp;cx.shadowBlur=U*3;
+so.forEach(function(i){if(len[i]>.2)ring(R,A(s[i])+.04,A(s[i]+len[i])-.04,C.lamp,1,i)});
+cx.shadowBlur=0;
+BT.forEach(function(b,i){var m=A(s[i]===undefined?a:s[i]+len[i]/2),d=((m-A0[i]+3.1416)%TAU+TAU)%TAU-3.1416,an=A0[i]+d*u[i],r=(43-14*u[i])*U;
+b.style.transform='translate('+(c+r*Math.cos(an)+Math.sin(tm*.9)*sh[i]*2*U)+'px,'+(c+r*Math.sin(an))+'px)'});
+var t=Math.round(dv);if(tE.textContent!=t)tE.textContent=t;nE.classList.toggle('wii-w',fl>.15)}
+mk();
+BT.forEach(function(b,i){b.addEventListener('click',function(){var r=toggle(i);
+if(r>0){so=so.filter(function(x){return x!==i});so.push(i)}
+if(r<0){fl=1;uv[i]+=.1;sh[i]=1}
+sync();kick()})});
+addEventListener('message',function(e){var m=e.data;if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark'))theme(m.theme)});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+mo.addEventListener('change',kick);
+cols();new ResizeObserver(fit).observe(st);fit();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoTimer=0,demoIndex=0;
+function demoStop(){demoEnabled=false;clearInterval(demoTimer);demoTimer=0}
+function demoStart(){if(demoTimer||!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;demoTimer=setInterval(function(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;BT[demoIndex++%BT.length].click()},1400)}
+window.addEventListener('forever:interactive',demoStop);
+['pointerdown','keydown','wheel','click'].forEach(function(t){document.addEventListener(t,function(e){if(e.isTrusted)demoStop()},{capture:true,passive:true})});
+document.addEventListener('visibilitychange',function(){clearInterval(demoTimer);demoTimer=0;if(!document.hidden)demoStart()});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',function(){clearInterval(demoTimer);demoTimer=0;demoStart()});
+demoStart();
+})();
+</script>
+</body>
+</html>

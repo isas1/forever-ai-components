@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Waterline — Feedback States. Drop items into a still waterline. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Waterline</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#3cc4a8}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#0b7a66}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt14-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;font-family:-apple-system,system-ui,"Segoe UI",sans-serif;-webkit-tap-highlight-color:transparent;user-select:none}
+.dt14-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt14-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dt14-add{position:absolute;right:5%;top:calc(42% - 50px);min-width:48px;min-height:44px;padding:0 10px;border:0;background:none;color:var(--acc);font:500 clamp(13px,3.2vmin,18px)/1 -apple-system,system-ui,sans-serif;letter-spacing:.02em;cursor:pointer;border-radius:6px}
+.dt14-add:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt14-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.dt14-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/feedback-states/27-waterline.html",
+ "title": "Waterline",
+ "description": "A still waterline with one snail: tap to drop items in, tap or press Delete to lift them out, drag to stir the water. Clean modern: off-black and verdigris with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and verdigris (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "At most 18 items. A visually hidden live region announces changes.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "empty-state",
+  "list",
+  "water",
+  "ripple",
+  "canvas"
+ ]
+}
+</script>
+</head><body>
+<div class="dt14-root" role="application" tabindex="0" aria-label="Tide pool list. One periwinkle waits on the waterline. Tap or press Enter to drop an item in. Tap a pebble, or select it with the arrow keys and press Delete, to lift it out. Drag along the water to stir it. Escape clears the selection."></div>
+<div class="dt14-cap" aria-hidden="true">Waterline</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.dt14-root');
+  var cv=document.createElement('canvas');cv.className='dt14-cv';root.appendChild(cv);
+  var cx=cv.getContext('2d');
+  var btn=document.createElement('button');btn.className='dt14-add';btn.type='button';btn.textContent='Add';
+  btn.setAttribute('aria-label','Add an item to the pool');root.appendChild(btn);
+  var live=document.createElement('div');live.className='dt14-sr';live.setAttribute('aria-live','polite');live.setAttribute('data-fit-clip-ok','');root.appendChild(live);
+  live.textContent='0 items. The pool is still.';
+  var N=56,u=new Float32Array(N),v=new Float32Array(N),W=0,H=0,dpr=1,started=false;
+  var K=0.16,C=0.34,D=0.86,SK=0.14,SD=0.8,MAX=18;
+  var names=['Monday','Forever plan','cat-pics-2','Emotional baggage','Laundry','Forever','Dentist','cat-pics-3','Groceries','Call back'];
+  var ni=0,items=[],sel=-1,actx=null;
+  function LY(){return H*0.42}
+  function nodeAt(x){return Math.max(1,Math.min(N-2,Math.round(x/W*(N-1))))}
+  function waterAt(x){var f=x/W*(N-1),i=Math.max(0,Math.min(N-2,f|0)),t=f-i;return u[i]*(1-t)+u[i+1]*t}
+  function slot(k){var c=k%6,r=k/6|0,g=W*0.115;return{x:W/2+(c-2.5)*g+(r%2?g*0.25:-g*0.25),y:LY()+H*0.15+r*H*0.105}}
+  function present(){return items.filter(function(p){return p.ph!=='up'})}
+  function count(){return present().length}
+  function say(s){live.textContent=s}
+  function poke(x,amt){var n=nodeAt(x);v[n]+=amt;v[n-1]+=amt*0.6;v[n+1]+=amt*0.6}
+  function plop(){}
+  function add(x){
+    if(count()>=MAX){poke(x||W*0.6,-H*0.012);say('The pool is full. '+MAX+' items.');kick();return}
+    x=x==null?W*(0.4+Math.random()*0.4):Math.max(W*0.08,Math.min(W*0.92,x));
+    var nm=names[ni++%names.length];
+    items.push({x:x,y:LY()-H*0.3,vx:0,vy:0,ph:'fall',name:nm,a:1});
+    say('Added '+nm+'. '+count()+(count()===1?' item.':' items.'));kick();
+  }
+  function removeAt(i){var p=present()[i];if(!p)return;
+    p.ph='up';p.vy=-H*0.004;plop(true);
+    var c=count();if(sel>=c)sel=c-1;
+    say('Removed '+p.name+'. '+(c?c+(c===1?' item.':' items.'):'0 items. The pool is still.'));kick()}
+  function step(dt){
+    var s=Math.ceil(dt),h=dt/s,m=false,ly=LY(),i,k;
+    for(k=0;k<s;k++){
+      for(i=1;i<N-1;i++){var a=-K*u[i]+C*(u[i-1]+u[i+1]-2*u[i]);v[i]=(v[i]+a*h)*Math.pow(D,h)}
+      for(i=1;i<N-1;i++)u[i]+=v[i]*h;
+    }
+    for(i=1;i<N-1;i++)if(Math.abs(u[i])>0.05||Math.abs(v[i])>0.05){m=true;break}
+    var idx=0;
+    for(i=items.length-1;i>=0;i--){}
+    items.forEach(function(p){
+      if(p.ph==='fall'){p.vy+=H*0.0016*dt;p.y+=p.vy*dt;var wl=ly+waterAt(p.x);
+        if(p.y>=wl){p.ph='sit';poke(p.x,H*0.022);p.vy*=0.35;plop(false)}m=true}
+      else if(p.ph==='sit'){var t=slot(idx);var ax=SK*(t.x-p.x),ay=SK*(t.y-p.y);
+        p.vx=(p.vx+ax*dt)*Math.pow(SD,dt);p.vy=(p.vy+ay*dt)*Math.pow(SD,dt);
+        p.x+=p.vx*dt;p.y+=p.vy*dt;
+        if(Math.abs(t.x-p.x)>0.3||Math.abs(t.y-p.y)>0.3||Math.abs(p.vx)+Math.abs(p.vy)>0.05)m=true}
+      else{var py=p.y,ty=ly-H*0.32;p.vy=(p.vy+SK*0.6*(ty-p.y)*dt)*Math.pow(SD,dt);p.y+=p.vy*dt;
+        var w2=ly+waterAt(p.x);if(py>w2&&p.y<=w2)poke(p.x,-H*0.018);
+        if(p.y<w2)p.a-=0.035*dt;m=true}
+      if(p.ph!=='up')idx++;
+    });
+    items=items.filter(function(p){return p.a>0});
+    return m;
+  }
+  function snapToTarget(){u.fill(0);v.fill(0);items=items.filter(function(p){return p.ph!=='up'});
+    items.forEach(function(p,i){var t=slot(i);p.x=t.x;p.y=t.y;p.vx=p.vy=0;p.ph='sit'})}
+  function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+  function snail(x,y,ang,s,ink){
+    cx.save();cx.translate(x,y);cx.rotate(ang);cx.strokeStyle=ink;cx.beginPath();
+    cx.moveTo(-1.7*s,-0.05*s);cx.quadraticCurveTo(0,-0.55*s,1.35*s,-0.35*s);
+    cx.quadraticCurveTo(1.75*s,-0.25*s,1.8*s,-0.05*s);cx.stroke();
+    cx.beginPath();cx.moveTo(1.3*s,-0.4*s);cx.lineTo(1.85*s,-1.15*s);
+    cx.moveTo(1.05*s,-0.45*s);cx.lineTo(1.25*s,-1.25*s);cx.stroke();
+    var c0x=-0.15*s,c0y=-1.15*s,t,r,first=true;cx.beginPath();
+    for(t=0;t<=3.3*Math.PI;t+=0.12){r=s*(1.05-t/(3.4*Math.PI)*0.95);
+      var px=c0x+Math.cos(t+Math.PI*0.6)*r,py=c0y+Math.sin(t+Math.PI*0.6)*r;
+      if(first){cx.moveTo(px,py);first=false}else cx.lineTo(px,py)}
+    cx.stroke();cx.restore()}
+  function draw(){
+    if(!W)return;var bg=col('--bg'),ink=col('--ink'),acc=col('--acc'),ly=LY(),i;
+    cx.setTransform(dpr,0,0,dpr,0,0);cx.fillStyle=bg;cx.fillRect(0,0,W,H);
+    var lw=Math.max(1.5,W/330);cx.lineWidth=lw;cx.lineCap='round';cx.lineJoin='round';
+    cx.beginPath();cx.moveTo(0,ly);for(i=0;i<N;i++)cx.lineTo(i/(N-1)*W,ly+u[i]);
+    cx.lineTo(W,H);cx.lineTo(0,H);cx.closePath();cx.globalAlpha=0.045;cx.fillStyle=ink;cx.fill();cx.globalAlpha=1;
+    cx.beginPath();for(i=0;i<N;i++){var px=i/(N-1)*W,py=ly+u[i];i?cx.lineTo(px,py):cx.moveTo(px,py)}
+    cx.strokeStyle=ink;cx.stroke();
+    var sx=W*0.26,sy=ly+waterAt(sx),sl=Math.atan2(waterAt(sx+4)-waterAt(sx-4),8);
+    snail(sx,sy-lw*0.5,sl,W*0.028,ink);
+    var rx=W*0.03,ry=W*0.021,k=0;
+    items.forEach(function(p){var on=p.ph!=='up'&&k===sel;if(p.ph!=='up')k++;
+      cx.globalAlpha=Math.max(0,p.a);cx.strokeStyle=on?acc:ink;cx.lineWidth=on?lw*1.6:lw;
+      cx.beginPath();cx.ellipse(p.x,p.y,rx,ry,0,0,Math.PI*2);cx.stroke();
+      cx.lineWidth=lw*0.7;cx.beginPath();cx.moveTo(p.x-rx*0.45,p.y-ry*0.25);cx.quadraticCurveTo(p.x,p.y-ry*0.6,p.x+rx*0.4,p.y-ry*0.3);cx.stroke()});
+    cx.globalAlpha=1;
+  }
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  new ResizeObserver(function(){var r=root.getBoundingClientRect();W=r.width;H=r.height;
+    dpr=Math.min(devicePixelRatio||1,2);cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);
+    present().forEach(function(p,i){var t=slot(i);p.x=t.x;p.y=t.y});
+    if(!started){started=true;if(amb())poke(W*0.26,H*0.012)}draw();kick()}).observe(root);
+  var down=null;
+  function pt(e){var r=root.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+  function hit(q){var ps=present(),R=Math.max(22,W*0.05);
+    for(var i=0;i<ps.length;i++)if(Math.hypot(ps[i].x-q.x,ps[i].y-q.y)<R)return i;return -1}
+  root.addEventListener('pointerdown',function(e){if(e.target===btn)return;var q=pt(e);
+    down={x:q.x,y:q.y,moved:0,item:hit(q)};root.setPointerCapture&&root.setPointerCapture(e.pointerId)});
+  root.addEventListener('pointermove',function(e){if(!down)return;var q=pt(e);
+    down.moved+=Math.abs(q.x-down.x)+Math.abs(q.y-down.y);down.x=q.x;down.y=q.y;
+    if(down.moved>10&&down.item<0){var n=nodeAt(q.x),d=Math.max(-H*0.06,Math.min(H*0.06,q.y-LY()));
+      if(Math.abs(q.y-LY())<H*0.18){u[n]+=(d-u[n])*0.3;u[n-1]+=(d-u[n-1])*0.15;u[n+1]+=(d-u[n+1])*0.15;kick()}}});
+  root.addEventListener('pointerup',function(e){if(!down)return;var d=down;down=null;if(d.moved>10)return;
+    if(d.item>=0){sel=-1;removeAt(d.item)}else add(d.x)});
+  root.addEventListener('pointercancel',function(){down=null});
+  btn.addEventListener('click',function(e){e.stopPropagation();add(null)});
+  root.addEventListener('keydown',function(e){var c=count(),k=e.key;
+    if((k==='Enter'||k===' ')&&e.target===btn)return;
+    if(k==='Enter'||k===' '){e.preventDefault();add(null)}
+    else if(k==='ArrowRight'||k==='ArrowDown'){e.preventDefault();if(c){sel=(sel+1)%c;say(present()[sel].name+', '+(sel+1)+' of '+c)}}
+    else if(k==='ArrowLeft'||k==='ArrowUp'){e.preventDefault();if(c){sel=sel<=0?c-1:sel-1;say(present()[sel].name+', '+(sel+1)+' of '+c)}}
+    else if(k==='Delete'||k==='Backspace'){e.preventDefault();if(c)removeAt(sel>=0?sel:c-1)}
+    else if(k==='Escape'){sel=-1;say('Selection cleared.')}
+    else return;draw();kick()});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  draw();
+  // Idle demo (demo-v1): performs the control on its own until the first real input.
+  function amb(){var p=window.__foreverPreview;return !p||p.demoEnabled!==false}
+  var demo=amb(),dI=0,dT=0;
+  function stopDemo(){demo=false;clearInterval(dT)}
+  dT=setInterval(function(){if(!demo||document.hidden||reduce())return;
+    if('aaaddd'.charAt(dI++%6)==='a'){add(null)}else{if(count())removeAt(count()-1)}},900);
+  window.addEventListener('forever:interactive',stopDemo);
+  ['pointerdown','keydown','wheel'].forEach(function(t){document.addEventListener(t,stopDemo,true)});
+})();</script>
+</body></html>

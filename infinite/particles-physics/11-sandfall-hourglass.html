@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Amber cellular-automaton sand grains topple through an hourglass cavity and auto-flip when the bulb drains; click reverses gravity.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sandfall Hourglass</title>
@@ -33,7 +34,7 @@
 {
  "file": "infinite/particles-physics/11-sandfall-hourglass.html",
  "title": "Sandfall Hourglass",
- "description": "Amber sand grains fall through a cellular-automaton hourglass cavity, piling realistically at the base; auto-flips when drained, click reverses gravity.",
+ "description": "Amber sand grains fall through a cellular-automaton hourglass cavity, piling realistically at the base; initial automatic flips stop after first input; canvas click reverses gravity and lets grains settle.",
  "useWhen": "Timers, loading screens, meditative ambient displays, or any context needing a satisfying physics loop with no user friction.",
  "avoidWhen": "Contexts requiring legible overlaid text or light backgrounds — background and palette are hardcoded dark amber. Low-end devices may struggle with the per-frame grid scan.",
  "agentPrompt": "Change the sand palette to cool blues by replacing PAL with ['#0d1b2a','#1a3a5c','#1e5f8a','#2980b9','#5dade2','#aed6f1'] and set background to #0a0f14. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
@@ -51,12 +52,14 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback (900 step fast-forward)",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Per-frame full grid scan is O(COLS*ROWS) — heavy on large viewports with small cell sizes",
   "Hourglass shape is purely rectangular mask math — cannot produce curved glass silhouette",
-  "pointermove kick only adds extra simulation steps, not a true pointer interaction"
+  "pointermove kick only adds extra simulation steps, not a true pointer interaction",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -80,10 +83,15 @@
 </script>
 </head>
 <body>
-<canvas id="sfh-c"></canvas>
+<canvas id="sfh-c" class="sfh-root"></canvas>
 <div class="cap">Sandfall Hourglass</div>
 <script>
 (function(){
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   const cv=document.getElementById('sfh-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   // cellular grid: 0 empty, 1..N sand shade. Hourglass mask carved into grid.
@@ -148,12 +156,12 @@
     bgx.stroke();
   }
   syncTheme();addEventListener('resize',build);build();
-  let flip=0, dir=1, kick=0;                        // dir: gravity sign
+  let flip=0,dir=1,kick=0,moved=1;                        // dir: gravity sign
   cv.addEventListener('pointermove',()=>{kick=6;});
   cv.addEventListener('click',()=>{dir*=-1;});
 
   function step(){
-    const gy = dir>0?1:-1;
+    moved=0;const gy = dir>0?1:-1;
     const y0 = dir>0?ROWS-2:1, y1=dir>0?-1:ROWS, dy=dir>0?-1:1;
     const odd = (flip&1);                            // alternate scan bias for symmetry
     for(let y=y0; y!==y1; y+=dy){
@@ -161,19 +169,19 @@
         const x = odd? COLS-1-k : k;
         const i=y*COLS+x, below=i+gy*COLS;
         const v=grid[i]; if(!v) continue;
-        if(mask[below] && !grid[below]){ grid[below]=v; grid[i]=0; continue; }
+        if(mask[below] && !grid[below]){ grid[below]=v; grid[i]=0;moved++; continue; }
         // angle-of-repose toppling: slide diagonally into empty neighbour
         const dl=below-1, dr=below+1;
         const cl=(x>0)&&mask[dl]&&!grid[dl]&&!grid[i-1];
         const cr=(x<COLS-1)&&mask[dr]&&!grid[dr]&&!grid[i+1];
-        if(cl&&cr){ if((x+y+flip)&1){grid[dl]=v;}else{grid[dr]=v;} grid[i]=0; }
-        else if(cl){ grid[dl]=v; grid[i]=0; }
-        else if(cr){ grid[dr]=v; grid[i]=0; }
+        if(cl&&cr){ if((x+y+flip)&1){grid[dl]=v;}else{grid[dr]=v;} grid[i]=0;moved++; }
+        else if(cl){ grid[dl]=v; grid[i]=0;moved++; }
+        else if(cr){ grid[dr]=v; grid[i]=0;moved++; }
       }
     }
     flip++;
     // auto-flip the frame once the falling bulb has mostly drained
-    if(flip%4===0){
+    if(demoEnabled&&!reduce&&flip%4===0){
       let top=0,bot=0;
       for(let y=0;y<ROWS;y++){const row=y<ROWS/2; for(let x=0;x<COLS;x++) if(grid[y*COLS+x]){row?top++:bot++;}}
       const drained = dir>0? top : bot;
@@ -196,18 +204,19 @@
   }
 
   let raf=0,acc=0,last=0;
-  function frame(t){
+  function frame(t){raf=0;if(document.hidden)return;
     const d=last?t-last:16;last=t;acc+=d;
     let n=0;
     while(acc>=33 && n<3){ step(); if(kick>0){step();kick--;} acc-=33;n++;}
     draw();
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(demoEnabled||(sessionActive&&moved>0)))start();
   }
-  function start(){if(!raf){last=0;raf=requestAnimationFrame(frame);}}
+  function start(){if(!raf&&!document.hidden&&!reduce&&(demoEnabled||(sessionActive&&moved>0)))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{if(reduce)return;document.hidden?stop():start();});
   if(reduce){ for(let s=0;s<900;s++) step(); draw(); }
   else start();
+  ['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;moved=1;if(reduce){for(let k=0;k<50;k++)step();draw();}else start();}));
 })();
 </script>
 </body>

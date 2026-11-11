@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Atelier Morph Dialog — Feedback &amp; States. Single-surface action button morphing inline into a multi-option codec export dialog.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier Morph Dialog</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  :root {
+    --at15-bg: #171614; --at15-surface: #211F1C; --at15-surface-hi: #2B2824;
+    --at15-ink: #F4F1EA; --at15-ink-fg: #171614; --at15-muted: #ADA699; --at15-border: #57524A;
+    --at15-accent: #EC6A43; --at15-accent-ink: #171614; --at15-spring: cubic-bezier(0.22, 1.35, 0.36, 1);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --at15-bg: #F4F1EA; --at15-surface: #EBE7DF; --at15-surface-hi: #FAF8F5;
+    --at15-ink: #1C1B19; --at15-ink-fg: #FAF8F5; --at15-muted: #666158; --at15-border: #C5BEB0;
+    --at15-accent: #C43B16; --at15-accent-ink: #FAF8F5;
+    color-scheme: light;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background-color: var(--at15-bg); color: var(--at15-ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased; transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  .at15-stage {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    padding: clamp(8px, 3vmin, 18px); padding-bottom: clamp(22px, 6.5vmin, 30px);
+    background-color: var(--at15-bg); color: var(--at15-ink);
+  }
+  .at15-unit { width: min(214px, 100%); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .at15-wrap { width: 100%; height: clamp(86px, 42vmin, 106px); display: flex; align-items: center; justify-content: center; }
+  .at15-box {
+    width: 132px; height: 40px; background: var(--at15-ink); color: var(--at15-ink-fg);
+    border: 1.5px solid var(--at15-ink); border-radius: 6px; box-shadow: 0 2px 0 var(--at15-border);
+    transition: width 260ms var(--at15-spring), height 260ms var(--at15-spring), background-color 180ms ease;
+    overflow: hidden; position: relative; display: flex; flex-direction: column; justify-content: center;
+  }
+  .at15-box.is-open { width: min(210px, 100%); height: clamp(84px, 40vmin, 102px); background: var(--at15-surface-hi); color: var(--at15-ink); box-shadow: 0 3px 0 var(--at15-ink); }
+  .at15-trigger {
+    appearance: none; width: 100%; height: 100%; background: transparent; border: none; color: inherit;
+    font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; touch-action: manipulation;
+  }
+  .at15-trigger:focus-visible { outline: 2px solid var(--at15-accent); outline-offset: -2px; }
+  .at15-box.is-open .at15-trigger { display: none; }
+  .at15-content { display: none; flex-direction: column; justify-content: space-between; height: 100%; padding: clamp(7px, 2.5vmin, 10px) clamp(8px, 3vw, 12px); }
+  .at15-box.is-open .at15-content { display: flex; }
+  .at15-title { font-size: 10px; font-weight: 700; color: var(--at15-muted); letter-spacing: 0.06em; }
+  .at15-actions { display: flex; gap: clamp(4px, 1.5vw, 6px); }
+  .at15-act {
+    appearance: none; flex: 1; padding: 6px 0; font-family: inherit; font-size: clamp(9px, 2.6vw, 10px);
+    font-weight: 700; border: 1px solid var(--at15-ink); border-radius: 4px;
+    background: var(--at15-surface); color: var(--at15-ink); cursor: pointer; box-shadow: 0 2px 0 var(--at15-ink);
+    touch-action: manipulation;
+  }
+  .at15-act:active { transform: translateY(2px); box-shadow: none; }
+  .at15-act:focus-visible { outline: 2px solid var(--at15-accent); outline-offset: 1px; }
+  .at15-act-primary { background: var(--at15-accent); color: var(--at15-accent-ink); }
+  .at15-readout {
+    width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    font-size: clamp(8.5px, 2.3vw, 10px); font-weight: 600;
+    letter-spacing: 0.06em; color: var(--at15-muted); text-transform: uppercase;
+  }
+  .at15-val { color: var(--at15-ink); }
+  .at15-cap {
+    position: absolute; left: 10px; bottom: 8px; font: 500 11px/1 ui-monospace, monospace;
+    color: var(--at15-ink); opacity: 0.45; letter-spacing: 0.04em; text-transform: uppercase;
+    user-select: none; pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) { .at15-box { transition-duration: 0.01ms !important; } }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/feedback-states/36-atelier-morph-dialog.html",
+ "title": "Atelier Morph Dialog",
+ "description": "Action trigger button that morphs in place into a bordered codec selection confirmation dialog.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Keep closed dialog content hidden and Escape key handling intact.",
+ "editableAreas": [
+  "tokens",
+  "actions"
+ ],
+ "preserveElements": [
+  "demo-v1"
+ ],
+ "knownLimitations": [],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "dialog",
+  "morph",
+  "export",
+  "confirmation",
+  "feedback",
+  "atelier"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="at15-stage">
+  <div class="at15-unit">
+    <div class="at15-wrap">
+      <div class="at15-box" id="at15-box">
+        <button type="button" class="at15-trigger" id="at15-open">BOUNCE MIX</button>
+        <div class="at15-content" role="dialog" aria-label="Export Format">
+          <div class="at15-title">SELECT CODEC:</div>
+          <div class="at15-actions">
+            <button type="button" class="at15-act at15-act-primary" data-fmt="WAV">WAV</button>
+            <button type="button" class="at15-act" data-fmt="FLAC">FLAC</button>
+            <button type="button" class="at15-act" data-fmt="CANCEL">ESC</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="at15-readout">
+      <span>OUTPUT</span>
+      <span class="at15-val" id="at15-out">IDLE</span>
+    </div>
+  </div>
+</div>
+<div class="at15-cap" aria-hidden="true">Atelier Morph Dialog</div>
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var box = document.getElementById("at15-box");
+  var openBtn = document.getElementById("at15-open");
+  var out = document.getElementById("at15-out");
+  var acts = Array.prototype.slice.call(box.querySelectorAll(".at15-act"));
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "forever:theme" && (e.data.theme === "light" || e.data.theme === "dark")) {
+      root.setAttribute("data-theme", e.data.theme);
+    }
+  });
+
+  function openDlg() {
+    box.classList.add("is-open");
+    out.textContent = "AWAITING FORMAT";
+  }
+
+  function closeDlg(fmt, restoreFocus) {
+    box.classList.remove("is-open");
+    out.textContent = fmt === "CANCEL" ? "CANCELLED" : "EXPORTED: " + fmt;
+    if (restoreFocus) openBtn.focus();
+  }
+
+  var fmts = ["WAV", "FLAC", "CANCEL"];
+  var fmtIdx = 0;
+  var demo = !reduce && (!window.__foreverPreview || window.__foreverPreview.demoEnabled !== false);
+  var initTimer = null, demoTimer = null, subTimer = null;
+
+  function cycleDemo() {
+    if (!demo || reduce || document.hidden) return;
+    openDlg();
+    if (subTimer) clearTimeout(subTimer);
+    subTimer = setTimeout(function () {
+      if (!demo || reduce || document.hidden) return;
+      closeDlg(fmts[fmtIdx % fmts.length], false);
+      fmtIdx++;
+    }, 1150);
+  }
+  function startDemo() {
+    if (demo && !reduce && !demoTimer) demoTimer = setInterval(cycleDemo, 2600);
+  }
+  function stopDemo() {
+    if (initTimer) { clearTimeout(initTimer); initTimer = null; }
+    if (subTimer) { clearTimeout(subTimer); subTimer = null; }
+    if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+  }
+  function takeover() { demo = false; stopDemo(); }
+
+  window.addEventListener("forever:interactive", takeover);
+  box.addEventListener("pointerdown", takeover, true);
+  box.addEventListener("keydown", takeover, true);
+
+  openBtn.addEventListener("click", function () {
+    takeover();
+    openDlg();
+    if (acts[0]) acts[0].focus();
+  });
+
+  acts.forEach(function (act) {
+    act.addEventListener("click", function () {
+      takeover();
+      closeDlg(act.dataset.fmt, true);
+    });
+  });
+
+  box.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && box.classList.contains("is-open")) {
+      takeover();
+      closeDlg("CANCEL", true);
+    }
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) stopDemo(); else if (demo) startDemo();
+  });
+
+  if (demo) {
+    initTimer = setTimeout(cycleDemo, 260);
+    startDemo();
+  }
+})();
+</script>
+</body>
+</html>

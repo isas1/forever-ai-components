@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="X-Ray Blueprint Loupe — Cards. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>X-Ray Blueprint Loupe</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+:root{
+  --accent:#C7F000; --accent-soft:rgba(199,240,0,.14); --accent-line:rgba(199,240,0,.32);
+  --bg:#0A0A0A; --bg-sunken:#070707; --surface:#111111; --surface-2:#161616; --surface-3:#1C1C1C;
+  --text:#EDEDEA; --text-muted:#8A8A85; --text-faint:#5A5A56;
+  --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+  --shadow-md:0 4px 16px rgba(0,0,0,.45); --shadow-lg:0 16px 48px rgba(0,0,0,.55);
+  --font-sans:system-ui,-apple-system,Arial,sans-serif;
+  --font-mono:ui-monospace,Menlo,monospace;
+  --ease-out:cubic-bezier(.22,1,.36,1);
+}
+:root[data-theme="light"]{
+  --bg:#FAFAF8; --bg-sunken:#F1F1EC; --surface:#F4F4F0; --surface-2:#ECECE6; --surface-3:#FFFFFF;
+  --text:#1A1A18; --text-muted:#6B6B66; --text-faint:#9A9A93;
+  --border:rgba(0,0,0,.08); --border-strong:rgba(0,0,0,.14);
+  --accent:#4D7A00; --accent-soft:rgba(77,122,0,.12); --accent-line:rgba(77,122,0,.35);
+  --shadow-md:0 4px 16px rgba(0,0,0,.12); --shadow-lg:0 16px 48px rgba(0,0,0,.14);
+}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.xrl-stage{position:fixed;inset:0;display:grid;place-items:center;font-family:var(--font-sans);color:var(--text);font-size:max(4.5px,2.5vmin);user-select:none}
+.xrl-stage *{box-sizing:border-box;margin:0;padding:0}
+.xrl-card{position:relative;width:28em;height:35em;border-radius:1em;background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow-lg);overflow:hidden;cursor:crosshair;isolation:isolate;touch-action:none;--xrl-x:50%;--xrl-y:44%;--xrl-r:7em}
+.xrl-card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.xrl-shell,.xrl-xray{position:absolute;inset:0;padding:1.85em;display:flex;flex-direction:column;justify-content:space-between}
+.xrl-badge{display:inline-flex;align-items:center;gap:.5em;font-family:var(--font-mono);font-size:.85em;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:.45em .8em;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted);width:fit-content}
+.xrl-dot{width:.5em;height:.5em;border-radius:50%;background:currentColor}
+.xrl-core{margin:auto;width:11.4em;height:11.4em;border-radius:1em;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center}
+.xrl-chip{width:6em;height:6em;border-radius:.65em;background:var(--surface-3);border:1px solid var(--border-strong);display:grid;place-items:center;font-family:var(--font-mono);font-size:.95em;font-weight:700;letter-spacing:.06em;color:var(--text-muted)}
+.xrl-title{font-size:1.55em;font-weight:700;letter-spacing:-.02em;margin-bottom:.3em}
+.xrl-sub{font-size:1em;line-height:1.45;color:var(--text-muted)}
+.xrl-meta{display:flex;justify-content:space-between;margin-top:1.1em;padding-top:.9em;border-top:1px solid var(--border);font-family:var(--font-mono);font-size:.92em;color:var(--text-muted)}
+.xrl-state{display:inline-flex;align-items:center;gap:.5em}
+.xrl-state::before{content:"";width:.5em;height:.5em;border-radius:50%;background:currentColor}
+.xrl-card[data-wide="true"] .xrl-state{color:var(--accent)}
+.xrl-xray{background-color:var(--bg-sunken);background-image:linear-gradient(to right,var(--border-strong) 1px,transparent 1px),linear-gradient(to bottom,var(--border-strong) 1px,transparent 1px);background-size:1.4em 1.4em;clip-path:circle(var(--xrl-r) at var(--xrl-x) var(--xrl-y));transition:clip-path .18s var(--ease-out);pointer-events:none}
+.xrl-card[data-dragging="true"] .xrl-xray{transition:none}
+.xrl-canvas{position:absolute;inset:0;width:100%;height:100%}
+.xrl-top,.xrl-bottom{position:relative;z-index:2;font-family:var(--font-mono)}
+.xrl-tag{display:inline-block;font-size:.85em;letter-spacing:.12em;color:var(--text-muted);border:1px solid var(--border-strong);padding:.35em .65em;border-radius:.4em;background:var(--surface)}
+.xrl-specs{font-size:.92em;line-height:1.55;color:var(--text-muted);background:var(--surface);border:1px solid var(--border-strong);padding:.8em .95em;border-radius:.65em}
+.xrl-specs strong{color:var(--text)}
+.xrl-ring{position:absolute;left:var(--xrl-x);top:var(--xrl-y);width:calc(var(--xrl-r)*2);height:calc(var(--xrl-r)*2);transform:translate(-50%,-50%);border-radius:50%;border:1.5px solid var(--text-muted);box-shadow:var(--shadow-md);pointer-events:none;transition:width .22s ease,height .22s ease,border-color .2s ease,box-shadow .2s ease}
+.xrl-card[data-wide="true"] .xrl-ring{border:2px solid var(--accent);box-shadow:0 0 0 1px var(--accent-line),0 0 18px var(--accent-soft)}
+.xrl-ring::before,.xrl-ring::after{content:"";position:absolute;background:var(--text-faint)}
+.xrl-ring::before{top:50%;left:8px;right:8px;height:1px;mask-image:linear-gradient(90deg,#000 12%,transparent 18%,transparent 82%,#000 88%)}
+.xrl-ring::after{left:50%;top:8px;bottom:8px;width:1px;mask-image:linear-gradient(180deg,#000 12%,transparent 18%,transparent 82%,#000 88%)}
+.xrl-cap{position:fixed;left:8px;bottom:7px;font:10px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--text);opacity:.3;pointer-events:none}
+@media (prefers-reduced-motion:reduce){.xrl-xray,.xrl-ring{transition:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/cards/15-xray-blueprint-loupe.html",
+ "title": "X-Ray Blueprint Loupe",
+ "description": "Sealed chip card where a pointer-tracked loupe reveals a live copper-bus blueprint and die telemetry underneath; tap or click switches narrow and wide lens.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [
+  "Forever Opus tokens on :root (--bg, --surface*, --text*, --border*, --accent) — one lime accent, no gradients",
+  "copy and data values in markup/script"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "theme hook: ?theme= bootstrap, forever:theme message listener and :root[data-theme=\"light\"] tokens",
+  "IIFE wrapper, visibilitychange sleep, prefers-reduced-motion guard, time-based (dt) animation"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "card",
+  "xray",
+  "loupe",
+  "blueprint",
+  "hardware"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="xrl-stage" role="region" aria-label="X-ray blueprint card. Hover or drag to move the lens, click or press Space to widen it.">
+  <div class="xrl-card" id="xrl-card" tabindex="0" role="group" aria-label="Chip card lens. Arrow keys move the lens, Space switches its size.">
+    <div class="xrl-shell">
+      <div class="xrl-badge"><span class="xrl-dot"></span>Tensor Core NPU</div>
+      <div class="xrl-core"><div class="xrl-chip">HX-09</div></div>
+      <div>
+        <h1 class="xrl-title">Halcyon Die Rev.4</h1>
+        <p class="xrl-sub">Sealed ceramic package. Move the lens to scan what is underneath. Tap to widen it.</p>
+        <div class="xrl-meta"><span>3nm GAA</span><span class="xrl-state" id="xrl-state" aria-live="polite">Narrow lens</span></div>
+      </div>
+    </div>
+    <div class="xrl-xray">
+      <canvas class="xrl-canvas" id="xrl-canvas" aria-hidden="true"></canvas>
+      <div class="xrl-top"><span class="xrl-tag">CAD // LAYER 04: COPPER BUS</span></div>
+      <div class="xrl-bottom"><div class="xrl-specs">
+        <div>DIE TEMP: <strong id="xrl-temp">42.8&deg;C</strong> &middot; VDD: <strong>0.74V</strong></div>
+        <div>CLOCK: <strong>3.85 GHz</strong> &middot; PARITY: <strong>OK</strong></div>
+      </div></div>
+    </div>
+    <div class="xrl-ring"></div>
+  </div>
+</div>
+<div class="xrl-cap" aria-hidden="true">X-Ray Blueprint Loupe</div>
+<script>
+(function(){
+  'use strict';
+  var card=document.getElementById('xrl-card'),canvas=document.getElementById('xrl-canvas'),
+      stateEl=document.getElementById('xrl-state'),tempEl=document.getElementById('xrl-temp'),
+      ctx=canvas.getContext('2d'),root=document.documentElement,C={};
+  function readTokens(){
+    var cs=getComputedStyle(root);
+    ['accent','text','text-muted'].forEach(function(k){C[k]=cs.getPropertyValue('--'+k).trim();});
+  }
+  readTokens();
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){root.setAttribute('data-theme',d.theme);readTokens();kick();}
+  });
+
+  var demoEnabled=!(window.__foreverPreview&&window.__foreverPreview.demoEnabled===false);
+  var isVisible=!document.hidden,expanded=false;
+  var targetX=.5,targetY=.44,curX=.5,curY=.44,t=0,rafId=0,last=0,W=360,H=450;
+  function reduced(){return matchMedia('(prefers-reduced-motion: reduce)').matches;}
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+
+  function resize(){
+    var dpr=Math.min(window.devicePixelRatio||1,2);
+    W=card.clientWidth||360;H=card.clientHeight||450;
+    canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    card.style.setProperty('--xrl-r',(W*(expanded?.43:.244)).toFixed(1)+'px');
+    kick();
+  }
+  if(window.ResizeObserver)new ResizeObserver(resize).observe(card);else addEventListener('resize',resize);
+
+  function setPointer(x,y){
+    var r=card.getBoundingClientRect();
+    targetX=Math.max(.08,Math.min(.92,(x-r.left)/r.width));
+    targetY=Math.max(.08,Math.min(.92,(y-r.top)/r.height));
+  }
+  function setWide(on){
+    expanded=on;
+    card.style.setProperty('--xrl-r',(W*(on?.43:.244)).toFixed(1)+'px');
+    card.setAttribute('data-wide',String(on));
+    stateEl.textContent=on?'Wide lens':'Narrow lens';
+    kick();
+  }
+  /* a press that barely moves is a tap (switch lens); one that moves drags the lens */
+  var down=null;
+  card.addEventListener('pointerdown',function(e){
+    stopDemo();
+    down={x:e.clientX,y:e.clientY,moved:false};
+    if(e.pointerType!=='mouse'){card.setPointerCapture(e.pointerId);setPointer(e.clientX,e.clientY);card.setAttribute('data-dragging','true');kick();}
+  });
+  card.addEventListener('pointermove',function(e){
+    if(e.pointerType!=='mouse'&&!down)return;
+    stopDemo();
+    if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>8)down.moved=true;
+    card.setAttribute('data-dragging','true');
+    setPointer(e.clientX,e.clientY);kick();
+  });
+  card.addEventListener('pointerup',function(){
+    if(down&&!down.moved)setWide(!expanded);
+    down=null;card.removeAttribute('data-dragging');
+  });
+  card.addEventListener('pointercancel',function(){down=null;card.removeAttribute('data-dragging');});
+  card.addEventListener('pointerleave',function(e){if(e.pointerType==='mouse')card.removeAttribute('data-dragging');});
+  card.addEventListener('keydown',function(e){
+    stopDemo();
+    var s=.06;
+    if(e.key==='ArrowLeft')targetX=Math.max(.1,targetX-s);
+    else if(e.key==='ArrowRight')targetX=Math.min(.9,targetX+s);
+    else if(e.key==='ArrowUp')targetY=Math.max(.1,targetY-s);
+    else if(e.key==='ArrowDown')targetY=Math.min(.9,targetY+s);
+    else if(e.key===' '||e.key==='Enter'){setWide(!expanded);e.preventDefault();return;}
+    else return;
+    e.preventDefault();kick();
+  });
+
+  function draw(phase){
+    var s=W/360,cx=W*.5,cy=H*.45;
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle=C['text-muted'];ctx.lineWidth=Math.max(.8,1.2*s);
+    for(var i=0;i<12;i++){
+      var a=i/12*Math.PI*2,r1=36*s,r2=96*s,
+          x1=cx+Math.cos(a)*r1,y1=cy+Math.sin(a)*r1,x2=cx+Math.cos(a)*r2,y2=cy+Math.sin(a)*r2,
+          p=(phase*.8+i*.17)%1;
+      ctx.globalAlpha=.5;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+      ctx.globalAlpha=1;ctx.fillStyle=i%2===0?C.accent:C.text;
+      ctx.beginPath();ctx.arc(x1+(x2-x1)*p,y1+(y2-y1)*p,Math.max(1.4,2.4*s),0,Math.PI*2);ctx.fill();
+    }
+    ctx.globalAlpha=1;ctx.strokeRect(cx-34*s,cy-34*s,68*s,68*s);
+    ctx.globalAlpha=.8;ctx.strokeStyle=C.accent;ctx.strokeRect(cx-22*s,cy-22*s,44*s,44*s);
+    ctx.globalAlpha=1;
+  }
+  function tick(now){
+    if(!isVisible){rafId=0;return;}
+    var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var rm=reduced();
+    if(!rm)t+=.018*dt;
+    if(demoEnabled&&!rm){targetX=.5+Math.cos(t*.9)*.24;targetY=.45+Math.sin(t*1.3)*.22;}
+    var k=rm?1:1-Math.pow(1-.16,dt);
+    curX+=(targetX-curX)*k;curY+=(targetY-curY)*k;
+    card.style.setProperty('--xrl-x',Math.round(curX*W)+'px');
+    card.style.setProperty('--xrl-y',Math.round(curY*H)+'px');
+    tempEl.textContent=(41.2+(curX+curY)*3.1).toFixed(1)+'°C';
+    draw(t);
+    /* sleep once the lens has settled and nothing autonomous is running */
+    if(Math.abs(targetX-curX)<.001&&Math.abs(targetY-curY)<.001&&(rm||!demoEnabled)){rafId=0;return;}
+    rafId=requestAnimationFrame(tick);
+  }
+  function kick(){if(isVisible&&!rafId){last=0;rafId=requestAnimationFrame(tick);}}
+  document.addEventListener('visibilitychange',function(){
+    isVisible=!document.hidden;
+    if(!isVisible&&rafId){cancelAnimationFrame(rafId);rafId=0;}
+    kick();
+  });
+  resize();
+})();
+</script>
+</body>
+</html>

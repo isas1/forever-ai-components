@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Atelier Stack Cards — Cards. Layered hardware synth preset deck cycling stacked cards forward with spring depth.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier Stack Cards</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  :root {
+    --at18-bg: #171614;
+    --at18-surface-lo: #1D1B18;
+    --at18-surface: #23211E;
+    --at18-surface-hi: #2B2824;
+    --at18-ink: #F4F1EA;
+    --at18-ink-fg: #171614;
+    --at18-muted: #ADA699;
+    --at18-accent: #EC6A43;
+    --at18-spring: cubic-bezier(0.22, 1.35, 0.36, 1);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --at18-bg: #F4F1EA;
+    --at18-surface-lo: #E2DDD3;
+    --at18-surface: #EBE7DF;
+    --at18-surface-hi: #FAF8F5;
+    --at18-ink: #1C1B19;
+    --at18-ink-fg: #FAF8F5;
+    --at18-muted: #666158;
+    --at18-accent: #C43B16;
+    color-scheme: light;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background-color: var(--at18-bg); color: var(--at18-ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  .at18-stage {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: clamp(10px, 3vmin, 20px);
+    padding-bottom: clamp(24px, 7vmin, 32px);
+    background-color: var(--at18-bg); color: var(--at18-ink);
+  }
+  .at18-unit {
+    width: min(198px, 100%);
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+  }
+  .at18-deck {
+    appearance: none; display: block; border: none; padding: 0; margin: 0;
+    background: transparent; text-align: left; font-family: inherit;
+    position: relative; width: 100%; height: clamp(80px, 40vmin, 100px);
+    cursor: pointer; color: var(--at18-ink);
+    touch-action: manipulation;
+  }
+  .at18-deck:focus-visible { outline: 2px solid var(--at18-accent); outline-offset: 4px; border-radius: 6px; }
+  .at18-card {
+    position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+    height: clamp(62px, 30vmin, 76px); margin: auto;
+    background: var(--at18-surface-hi);
+    border: 1.5px solid var(--at18-ink); border-radius: 6px;
+    padding: clamp(7px, 2.5vmin, 10px) clamp(9px, 3vw, 12px);
+    display: flex; flex-direction: column; justify-content: space-between;
+    box-shadow: 0 2px 0 var(--at18-ink);
+    transition: transform 320ms var(--at18-spring), opacity 240ms ease, background-color 200ms ease;
+  }
+  .at18-card[data-pos="0"] { transform: translateY(8px) scale(1); z-index: 3; background: var(--at18-surface-hi); }
+  .at18-card[data-pos="1"] { transform: translateY(-4px) scale(0.93); z-index: 2; background: var(--at18-surface); }
+  .at18-card[data-pos="2"] { transform: translateY(-15px) scale(0.86); z-index: 1; background: var(--at18-surface-lo); }
+  .at18-top {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: clamp(10px, 2.8vw, 11px); font-weight: 700;
+  }
+  .at18-tag {
+    font-size: 9px; padding: 2px 5px; line-height: 1.1;
+    background: var(--at18-ink); color: var(--at18-ink-fg); border-radius: 3px;
+  }
+  .at18-wave { height: 16px; display: flex; align-items: center; gap: 3px; }
+  .at18-bar { flex: 1; background: var(--at18-ink); border-radius: 1px; display: block; }
+  .at18-h12 { height: 12px; }
+  .at18-h6 { height: 6px; }
+  .at18-h14 { height: 14px; }
+  .at18-h8 { height: 8px; }
+  .at18-h11 { height: 11px; }
+  .at18-h5 { height: 5px; }
+  .at18-h15 { height: 15px; }
+  .at18-h7 { height: 7px; }
+  .at18-h13 { height: 13px; }
+  .at18-h4 { height: 4px; }
+  .at18-h10 { height: 10px; }
+  .at18-h9 { height: 9px; }
+  .at18-readout {
+    width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    font-size: clamp(8.5px, 2.3vw, 10px); font-weight: 600;
+    letter-spacing: 0.06em; color: var(--at18-muted);
+    text-transform: uppercase;
+  }
+  .at18-val { color: var(--at18-ink); white-space: nowrap; }
+  .at18-cap {
+    position: absolute; left: 10px; bottom: 8px;
+    font: 500 11px/1 ui-monospace, monospace;
+    color: var(--at18-ink); opacity: 0.45;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    user-select: none; pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .at18-card { transition-duration: 0.01ms !important; }
+  }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/cards/20-atelier-stack-cards.html",
+ "title": "Atelier Stack Cards",
+ "description": "Three-layer stacked synth bank cards with waveform mini-bars cycling cleanly forward with spring depth.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Keep data-pos depth rotation logic and class-based mini waveform bars intact.",
+ "editableAreas": [
+  "tokens",
+  "cards"
+ ],
+ "preserveElements": [
+  "demo-v1"
+ ],
+ "knownLimitations": [],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "cards",
+  "stack",
+  "deck",
+  "preset",
+  "carousel",
+  "atelier"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="at18-stage">
+  <div class="at18-unit">
+    <button type="button" class="at18-deck" id="at18-deck" aria-label="Cycle Synth Presets">
+      <span class="at18-card" data-pos="0" data-name="PRESET A // JUNO">
+        <span class="at18-top"><span>PRESET A</span><span class="at18-tag">POLY</span></span>
+        <span class="at18-wave" aria-hidden="true">
+          <span class="at18-bar at18-h12"></span><span class="at18-bar at18-h6"></span><span class="at18-bar at18-h14"></span><span class="at18-bar at18-h8"></span><span class="at18-bar at18-h11"></span>
+        </span>
+      </span>
+      <span class="at18-card" data-pos="1" data-name="PRESET B // MOOG">
+        <span class="at18-top"><span>PRESET B</span><span class="at18-tag">MONO</span></span>
+        <span class="at18-wave" aria-hidden="true">
+          <span class="at18-bar at18-h5"></span><span class="at18-bar at18-h15"></span><span class="at18-bar at18-h7"></span><span class="at18-bar at18-h13"></span><span class="at18-bar at18-h4"></span>
+        </span>
+      </span>
+      <span class="at18-card" data-pos="2" data-name="PRESET C // FM8">
+        <span class="at18-top"><span>PRESET C</span><span class="at18-tag">BELL</span></span>
+        <span class="at18-wave" aria-hidden="true">
+          <span class="at18-bar at18-h14"></span><span class="at18-bar at18-h10"></span><span class="at18-bar at18-h4"></span><span class="at18-bar at18-h12"></span><span class="at18-bar at18-h9"></span>
+        </span>
+      </span>
+    </button>
+    <div class="at18-readout">
+      <span>BANK</span>
+      <span class="at18-val" id="at18-out">PRESET A // JUNO</span>
+    </div>
+  </div>
+</div>
+<div class="at18-cap" aria-hidden="true">Atelier Stack Cards</div>
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var deck = document.getElementById("at18-deck");
+  var cards = Array.prototype.slice.call(deck.querySelectorAll(".at18-card"));
+  var out = document.getElementById("at18-out");
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "forever:theme" && (e.data.theme === "light" || e.data.theme === "dark")) {
+      root.setAttribute("data-theme", e.data.theme);
+    }
+  });
+
+  function cycle() {
+    for (var i = 0; i < cards.length; i++) {
+      var pos = (Number(cards[i].dataset.pos) + 2) % 3;
+      cards[i].dataset.pos = String(pos);
+      if (pos === 0) out.textContent = cards[i].dataset.name;
+    }
+  }
+
+  var demo = !reduce && (!window.__foreverPreview || window.__foreverPreview.demoEnabled !== false);
+  var initTimer = null, demoTimer = null;
+
+  function stepDemo() {
+    if (!demo || reduce || document.hidden) return;
+    cycle();
+  }
+  function startDemo() {
+    if (demo && !reduce && !demoTimer) demoTimer = setInterval(stepDemo, 1900);
+  }
+  function stopDemo() {
+    if (initTimer) { clearTimeout(initTimer); initTimer = null; }
+    if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+  }
+  function takeover() { demo = false; stopDemo(); }
+
+  window.addEventListener("forever:interactive", takeover);
+  deck.addEventListener("pointerdown", takeover, true);
+  deck.addEventListener("keydown", takeover, true);
+  deck.addEventListener("click", function () {
+    takeover();
+    cycle();
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) stopDemo(); else if (demo) startDemo();
+  });
+
+  if (demo) {
+    initTimer = setTimeout(stepDemo, 280);
+    startDemo();
+  }
+})();
+</script>
+</body>
+</html>

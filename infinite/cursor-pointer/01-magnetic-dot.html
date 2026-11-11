@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A glowing pink dot springs to the pointer while a laggy outer ring squashes along its travel, joined by a fading tendril.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Magnetic Dot</title>
 <script>
@@ -16,19 +17,19 @@
   --ccp01-bg:#f2f2f6; --ccp01-acc:#d60064;
   --ccp01-ring-a:.92; --ccp01-halo-a:.09; --ccp01-tendril-a:.4; --cap-o:.55;
 }
-html,body{margin:0;height:100%;overflow:hidden}
-body{background:var(--ccp01-bg);display:grid;place-items:center}
-#ccp01-c{display:block;width:100vw;height:100vh;cursor:none}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ccp01-bg)}
+#ccp01-c{display:block;width:100%;height:100%;touch-action:none;cursor:none}
+.ccp01-canvas:focus-visible{outline:2px solid var(--ccp01-acc);outline-offset:-4px}
 .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:var(--ccp01-acc);opacity:var(--cap-o);letter-spacing:.1em;text-transform:uppercase;user-select:none;pointer-events:none}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/cursor-pointer/01-magnetic-dot.html",
  "title": "Magnetic Dot",
- "description": "Glowing pink dot springs to the pointer; a laggy outer ring squashes along its travel, joined by a fading tendril. Self-demos via Lissajous path when idle.",
+ "description": "Glowing pink dot springs to the pointer; a laggy outer ring squashes along its travel, joined by a fading tendril. Self-demos via Lissajous path until first deliberate input.",
  "useWhen": "Custom cursor replacements, interactive portfolio heroes, or any dark-background canvas needing a tactile pointer feel.",
  "avoidWhen": "Light backgrounds (hardcoded dark body), or UIs where hiding the native cursor would confuse users.",
- "agentPrompt": "Change the accent color from '#ff5ca8' to '#00eaff', increase dot spring stiffness from 0.22 to 0.35, and slow ring lag from 0.10 to 0.06. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Adjust the existing palette tokens and effect parameters while preserving manual control. Arrow keys steer; first click/touch stops the attract path permanently for this mount. Keep demo-v1 lifecycle marker, __foreverPreview.demoEnabled initialization and forever:interactive handler. Preserve reduced motion, visibility suspension and theme switching.",
  "editableAreas": [
   "accent color (ACC = '#ff5ca8')",
   "dot spring stiffness (0.22)",
@@ -42,17 +43,21 @@ body{background:var(--ccp01-bg);display:grid;place-items:center}
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "sticky demo-v1 preview lifecycle; stop attract work, retain manual feedback and settling",
+  "pointer/touch takeover, keyboard access and visibility suspension",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
-  "cursor:none hides native cursor globally on the canvas element"
+  "cursor:none hides native cursor globally on the canvas element",
+  "Control state is local to each mount; format changes preserve preview takeover but create a fresh source instance.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
   "agent-ready",
   "easy-to-modify",
-  "mobile-ready",
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
@@ -70,11 +75,14 @@ body{background:var(--ccp01-bg);display:grid;place-items:center}
 }
 </script>
 </head><body>
-<canvas id="ccp01-c" role="img" aria-label="A follower dot and ring springing toward a moving pointer"></canvas>
+<canvas class="ccp01-canvas" tabindex="0" aria-label="Pointer effect. Use arrow keys to steer." id="ccp01-c" role="img" aria-label="A follower dot and ring springing toward a moving pointer"></canvas>
 <div class="cap">Magnetic Dot</div>
 <script>(function(){
 var cv=document.getElementById('ccp01-c'),ctx=cv.getContext('2d');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+window.addEventListener('forever:interactive',takeover);
+document.addEventListener('pointerdown',function(e){if(e.button===0)takeover();},{capture:true,passive:true});
 var root=document.documentElement;
 var W=0,H=0,DPR=1,running=true,raf=0,t0=0;
 
@@ -94,7 +102,7 @@ addEventListener('message',function(e){
   var d=e.data;
   if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
     root.setAttribute('data-theme',d.theme);syncTheme();
-    if(reduce)draw();      // no rAF loop in reduced motion — force a recolor
+    draw();      // no rAF loop in reduced motion — force a recolor
   }
 });
 syncTheme();
@@ -102,7 +110,7 @@ syncTheme();
 // target (the "pointer"), dot (fast follower), ring (laggy follower)
 var tx=0,ty=0, dx=0,dy=0, rx=0,ry=0;       // positions
 var rvx=0,rvy=0;                            // ring velocity (for squash)
-var real=false, lastMove=-1e9;              // real-pointer takeover state
+var real=!demoEnabled, lastMove=-1e9;              // real-pointer takeover state
 
 function resize(){
   DPR=Math.min(2,window.devicePixelRatio||1);
@@ -110,7 +118,7 @@ function resize(){
   cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
   ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-window.addEventListener('resize',resize);resize();
+window.addEventListener('resize',function(){resize();draw();wake();});resize();
 tx=dx=rx=W/2;ty=dy=ry=H/2;
 
 // Lissajous self-demo path, eased & breathing, scaled to the frame
@@ -124,15 +132,26 @@ function onMove(e){
   var r=cv.getBoundingClientRect();
   tx=e.clientX-r.left;ty=e.clientY-r.top;
   real=true;lastMove=performance.now();
+  if(reduce){dx=rx=tx;dy=ry=ty;rvx=rvy=0;draw();}else wake();
 }
-cv.addEventListener('pointermove',onMove);
-cv.addEventListener('pointerleave',function(){real=false;});
+cv.addEventListener('pointermove',onMove);cv.addEventListener('pointerdown',onMove);
+cv.addEventListener('pointerleave',function(){if(demoEnabled)real=false;});
+
+cv.addEventListener('keydown',function(e){
+  if(!/^Arrow(Left|Right|Up|Down)$/.test(e.key))return;
+  e.preventDefault();takeover();var r=cv.getBoundingClientRect(),step=Math.max(8,Math.min(W,H)*.06);
+  var x=tx+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0),y=ty+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0);
+  onMove({clientX:r.left+Math.max(0,Math.min(W,x)),clientY:r.top+Math.max(0,Math.min(H,y))});
+});
+function takeover(){if(!demoEnabled)return;demoEnabled=false;real=true;wake();}
+function wake(){if(!reduce&&!document.hidden&&!raf){running=true;raf=requestAnimationFrame(frame);}}
 
 function frame(now){
+  raf=0;if(!running)return;
   if(!t0)t0=now;var t=(now-t0)/1000;
   // hand back to self-demo after 2.4s of stillness
-  if(real && now-lastMove>2400)real=false;
-  if(!real){var p=demo(t);tx=p.x;ty=p.y;}
+  if(demoEnabled&&real && now-lastMove>2400)real=false;
+  if(demoEnabled&&!real){var p=demo(t);tx=p.x;ty=p.y;}
 
   // springs: dot is tight & snappy, ring lags behind the dot
   dx+=(tx-dx)*0.22; dy+=(ty-dy)*0.22;
@@ -141,9 +160,30 @@ function frame(now){
   rvx=rx-ox; rvy=ry-oy;
 
   draw();
-  if(running)raf=requestAnimationFrame(frame);
+  if(running&&(demoEnabled||Math.abs(tx-dx)+Math.abs(ty-dy)+Math.abs(dx-rx)+Math.abs(dy-ry)>.03))raf=requestAnimationFrame(frame);
 }
 
+// Glows are baked once into offscreen sprites (rebuilt on resize / theme switch);
+// a canvas shadow blur per frame is the expensive way to get the same look.
+var SP={key:''};
+function bake(half,paint){
+  var c=document.createElement('canvas'),n=Math.ceil(half*2*DPR),g=c.getContext('2d');
+  c.width=c.height=n;g.setTransform(DPR,0,0,DPR,n/2,n/2);paint(g);return c;
+}
+function ensureSprites(base,dr){
+  var k=[base,dr,DPR,C.acc,C.rgb,C.ringA].join();
+  if(SP.key===k)return;SP.key=k;
+  SP.rh=base+26;SP.dh=dr+28;
+  SP.ring=bake(SP.rh,function(g){
+    g.lineWidth=1.6;g.strokeStyle='rgba('+C.rgb+','+C.ringA+')';
+    g.shadowColor=C.acc;g.shadowBlur=14;
+    g.beginPath();g.arc(0,0,base,0,6.2832);g.stroke();
+  });
+  SP.dot=bake(SP.dh,function(g){
+    g.shadowColor=C.acc;g.shadowBlur=18;g.fillStyle=C.acc;
+    g.beginPath();g.arc(0,0,dr,0,6.2832);g.fill();
+  });
+}
 function draw(){
   ctx.clearRect(0,0,W,H);
 
@@ -164,10 +204,8 @@ function draw(){
   ctx.save();
   ctx.translate(rx,ry);ctx.rotate(ang);
   ctx.scale(1+stretch,1-stretch*0.55);
-  ctx.lineWidth=1.6;
-  ctx.strokeStyle='rgba('+C.rgb+','+C.ringA+')';
-  ctx.shadowColor=C.acc;ctx.shadowBlur=14;
-  ctx.beginPath();ctx.arc(0,0,base,0,6.2832);ctx.stroke();
+  ensureSprites(base,Math.min(W,H)*0.018+3.5);
+  ctx.drawImage(SP.ring,-SP.rh,-SP.rh,SP.rh*2,SP.rh*2);
   ctx.restore();
 
   // faint trailing halo on the ring
@@ -179,11 +217,8 @@ function draw(){
 
   // core dot — solid, glowing, with a tiny velocity smear
   ctx.save();
-  ctx.shadowColor=C.acc;ctx.shadowBlur=18;
-  ctx.fillStyle=C.acc;
   var dr=Math.min(W,H)*0.018+3.5;
-  ctx.beginPath();ctx.arc(dx,dy,dr,0,6.2832);ctx.fill();
-  ctx.shadowBlur=0;
+  ctx.drawImage(SP.dot,dx-SP.dh,dy-SP.dh,SP.dh*2,SP.dh*2);
   ctx.fillStyle='rgba(255,255,255,0.9)';
   ctx.beginPath();ctx.arc(dx-dr*0.25,dy-dr*0.25,dr*0.35,0,6.2832);ctx.fill();
   ctx.restore();
@@ -195,8 +230,8 @@ if(reduce){
 }
 
 function vis(){
-  if(document.hidden){running=false;cancelAnimationFrame(raf);}
-  else if(!running){running=true;t0=0;raf=requestAnimationFrame(frame);}
+  if(document.hidden){running=false;cancelAnimationFrame(raf);raf=0;}
+  else{t0=0;wake();}
 }
 document.addEventListener('visibilitychange',vis);
 raf=requestAnimationFrame(frame);

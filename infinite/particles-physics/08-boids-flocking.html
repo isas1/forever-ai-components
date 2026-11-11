@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A swarm of lime-green triangular boids flocks with alignment, cohesion and separation, fleeing the cursor on a dark canvas.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Boids Flocking</title>
@@ -23,7 +24,7 @@
     --c08-fade:rgba(239,243,238,0.28); --c08-s:65; --c08-l:28;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c08-bg)}
-  #c{display:block;width:100%;height:100%}
+  #c08-canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--c08-cap);opacity:var(--c08-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
@@ -49,12 +50,14 @@
   "visibilitychange pause/play",
   "prefers-reduced-motion guard (single static frame)",
   "toroidal wrap-around boundary",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "O(n²) neighbor search — scales poorly above ~80 boids on low-end devices",
   "No reduced-motion fallback beyond a single static step (boids still drawn but don't animate)",
-  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -78,11 +81,16 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c08-canvas" class="c08-root"></canvas>
 <div class="cap">Boids Flocking</div>
 <script>
 (function(){
-const cv=document.getElementById('c'),x=cv.getContext('2d');
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+const cv=document.getElementById('c08-canvas'),x=cv.getContext('2d');
 let W,H,DPR,b=[],reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const root=document.documentElement;
 let FADE='rgba(10,14,10,0.28)',BS=80,BL=62;   // trail wash + boid hsl saturation/lightness
@@ -124,10 +132,11 @@ function step(){
     x.restore();
   }
 }
-let raf;function loop(){step();raf=requestAnimationFrame(loop);}
-function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+let raf=0;function loop(){raf=0;if(document.hidden)return;step();if(!reduce&&(demoEnabled||(sessionActive)))play();}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}raf=requestAnimationFrame(loop);}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;play();}));
 play();
 })();
 </script>

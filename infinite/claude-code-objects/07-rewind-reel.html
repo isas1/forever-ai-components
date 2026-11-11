@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="An open-reel tape deck writes blocks of a file as it plays; rewind rolls the tape back to the previous checkpoint and un-writes them.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Rewind Reel</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{--co07-bg:#171614;--co07-plate:#2b2926;--co07-plate2:#1f1d1a;--co07-steel1:#c2bcae;--co07-steel2:#6a655c;--co07-line:#3a3631;--co07-ink:#e8e3d8;--co07-muted:#a39c90;--co07-ochre:#b88b58;--co07-tape:#6a4833;--co07-paper:#d8cfb8;--co07-pen:#3a342b;--co07-well:#14120f;--co07-glow:#d8b27a;--co07-accent:#b88b58;}
+  :root[data-theme="light"]{--co07-bg:#f3efe6;--co07-plate:#d3ccbc;--co07-plate2:#bdb6a5;--co07-steel1:#f1ede3;--co07-steel2:#8d877b;--co07-line:#d9d2c4;--co07-ink:#1d1b18;--co07-muted:#5f594f;--co07-ochre:#8a6232;--co07-tape:#7a5236;--co07-paper:#fffdf6;--co07-pen:#3a342b;--co07-well:#2a2722;--co07-glow:#e0bf86;--co07-accent:#8a6232;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--co07-bg)}
+  .co07-root{position:fixed;inset:0}
+  .co07-cv{display:block;width:100%;height:100%;outline:none;cursor:pointer;touch-action:none;}
+  .co07-cv:focus-visible{outline:2px solid var(--co07-accent);outline-offset:-6px}
+  .co07-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .co07-cap{position:fixed;left:8px;bottom:7px;font:10px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--co07-ink);opacity:.28}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code-objects/07-rewind-reel.html",
+ "title": "Rewind Reel",
+ "description": "Open-reel tape writes file blocks; rewind returns to the previous checkpoint and un-writes them.",
+ "useWhen": "Showing session checkpoints and rewind as a tape deck.",
+ "avoidWhen": "When a precise timeline with labelled steps is required.",
+ "agentPrompt": "Open-reel tape writes file blocks; tap or Esc rewinds to the previous checkpoint.",
+ "editableAreas": [
+  "Palette tokens on :root (--co07-*)",
+  "Proportions and timings in the script"
+ ],
+ "preserveElements": [
+  "demo-v1: __foreverPreview.demoEnabled, forever:interactive, first-input takeover",
+  "theme: ?theme=, forever:theme messages, light tokens",
+  "IIFE, visibilitychange, reduced motion, keyboard, aria-live"
+ ],
+ "knownLimitations": [
+  "Abstract bars, not real text; checkpoints sit at whole tape units."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "claude-code",
+  "rewind",
+  "checkpoint",
+  "tape",
+  "reel",
+  "canvas"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="co07-root" id="co07-root" role="group" aria-label="Rewind Reel">
+  <canvas class="co07-cv" id="co07-cv" tabindex="0" role="button" aria-label="Rewind reel. Escape, Enter or arrow left rewinds one checkpoint; arrow right winds on. Drag a reel to scrub."></canvas>
+  <div class="co07-live" id="co07-live" aria-live="polite"></div>
+</div>
+<div class="co07-cap" aria-hidden="true">Rewind Reel</div>
+<script>
+(function(){
+'use strict';
+var KEYS=["bg","plate","plate2","steel1","steel2","line","ink","muted","ochre","tape","paper","pen","well","glow","accent"],DEMO=250;
+var $=function(i){return document.getElementById(i)};
+var root=$('co07-root'),cv=$('co07-cv'),live=$('co07-live'),g=cv.getContext('2d');
+var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+var C={},W=0,H=0,S=0,raf=0,last=0,timers=[],onSize=function(){},onTheme=function(){};
+function tok(){var cs=getComputedStyle(root);KEYS.forEach(function(k){C[k]=cs.getPropertyValue('--co07-'+k).trim()||'#888'})}
+function setTheme(t){if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);tok();onTheme();draw()}}
+window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+function size(){var d=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;cv.width=Math.round(W*d);cv.height=Math.round(H*d);g.setTransform(d,0,0,d,0,0);S=Math.min(W,H);onSize();draw()}
+window.addEventListener('resize',size);
+function say(t){if(!demoEnabled)live.textContent=t}
+function pt(e){var r=cv.getBoundingClientRect();return{x:e.clientX-r.left-r.width/2,y:e.clientY-r.top-r.height/2}}
+function rr(x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
+function loop(now){raf=0;if(document.hidden)return;var dt=last?Math.min(now-last,50):16;last=now;update(dt);draw();if(!reduced())raf=requestAnimationFrame(loop)}
+function start(){if(!raf&&!document.hidden&&!reduced()){last=0;raf=requestAnimationFrame(loop)}}
+function stopDemo(){timers.forEach(function(t){clearTimeout(t);clearInterval(t)});timers=[]}
+function startDemo(){stopDemo();if(!demoEnabled||reduced()||document.hidden)return;timers.push(setTimeout(demoStep,400),setInterval(demoStep,DEMO))}
+function takeover(){demoEnabled=false;stopDemo()}
+window.addEventListener('forever:interactive',takeover);
+cv.addEventListener('pointerdown',takeover,true);
+cv.addEventListener('keydown',takeover,true);
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0;stopDemo()}else{start();startDemo()}});
+var T=6.2832,L=6,pos=2.8,vel=0,mode=reduced()?'stop':'play',tgt=0,drag=null,didRew=0,WID=[.34,.28,.36,.22,.32,.3],MONO='px ui-monospace,Menlo,monospace';
+function rewind(zero){
+if(pos<.01)return;tgt=zero?0:Math.max(0,Math.floor(pos)-1);say('Rewound to checkpoint '+tgt);
+if(reduced()){pos=tgt;draw()}else{mode='rew';start()}
+}
+function update(dt){
+var tv=0;
+if(drag){vel=0;return}
+if(mode==='play'){tv=.45;if(pos>=L){mode='stop';tv=0}}
+else if(mode==='rew')tv=-Math.min(2.6,(pos-tgt)*4+.3);
+else if(mode==='ff'){tv=2.2;if(pos>=tgt)mode='play'}
+vel+=(tv-vel)*(1-Math.exp(-dt/(mode==='rew'?110:180)));
+pos=Math.max(0,Math.min(L,pos+vel*dt/1000));
+if(mode==='rew'&&pos<=tgt+.003){pos=tgt;mode='play';vel=0}
+}
+function reel(cx,cy,pr,th){
+var R=S*.17,hub=S*.05,i,a,p=new Path2D(),f;
+g.save();g.translate(cx,cy);
+f=g.createRadialGradient(0,0,hub,0,0,pr);f.addColorStop(0,C.pen);f.addColorStop(.12,C.tape);f.addColorStop(1,C.pen);
+g.fillStyle=f;g.beginPath();g.arc(0,0,pr,0,T);g.fill();
+p.arc(0,0,R,0,T);
+for(i=0;i<3;i++){a=th+i*2.0944;p.moveTo(Math.cos(a+.2)*S*.152,Math.sin(a+.2)*S*.152);p.arc(0,0,S*.152,a+.2,a+1.89);p.arc(0,0,S*.07,a+1.89,a+.2,true);p.closePath()}
+f=g.createRadialGradient(-R*.5,-R*.5,R*.1,0,0,R*1.15);f.addColorStop(0,C.steel1);f.addColorStop(1,C.steel2);
+g.shadowColor='rgba(0,0,0,.45)';g.shadowBlur=S*.025;g.shadowOffsetY=S*.012;g.fillStyle=f;g.fill(p,'evenodd');g.shadowColor='transparent';
+g.strokeStyle='rgba(255,255,255,.2)';g.lineWidth=1;g.stroke(p);g.strokeStyle='rgba(0,0,0,.22)';g.beginPath();g.arc(0,0,R-S*.005,0,T);g.stroke();
+f=g.createRadialGradient(-hub*.4,-hub*.4,1,0,0,hub);f.addColorStop(0,C.steel1);f.addColorStop(1,C.steel2);
+g.fillStyle=f;g.beginPath();g.arc(0,0,hub,0,T);g.fill();g.stroke();g.strokeStyle='rgba(255,255,255,.22)';g.beginPath();g.arc(0,0,hub*.72,0,T);g.stroke();
+g.fillStyle=C.well;g.beginPath();g.arc(0,0,S*.014,0,T);g.fill();
+g.restore();
+}
+function draw(){
+var i,x,y,k,th=pos*2.4,rl=S*(.062+.088*(1-pos/L)),rr2=S*(.062+.088*pos/L),f,TY=S*.32,c=Math.floor(pos+1e-6);
+g.clearRect(0,0,W,H);g.fillStyle=C.bg;g.fillRect(0,0,W,H);
+g.save();g.translate(W/2,H/2);
+f=g.createLinearGradient(0,-S*.43,0,S*.43);f.addColorStop(0,C.plate);f.addColorStop(1,C.plate2);
+g.shadowColor='rgba(0,0,0,.4)';g.shadowBlur=S*.04;g.shadowOffsetY=S*.015;g.fillStyle=f;rr(-S*.43,-S*.43,S*.86,S*.86,S*.04);g.fill();g.shadowColor='transparent';
+g.lineWidth=1;g.strokeStyle='rgba(255,255,255,.025)';g.beginPath();
+for(i=0;i<46;i++){y=-S*.42+i*S*.0187+(i*37%7)*S*.002;g.moveTo(-S*.42,y);g.lineTo(S*.42,y)}g.stroke();
+g.strokeStyle=C.line;rr(-S*.43,-S*.43,S*.86,S*.86,S*.04);g.stroke();
+g.fillStyle=C.steel2;g.strokeStyle=C.well;for(i=0;i<4;i++){x=(i%2?1:-1)*S*.385;y=(i<2?-1:1)*S*.385;g.beginPath();g.arc(x,y,S*.013,0,T);g.fill();g.lineWidth=Math.max(.6,S*.002);g.beginPath();g.moveTo(x-S*.007,y+S*.004);g.lineTo(x+S*.007,y-S*.004);g.stroke();}
+
+g.save();g.shadowColor='rgba(0,0,0,.35)';g.shadowBlur=S*.015;g.shadowOffsetY=S*.006;g.fillStyle=C.paper;rr(-S*.23,-S*.37,S*.46,S*.17,S*.008);g.fill();g.restore();
+for(i=0;i<6;i++){
+  y=-S*.345+i*S*.0245;f=Math.max(0,Math.min(1,pos-i));
+  g.fillStyle=C.plate2;g.beginPath();g.arc(-S*.21,y,S*.004,0,T);g.arc(S*.21,y,S*.004,0,T);g.fill();
+  g.lineWidth=Math.max(1,S*.005);g.strokeStyle=C.ochre;g.fillStyle=C.ochre;g.beginPath();g.arc(-S*.18,y,S*.008,0,T);if(pos>=i+1)g.fill();else g.stroke();
+  x=-S*.15;k=S*.34*WID[i]/.34;
+  g.save();g.beginPath();g.rect(x-2,y-S*.01,f*k+2,S*.02);g.clip();g.strokeStyle=C.pen;g.lineWidth=S*.011;g.lineCap='round';g.beginPath();
+  g.moveTo(x,y);g.lineTo(x+k*.42,y);g.moveTo(x+k*.5,y);g.lineTo(x+k*.7,y);g.moveTo(x+k*.78,y);g.lineTo(x+k,y);g.stroke();g.restore();
+  if(f>0&&f<1){g.fillStyle=C.ochre;g.fillRect(x+f*k,y-S*.009,S*.012,S*.018)}
+}
+
+g.fillStyle=C.well;g.strokeStyle=C.ochre;g.lineWidth=Math.max(1.5,S*.007);rr(-S*.085,-S*.155,S*.17,S*.07,S*.01);g.fill();g.stroke();
+g.fillStyle=C.ochre;g.beginPath();g.moveTo(-S*.06,-S*.14);g.lineTo(-S*.035,-S*.128);g.lineTo(-S*.06,-S*.116);g.closePath();g.fill();
+g.fillStyle=C.glow;g.font='700 '+(S*.05)+MONO;g.textAlign='center';g.textBaseline='middle';g.fillText((c<10?'0':'')+c,S*.03,-S*.12);
+
+reel(-S*.21,S*.1,rl,th);reel(S*.21,S*.1,rr2,th);
+g.lineCap='round';g.lineJoin='round';g.strokeStyle=C.tape;g.lineWidth=S*.014;g.beginPath();g.moveTo(-S*.21,S*.1+rl);g.lineTo(-S*.11,TY);g.lineTo(S*.11,TY);g.lineTo(S*.21,S*.1+rr2);g.stroke();
+g.strokeStyle='rgba(255,230,200,.2)';g.lineWidth=S*.003;g.setLineDash([S*.02,S*.03]);g.lineDashOffset=-pos*S*.2;g.stroke();g.setLineDash([]);
+for(i=0;i<=L;i++){x=(pos-i)*S*.2;if(Math.abs(x)<.105*S){
+  g.globalAlpha=Math.min(1,(.105*S-Math.abs(x))/(S*.03));g.fillStyle=C.ochre;g.fillRect(x-S*.004,TY-S*.022,S*.008,S*.044);g.beginPath();g.moveTo(x+S*.004,TY-S*.022);g.lineTo(x+S*.026,TY-S*.012);g.lineTo(x+S*.004,TY-S*.002);g.fill();g.globalAlpha=1}}
+g.fillStyle=C.steel2;for(x=-1;x<2;x+=2){g.beginPath();g.arc(x*S*.11,TY,S*.016,0,T);g.fill()}
+f=g.createLinearGradient(0,TY+S*.01,0,TY+S*.06);f.addColorStop(0,C.steel1);f.addColorStop(1,C.steel2);g.fillStyle=f;rr(-S*.045,TY+S*.012,S*.09,S*.046,S*.006);g.fill();
+if(S>=440){g.fillStyle=C.muted;g.font=(S*.026)+MONO;g.fillText('esc esc',0,S*.4)}
+g.restore();
+}
+cv.addEventListener('pointerdown',function(e){
+var p=pt(e),s=p.x<0?-1:1,cx=s*S*.21,cy=S*.1;
+drag={a:Math.atan2(p.y-cy,p.x-cx),cx:cx,cy:cy,p0:pos,acc:0,on:Math.hypot(p.x-cx,p.y-cy)<S*.19};
+try{cv.setPointerCapture(e.pointerId)}catch(_){}start();
+});
+cv.addEventListener('pointermove',function(e){
+if(!drag||!drag.on)return;
+var p=pt(e),a=Math.atan2(p.y-drag.cy,p.x-drag.cx),d=a-drag.a;
+if(d>3.1416)d-=T;if(d<-3.1416)d+=T;
+drag.acc+=d;drag.a=a;pos=Math.max(0,Math.min(L,drag.p0+drag.acc*.2));if(reduced())draw();
+});
+cv.addEventListener('pointerup',function(){
+if(!drag)return;var d=drag;drag=null;
+if(!d.on||Math.abs(d.acc)<.15)rewind();else if(mode!=='rew')mode=reduced()?'stop':'play';
+});
+cv.addEventListener('pointercancel',function(){drag=null});
+cv.addEventListener('click',function(e){if(e.detail===0){takeover();rewind()}});
+cv.addEventListener('keydown',function(e){
+var k=e.key;
+if(k==='Escape'||k==='Enter'||k===' '||k==='ArrowLeft'||k==='Backspace'){e.preventDefault();rewind()}
+else if(k==='ArrowRight'){e.preventDefault();tgt=Math.min(L,Math.floor(pos)+1);if(reduced()){pos=tgt;draw()}else{mode='ff';start()}}
+});
+function demoStep(){
+if(drag||mode==='rew')return;
+if(mode==='play'&&!didRew&&pos>=3.55){didRew=1;rewind()}
+else if(pos>=L-.02){didRew=0;rewind(1)}
+}
+tok();size();start();startDemo();
+})();
+</script>
+</body>
+</html>

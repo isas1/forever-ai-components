@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Seamless Progress Line — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Seamless Progress Line</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  /* forever brand tokens — dark default, warm-paper light in the [data-theme="light"] block */
+  :root{
+    --pl15-bg:#0a0a0a;--pl15-surface:#111111;--pl15-text:#ededea;--pl15-muted:#8a8a85;--pl15-faint:#5a5a56;
+    --pl15-border:rgba(255,255,255,.08);--pl15-track:rgba(255,255,255,.1);
+    --pl15-accent:#3fb680;--pl15-accent-line:rgba(63,182,128,.32);
+    --pl15-sans:Geist,ui-sans-serif,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --pl15-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;--pl15-ease:cubic-bezier(.22,1,.36,1);
+  }
+  :root[data-theme="light"]{
+    --pl15-bg:#fafaf8;--pl15-surface:#f4f4f0;--pl15-text:#1a1a18;--pl15-muted:#6b6b66;--pl15-faint:#9a9a93;
+    --pl15-border:rgba(0,0,0,.08);--pl15-track:rgba(0,0,0,.1);--pl15-accent:#1a7a50;--pl15-accent-line:rgba(26,122,80,.35);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--pl15-bg)}
+  .pl15-stage{position:fixed;inset:0;display:grid;place-items:center;font-family:var(--pl15-sans);color:var(--pl15-text)}
+  .pl15-card{width:min(86%,420px);background:var(--pl15-surface);border:1px solid var(--pl15-border);border-radius:8px;
+    padding:clamp(12px,4.4vmin,22px) clamp(12px,4.6vmin,22px);display:grid;gap:clamp(12px,4.4vmin,22px)}
+  .pl15-row{display:grid;gap:clamp(6px,2vmin,9px)}
+  .pl15-lab{display:flex;justify-content:space-between;align-items:baseline;font-size:clamp(11px,3.3vmin,14px);font-weight:500;letter-spacing:-.01em}
+  .pl15-lab i{font:400 clamp(9px,2.6vmin,11px)/1 var(--pl15-mono);font-style:normal;letter-spacing:.02em;color:var(--pl15-muted);font-variant-numeric:tabular-nums}
+  .pl15-lab i.is-done{color:var(--pl15-accent)}
+  .pl15-track{position:relative;height:3px;border-radius:999px;background:var(--pl15-track);overflow:hidden}
+  .pl15-fill{position:absolute;inset:0;width:0;background:var(--pl15-accent);border-radius:999px;transition:width .2s var(--pl15-ease)}
+  /* indeterminate: a lit segment travels the track endlessly (transform only) */
+  .pl15-ind{position:absolute;top:0;bottom:0;left:0;width:40%;background:var(--pl15-accent);border-radius:999px;animation:pl15-travel 1.4s cubic-bezier(.65,0,.35,1) infinite}
+  @keyframes pl15-travel{from{transform:translateX(-100%)}to{transform:translateX(250%)}}
+  .pl15-row.pl15-idle .pl15-ind{animation-play-state:paused;opacity:.25}
+  /* stepped: five segments fill one by one */
+  .pl15-seg{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+  .pl15-seg b{height:3px;border-radius:999px;background:var(--pl15-track);transition:background .3s}
+  .pl15-seg b.pl15-on{background:var(--pl15-accent)}
+  .pl15-foot{display:flex;justify-content:space-between;gap:8px;font:400 clamp(9px,2.6vmin,11px)/1 var(--pl15-mono);letter-spacing:.02em;color:var(--pl15-faint);padding-top:clamp(8px,3vmin,12px);border-top:1px solid var(--pl15-border)}
+  .pl15-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 var(--pl15-mono);color:var(--pl15-muted);opacity:.5;letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+  @media (max-width:220px){#pl15-stat{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+  @media (prefers-reduced-motion:reduce){.pl15-ind{animation:none;transform:translateX(75%)}.pl15-fill,.pl15-seg b{transition:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/15-seamless-progress-line.html",
+ "title": "Seamless Progress Line",
+ "description": "Three progress idioms in one handoff card: a determinate copy line filling to a tabular percentage, an indeterminate stream where a lit accent segment travels the track, and a five-segment stepped build — run in sequence by one clock with a mono footer showing the phase and elapsed time.",
+ "useWhen": "Multi-stage operations such as copy → stream → build, agent handoffs, uploads with a processing tail; any place three kinds of progress need to read as one system.",
+ "avoidWhen": "A single simple bar (use only the first row), or operations with unknown stage boundaries.",
+ "agentPrompt": "Rename the three rows and the steps array, change the phase lengths COPY=2400 / STREAM=2000 / STEP=420 / HOLD=1800, and recolour via --pl15-accent; keep the aria-valuenow updates on the determinate bar. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "row labels and the footer copy in paint()/reset()",
+  "phase lengths (COPY, STREAM, STEP, HOLD)",
+  "segment count (five <b> elements + the 5 in paint())",
+  "travel speed of the indeterminate segment (1.4s on .pl15-ind)",
+  "accent token (--pl15-accent)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "IIFE wrapper",
+  "role=progressbar + aria-valuenow on the determinate track",
+  "the indeterminate segment moves by transform only",
+  "prefers-reduced-motion guard (all three rows complete, still)",
+  "visibilitychange pause",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+ ],
+ "knownLimitations": [
+  "The sequence is a demo loop — drive phase changes from real events in a product"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "progress",
+  "determinate",
+  "indeterminate",
+  "stepped",
+  "line",
+  "handoff",
+  "stream",
+  "mono",
+  "percent"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="pl15-stage">
+  <div class="pl15-card" role="img" aria-label="Three progress lines in an agent handoff: a determinate copy with a percentage, an indeterminate streaming line, and a five-step build that completes stage by stage">
+    <div class="pl15-row"><div class="pl15-lab"><span>copy source</span><i id="pl15-p1">0%</i></div>
+      <div class="pl15-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="pl15-bar1"><div class="pl15-fill" id="pl15-f1"></div></div></div>
+    <div class="pl15-row pl15-idle" id="pl15-r2"><div class="pl15-lab"><span>stream to agent</span><i id="pl15-p2">waiting</i></div>
+      <div class="pl15-track" aria-hidden="true"><div class="pl15-ind"></div></div></div>
+    <div class="pl15-row"><div class="pl15-lab"><span>build</span><i id="pl15-p3">0 of 5</i></div>
+      <div class="pl15-seg" id="pl15-seg" aria-hidden="true"><b></b><b></b><b></b><b></b><b></b></div></div>
+    <div class="pl15-foot"><span id="pl15-stat">idle</span><span id="pl15-ms">0.0 s</span></div>
+  </div>
+</div>
+<div class="pl15-cap" aria-hidden="true">Seamless Progress Line</div>
+<script>(function(){"use strict";
+  var root=document.documentElement, $=function(id){return document.getElementById(id);};
+  var f1=$('pl15-f1'), p1=$('pl15-p1'), bar1=$('pl15-bar1'), r2=$('pl15-r2'), p2=$('pl15-p2'), p3=$('pl15-p3'), segs=$('pl15-seg').children, stat=$('pl15-stat'), ms=$('pl15-ms');
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))root.setAttribute('data-theme',d.theme);});
+  // a 100 ms clock runs the three phases in sequence, then holds and restarts — plausible, never wild
+  var TICK=100, COPY=2400, STREAM=2000, STEP=420, HOLD=1800, t=0, phase=0, clock=null;
+  var steps=['copy','stream','build','done'];
+  function ease(x){return 1-Math.pow(1-x,3);}
+  function paint(){
+    var e=t/1000; ms.textContent=e.toFixed(1)+' s';
+    if(phase===0){ var v=Math.round(ease(Math.min(1,t/COPY))*100); f1.style.width=v+'%'; p1.textContent=v+'%'; bar1.setAttribute('aria-valuenow',v);
+      if(t>=COPY){ p1.classList.add('is-done'); phase=1; r2.classList.remove('pl15-idle'); p2.textContent='streaming'; stat.textContent='stream'; } }
+    else if(phase===1){ if(t>=COPY+STREAM){ phase=2; r2.classList.add('pl15-idle'); p2.textContent='received'; p2.classList.add('is-done'); stat.textContent='build'; } }
+    else if(phase===2){ var n=Math.min(5,Math.floor((t-COPY-STREAM)/STEP)); for(var i=0;i<5;i++)segs[i].classList.toggle('pl15-on',i<n); p3.textContent=n+' of 5';
+      if(n>=5){ phase=3; p3.classList.add('is-done'); stat.textContent='done · 1 file · 0 deps'; } }
+    else if(t>=COPY+STREAM+5*STEP+HOLD){ reset(); }
+  }
+  function reset(){ t=0; phase=0; stat.textContent='copy'; [p1,p2,p3].forEach(function(p){p.classList.remove('is-done');});
+    f1.style.width='0%'; p1.textContent='0%'; p2.textContent='waiting'; r2.classList.add('pl15-idle'); p3.textContent='0 of 5'; for(var i=0;i<5;i++)segs[i].classList.remove('pl15-on'); }
+  function tick(){ t+=TICK; paint(); }
+  function start(){ if(!clock&&!reduce)clock=setInterval(tick,TICK); }
+  function stop(){ clearInterval(clock); clock=null; }
+  document.addEventListener('visibilitychange',function(){ document.hidden?stop():start(); });
+  reset(); t=900; paint(); // pre-roll: the copy line is already a third in at first paint
+  if(reduce){ t=COPY+STREAM+5*STEP; phase=0; paint(); paint(); paint(); paint(); } // reduced motion: everything complete, still
+  start();
+})();</script>
+</body>
+</html>

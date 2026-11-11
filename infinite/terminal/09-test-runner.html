@@ -4,16 +4,16 @@
 <title>Test Runner</title>
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;font:clamp(10px,1.85vmin,14px)/1.55 ui-monospace,Menlo,Consolas,monospace}
-.ttr-wrap{position:relative;height:100%;display:flex;flex-direction:column;padding:clamp(8px,2vmin,16px);overflow:hidden}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;font:clamp(11px,2.3vmin,14px)/1.55 ui-monospace,Menlo,Consolas,monospace}
+.ttr-wrap{position:relative;height:100%;display:flex;flex-direction:column;padding:8px 10px 24px;overflow:hidden}
 .ttr-wrap::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:4;background:repeating-linear-gradient(180deg,rgba(74,222,128,.028) 0 2px,transparent 2px 4px)}
 .ttr-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;border-bottom:1px solid #1b2430;padding-bottom:6px;margin-bottom:6px}
 .ttr-run{color:#4ade80;font-weight:600;letter-spacing:.3px}
-.ttr-tally{white-space:nowrap;font-size:.92em}
-.ttr-body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:1px}
-.ttr-line{white-space:pre;animation:ttr-in .2s ease}
+.ttr-tally{white-space:normal;font-size:1em}
+.ttr-body{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:1px}
+.ttr-line{flex-shrink:0;white-space:pre-wrap;overflow-wrap:anywhere;animation:ttr-in .2s ease}
 @keyframes ttr-in{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
-.ttr-dim{color:#3a4657}
+.ttr-dim{color:#929fb0}
 .ttr-ok{color:#4ade80}
 .ttr-warn{color:#f5a524}
 .ttr-err{color:#f76a6a}
@@ -24,11 +24,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;
 .ttr-cur{display:inline-block;width:.5em;height:.95em;margin-left:2px;background:#4ade80;vertical-align:text-bottom;animation:ttr-bl 1.1s step-start infinite}
 @keyframes ttr-bl{0%,100%{opacity:1}50%{opacity:0}}
 .ttr-cap{position:absolute;left:10px;bottom:8px;font:600 10px ui-monospace,monospace;color:#4ade80;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:5}
+.ttr-paused .ttr-cur{animation-play-state:paused}
+@media(prefers-reduced-motion:reduce){.ttr-line,.ttr-cur{animation:none}}
 </style>
 </head><body>
 <div class="ttr-wrap" role="img" aria-label="A watch-mode test runner streaming passing specs with green ticks, one failing spec that retries and recovers, a live pass and fail tally, per-suite timings, and a final coverage table.">
   <div class="ttr-head">
-    <span class="ttr-run">RUN  spec v2.1.4  › watch</span>
+    <span class="ttr-run">RUN spec › watch</span>
     <span class="ttr-tally" id="ttr-tally"></span>
   </div>
   <div class="ttr-body" id="ttr-body"></div>
@@ -38,7 +40,9 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   const body=document.getElementById('ttr-body');
   const tallyEl=document.getElementById('ttr-tally');
-  const MAX=30;
+  const compact=()=>document.documentElement.clientWidth<400;
+  function trim(){while(body.children.length>1&&body.scrollHeight>body.clientHeight)body.firstChild.remove();}
+  addEventListener('resize',()=>{tally();trim();});
 
   const suites=[
     {f:'auth/token.spec.ts',   ms:214, specs:['signs a JWT with HS256','rejects an expired token','refreshes a token near expiry']},
@@ -65,6 +69,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;
 
   let pass=0,fail=0,dur=0;
   function tally(){
+    if(compact()){tallyEl.textContent=pass+' ✓ · '+fail+' ✗ · '+dur.toFixed(2)+'s';return;}
     tallyEl.innerHTML='<span class="ttr-pass">✓ '+pass+' passed</span>  '
       +'<span class="'+(fail?'ttr-fail':'ttr-dim')+'">✗ '+fail+' failed</span>  '
       +'<span class="ttr-dim">'+pass+'/'+TOTAL+' · '+dur.toFixed(2)+'s</span>';
@@ -74,12 +79,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;
     d.className='ttr-line'+(cls?' '+cls:'');
     d.textContent=txt;
     body.appendChild(d);
-    while(body.children.length>MAX)body.removeChild(body.firstChild);
+    trim();
     return d;
   }
   const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
   function coverage(){
+    if(compact()){line('Coverage 94.2%','ttr-ok');line('Branch 88.7% · fn 91.5%','ttr-file');return;}
     line('','');
     line(' % Coverage report · istanbul','ttr-hi');
     line(sep,'ttr-dim');
@@ -89,6 +95,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;
     line(sep,'ttr-dim');
   }
   function summary(){
+    if(compact()){line(suites.length+' suites · '+TOTAL+' passed','ttr-hi');line('1 flaky · '+dur.toFixed(2)+'s','ttr-file');return;}
     line('','');
     line(' Test Files  '+suites.length+' passed ('+suites.length+')','ttr-hi');
     line('      Tests  '+TOTAL+' passed · 1 flaky ('+TOTAL+')','ttr-hi');
@@ -97,29 +104,31 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;
 
   function staticFrame(){
     pass=TOTAL;fail=0;dur=suites.reduce((n,s)=>n+s.ms/1000,0);tally();
+    if(compact()){summary();coverage();line('watching src/','ttr-dim');return;}
     line('$ npx spec --watch','ttr-hi');line('','');
     suites.forEach(s=>line(' ✓ '+s.f+'  ('+s.specs.length+')  '+s.ms+'ms','ttr-file'));
     summary();coverage();
     line('','');line(' watching for file changes…','ttr-dim');
   }
 
-  let running=true;
+  let running=true,epoch=0;
   async function run(){
-    while(running){
+    const token=++epoch;
+    while(running&&token===epoch){
       body.innerHTML='';pass=0;fail=0;dur=0;tally();
       line('$ npx spec --watch','ttr-hi');line('','');
       for(const s of suites){
-        if(!running)return;
+        if(!running||token!==epoch)return;
         for(let i=0;i<s.specs.length;i++){
-          if(!running)return;
-          await sleep(95);
+          if(!running||token!==epoch)return;
+          await sleep(95);if(!running||token!==epoch)return;
           if(s.flaky===i){
             fail++;tally();
             line('   ✗ '+s.specs[i],'ttr-err');
             line('     AssertionError: expected ‘settled’ to equal ‘pending’','ttr-dim');
-            await sleep(280);
+            await sleep(280);if(!running||token!==epoch)return;
             line('   ↻ retry 1/2 …','ttr-warn');
-            await sleep(300);
+            await sleep(300);if(!running||token!==epoch)return;
             fail--;pass++;tally();
             line('   ✓ '+s.specs[i]+'  (recovered)','ttr-ok');
           }else{
@@ -132,18 +141,19 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#c8d0c8;
         line('','');
         await sleep(170);
       }
-      if(!running)return;
+      if(!running||token!==epoch)return;
       summary();coverage();
       line('','');
       const w=line(' watching for file changes…','ttr-dim');
-      w.appendChild(Object.assign(document.createElement('span'),{className:'ttr-cur'}));
+      w.appendChild(Object.assign(document.createElement('span'),{className:'ttr-cur'}));trim();
       await sleep(2800);
     }
   }
 
   if(reduce){staticFrame();return;}
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden)running=false;
+    body.classList.toggle('ttr-paused',document.hidden);
+    if(document.hidden){running=false;epoch++;}
     else if(!running){running=true;run();}
   });
   run();

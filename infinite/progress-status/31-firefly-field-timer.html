@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Candle Field Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Candle Field Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--wtj-bg:#0E1630;--wtj-ink:#E6EAF6;--wtj-mute:#6F7BA6;--wtj-lamp:#F2C230;--wtj-warm:#E8893A}
+:root[data-theme="light"]{--wtj-bg:#DCE3F2;--wtj-ink:#1A2340;--wtj-mute:#6A769E;--wtj-lamp:#B8860B;--wtj-warm:#B8561A}
+.wtj-root,.wtj-root *{box-sizing:border-box;margin:0}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--wtj-bg)}
+.wtj-root{background:var(--wtj-bg);color:var(--wtj-ink);overflow:hidden;font:600 clamp(24px,8vmin,52px)/1 ui-monospace,"SF Mono",Menlo,monospace}
+.wtj-root{width:100%;height:100%;display:grid;place-items:center}
+.wtj-st{position:relative;width:min(94vmin,640px);aspect-ratio:1;touch-action:none;cursor:pointer;border-radius:12px}
+.wtj-canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.wtj-n{position:absolute;pointer-events:none;text-align:center;font:inherit;color:var(--wtj-ink)}
+.wtj-st:focus-visible,.wtj-n:focus-visible{outline:2px solid var(--wtj-lamp);outline-offset:3px}
+.wtj-n{left:0;right:0;bottom:7%}
+.wtj-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--wtj-ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/31-firefly-field-timer.html",
+ "title": "Candle Field Timer",
+ "description": "Choose a candle field duration and watch the lit stems burn down. Indigo nocturne lamplight palette with candle gold and burnt orange.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "candles",
+  "field",
+  "selection",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wtj-root" id="wtj-root" role="group" aria-label="Bake timer">
+<div class="wtj-st" id="wtj-st" role="slider" tabindex="0" aria-label="Bake minutes" aria-valuemin="1" aria-valuemax="30" aria-valuenow="10"><canvas class="wtj-canvas" id="wtj-cv"></canvas><div class="wtj-n" id="wtj-n" aria-hidden="true"></div></div>
+</div>
+<div class="wtj-cap" aria-hidden="true">Candle Field Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||rm.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var R=document.documentElement,$=function(i){return document.getElementById(i)},st=$('wtj-st'),cv=$('wtj-cv'),g=cv.getContext('2d'),num=$('wtj-n'),
+S=300,D=1,C={},raf=0,last=0,rm=matchMedia('(prefers-reduced-motion: reduce)'),
+mode=0,set=10,el=0,pv=0,lt='',at='',TS=2000,MAX=30,onset=null;
+function col(){var s=getComputedStyle(R);['ink','mute','lamp','warm'].forEach(function(k){C[k]=s.getPropertyValue('--wtj-'+k).trim()})}
+function fit(){S=st.clientWidth;D=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(S*D);wake()}
+function next(){if(!raf)raf=requestAnimationFrame(loop)}
+function wake(){if(!raf&&!document.hidden){last=performance.now();next()}}
+function loop(now){raf=0;var ms=Math.max(0,Math.min(now-last,50)),dt=ms/16.667;last=now;demoBeat(ms);
+if(mode==1&&!demoPaused){el+=ms/TS;if(el>=set){el=set;mode=2;done()}}
+var b=demoPaused?false:step(dt,ms);g.setTransform(D,0,0,D,0,0);g.clearRect(0,0,S,S);draw();sync();if((b||mode==1||demoEnabled)&&!demoPaused&&!rm.matches)next();else if(mode==1&&!demoPaused&&!demoSession)next()}
+function spr(o,t,dt,k,f){if(rm.matches){o.x=t;o.v=0;return 0}o.v+=(t-o.x)*k*dt;o.v*=Math.pow(f,dt);o.x+=o.v*dt;return Math.abs(o.v)>.002||Math.abs(t-o.x)>.002}
+function ln(x,y,X,Y){g.beginPath();g.moveTo(x,y);g.lineTo(X,Y);g.stroke()}
+function sync(){var t=mode==2?'✓':String(mode==1?Math.ceil(set-el-1e-6):(mode==0&&pv)||set),a;
+if(t!==lt){lt=t;num.textContent=t}
+a=mode==1?'Baking, '+t+' minutes left. Press to cancel':mode==2?'Done. Press to reset':'Start baking '+set+' minutes';
+if(num.tagName=='BUTTON'&&a!==at){at=a;num.setAttribute('aria-label',a)}
+st.setAttribute('aria-valuenow',set);st.setAttribute('aria-valuetext',set+' minutes'+(mode==1?', baking':mode==2?', done':''))}
+function setSet(m){demoPaused=false;set=Math.max(1,Math.min(MAX,m));mode=0;el=0;if(onset)onset();wake()}
+function start(){demoPaused=false;demoSession=demoEnabled;el=0;mode=1;wake()}
+function reset(){demoPaused=false;mode=0;el=0;wake()}
+st.addEventListener('keydown',function(e){demoPaused=false;if(e.target!==st)return;var k=e.key,s=e.shiftKey?5:1,h=1;
+if(k=='ArrowRight'||k=='ArrowUp')setSet(set+s);else if(k=='ArrowLeft'||k=='ArrowDown')setSet(set-s);else if(k=='Home')setSet(1);else if(k=='End')setSet(MAX);else if(k=='Enter'||k==' '){mode==1?reset():start()}else h=0;if(h)e.preventDefault()});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else wake()});
+function setTheme(t){R.setAttribute('data-theme',t=='light'?'light':'dark');col();wake()}
+addEventListener('message',function(e){var d=e.data;if(d&&d.type=='forever:theme')setTheme(d.theme)});
+rm.addEventListener('change',wake);
+new ResizeObserver(fit).observe(st);
+var N=30,Y=[],hx=-99,drag=0,lm=0,sw=-1,tt=0,jt=[],i;
+for(i=0;i<N;i++){Y.push({x:0,v:0});jt.push((Math.sin(i*12.9898)*43758.5453)%1/2)}
+function done(){sw=rm.matches?-1:0}
+function ps(){return mode!=1&&pv?pv:set}
+function tg(i){var t=i<ps()?.2:.05,d=(i-hx)/2.2;if(mode==1&&i<el)t=.03;if(mode==1&&i==Math.floor(el))t=.27;return t+(hx>-50?.2*Math.exp(-d*d):0)}
+function step(dt,ms){tt+=ms;var m=Math.floor(el),b=0,n=Math.max(1,Math.ceil(dt)),h=dt/n,k,a,l,r,j,j2;
+if(mode==1){if(m>lm&&m<set&&!rm.matches)Y[m].v+=.025;lm=m}else lm=0;
+if(sw>=0){j=Math.floor(sw);sw+=dt*.7;j2=Math.floor(sw);for(;j<j2;j++)if(j<set)Y[j].v+=.05;if(sw>set)sw=-1;else b=1}
+if(rm.matches){for(k=0;k<N;k++){Y[k].x=tg(k);Y[k].v=0}return 0}
+for(r=0;r<n;r++){for(k=0;k<N;k++){a=Y[k];l=(k?Y[k-1].x:a.x)+(k<N-1?Y[k+1].x:a.x)-2*a.x;a.v+=((tg(k)-a.x)*.12+l*.2)*h;a.v*=Math.pow(.9,h)}for(k=0;k<N;k++)Y[k].x+=Y[k].v*h}
+for(k=0;k<N;k++)if(Math.abs(Y[k].v)>.0005||Math.abs(tg(k)-Y[k].x)>.0005)b=1;
+return b}
+function draw(){var cy=S/2,i,x,h,cl,al,sh,hd,o;g.lineCap='round';
+for(i=0;i<N;i++){x=S*(.07+.86*(i+.5)/N);h=Math.max(.01,Y[i].x)*S;
+hd=mode==1&&i==Math.floor(el);cl=C.lamp;al=1;sh=0;
+if(i>=ps()){cl=C.mute;al=.45}else if(mode==1&&i<el&&!hd){cl=C.mute;al=.6}
+if(hd){cl=C.warm;sh=S*.04;h*=1+.05*Math.sin(tt*.02)}else if(mode==2&&i<set){cl=C.warm;sh=S*.02}
+o=jt[i]*h*.06;g.strokeStyle=cl;g.shadowColor=cl;g.shadowBlur=sh*D;g.globalAlpha=al;g.lineWidth=S*.014;
+ln(x-o,cy-h/2,x+o,cy+h/2);
+g.shadowBlur=0;g.globalAlpha=al*.5;g.lineWidth=S*.005;ln(x+S*.004-o,cy-h/2,x+S*.004+o,cy+h/2)}
+g.globalAlpha=1}
+function hv(e){var b=st.getBoundingClientRect();hx=((e.clientX-b.left)/b.width-.07)/.86*N-.5;pv=Math.max(1,Math.min(N,Math.round(hx)+1));wake()}
+function off(){hx=-99;pv=0;wake()}
+st.addEventListener('pointerdown',function(e){demoPaused=false;drag=1;st.setPointerCapture(e.pointerId);hv(e)});
+st.addEventListener('pointermove',hv);
+st.addEventListener('pointerup',function(e){if(drag){drag=0;setSet(pv);start()}if(e.pointerType!='mouse')off()});
+st.addEventListener('pointerleave',function(){if(!drag)off()});
+st.addEventListener('pointercancel',function(){drag=0;off()});
+function demoFinished(){return mode==2}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;start()}
+if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,0);col();sync();fit();if(demoEnabled&&!rm.matches)demoStart();
+rm.addEventListener('change',function(){if(rm.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

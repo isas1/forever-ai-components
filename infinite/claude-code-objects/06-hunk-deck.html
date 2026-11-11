@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A stack of index cards, each an abstract diff; swipe right to keep a hunk, left to reject it.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Hunk Deck</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{--co06-bg:#171614;--co06-surface:#211f1c;--co06-ink:#e8e3d8;--co06-muted:#a39c90;--co06-sage:#6f8f79;--co06-brick:#a85858;--co06-stone:#7a746b;--co06-paper:#d8cfb8;--co06-edge:#a99f86;--co06-accent:#6f8f79;--co06-pen:#3a342b;--co06-add:#46664f;--co06-cut:#8e3b3b;}
+  :root[data-theme="light"]{--co06-bg:#f3efe6;--co06-surface:#fbf8f1;--co06-ink:#1d1b18;--co06-muted:#5f594f;--co06-sage:#46664f;--co06-brick:#8e3b3b;--co06-stone:#8f887c;--co06-paper:#fffdf6;--co06-edge:#cfc6b0;--co06-accent:#46664f;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--co06-bg)}
+  .co06-root{position:fixed;inset:0}
+  .co06-cv{display:block;width:100%;height:100%;outline:none;cursor:pointer;touch-action:none;}
+  .co06-cv:focus-visible{outline:2px solid var(--co06-accent);outline-offset:-6px}
+  .co06-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .co06-cap{position:fixed;left:8px;bottom:7px;font:10px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--co06-ink);opacity:.28}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code-objects/06-hunk-deck.html",
+ "title": "Hunk Deck",
+ "description": "A stack of index cards, each an abstract diff; swipe right to keep a hunk, left to reject it.",
+ "useWhen": "Showing per-hunk review of a diff as a tactile card deck.",
+ "avoidWhen": "When real code text must be readable.",
+ "agentPrompt": "Manila index cards with dark ink, forest additions and brick removals. Swipe right to keep, left to reject; preserve demo-v1 and both palettes.",
+ "editableAreas": [
+  "Palette tokens on :root (--co06-*)",
+  "Proportions and timings in the script"
+ ],
+ "preserveElements": [
+  "demo-v1: __foreverPreview.demoEnabled, forever:interactive, first-input takeover",
+  "theme: ?theme=, forever:theme messages, light tokens",
+  "IIFE, visibilitychange, reduced motion, keyboard, aria-live"
+ ],
+ "knownLimitations": [
+  "Cards are abstract bars with no code text.",
+  "State is local to each mounted instance."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "claude-code",
+  "diff",
+  "review",
+  "cards",
+  "swipe",
+  "canvas"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="co06-root" id="co06-root" role="group" aria-label="Hunk Deck">
+  <canvas class="co06-cv" id="co06-cv" tabindex="0" role="button" aria-label="Hunk deck. Swipe or press arrow right to keep the top card, arrow left to reject it."></canvas>
+  <div class="co06-live" id="co06-live" aria-live="polite"></div>
+</div>
+<div class="co06-cap" aria-hidden="true">Hunk Deck</div>
+<script>
+(function(){
+'use strict';
+var KEYS=["bg","surface","ink","muted","sage","brick","stone","paper","edge","accent","pen","add","cut"],DEMO=2100;
+var $=function(i){return document.getElementById(i)};
+var root=$('co06-root'),cv=$('co06-cv'),live=$('co06-live'),g=cv.getContext('2d');
+var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+var C={},W=0,H=0,S=0,raf=0,last=0,timers=[],onSize=function(){},onTheme=function(){};
+function tok(){var cs=getComputedStyle(root);KEYS.forEach(function(k){C[k]=cs.getPropertyValue('--co06-'+k).trim()||'#888'})}
+function setTheme(t){if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);tok();onTheme();draw()}}
+window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+function size(){var d=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;cv.width=Math.round(W*d);cv.height=Math.round(H*d);g.setTransform(d,0,0,d,0,0);S=Math.min(W,H);onSize();draw()}
+window.addEventListener('resize',size);
+function say(t){if(!demoEnabled)live.textContent=t}
+function pt(e){var r=cv.getBoundingClientRect();return{x:e.clientX-r.left-r.width/2,y:e.clientY-r.top-r.height/2}}
+function rr(x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
+function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;var t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function loop(now){raf=0;if(document.hidden)return;var dt=last?Math.min(now-last,50):16;last=now;update(dt);draw();if(!reduced())raf=requestAnimationFrame(loop)}
+function start(){if(!raf&&!document.hidden&&!reduced()){last=0;raf=requestAnimationFrame(loop)}}
+function stopDemo(){timers.forEach(function(t){clearTimeout(t);clearInterval(t)});timers=[]}
+function startDemo(){stopDemo();if(!demoEnabled||reduced()||document.hidden)return;timers.push(setTimeout(demoStep,400),setInterval(demoStep,DEMO))}
+function takeover(){demoEnabled=false;stopDemo()}
+window.addEventListener('forever:interactive',takeover);
+cv.addEventListener('pointerdown',takeover,true);
+cv.addEventListener('keydown',takeover,true);
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0;stopDemo()}else{start();startDemo()}});
+var seedN=3,deck=[],fly=[],drag=null,done=0,refillAt=0,di=0,DIRS=[1,1,-1,1,-1,-1,1],NAMES=['parse.ts','deck.css','api.js','cart.py'],MONO='px ui-monospace,"SF Mono",Menlo,monospace';
+function mk(i){var r=rng(seedN+=17),rows=[],k,len,j,q=reduced();
+while(rows.length<10){k=r()<.3?0:(r()<.5?-1:1);len=1+(r()*(k?3:2)|0);for(j=0;j<len&&rows.length<10;j++)rows.push({k:k,w:.3+r()*.6,i:(r()*3|0)*.05})}
+return{rows:rows,rot:(r()-.5)*.08,ox:(r()-.5)*.02,x:0,y:0,d:q?i:i+3,a:q?1:0,nm:NAMES[i],r:r()}}
+function fill(){deck=[];for(var i=0;i<4;i++)deck.push(mk(i))}
+function update(dt){
+var k=1-Math.exp(-dt/90),t=deck[0];
+deck.forEach(function(c,i){c.d+=(i-c.d)*k;c.a+=(1-c.a)*k});
+if(t){t.x+=((drag?drag.dx:0)-t.x)*(drag?.55:k);t.y+=((drag?drag.dx*.04:0)-t.y)*k}
+fly.forEach(function(f){f.t+=dt/540});
+fly=fly.filter(function(f){return f.t<1});
+if(!deck.length&&!fly.length){var n=performance.now();if(!refillAt)refillAt=n+450;else if(n>refillAt){refillAt=0;done=0;fill()}}
+}
+function decide(dir){
+var c=deck.shift();if(!c)return;
+fly.push({c:c,x0:c.x||dir*S*.05,y0:c.y,dir:dir,t:0});done++;drag=null;
+say((dir>0?'Kept':'Rejected')+' hunk '+done+' of 4');
+if(reduced()){fly=[];if(!deck.length){done=0;fill()}deck.forEach(function(d,i){d.d=i;d.a=1});draw()}else start();
+}
+function card(c,x,y,rot,sc,al,m){
+var w=S*.56,h=S*.66,i,r=rng(c.r*1e5|0),rh=h*.072,y0=-h/2+h*.16;
+g.save();g.globalAlpha=al;g.translate(x,y);g.rotate(rot);g.scale(sc,sc);
+g.shadowColor='rgba(0,0,0,.42)';g.shadowBlur=S*.035;g.shadowOffsetY=S*.012;
+g.fillStyle=C.paper;rr(-w/2,-h/2,w,h,S*.014);g.fill();g.shadowColor='transparent';
+var gr=g.createLinearGradient(0,-h/2,0,h/2);gr.addColorStop(0,'rgba(255,255,255,.24)');gr.addColorStop(1,'rgba(80,60,30,.16)');
+g.fillStyle=gr;g.fill();g.lineWidth=1;g.strokeStyle=C.edge;g.stroke();
+g.fillStyle=C.edge;g.globalAlpha=al*.2;for(i=0;i<30;i++)g.fillRect((r()-.5)*w,(r()-.5)*h,.7,.7);
+g.globalAlpha=al*.75;g.fillStyle=C.brick;g.fillRect(-w/2,-h/2+h*.12,w,Math.max(1,S*.005));
+g.globalAlpha=al;
+if(S>=270){g.fillStyle=C.pen;g.font=Math.max(10,S*.032)+MONO;g.textAlign='left';g.fillText(c.nm,-w/2+w*.07,-h/2+h*.085)}
+g.lineCap='round';g.lineWidth=Math.max(1.2,S*.006);
+c.rows.forEach(function(o,j){
+  var ry=y0+j*rh,col=o.k>0?C.add:o.k<0?C.cut:C.pen,gx=-w/2+w*.09,gy=ry+rh*.43;
+  if(o.k){g.globalAlpha=al*.17;g.fillStyle=col;g.fillRect(-w/2+w*.04,ry,w*.92,rh*.86);
+    g.globalAlpha=al;g.strokeStyle=col;g.beginPath();g.moveTo(gx-w*.02,gy);g.lineTo(gx+w*.02,gy);
+    if(o.k>0){g.moveTo(gx,gy-w*.02);g.lineTo(gx,gy+w*.02)}g.stroke()}
+  g.globalAlpha=al*(o.k?1:.5);g.fillStyle=col;rr(-w/2+w*.2+o.i*w,ry+rh*.2,w*.66*o.w,rh*.46,rh*.2);g.fill();
+});
+if(Math.abs(m)>.08){
+  g.globalAlpha=al*Math.min(1,Math.abs(m));g.strokeStyle=m>0?C.add:C.cut;g.lineWidth=S*.024;g.lineJoin='round';
+  g.save();g.translate(0,h*.06);g.rotate(-.18*Math.sign(m));g.beginPath();g.arc(0,0,w*.24,0,7);
+  if(m>0){g.moveTo(-w*.11,w*.01);g.lineTo(-w*.03,w*.09);g.lineTo(w*.12,-w*.08)}
+  else{g.moveTo(-w*.1,-w*.1);g.lineTo(w*.1,w*.1);g.moveTo(w*.1,-w*.1);g.lineTo(-w*.1,w*.1)}
+  g.stroke();g.restore();
+}
+g.restore();
+}
+function draw(){
+g.clearRect(0,0,W,H);
+var v=g.createRadialGradient(W/2,H/2,S*.1,W/2,H/2,S*.8);v.addColorStop(0,C.surface);v.addColorStop(1,C.bg);
+g.fillStyle=v;g.fillRect(0,0,W,H);
+g.save();g.translate(W/2,H/2-S*.03);
+for(var i=deck.length-1;i>=0;i--){var c=deck[i],d=c.d;
+  card(c,c.x+c.ox*S,c.y+d*S*.022,c.rot+c.x/S*.5,1-d*.035,Math.min(1,c.a),i?0:Math.max(-1,Math.min(1,c.x/(S*.16))))}
+fly.forEach(function(f){var p=f.t*f.t,c=f.c;
+  card(c,f.x0+f.dir*W*.8*p,f.y0-Math.sin(f.t*3.14)*S*.05,c.rot+f.dir*(.15+.8*f.t),1,1-Math.max(0,f.t-.55)/.45,f.dir*Math.min(1,.7+f.t*4))});
+g.restore();
+g.fillStyle=C.muted;g.font='600 '+(S*.065)+MONO;g.textAlign='center';g.fillText(Math.min(done+1,4)+'/4',0+W/2,H/2+S*.4);
+}
+cv.addEventListener('pointerdown',function(e){if(!deck.length)return;drag={sx:pt(e).x,dx:0,m:0};try{cv.setPointerCapture(e.pointerId)}catch(_){}start()});
+cv.addEventListener('pointermove',function(e){if(!drag)return;drag.dx=pt(e).x-drag.sx;drag.m=Math.max(drag.m,Math.abs(drag.dx));if(reduced()&&deck[0]){deck[0].x=drag.dx;draw()}});
+cv.addEventListener('pointerup',function(e){
+if(!drag)return;var d=drag;drag=null;
+if(d.m<8)decide(pt(e).x>=0?1:-1);else if(Math.abs(d.dx)>S*.14)decide(d.dx>0?1:-1);else if(deck[0]&&reduced()){deck[0].x=0;draw()}});
+cv.addEventListener('pointercancel',function(){drag=null});
+cv.addEventListener('click',function(e){if(e.detail===0){takeover();decide(1)}});
+cv.addEventListener('keydown',function(e){
+if(e.key==='ArrowRight'||e.key==='Enter'||e.key===' '){e.preventDefault();decide(1)}
+else if(e.key==='ArrowLeft'||e.key==='Backspace'||e.key==='Delete'){e.preventDefault();decide(-1)}});
+function demoStep(){if(deck.length&&!drag)decide(DIRS[di++%DIRS.length])}
+fill();
+tok();size();start();startDemo();
+})();
+</script>
+</body>
+</html>

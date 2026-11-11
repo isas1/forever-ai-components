@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Color Wake — grey pictures bloom into colour where your finger passes.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Color Wake</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+:root{--cw-bg:#1C1B18;--cw-ink:#EEE9DF;--cw-muted:#A39C8F;--cw-line:#3A372F;color-scheme:dark}
+:root[data-theme="light"]{--cw-bg:#F4F1EA;--cw-ink:#24221E;--cw-muted:#6B655B;--cw-line:#D9D2C4;color-scheme:light}
+html,body{margin:0;height:100%;overflow:hidden;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;background:var(--cw-bg);color:var(--cw-ink);font:15px/1.3 ui-rounded,"Avenir Next",Avenir,system-ui,sans-serif}
+.cw-st{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(10px,4vmin,26px);background:var(--cw-bg);-webkit-tap-highlight-color:transparent}
+.cw-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(6px,2.2vmin,14px);width:min(90vw,112vh,620px);touch-action:none}
+.cw-t{appearance:none;position:relative;margin:0;padding:0;border:1px solid var(--cw-line);border-radius:clamp(6px,2vmin,12px);aspect-ratio:1;overflow:hidden;background:var(--cw-bg);cursor:crosshair;outline:none;transition:border-color .2s,transform .2s}
+@media (hover:hover){.cw-t:hover{border-color:var(--cw-muted)}}
+.cw-t:active{transform:scale(.985)}
+.cw-t:focus-visible{box-shadow:0 0 0 2px var(--cw-bg),0 0 0 4px var(--cw-ink)}
+.cw-pin{border-color:var(--cw-ink)}
+.cw-pin::after{content:"";position:absolute;top:7%;right:7%;width:7px;height:7px;border-radius:50%;background:var(--cw-ink);box-shadow:0 0 0 2px var(--cw-bg)}
+.cw-g,.cw-c{stroke-linecap:round;stroke-linejoin:round;position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.cw-g{filter:grayscale(1) sepia(.12) contrast(.88)}
+.cw-c{-webkit-mask-image:linear-gradient(#0000,#0000);mask-image:linear-gradient(#0000,#0000)}
+.cw-pin .cw-c,.cw-rm .cw-c{-webkit-mask-image:none!important;mask-image:none!important}
+.cw-say{margin:0;font-size:clamp(12px,3.6vmin,16px);color:var(--cw-muted)}
+.cw-gh{position:absolute;left:0;top:0;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;border:1.5px solid var(--cw-ink);opacity:0;pointer-events:none;transition:opacity .4s}
+.cw-gh.cw-on{opacity:.4}
+.cw-cap{position:absolute;left:10px;bottom:8px;font:500 11px/1 ui-monospace,monospace;color:var(--cw-ink);opacity:.45;letter-spacing:.04em;text-transform:uppercase;pointer-events:none}
+@media (max-aspect-ratio:4/5){.cw-grid{grid-template-columns:repeat(2,1fr);width:min(90vw,50vh,420px)}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/cursor-pointer/08-color-wake.html",
+ "title": "Color Wake",
+ "description": "Six grey pictures bloom into muted colour along a soft wake that follows a finger or pointer, then fade.",
+ "useWhen": "Landing grids where visitors should play before reading.",
+ "avoidWhen": "Colour that must be visible at rest.",
+ "agentPrompt": "Matte paper register (clay, sand, sage, slate, dusty blue). Edit --cw-* tokens; ART holds [label, svg]; drop() sets bloom size.",
+ "editableAreas": [
+  "--cw-* tokens",
+  "ART pictures",
+  "bloom size and fade"
+ ],
+ "preserveElements": [
+  "IIFE + prefix, reduced-motion, visibilitychange, theme hook, demo-v1"
+ ],
+ "knownLimitations": [
+  "Demo state resets on remount"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "color-reveal",
+  "mask",
+  "pointer-trail",
+  "image-grid",
+  "first-touch"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="cw-st" id="cw-st">
+<div class="cw-grid" id="cw-grid" role="group" aria-label="Pictures. Move across to colour them; Enter keeps a colour."></div>
+<p class="cw-say">Colour comes with you.</p>
+<div class="cw-gh" id="cw-gh" aria-hidden="true"></div>
+</div>
+<div class="cw-cap" aria-hidden="true">Color Wake</div>
+<script>
+(function(){
+var root=document.documentElement,st=document.getElementById("cw-st"),grid=document.getElementById("cw-grid"),gh=document.getElementById("cw-gh");
+var reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+var demo=!reduce&&(!window.__foreverPreview||window.__foreverPreview.demoEnabled!==false);
+var C="#C27A5A",L="#7E9468",K="#2E2B26",Q="#F4ECDC";
+function pa(d,f){return '<path d="'+d+'" fill="'+f+'"/>';}
+function bg(w,t){return '<rect width="100" height="100" fill="'+w+'"/><path d="M0 72h100v28H0z" fill="'+t+'"/>';}
+function sh(x,y,r){return '<ellipse cx="'+x+'" cy="'+y+'" rx="'+r+'" ry="3.4" fill="#000" opacity=".13"/>';}
+var ART=[
+["Cup",bg("#C9D5DC","#AEBDC5")+sh(50,80,30)+'<ellipse cx="48" cy="76" rx="28" ry="6" fill="'+Q+'"/><path d="M20 76a28 6 0 0 0 56 0" fill="none" stroke="#D9CDB7"/>'+pa("M31 42h34l-3.4 27a5 5 0 0 1-5 4.4H39.4a5 5 0 0 1-5-4.4z",C)+pa("M55 42h10l-3.4 27a5 5 0 0 1-4 4.3z","#D2906F")+'<ellipse cx="48" cy="42" rx="17" ry="3" fill="#A9654A"/><path d="M64.5 49c11 0 11 15-1.5 15" fill="none" stroke="'+C+'" stroke-width="4.4"/><path d="M42 34c-3-5 3-7 0-12M53 34c-3-5 3-7 0-12" fill="none" stroke="#FFF8EC" stroke-width="2.6"/>'],
+["Plant",bg("#E9DFC9","#D3C2A1")+sh(50,85,20)+'<g fill="'+L+'"><path d="M50 60C40 52 26 50 20 40c12-3 26 4 30 20z"/><path d="M50 60c6-12 18-20 31-18-4 12-16 18-31 18z"/><path d="M50 60c-6-14-4-30 4-42 6 12 4 28-4 42z"/></g>'+pa("M35 63h30l-4 21H39z",C)+'<rect x="33" y="59" width="34" height="7" rx="1.5" fill="#A9654A"/>'],
+["Bicycle",bg("#DCCBA7","#C7B28A")+'<path d="M12 81h76" stroke="#000" stroke-opacity=".14" stroke-width="3"/><g fill="none" stroke="'+K+'"><circle cx="28" cy="64" r="15" stroke-width="3.4"/><circle cx="72" cy="64" r="15" stroke-width="3.4"/></g><path d="M28 64l14-24h22l8 24M42 40l12 24 10-24M54 64H28M64 40l-2-8h7" fill="none" stroke="'+C+'" stroke-width="3.4"/><path d="M36 35h11" stroke="'+K+'" stroke-width="3.6"/><circle cx="54" cy="64" r="3" fill="'+K+'"/><circle cx="28" cy="64" r="2" fill="'+K+'"/><circle cx="72" cy="64" r="2" fill="'+K+'"/>'],
+["Cat",bg("#C7D0B5","#B0BC9A")+sh(52,88,24)+pa("M30 90c0-22 8-34 20-34s20 12 20 34z","#5F6A72")+pa("M42 90c0-14 3-22 8-22s8 8 8 22z","#78838B")+pa("M32 46l4-18 10 10h8l10-10 4 18c0 12-8 20-18 20s-18-8-18-20z","#5F6A72")+pa("M37 33l1.6-6 4 4zM63 33l-1.6-6-4 4z","#D9A08A")+'<ellipse cx="43" cy="47" rx="3.4" ry="3.6" fill="#E8C979"/><ellipse cx="57" cy="47" rx="3.4" ry="3.6" fill="#E8C979"/><path d="M43 44.6v4.8M57 44.6v4.8" stroke="'+K+'" stroke-width="1.6"/>'+pa("M48 54h4l-2 2z","#D9A08A")+'<path d="M40 56l-10-1M40 58l-9 2M60 56l10-1M60 58l9 2" stroke="'+Q+'" stroke-width=".6" opacity=".8"/><path d="M70 86c10 0 14-8 10-14" fill="none" stroke="#5F6A72" stroke-width="5"/>'],
+["Kite",'<rect width="100" height="100" fill="#A9BDCB"/><path d="M8 78c4-6 12-6 15-2 3-5 12-5 15 1 5 0 7 3 7 5H8z" fill="'+Q+'" opacity=".8"/>'+pa("M50 12L72 38 50 64 28 38z","#D8C49E")+pa("M50 12L72 38H50zM50 64L28 38h22z",C)+'<path d="M50 12v52M28 38h44" stroke="'+K+'" stroke-width=".8" opacity=".55"/><path d="M50 64c-4 8 6 12 2 20s-8 6-6 14" fill="none" stroke="'+K+'" stroke-width="1.4"/>'+pa("M47 72l6 2-6 2zM49 84l6 2-6 2zM45 94l6 2-6 2z",L)],
+["Fruit bowl",bg("#EDE3CF","#D7C5A3")+sh(50,82,32)+'<circle cx="37" cy="50" r="11" fill="#D08A4E"/><circle cx="62" cy="48" r="12" fill="#D08A4E"/><path d="M33 44a5 3 -30 0 1 5-2M58 41a5 3 -30 0 1 5-2" stroke="#E8B588" stroke-width="1.6"/>'+pa("M62 36c2-3 6-4 8-2-2 3-5 3-8 2z",L)+pa("M49 28c-5 6-9 13-5 21s14 6 14-2c0-7-5-11-9-19z","#9DAE85")+'<path d="M49 28c0-3 1-5 3-6" fill="none" stroke="#5A4A3A" stroke-width="1.4"/>'+pa("M18 54h64c0 16-14 27-32 27S18 70 18 54z","#7F93A8")+pa("M18 54h64l-.4 3.6H18.4z","#97A9BC")]
+];
+var T=ART.map(function(a,i){
+var b=document.createElement("button");
+b.type="button";b.className="cw-t";b.setAttribute("aria-label",a[0]);b.setAttribute("aria-pressed","false");
+var s='<svg viewBox="0 0 100 100" aria-hidden="true" class="';
+b.innerHTML=s+'cw-g">'+a[1]+"</svg>"+s+'cw-c">'+a[1]+"</svg>";
+grid.appendChild(b);
+return{b:b,c:b.lastChild,x:0,y:0,w:0,i:i,pin:false};
+});
+if(reduce)root.classList.add("cw-rm");
+
+window.addEventListener("message",function(e){
+if(e.data&&e.data.type==="forever:theme"&&(e.data.theme==="light"||e.data.theme==="dark"))root.setAttribute("data-theme",e.data.theme);
+});
+
+var pts=[],P={on:false,x:0,y:0},last=null,kbd=false,raf=0,prev=0,t0=0,cell=100;
+function measure(){
+var s=st.getBoundingClientRect();
+T.forEach(function(t){var r=t.b.getBoundingClientRect();t.x=r.left-s.left;t.y=r.top-s.top;t.w=r.width;});
+cell=T[0].w||100;
+}
+function drop(x,y,big){
+pts.push({x:x+(Math.random()-.5)*cell*.08,y:y+(Math.random()-.5)*cell*.08,r:cell*(big?.8:.56)*(.8+Math.random()*.4),life:1});
+if(pts.length>28)pts.shift();
+last={x:x,y:y};
+}
+function feed(x,y){
+if(!last||Math.hypot(x-last.x,y-last.y)>cell*.07)drop(x,y);
+}
+function paint(){
+var f=document.activeElement,park=null;
+T.forEach(function(t){if(kbd&&f===t.b)park=t;});
+T.forEach(function(t){
+var L=[],i,p;
+var all=park===t?pts.concat([{x:t.x+t.w/2,y:t.y+t.w/2,r:t.w*.8,life:1}]):pts;
+for(i=0;i<all.length;i++){
+p=all[i];
+var lx=p.x-t.x,ly=p.y-t.y,r=p.r*(.55+.45*p.life);
+if(lx<-r||ly<-r||lx>t.w+r||ly>t.w+r)continue;
+var a=Math.min(1,p.life*1.6);
+L.push("radial-gradient(circle "+r.toFixed(1)+"px at "+lx.toFixed(1)+"px "+ly.toFixed(1)+"px,rgba(0,0,0,"+a.toFixed(2)+") 0,rgba(0,0,0,"+(a*.8).toFixed(2)+") 45%,#0000 100%)");
+}
+var m=L.length?L.join(","):"linear-gradient(#0000,#0000)";
+t.c.style.webkitMaskImage=m;t.c.style.maskImage=m;
+});
+}
+function step(dt,ts){
+if(demo){
+var t=(ts-t0)/1000,g=grid.getBoundingClientRect(),s=st.getBoundingClientRect();
+P.x=g.left-s.left+g.width*(.5+Math.sin(t*.55)*.46);
+P.y=g.top-s.top+g.height*(.5+Math.sin(t*.93+.6)*.44);
+P.on=true;
+gh.style.transform="translate("+P.x.toFixed(1)+"px,"+P.y.toFixed(1)+"px)";
+}
+if(P.on)feed(P.x,P.y);
+for(var i=pts.length-1;i>=0;i--){pts[i].life-=dt/2000;if(pts[i].life<=0)pts.splice(i,1);}
+}
+function frame(ts){
+raf=0;
+if(document.hidden)return;
+var dt=prev?Math.min(50,ts-prev):16;prev=ts;
+step(dt,ts);paint();
+if(pts.length||P.on||demo){if(!raf)raf=requestAnimationFrame(frame);}else prev=0;
+}
+function wake(){if(!reduce&&!raf&&!document.hidden)raf=requestAnimationFrame(frame);}
+function takeover(){if(!demo)return;demo=false;P.on=false;gh.classList.remove("cw-on");wake();}
+window.addEventListener("forever:interactive",takeover);
+
+function at(e){var s=st.getBoundingClientRect();P.x=e.clientX-s.left;P.y=e.clientY-s.top;}
+st.addEventListener("pointermove",function(e){
+takeover();kbd=false;
+if(e.pointerType!=="mouse"&&!e.buttons)return;
+at(e);P.on=true;wake();
+});
+st.addEventListener("pointerdown",function(e){takeover();kbd=false;at(e);drop(P.x,P.y,true);P.on=true;wake();});
+function off(e){if(e.pointerType!=="mouse"||e.type==="pointerleave"){P.on=false;last=null;wake();}}
+st.addEventListener("pointerup",off);st.addEventListener("pointercancel",off);st.addEventListener("pointerleave",off);
+
+T.forEach(function(t,i){
+t.b.addEventListener("click",function(e){
+takeover();
+if(e.detail!==0)return;
+t.pin=!t.pin;t.b.classList.toggle("cw-pin",t.pin);t.b.setAttribute("aria-pressed",String(t.pin));
+});
+t.b.addEventListener("keydown",function(e){
+var c=getComputedStyle(grid).gridTemplateColumns.split(" ").length,j=i+({ArrowRight:1,ArrowLeft:-1,ArrowDown:c,ArrowUp:-c}[e.key]||NaN);
+if(j>=0&&j<T.length){e.preventDefault();T[j].b.focus();}
+});
+t.b.addEventListener("focus",function(){paint();wake();});
+t.b.addEventListener("blur",function(){setTimeout(paint,0);});
+});
+document.addEventListener("keydown",function(e){if(e.key==="Tab"||e.key.indexOf("Arrow")===0){takeover();kbd=true;wake();}});
+document.addEventListener("visibilitychange",function(){prev=0;if(!document.hidden)wake();});
+addEventListener("resize",function(){measure();paint();});
+
+measure();
+if(demo){
+t0=performance.now()-1500;
+for(var k=0;k<60;k++)step(25,t0+k*25);
+gh.classList.add("cw-on");paint();wake();
+}
+})();
+</script>
+</body>
+</html>

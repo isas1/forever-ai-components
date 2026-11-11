@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Slosh Bowl — a ceramic bowl of muted ink you poke to ripple and drag to slosh.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slosh Bowl</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+:root{--sb-bg:#1C1B18;--sb-fg:#EEE9DF;--sb-body:#E6DDCB;--sb-shade:#D3C7B0;--sb-rim:#2F2C27;--sb-glaze:#F1EBDF;--sb-ink:#4F6672;--sb-men:#6F8793;--sb-blob:#8EA2AC;--sb-ring:#C3D0D6;--sb-sh:rgba(0,0,0,.5);color-scheme:dark}
+:root[data-theme="light"]{--sb-bg:#F4F1EA;--sb-fg:#24221E;--sb-body:#EDE6D8;--sb-shade:#DCD1BC;--sb-sh:rgba(70,50,30,.16);color-scheme:light}
+html,body{margin:0;height:100%;overflow:hidden;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;background:var(--sb-bg);color:var(--sb-fg);font:14px/1.3 ui-serif,Georgia,serif}
+.sb-st{position:absolute;inset:0;display:grid;place-items:center}
+.sb-w{position:relative;width:min(80vw,96vh,300px);aspect-ratio:1/.72}
+.sb-c{position:absolute;inset:0;width:100%;height:100%}
+.sb-b{appearance:none;position:absolute;left:2%;right:2%;top:12%;bottom:12%;margin:0;padding:0;border:0;background:none;border-radius:46%;cursor:pointer;touch-action:none;-webkit-tap-highlight-color:transparent}
+.sb-b:focus{outline:none}
+.sb-b:focus-visible{outline:2px solid var(--sb-fg);outline-offset:4px}
+.sb-g{position:absolute;left:0;top:0;width:30px;height:30px;margin:-15px 0 0 -15px;box-sizing:border-box;border:2px solid var(--sb-fg);border-radius:50%;opacity:0;pointer-events:none;transition:opacity .3s}
+.sb-cap{position:absolute;left:10px;bottom:8px;font:500 11px/1 ui-monospace,monospace;color:var(--sb-fg);opacity:.45;letter-spacing:.04em;text-transform:uppercase;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/particles-physics/24-slosh-bowl.html",
+ "title": "Slosh Bowl",
+ "description": "A shallow ceramic bowl of muted slate ink: poke to ripple, drag to slosh, and soft blobs merge and part. A toy, not a meter.",
+ "useWhen": "A tactile hero toy, calm landing moments, a pause screen.",
+ "avoidWhen": "Showing a value or progress; it has no readout.",
+ "agentPrompt": "Matte paper register (ceramic cream, charcoal rim, slate ink on #1C1B18 / #F4F1EA). Edit --sb-* tokens; blobs sets drop sizes; step() holds the slosh spring.",
+ "editableAreas": [
+  "--sb-* tokens",
+  "blobs list",
+  "slosh spring in step()"
+ ],
+ "preserveElements": [
+  "IIFE + prefix, reduced-motion, visibilitychange, theme hook, demo-v1"
+ ],
+ "knownLimitations": [
+  "Demo state resets on remount"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "themeable",
+  "light-ready"
+ ],
+ "tags": [
+  "liquid",
+  "ripple",
+  "canvas",
+  "toy",
+  "first-touch"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="sb-st">
+<div class="sb-w">
+<canvas class="sb-c" id="sb-c" aria-hidden="true"></canvas>
+<button type="button" class="sb-b" id="sb-b" aria-label="Bowl of ink. Drag or use arrow keys to slosh it; Enter drops a ripple."></button>
+<span class="sb-g" id="sb-g"></span>
+</div>
+</div>
+<div class="sb-cap" aria-hidden="true">Slosh Bowl</div>
+<script>
+(function(){
+"use strict";
+var D=document,root=D.documentElement,$=function(i){return D.getElementById(i);},cv=$("sb-c"),btn=$("sb-b"),gh=$("sb-g"),g=cv.getContext("2d"),M=Math,A=M.abs,PI2=M.PI*2;
+var reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+var demo=!reduce&&(!window.__foreverPreview||window.__foreverPreview.demoEnabled!==false);
+var W=0,H=0,dpr=1,R=100,E=0.34,cx=0,ry0=0,raf=0,t0=0,cyc=-1,C={};
+var L={a:demo?0.7:0,b:0,va:0,vb:0},rings=demo?[{u:0.2,v:0,r:0.25,l:0.3},{u:-0.35,v:0.2,r:0.1,l:0}]:[];
+var blobs=[[-0.3,0.1,0.16],[0.26,-0.18,0.12],[0.08,0.36,0.09]].map(function(b){return{u:b[0],v:b[1],r:b[2],vu:0,vv:0};});
+var P={down:false,on:false,lx:0,ly:0,u:9,v:9,t:0};
+function cl(v,a,b){return v<a?a:v>b?b:v;}
+function col(){var s=getComputedStyle(root);["body","shade","rim","glaze","ink","men","blob","ring","sh"].forEach(function(k){C[k]=s.getPropertyValue("--sb-"+k).trim();});}
+window.addEventListener("message",function(e){
+var t=e.data&&e.data.type==="forever:theme"&&e.data.theme;if(t==="light"||t==="dark"){root.setAttribute("data-theme",t);col();draw();}
+});
+function geo(){
+var w=cv.clientWidth,h=cv.clientHeight;dpr=M.min(2,window.devicePixelRatio||1);
+if(w!==W||h!==H){W=w;H=h;cv.width=M.round(w*dpr);cv.height=M.round(h*dpr);}
+R=W*0.46;cx=W/2;ry0=H*0.38;
+}
+function ell(x,y,a,b){g.beginPath();g.ellipse(x,y,a,b,0,0,PI2);}
+function body(fy){g.beginPath();g.moveTo(cx-R,ry0);g.bezierCurveTo(cx-R,ry0+R*0.42,cx-R*0.52,fy,cx-R*0.34,fy);g.lineTo(cx-R*0.3,fy+R*0.05);g.lineTo(cx+R*0.3,fy+R*0.05);g.lineTo(cx+R*0.34,fy);g.bezierCurveTo(cx+R*0.52,fy,cx+R,ry0+R*0.42,cx+R,ry0);g.closePath();}
+function draw(){
+if(!W)return;
+var fy=ry0+R*0.56,ir=R*0.94,rx=ir*0.82,ry=rx*E;
+g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);g.globalAlpha=1;
+g.fillStyle=C.sh;ell(cx,fy+R*0.05,R*0.6,R*0.08);g.fill();
+body(fy);g.fillStyle=C.body;g.fill();
+g.save();g.clip();g.fillStyle=C.shade;ell(cx+R*0.62,ry0+R*0.5,R*0.62,R*0.5);g.fill();g.restore();
+body(fy);g.strokeStyle=C.rim;g.lineWidth=1.4;g.stroke();
+ell(cx,ry0,R,R*E);g.fillStyle=C.body;g.fill();
+ell(cx,ry0,ir,ir*E);g.fillStyle=C.glaze;g.fill();
+g.save();g.clip();
+g.setTransform(dpr*rx,-dpr*L.a*R*0.16,0,dpr*(ry-L.b*R*0.08),dpr*(cx+L.a*R*0.05),dpr*(ry0+R*0.2));
+g.beginPath();g.arc(0,0,1,0,PI2);g.fillStyle=C.ink;g.fill();g.clip();
+g.strokeStyle=C.ring;g.lineWidth=1.6/rx;
+rings.forEach(function(r){g.globalAlpha=(1-r.l)*0.7;g.beginPath();g.arc(r.u,r.v,r.r,0,PI2);g.stroke();});
+g.globalAlpha=1;g.fillStyle=g.strokeStyle=C.blob;g.lineCap="round";
+blobs.forEach(function(o,i){
+g.beginPath();g.arc(o.u,o.v,o.r,0,PI2);g.fill();
+blobs.slice(i+1).forEach(function(p){var d=M.hypot(o.u-p.u,o.v-p.v),s=o.r+p.r,k=cl(1.5-d/s,0,1);
+if(k>0){g.lineWidth=2*M.min(o.r,p.r)*k*0.85;g.beginPath();g.moveTo(o.u,o.v);g.lineTo(p.u,p.v);g.stroke();}});
+});
+g.beginPath();g.arc(0,0,0.985,0,PI2);g.strokeStyle=C.men;g.lineWidth=4/rx;g.stroke();
+g.restore();
+g.strokeStyle=C.rim;g.lineWidth=1.6;ell(cx,ry0,R,R*E);g.stroke();
+g.lineWidth=1;ell(cx,ry0,ir,ir*E);g.stroke();
+}
+function loc(X,Y){var rx=R*0.94*0.82,u=(X-cx-L.a*R*0.05)/rx;return{u:u,v:(Y-ry0-R*0.2+L.a*R*0.16*u)/(rx*E-L.b*R*0.08)};}
+function ring(u,v,r){if(M.hypot(u,v)>1.05)return;rings.push({u:u,v:v,r:r||0.03,l:0});if(rings.length>14)rings.shift();}
+function poke(u,v){
+if(reduce)return;
+ring(u,v);ring(u,v,0.01);L.va+=u*0.02;L.vb+=v*0.015;
+blobs.forEach(function(o){var du=o.u-u,dv=o.v-v,d=M.hypot(du,dv)+0.01;if(d<0.5){o.vu+=du/d*0.012;o.vv+=dv/d*0.012;}});
+wake();
+}
+function stir(u,v,dx,dy,ts,hard){
+if(reduce)return;
+L.va+=dx/W*(hard?0.25:0.06);L.vb+=dy/W*(hard?0.15:0.04);
+P.u=u;P.v=v;
+if(ts-P.t>(hard?70:140)&&(A(dx)+A(dy)>1.5)){P.t=ts;ring(u,v,0.02);}
+wake();
+}
+function step(){
+L.va=(L.va-L.a*0.05)*0.962;L.vb=(L.vb-L.b*0.05)*0.962;L.a=cl(L.a+L.va,-1.3,1.3);L.b=cl(L.b+L.vb,-1,1);
+for(var i=rings.length;i--;){var r=rings[i];r.r+=0.02*(1-r.l*0.5);r.l+=0.015;if(r.l>=1)rings.splice(i,1);}
+var e=A(L.a)+A(L.b)+A(L.va)*20+A(L.vb)*20+rings.length;
+blobs.forEach(function(o){
+o.vu-=L.a*0.0015+L.va*0.03;o.vv-=L.b*0.0015+L.vb*0.03;
+var du=o.u-P.u,dv=o.v-P.v,d=M.hypot(du,dv)+0.001;
+if(d<o.r+0.18){o.vu+=du/d*0.006;o.vv+=dv/d*0.006;}
+blobs.forEach(function(p){if(p===o)return;var x=p.u-o.u,y=p.v-o.v,q=M.hypot(x,y)+0.001,s=o.r+p.r;
+if(q<s*0.75){o.vu-=x/q*0.002;o.vv-=y/q*0.002;}else if(q<s*1.6){o.vu+=x/q*0.0004;o.vv+=y/q*0.0004;}});
+o.vu*=0.93;o.vv*=0.93;o.u+=o.vu;o.v+=o.vv;
+var m=M.hypot(o.u,o.v),lim=0.95-o.r;if(m>lim){o.u*=lim/m;o.v*=lim/m;o.vu*=-0.3;o.vv*=-0.3;}
+e+=(A(o.vu)+A(o.vv))*40;
+});
+return e;
+}
+function runDemo(ts){
+if(!t0)t0=ts-300;
+var e=ts-t0,n=M.floor(e/5200),t=e%5200,dir=n%2?-1:1;
+if(t<1700){
+var q=t/1700,u=dir*(-0.85+1.7*q),v=0.28*M.sin(q*PI2),X=cx+L.a*R*0.05+u*R*0.77,Y=ry0+R*0.2+v*(R*0.77*E)-L.a*R*0.16*u;
+stir(u,v,dir*W*0.012,0,ts,true);gh.style.opacity=".4";gh.style.transform="translate("+X.toFixed(1)+"px,"+Y.toFixed(1)+"px)";
+}else{P.u=P.v=9;gh.style.opacity=t>2500&&t<2900?".4":"0";
+if(t>2600&&cyc!==n){cyc=n;poke(dir*0.3,-0.15);}}
+}
+function frame(ts){
+raf=0;if(D.hidden)return;
+geo();if(demo)runDemo(ts);
+var e=step();draw();
+if((demo||P.down||e>0.004)&&!raf)raf=requestAnimationFrame(frame);
+}
+function wake(){if(reduce){geo();draw();return;}if(!raf&&!D.hidden)raf=requestAnimationFrame(frame);}
+function takeover(){if(!demo)return;demo=false;gh.style.opacity="0";P.u=P.v=9;wake();}
+window.addEventListener("forever:interactive",takeover);
+function pt(e){var r=cv.getBoundingClientRect(),X=e.clientX-r.left,Y=e.clientY-r.top,p=loc(X,Y);p.X=X;p.Y=Y;return p;}
+function on(t,f){btn.addEventListener(t,f);}
+on("pointerdown",function(e){
+if(e.button>0)return;
+takeover();var p=pt(e);P.down=true;P.lx=p.X;P.ly=p.Y;
+try{btn.setPointerCapture(e.pointerId);}catch(_){}
+poke(p.u,p.v);
+});
+on("pointermove",function(e){
+if(e.pointerType==="touch"&&!P.down)return;
+var p=pt(e),dx=p.X-P.lx,dy=p.Y-P.ly;P.lx=p.X;P.ly=p.Y;
+if(!P.down&&!P.on){P.on=true;return;}
+takeover();stir(p.u,p.v,dx,dy,performance.now(),P.down);
+});
+function up(){P.down=P.on=false;P.u=P.v=9;}
+on("pointerup",up);on("pointercancel",up);on("pointerleave",up);
+on("keydown",function(e){
+var k={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+if(k){e.preventDefault();takeover();if(!reduce){L.va+=k[0]*0.07;L.vb+=k[1]*0.05;wake();}}
+else if(e.key==="Enter"||e.key===" "){e.preventDefault();takeover();poke(0,0);}
+});
+D.addEventListener("visibilitychange",function(){if(!D.hidden)wake();});
+window.addEventListener("resize",function(){geo();draw();wake();});
+col();geo();draw();wake();
+})();
+</script>
+</body>
+</html>

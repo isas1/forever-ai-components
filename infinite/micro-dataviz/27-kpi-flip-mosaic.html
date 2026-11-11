@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="KPI Flip Mosaic — Micro Data-Viz. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KPI Flip Mosaic</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root[data-theme="light"]{--wkc-bg:#DED9CF;--wkc-tile:#F6F1E7;--wkc-ink:#17263B;--wkc-mut:#57677A;--wkc-grout:#CEC7BA;--wkc-acc:#1D5295;--wkc-c0:#4F8889;--wkc-c1:#1D5295;--wkc-c2:#C99A20;--wkc-c3:#B94430}
+
+:root{--wkc-bg:#111B25;--wkc-tile:#1B2937;--wkc-ink:#EDF3FA;--wkc-mut:#96A6B8;--wkc-grout:#0A1118;--wkc-acc:#4B85D1;--wkc-c0:#6EB2B3;--wkc-c1:#4B85D1;--wkc-c2:#E5B438;--wkc-c3:#E06752}
+
+.wkc-stage,.wkc-stage *{box-sizing:border-box;margin:0;padding:0}
+
+.wkc-stage{background:var(--wkc-bg);display:grid;place-items:center;overflow:hidden}
+#wkc-root{width:min(100vmin,640px);height:min(100vmin,640px);background:var(--wkc-tile);border:3px solid var(--wkc-grout);touch-action:manipulation;cursor:pointer;user-select:none;-webkit-user-select:none}
+#wkc-root:focus-visible{outline:2px solid var(--wkc-acc);outline-offset:-8px}
+#wkc-c{display:block;width:100%;height:100%}
+
+:root{--bg:var(--wkc-bg)}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.wkc-stage{width:100%;height:100%;display:grid;place-items:center}
+.wkc-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--wkc-ink);opacity:.45;pointer-events:none}
+
+
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/micro-dataviz/27-kpi-flip-mosaic.html",
+ "title": "KPI Flip Mosaic",
+ "description": "KPI Flip Mosaic compares focus, commits, coffee ounces and bugs across Monday, Friday and Forever in a cobalt glaze, teal and ochre grout palette.",
+ "useWhen": "A compact comparison of illustrative metrics across selectable days.",
+ "avoidWhen": "Financial reporting without replacing the sample data and adding accessible data tables.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "kpi",
+  "day-comparison",
+  "metrics",
+  "spring",
+  "data-visualization"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wkc-stage" role="group" aria-label="KPI Flip Mosaic">
+<div id="wkc-root" role="slider" tabindex="0" aria-label="Day KPI mosaic: focus, commits, coffee, bugs. Tap to switch day, or use arrow keys" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1" aria-valuetext="">
+<canvas id="wkc-c"></canvas>
+</div>
+</div>
+<div class="wkc-cap" aria-hidden="true">KPI Flip Mosaic</div>
+<script>
+(function(){
+var D=[["Monday",[84.5,1420,342,18]],["Friday",[72.4,980,215,34]],["Forever",[92.1,2150,580,6]]],
+MX=[92.1,2150,580,34],root=document.getElementById('wkc-root'),cv=document.getElementById('wkc-c'),cx=cv.getContext('2d'),
+rm=matchMedia('(prefers-reduced-motion: reduce)'),S=0,C={},raf=0,last=0,idx=0,T=[],kv=D[0][1].slice(),n,
+X0=.08,P=.063,Y0=.09,BP=.2;
+function fmt(i,x){x=Math.max(0,x);return i==0?x.toFixed(1)+'%':i==2?Math.round(x)+' oz':Math.round(x).toLocaleString('en')}
+function cols(){var s=getComputedStyle(document.documentElement);['bg','tile','ink','mut','grout','acc','c0','c1','c2','c3'].forEach(function(k){C[k]=s.getPropertyValue('--wkc-'+k).trim()})}
+function say(){root.setAttribute('aria-valuenow',idx+1);root.setAttribute('aria-valuetext',D[idx][0]+': '+D[idx][1].map(function(v,i){return fmt(i,v)}).join(', '))}
+function size(){S=root.clientWidth;var d=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(S*d);cx.setTransform(d,0,0,d,0,0);draw()}
+function want(q,s){return q.o<Math.round(D[s][1][q.k]/MX[q.k]*20)?1:0}
+for(n=0;n<80;n++){var r=n/10|0,c=n%10;T.push({k:r>>1,o:(r&1)*10+c,cx:X0+c*P+.027,cy:Y0+(r>>1)*BP+(r&1)*P+.027,a:0,t:0,d:0});T[n].a=T[n].t=want(T[n],0)}
+function go(i,ox,oy){
+ idx=i;say();
+ T.forEach(function(q){var t=want(q,i);if(t!=q.t){q.t=t;q.d=Math.hypot(q.cx-ox,q.cy-oy)*40}});wake()}
+function step(dt){
+ var m=0,k,s=.07*dt;
+ if(rm.matches){T.forEach(function(q){q.a=q.t;q.d=0});kv=D[idx][1].slice();return false}
+ T.forEach(function(q){
+  if(q.d>0){q.d-=dt;m=1;return}
+  if(Math.abs(q.t-q.a)<=s)q.a=q.t;else{q.a+=q.t>q.a?s:-s;m=1}});
+ for(k=0;k<4;k++){var d=D[idx][1][k]-kv[k];if(Math.abs(d)>MX[k]*.0005){kv[k]+=d*(1-Math.pow(.92,dt));m=1}else kv[k]=D[idx][1][k]}
+ return m}
+function draw(){
+ if(!S)return;cx.clearRect(0,0,S,S);var k,s;
+ cx.lineWidth=1.5;
+ T.forEach(function(q){
+  var e=q.a<.5?2*q.a*q.a:1-2*(1-q.a)*(1-q.a),sx=Math.abs(Math.cos(Math.PI*e)),sy=1+.14*Math.sin(Math.PI*e),h=S*.027;
+  cx.save();cx.translate(q.cx*S,q.cy*S);cx.scale(Math.max(sx,.02),sy);
+  if(e>=.5){
+   cx.fillStyle=C['c'+q.k];cx.fillRect(-h,-h,2*h,2*h);
+   cx.globalAlpha=.4;cx.fillStyle=C.tile;cx.beginPath();cx.moveTo(0,-h*.5);cx.lineTo(h*.5,0);cx.lineTo(0,h*.5);cx.lineTo(-h*.5,0);cx.fill()}
+  else{cx.globalAlpha=.4;cx.strokeStyle=C.mut;cx.strokeRect(-h,-h,2*h,2*h)}
+  cx.restore()});
+ cx.globalAlpha=1;cx.textBaseline='middle';cx.textAlign='left';cx.fillStyle=C.ink;cx.font='900 '+S*.056+'px "Archivo Black",system-ui,sans-serif';
+ for(k=0;k<4;k++)cx.fillText(fmt(k,kv[k]),S*.74,S*(Y0+k*BP+P/2+.027));
+ cx.textAlign='center';cx.font='700 '+S*.03+'px ui-monospace,Menlo,monospace';
+ for(s=0;s<3;s++){var nx=S*(s+.5)/3;cx.fillStyle=s==idx?C.ink:C.mut;cx.fillText(D[s][0].toUpperCase(),nx,S*.925);
+  if(s==idx){cx.fillStyle=C.acc;cx.fillRect(nx-S*.06,S*.95,S*.12,3)}}}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+function tick(t){raf=0;var dt=Math.min(t-last,50)/16.667;last=t;if(step(dt))raf=requestAnimationFrame(tick);draw()}
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else wake()});
+root.addEventListener('click',function(e){
+ var r=root.getBoundingClientRect(),x=(e.clientX-r.left-3)/S,y=(e.clientY-r.top-3)/S;
+ go(y>.88?Math.min(2,Math.max(0,Math.floor(x*3))):(idx+1)%3,x,y)});
+root.addEventListener('keydown',function(e){
+ var k=e.key,i=idx,ox=.5;
+ if(k=='ArrowRight'||k=='ArrowUp'||k==' '||k=='Enter'){i=(i+1)%3;ox=0}
+ else if(k=='ArrowLeft'||k=='ArrowDown'){i=(i+2)%3;ox=1}
+ else if(k=='Home')i=0;else if(k=='End')i=2;else if(k>='1'&&k<='3')i=k-1;else return;
+ e.preventDefault();go(i,ox,.5)});
+function theme(t){document.documentElement.setAttribute('data-theme',t);cols();draw()}
+window.addEventListener('message',function(e){var m=e.data;if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark'))theme(m.theme)});
+if(rm.addEventListener)rm.addEventListener('change',wake);
+cols();say();
+if(window.ResizeObserver)new ResizeObserver(size).observe(root);else addEventListener('resize',size);
+size();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoClock=0;
+function demoStep(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;go((idx+1)%3,.5,.5);}
+function demoStop(){if(demoClock){clearInterval(demoClock);demoClock=0}}
+function demoStart(){demoStop();if(demoEnabled&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches)demoClock=setInterval(demoStep,1600)}
+function takeover(){if(window.__foreverPreview?.surface==='wall')return;demoEnabled=false;demoStop()}
+window.addEventListener('forever:interactive',takeover);
+var stage=document.querySelector('.wkc-stage');
+stage.addEventListener('pointerdown',takeover,true);stage.addEventListener('keydown',takeover,true);stage.addEventListener('input',takeover,true);stage.addEventListener('wheel',takeover,{capture:true,passive:true});
+document.addEventListener('visibilitychange',function(){document.hidden?demoStop():demoStart()});
+var demoMotion=matchMedia('(prefers-reduced-motion: reduce)');demoMotion.addEventListener('change',function(){demoStart();wake()});
+demoStart();
+})();
+</script>
+</body>
+</html>

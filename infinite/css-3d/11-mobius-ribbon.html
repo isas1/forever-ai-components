@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block. Ribbon colours are bare
@@ -63,12 +64,14 @@
   "prefers-reduced-motion guard",
   "visibilitychange pause/resume",
   "resize handler rebuilding quads",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "60 divs with per-frame inline style writes — can strain low-end CPUs",
   "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
-  "Seam visible if N reduced below ~40"
+  "Seam visible if N reduced below ~40",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -93,13 +96,19 @@
 </script>
 </head>
 <body>
-  <div class="mob-stage"><div class="mob-rot" id="mobRot"><div class="mob-spin" id="mobSpin"></div></div></div>
+  <div class="mob-stage"><div class="mob-rot" id="mob-mobRot"><div class="mob-spin" id="mob-mobSpin"></div></div></div>
   <div class="mob-cap">Möbius Ribbon</div>
 <script>
 (function(){
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const spin = document.getElementById('mobSpin');
-  const rot  = document.getElementById('mobRot');
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
+  const spin = document.getElementById('mob-mobSpin');
+  const rot  = document.getElementById('mob-mobRot');
   const N = 60, TAU = Math.PI*2;
   const R = () => Math.min(innerWidth,innerHeight)*0.30; // ribbon radius (px)
   let radius = R(), quads = [];
@@ -148,16 +157,16 @@
 
   let t=0, raf=0, nudge=0;
   function frame(){
-    t += reduce?0:0.0042;
+    if(demo)t += reduce?0:0.0042;
     nudge*=0.95;
     const spinDeg = (t*42)%360 + nudge*40;
     rot.style.transform = 'rotateX(58deg) rotateZ('+spinDeg.toFixed(2)+'deg)';
     // a slow secondary travel of the twist along the band for shimmer
     const twistPhase = Math.sin(t*1.7)*0.10;
     for(let i=0;i<quads.length;i++) place(quads[i], twistPhase);
-    raf = reduce?0:requestAnimationFrame(frame);
+    if(!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);else raf=0;
   }
-  function start(){ if(!raf && !reduce) raf=requestAnimationFrame(frame); }
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);}
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
   addEventListener('resize',()=>{ radius=R(); build(); if(reduce){frame();} });
@@ -169,7 +178,7 @@
       document.documentElement.setAttribute('data-theme',d.theme); });
 
   radius=R(); build();
-  if(reduce){ frame(); } else start();
+  if(reduce||!demo){ frame(); } else start();
 })();
 </script>
 </body>

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="A segmented Day/Week/Month toggle where a glowing translucent pill springs between options on a dark rounded bar.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sliding Pill</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -70,6 +71,8 @@
   .c07-pill__btn--active{color:var(--text-0)}
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
   @media (prefers-reduced-motion:reduce){.c07-pill__glide{transition-duration:.001ms!important}}
+@media(max-width:220px){.c07-pill__btn{font-size:12px;padding:8px 10px}}
+  .c07-pill__btn:focus-visible{outline:2px solid var(--text-0);outline-offset:2px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -84,7 +87,7 @@
   "spring easing curve (--ease-spring cubic-bezier)",
   "glide transition duration (440ms)",
   "accent glow color (--glow-cyan / --border-glow)",
-  "auto-cycle interval (1700ms)",
+  "auto-cycle interval (1700ms) Autonomous preview ends at first deliberate input and never resumes.",
   "padding and font size",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
@@ -92,12 +95,14 @@
   "requestAnimationFrame initial move() call (sizes glide on load)",
   "visibilitychange stop/loop pause pattern",
   "prefers-reduced-motion guard on auto-cycle loop",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Auto-cycles by default — remove loop() call and stop() handler before shipping in production",
   "Background and colors hardcoded for dark surfaces only",
-  "No aria-pressed or role=tablist semantics for screen readers"
+  "No aria-pressed or role=tablist semantics for screen readers",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -152,14 +157,17 @@
   btns.forEach(function(btn){btn.addEventListener('click',function(){move(btn);});});
   requestAnimationFrame(function(){move(btns[0]);});
   /* autonomous idle: cycle the active segment */
-  var i=0,timer;
+  var i=0,timer,demoEnabled=window.__foreverPreview?.demoEnabled!==false;
   function loop(){
-    if(reduce)return;
+    if(reduce||!demoEnabled)return;
+    clearTimeout(timer);
     timer=setTimeout(function(){i=(i+1)%btns.length;move(btns[i]);loop();},1700);
   }
   function stop(){clearTimeout(timer);}
-  document.addEventListener('visibilitychange',function(){document.hidden?stop():loop();});
-  loop();
+  function takeover(){demoEnabled=false;stop();}
+  window.addEventListener("forever:interactive",takeover);pill.addEventListener("pointerdown",takeover,true);pill.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():(demoEnabled&&loop());});
+  if(demoEnabled)loop();
 })();
 </script>
 </body>

@@ -1,16 +1,19 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="Cyan radial bars radiate from a pulsing bass-driven core around a slowly rotating ring, driven by synth or live mic.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Radial Spectrum</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden}
 body{background:#07080d;display:grid;place-items:center}
 #aav02-c{display:block;width:100%;height:100%}
+.aav02-stage{position:fixed;inset:0}
 .aav02-live{position:fixed;right:8px;top:8px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:#22d3ee;background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.28);
   border-radius:4px;padding:5px 8px;letter-spacing:.06em;cursor:pointer;opacity:.55;
   transition:opacity .25s ease,background .25s ease}
 .aav02-live:hover{opacity:1;background:rgba(34,211,238,.16)}
-.aav02-live.on{color:#07080d;background:#22d3ee;opacity:.95}
+.aav02-live:focus-visible{outline:2px solid #22d3ee;outline-offset:3px}
+.aav02-live.is-on{color:#07080d;background:#22d3ee;opacity:.95}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style><script type="application/json" id="forever-agent-meta">
@@ -33,12 +36,16 @@ body{background:#07080d;display:grid;place-items:center}
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange stop/start guard",
   "prefers-reduced-motion static-frame fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "First deliberate control stops synthetic attract data. Live microphone stream remains active until teardown; teardown stops tracks and closes audio context.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Microphone access requires HTTPS in production — works on localhost but fails on plain HTTP",
   "Background color hardcoded to #07080d in CSS — must edit to change",
-  "No reduced-motion animation — only renders one static frame, no interactive fallback"
+  "Live input depends on browser microphone permission and sandbox capability; user feedback reports unavailable input.",
+  "Microphone acquisition is permission- and sandbox-dependent; mocked tests verify track/context teardown, not hardware access.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -61,8 +68,8 @@ body{background:#07080d;display:grid;place-items:center}
 }
 </script>
 </head><body>
-<canvas id="aav02-c" role="img" aria-label="Radial frequency spectrum around a rotating ring"></canvas>
-<button class="aav02-live" id="aav02-live" type="button" aria-label="Switch to live microphone input">&#9834; live</button>
+<div class="aav02-stage"><canvas id="aav02-c" role="img" aria-label="Radial frequency spectrum around a rotating ring"></canvas>
+<button class="aav02-live" id="aav02-live" type="button" aria-label="Switch to live microphone input">&#9834; live</button></div>
 <div class="cap">Radial Spectrum</div>
 <script>(function(){
 var cv=document.getElementById('aav02-c'),x=cv.getContext('2d');
@@ -74,7 +81,7 @@ var ACC='#22d3ee';
 
 function resize(){
   dpr=Math.min(2,window.devicePixelRatio||1);
-  var w=cv.clientWidth||window.innerWidth,h=cv.clientHeight||window.innerHeight;
+  var w=Math.max(1,cv.clientWidth),h=Math.max(1,cv.clientHeight);
   W=w;H=h;cv.width=w*dpr|0;cv.height=h*dpr|0;
   x.setTransform(dpr,0,0,dpr,0,0);
   cx=w/2;cy=h/2;R=Math.min(w,h)*0.22;
@@ -102,7 +109,8 @@ function synth(i,time){
 }
 
 // --- live audio (created only inside click) ---
-var actx=null,analyser=null,freq=null,live=false;
+var actx=null,analyser=null,freq=null,live=false,stream=null,source=null,destroyed=false;
+var demoEnabled=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true;
 var btn=document.getElementById('aav02-live');
 btn.addEventListener('click',function(){
   if(live)return;
@@ -110,12 +118,14 @@ btn.addEventListener('click',function(){
     actx=new (window.AudioContext||window.webkitAudioContext)();
     analyser=actx.createAnalyser();analyser.fftSize=256;analyser.smoothingTimeConstant=0.78;
     freq=new Uint8Array(analyser.frequencyBinCount);
-    navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-      var src=actx.createMediaStreamSource(stream);
-      src.connect(analyser);               // never connect to destination
-      live=true;btn.classList.add('on');btn.textContent='♪ on';
-    }).catch(function(){btn.textContent='♪ n/a';});
-  }catch(e){btn.textContent='♪ n/a';}
+    navigator.mediaDevices.getUserMedia({audio:true}).then(function(mediaStream){
+      if(destroyed){mediaStream.getTracks().forEach(function(track){track.stop();});actx.close();return;}
+      stream=mediaStream;source=actx.createMediaStreamSource(stream);
+      source.connect(analyser);               // never connect to destination
+      live=true;btn.classList.add('is-on');btn.textContent='♪ on';
+      if(reduce)frame(3);else start();
+    }).catch(function(){if(actx)actx.close();actx=null;btn.textContent='♪ n/a';});
+  }catch(e){if(actx)actx.close();actx=null;btn.textContent='♪ n/a';}
 });
 
 function sample(i,time){
@@ -175,10 +185,15 @@ function frame(time){
 }
 
 var raf=0,running=false;
-function loop(time){frame(time/1000);raf=requestAnimationFrame(loop);}
-function start(){if(!running&&!reduce){running=true;raf=requestAnimationFrame(loop);}}
-function stop(){running=false;cancelAnimationFrame(raf);}
-function vis(){if(document.hidden)stop();else start();}
+function loop(time){if(!running||(!demoEnabled&&!live)){running=false;raf=0;return;}frame(time/1000);raf=requestAnimationFrame(loop);}
+function start(){if(!running&&!reduce&&(demoEnabled||live)){running=true;raf=requestAnimationFrame(loop);}}
+function stop(){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+function stopDemo(){demoEnabled=false;if(!live)stop();}
+window.addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});
+document.addEventListener('keydown',function(e){if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+function cleanup(){destroyed=true;stop();if(stream)stream.getTracks().forEach(function(track){track.stop();});if(source)source.disconnect();if(actx&&actx.state!=='closed')actx.close();}
+window.addEventListener('pagehide',cleanup,{once:true});
+function vis(){if(document.hidden){stop();if(actx)actx.suspend();}else{if(actx&&live)actx.resume();if(demoEnabled||live)start();}}
 document.addEventListener('visibilitychange',vis);
 
 if(reduce){                                 // settle to one static, legible frame

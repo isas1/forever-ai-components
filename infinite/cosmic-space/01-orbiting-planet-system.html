@@ -81,6 +81,13 @@
     {r:185,s:0.27,sz:6.5,c:'#b8a0ff'}
   ];
   planets.forEach(p=>p.a=Math.random()*Math.PI*2);
+  // halo pre-rendered once per planet: a per-frame shadowBlur re-blurs every planet every frame
+  planets.forEach(p=>{
+    const k=document.createElement('canvas');k.width=k.height=64;
+    const g=k.getContext('2d'),rg=g.createRadialGradient(32,32,0,32,32,32);
+    rg.addColorStop(0,p.c);rg.addColorStop(0.35,p.c);rg.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle=rg;g.globalAlpha=0.55;g.fillRect(0,0,64,64);p.halo=k;
+  });
   let mx=0,my=0,t=0;
   cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
     mx=(e.clientX-r.left-cx)/cx;my=(e.clientY-r.top-cy)/cy;});
@@ -108,8 +115,10 @@
     }).sort((u,v)=>u.z-v.z);
     drawn.forEach(d=>{
       const sc=0.7+0.3*((d.z+1)/2),sz=d.p.sz*scale*sc;
-      ctx.fillStyle=d.p.c;ctx.shadowColor=d.p.c;ctx.shadowBlur=8;
-      ctx.beginPath();ctx.arc(d.x,d.y,sz,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+      const hr=sz+8;
+      ctx.drawImage(d.p.halo,d.x-hr,d.y-hr,hr*2,hr*2);
+      ctx.fillStyle=d.p.c;
+      ctx.beginPath();ctx.arc(d.x,d.y,sz,0,Math.PI*2);ctx.fill();
     });
     ctx.restore();
     raf=requestAnimationFrame(frame);

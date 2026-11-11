@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Felt patch panel: braided cables link agent jacks to tool sockets; packets travel along live cables, amber marks a reconnecting socket.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>MCP Patch Bay</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{--co09-bg:#171614;--co09-felt:#2b2a24;--co09-thread:#a39c90;--co09-label:#d4b07a;--co09-brass1:#dcbc86;--co09-brass2:#7d5a2c;--co09-well:#100f0c;--co09-sage:#7fa38b;--co09-amber:#d69a3a;--co09-glow:#f0e6c8;--co09-c0:#c87456;--co09-c1:#d8cfb8;--co09-c2:#8c857a;--co09-ink:#e8e3d8;--co09-accent:#b88b58;}
+  :root[data-theme="light"]{--co09-bg:#f3efe6;--co09-felt:#b9b2a1;--co09-thread:#efe7d2;--co09-label:#3a3226;--co09-brass1:#ecd09a;--co09-brass2:#8a6232;--co09-well:#2a2722;--co09-sage:#4f7d5f;--co09-amber:#c4801f;--co09-glow:#fff8e2;--co09-c0:#a4532f;--co09-c1:#f6f0de;--co09-c2:#6f6a60;--co09-ink:#1d1b18;--co09-accent:#8a6232;}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--co09-bg)}
+  .co09-root{position:fixed;inset:0}
+  .co09-cv{display:block;width:100%;height:100%;outline:none;cursor:pointer;touch-action:none;}
+  .co09-cv:focus-visible{outline:2px solid var(--co09-accent);outline-offset:-6px}
+  .co09-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  .co09-cap{position:fixed;left:8px;bottom:7px;font:10px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--co09-ink);opacity:.28}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code-objects/09-mcp-patch-bay.html",
+ "title": "MCP Patch Bay",
+ "description": "Felt patch bay with braided cables, brass sockets and live packets; amber signals reconnection.",
+ "useWhen": "Showing MCP servers linking an agent to tools.",
+ "avoidWhen": "When real server health must be shown.",
+ "agentPrompt": "Felt, brass and woven cables. Drag plugs or tap sockets.",
+ "editableAreas": [
+  "--co09-* palette tokens",
+  "Script proportions and timings"
+ ],
+ "preserveElements": [
+  "demo-v1: __foreverPreview.demoEnabled, forever:interactive, first-input takeover",
+  "theme: ?theme=, forever:theme messages, light tokens",
+  "IIFE, visibilitychange, reduced motion, keyboard, aria-live"
+ ],
+ "knownLimitations": [
+  "Three cables, four generic sockets; local state."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "claude-code",
+  "mcp",
+  "patch-bay",
+  "brass"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="co09-root" id="co09-root" role="group" aria-label="MCP Patch Bay">
+  <canvas class="co09-cv" id="co09-cv" tabindex="0" role="button" aria-label="Patch bay. Arrow keys pick a socket, Enter plugs or unplugs it. Drag a plug to another socket."></canvas>
+  <div class="co09-live" id="co09-live" aria-live="polite"></div>
+</div>
+<div class="co09-cap" aria-hidden="true">MCP Patch Bay</div>
+<script>
+(function(){
+'use strict';
+var KEYS=["bg","felt","thread","label","brass1","brass2","well","sage","amber","glow","c0","c1","c2","ink","accent"],DEMO=2600;
+var $=function(i){return document.getElementById(i)};
+var root=$('co09-root'),cv=$('co09-cv'),live=$('co09-live'),g=cv.getContext('2d');
+var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+var C={},W=0,H=0,S=0,raf=0,last=0,timers=[],onSize=function(){},onTheme=function(){};
+function tok(){var cs=getComputedStyle(root);KEYS.forEach(function(k){C[k]=cs.getPropertyValue('--co09-'+k).trim()||'#888'})}
+function setTheme(t){if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);tok();onTheme();draw()}}
+window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+function size(){var d=Math.min(devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;cv.width=Math.round(W*d);cv.height=Math.round(H*d);g.setTransform(d,0,0,d,0,0);S=Math.min(W,H);onSize();draw()}
+window.addEventListener('resize',size);
+function say(t){if(!demoEnabled)live.textContent=t}
+function pt(e){var r=cv.getBoundingClientRect();return{x:e.clientX-r.left-r.width/2,y:e.clientY-r.top-r.height/2}}
+function rr(x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
+function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;var t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function loop(now){raf=0;if(document.hidden)return;var dt=last?Math.min(now-last,50):16;last=now;update(dt);draw();if(!reduced())raf=requestAnimationFrame(loop)}
+function start(){if(!raf&&!document.hidden&&!reduced()){last=0;raf=requestAnimationFrame(loop)}}
+function later(f,ms){timers.push(setTimeout(f,ms))}
+function stopDemo(){timers.forEach(function(t){clearTimeout(t);clearInterval(t)});timers=[]}
+function startDemo(){stopDemo();if(!demoEnabled||reduced()||document.hidden)return;timers.push(setTimeout(demoStep,400),setInterval(demoStep,DEMO))}
+function takeover(){demoEnabled=false;stopDemo()}
+window.addEventListener('forever:interactive',takeover);
+cv.addEventListener('pointerdown',takeover,true);
+cv.addEventListener('keydown',takeover,true);
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0;stopDemo()}else{start();startDemo()}});
+var JX=[-.22,0,.22],SX=[-.3,-.1,.1,.3],JY=-.27,SY=.2,NM=['fs','git','db','web'],ck=0,k=0,sel=0,st=null,felt=null,T=6.2832,MONO='px ui-monospace,Menlo,monospace';
+var cab=[0,2,3].map(function(s,i){return{j:i,sock:s,x:SX[s],y:SY,vx:0,vy:0}});
+function tgt(c){return c.sock>=0?[SX[c.sock],SY]:[JX[c.j]+(c.j-1)*.05,JY+.33]}
+function snap(c){var t=tgt(c);c.x=t[0];c.y=t[1];c.vx=c.vy=0}
+function plug(c,i,q){cab.forEach(function(o){if(o!==c&&o.sock===i)o.sock=-1});c.sock=i;if(!q)say(NM[i]+' connected')}
+function tapSock(i){
+var o=cab.filter(function(c){return c.sock===i})[0],c;
+if(o){o.sock=-1;say(NM[i]+' disconnected')}
+else{c=cab.filter(function(c){return c.sock<0})[0]||cab.slice().sort(function(a,b){return Math.abs(JX[a.j]-SX[i])-Math.abs(JX[b.j]-SX[i])})[0];plug(c,i)}
+sel=i;if(reduced()){cab.forEach(snap);draw()}else start();
+}
+function update(dt){
+var s=dt/1000,e=Math.exp(-7*s);ck+=dt;
+cab.forEach(function(c){if(st&&st.c===c&&st.m>=8)return;var t=tgt(c);c.vx=(c.vx+(t[0]-c.x)*160*s)*e;c.vy=(c.vy+(t[1]-c.y)*160*s)*e;c.x+=c.vx*s;c.y+=c.vy*s});
+}
+function path(c){
+var a=JX[c.j],b=JY+.02,sw=Math.sin(ck*.0013+c.j*2)*.014,x1=a+sw,y1=b+.2,x2=c.x-sw*.5,y2=c.y-(c.sock<0?.1:.2),o=[],i,u,w;
+for(i=0;i<=20;i++){u=i/20;w=1-u;o.push({x:(w*w*w*a+3*w*w*u*x1+3*w*u*u*x2+u*u*u*c.x)*S,y:(w*w*w*b+3*w*w*u*y1+3*w*u*u*y2+u*u*u*c.y)*S})}
+return o;
+}
+function strk(p,w,col,al,dash,dx,dy){
+dx=dx||0;dy=dy||0;g.globalAlpha=al;g.strokeStyle=col;g.lineWidth=w;g.setLineDash(dash||[]);g.beginPath();
+p.forEach(function(q,i){i?g.lineTo(q.x+dx,q.y+dy):g.moveTo(q.x+dx,q.y+dy)});g.stroke();g.setLineDash([]);g.globalAlpha=1;
+}
+function brass(x,y,r){
+var f=g.createRadialGradient(x-r*.4,y-r*.4,r*.1,x,y,r);f.addColorStop(0,C.brass1);f.addColorStop(1,C.brass2);
+g.fillStyle=f;g.beginPath();g.arc(x,y,r,0,T);g.fill();g.strokeStyle='rgba(0,0,0,.35)';g.lineWidth=1;g.stroke();g.strokeStyle='rgba(255,255,255,.38)';g.lineWidth=Math.max(.5,r*.06);g.beginPath();g.arc(x,y,r*.8,3.5,5.8);g.stroke();
+}
+function buildFelt(){
+var c=document.createElement('canvas'),x=c.getContext('2d'),r=rng(5),i;c.width=c.height=96;
+x.fillStyle=C.felt;x.fillRect(0,0,96,96);
+for(i=0;i<450;i++){x.fillStyle=r()<.5?'rgba(255,255,255,.035)':'rgba(0,0,0,.05)';x.fillRect(r()*96,r()*96,.7+r()*.6,.7)}
+felt=g.createPattern(c,'repeat');
+}
+onTheme=function(){felt=null};
+function draw(){
+var i,j,p,c,o,q,u,x,y,f,rc=Math.floor(ck/7000)%3,rcOn=ck%7000>4000,lv=.5+.5*Math.sin(ck*.004);
+g.clearRect(0,0,W,H);g.fillStyle=C.bg;g.fillRect(0,0,W,H);if(!felt)buildFelt();
+g.save();g.translate(W/2,H/2);
+g.shadowColor='rgba(0,0,0,.45)';g.shadowBlur=S*.04;g.shadowOffsetY=S*.015;g.fillStyle=C.felt;rr(-S*.43,-S*.43,S*.86,S*.86,S*.035);g.fill();g.shadowColor='transparent';
+g.save();g.clip();if(felt){g.fillStyle=felt;g.fillRect(-S/2,-S/2,S,S)}
+g.shadowColor='rgba(0,0,0,.32)';g.shadowBlur=S*.025;g.strokeStyle='#000';g.lineWidth=S*.014;rr(-S*.43,-S*.43,S*.86,S*.86,S*.035);g.stroke();g.restore();
+g.strokeStyle=C.thread;g.globalAlpha=.35;g.lineWidth=Math.max(.6,S*.0025);g.setLineDash([S*.014,S*.01]);rr(-S*.4,-S*.4,S*.8,S*.8,S*.025);g.stroke();g.setLineDash([]);g.globalAlpha=1;
+for(i=0;i<3;i++){x=JX[i]*S;y=JY*S;brass(x,y,S*.044);g.fillStyle=C.well;g.beginPath();g.arc(x,y,S*.028,0,T);g.fill()}
+for(i=0;i<4;i++){
+  x=SX[i]*S;y=SY*S;c=cab.filter(function(a){return a.sock===i})[0];o=c&&rcOn&&cab[rc]===c;
+  if(c){q=o?C.amber:C.sage;f=g.createRadialGradient(x,y,S*.03,x,y,S*.075);f.addColorStop(0,q);f.addColorStop(1,'rgba(0,0,0,0)');
+    g.globalAlpha=o?.14+.16*lv:.12+.04*lv;g.fillStyle=f;g.beginPath();g.arc(x,y,S*.075,0,T);g.fill();g.globalAlpha=1}
+  brass(x,y,S*.046);g.fillStyle=C.well;g.beginPath();g.arc(x,y,S*.027,0,T);g.fill();
+  if(c){g.strokeStyle=q;g.globalAlpha=o?.3+.7*lv:1;g.lineWidth=Math.max(1.5,S*.008);g.beginPath();g.arc(x,y,S*.055,0,T);g.stroke();g.globalAlpha=1}
+  g.fillStyle=C.label;g.font='600 '+Math.max(10,S*.05)+MONO;g.textAlign='center';g.textBaseline='middle';g.fillText(NM[i],x,S*.32);
+  if(i===sel&&cv.matches(':focus-visible')){g.strokeStyle=C.label;g.lineWidth=2;g.beginPath();g.arc(x,y,S*.075,0,T);g.stroke()}
+}
+g.lineCap='round';
+cab.forEach(function(c){
+  p=path(c);strk(p,S*.022,'#000',.28,0,S*.006,S*.012);strk(p,S*.018,C['c'+c.j],1);strk(p,S*.018,'#000',.2,[S*.005,S*.005]);
+  x=JX[c.j]*S;y=JY*S;brass(x,y,S*.025);
+  if(c.sock>=0&&!(rcOn&&cab[rc]===c))for(j=0;j<3;j++){u=(ck*.0004+j/3+c.j*.17)%1;q=p[Math.min(20,Math.round(u*20))];g.globalAlpha=Math.sin(u*3.1416);g.fillStyle=C.glow;g.beginPath();g.arc(q.x,q.y,S*.0075,0,T);g.fill();g.globalAlpha=1}
+  o=p[20];q=p[18];g.save();g.translate(o.x,o.y);g.rotate(Math.atan2(o.y-q.y,o.x-q.x));
+  f=g.createLinearGradient(0,-S*.014,0,S*.014);f.addColorStop(0,C.brass1);f.addColorStop(1,C.brass2);g.fillStyle=f;rr(-S*.06,-S*.014,S*.06,S*.028,S*.008);g.fill();g.restore();
+});
+g.restore();
+}
+function nearX(px){var b=0,i;for(i=1;i<4;i++)if(Math.abs(px-SX[i])<Math.abs(px-SX[b]))b=i;return b}
+cv.addEventListener('pointerdown',function(e){
+var p=pt(e),c=null,bd=.09,d;
+cab.forEach(function(a){d=Math.hypot(p.x/S-a.x,p.y/S-a.y);if(d<bd){bd=d;c=a}});
+st={x:p.x,y:p.y,c:c,m:0};try{cv.setPointerCapture(e.pointerId)}catch(_){}start();
+});
+cv.addEventListener('pointermove',function(e){
+if(!st)return;var p=pt(e);st.m=Math.max(st.m,Math.hypot(p.x-st.x,p.y-st.y));
+if(st.c&&st.m>=8){if(st.c.sock>=0)st.c.sock=-1;st.c.x=p.x/S;st.c.y=p.y/S;st.c.vx=st.c.vy=0;if(reduced())draw()}
+});
+cv.addEventListener('pointerup',function(e){
+var s=st,p=pt(e),i,b=0,bd=9,d;st=null;if(!s)return;
+if(s.c&&s.m>=8){
+  for(i=0;i<4;i++){d=Math.hypot(p.x/S-SX[i],p.y/S-SY);if(d<bd){bd=d;b=i}}
+  if(bd<.13){plug(s.c,b);sel=b}
+  if(reduced()){cab.forEach(snap);draw()}
+}else if(s.m<8)tapSock(nearX(p.x/S));
+});
+cv.addEventListener('pointercancel',function(){st=null});
+cv.addEventListener('click',function(e){if(e.detail===0){takeover();tapSock(sel)}});
+cv.addEventListener('keydown',function(e){
+if(e.key==='ArrowRight'){e.preventDefault();sel=Math.min(3,sel+1)}
+else if(e.key==='ArrowLeft'){e.preventDefault();sel=Math.max(0,sel-1)}
+else if(e.key==='Enter'||e.key===' '){e.preventDefault();tapSock(sel)}
+if(reduced())draw();
+});
+function demoStep(){
+var c=cab[k++%3],f=[0,1,2,3].filter(function(i){return i!==c.sock&&!cab.some(function(o){return o.sock===i})}),t;
+if(c.sock<0||!f.length||st)return;t=f[k%f.length];c.sock=-1;later(function(){plug(c,t,1)},520);
+}
+cab.forEach(snap);
+tok();size();start();startDemo();
+})();
+</script>
+</body>
+</html>

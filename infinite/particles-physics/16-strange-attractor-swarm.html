@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Hundreds of hot-pink particles trace a slowly rotating Aizawa strange attractor in 3D, glowing where fast; pointer spins and boosts.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Strange Attractor Swarm</title>
@@ -49,12 +50,14 @@
   "prefers-reduced-motion static-frame fallback",
   "visibilitychange stop/start guards",
   "DPR-aware canvas sizing",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "CPU-bound per-frame velocity loop — can drop frames on low-end devices at full particle count",
   "Background color hardcoded in CSS (#120010) — must edit to change dark purple",
-  "Reduced-motion path uses MORE particles (900) than the animated path (560) for a denser static frame — may confuse future editors"
+  "Reduced-motion path uses MORE particles (900) than the animated path (560) for a denser static frame — may confuse future editors",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -78,10 +81,15 @@
 </script>
 </head>
 <body>
-<canvas id="sas-c"></canvas>
+<canvas id="sas-c" class="sas-root"></canvas>
 <div class="sas-cap">Strange Attractor Swarm</div>
 <script>
 (function(){
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   const cv=document.getElementById('sas-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,cx,cy,scale;
@@ -135,10 +143,10 @@
     return {sx:cx+rx*scale*persp, sy:cy - ty*scale*persp + scale*0.15, d:persp};
   }
 
-  function frame(){
+  function frame(){raf=0;if(document.hidden)return;
     ctx.fillStyle=TH.fade;ctx.fillRect(0,0,W,H);
     boost*=0.93; pull*=0.9;
-    if(!reduce) rot+=0.0016+pull*0.004;
+    if(!reduce)rot+=(demoEnabled?.0016:0)+pull*.004;
     const sr=Math.sin(rot),cr=Math.cos(rot);
     const steps=reduce?1:(2+(boost>0.05?2:0));
     ctx.globalCompositeOperation=TH.blend;
@@ -160,10 +168,10 @@
       ctx.beginPath();ctx.arc(q.sx,q.sy,r,0,6.2832);ctx.fill();
     }
     ctx.globalCompositeOperation='source-over';
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(demoEnabled||(boost>.003||Math.abs(pull)>.003)))start();
   }
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!document.hidden&&!reduce&&(demoEnabled||(boost>.003||Math.abs(pull)>.003)))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   function still(){
@@ -180,6 +188,7 @@
     for(let w=0;w<700;w++)for(let i=0;i<N;i++){const p=P[i],v=vel(p);p.x+=v.x*DT;p.y+=v.y*DT;p.z+=v.z*DT;if(Math.abs(p.x)>3)seed(p);}
     still();
   } else start();
+  ['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;if(reduce){rot+=pull*.12;still();}else start();}));
 })();
 </script>
 </body>

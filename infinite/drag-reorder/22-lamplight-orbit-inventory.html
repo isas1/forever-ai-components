@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Lamplight Weight Rail — Drag &amp; Reorder. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lamplight Weight Rail</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--sky:#0E1630;--s1:#16224A;--s2:#2B3D71;--s3:#3E66A8;--lamp:#F2C230;--warm:#E8893A;--ink:#FFF6D6;--mut:#A9B4D6}
+:root[data-theme="light"]{--sky:#DCE3F2;--s1:#C5D0E8;--s2:#B3C2E0;--s3:#8FA3CC;--lamp:#B8860B;--warm:#B8651A;--ink:#1A2340;--mut:#4A5578}
+.wij-stage,.wij-stage *{box-sizing:border-box;margin:0;padding:0}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--sky)}
+.wij-stage{position:absolute;inset:0;background:var(--sky);color:var(--ink);font-family:"Gill Sans",Optima,Candara,system-ui,sans-serif;display:grid;place-items:center;overflow:hidden}
+.wij-s{position:relative;width:min(92vmin,640px);aspect-ratio:1;touch-action:none;user-select:none;-webkit-user-select:none}
+.wij-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+.wij-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.wij-b{position:absolute;left:0;top:0;border:2px solid var(--s3);background:var(--s1);color:var(--ink);font:700 calc(var(--u)*4.4)/1 inherit;font-family:inherit;cursor:pointer;touch-action:none;transition:background .25s,color .25s,border-color .25s}
+.wij-b:hover{border-color:var(--lamp)}
+.wij-b[aria-pressed=true]{background:var(--lamp);color:var(--sky);border-color:var(--lamp)}
+.wij-n{position:absolute;pointer-events:none;color:var(--lamp);font-weight:600;line-height:1;font-variant-numeric:tabular-nums;transition:color .2s}
+.wij-unit{font-style:normal;color:var(--mut)}
+.wij-n.wij-w{color:var(--warm)}
+.wij-stage :focus-visible{outline:2px solid var(--lamp);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){.wij-stage *{transition:none!important}}
+.wij-b{height:calc(var(--u)*12);border:0;background:none;color:var(--ink);transform-origin:50% 50%}
+.wij-b[aria-pressed=true]{background:none;color:var(--sky)}
+.wij-n{left:0;right:0;top:calc(var(--u)*8);text-align:center;font-size:calc(var(--u)*13)}
+.wij-unit{font-size:calc(var(--u)*5)}
+
+.wij-cap{position:fixed;left:8px;bottom:7px;max-width:calc(100% - 16px);font:10px/1.2 system-ui,sans-serif;letter-spacing:.03em;color:var(--ink);opacity:.35;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/drag-reorder/22-lamplight-orbit-inventory.html",
+ "title": "Lamplight Weight Rail",
+ "description": "Lamplight-on-navy palette with warm gold accents; drag or tap brushstroke gear into a weighted rail with elastic tilt and capacity feedback.",
+ "useWhen": "A playful item picker with capacity feedback and keyboard alternatives.",
+ "avoidWhen": "Persistent inventory management without connecting real item data and storage.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes.",
+  "Owner-approved light lamp accent #B8860B has 2.53:1 contrast on #DCE3F2; catalog accentLight uses actual light ink #1A2340 for readable placeholder chrome."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "inventory",
+  "rail",
+  "lamplight",
+  "drag",
+  "capacity"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wij-stage" role="group" aria-label="Lamplight Weight Rail">
+<main id="wij-root" class="wij-s" role="group" aria-label="Pack equipment, limit 36 pounds">
+<canvas id="wij-cv" class="wij-c" aria-hidden="true"></canvas>
+<div class="wij-n" id="wij-n"><span id="wij-t">22</span><i class="wij-unit">/36</i></div>
+<div id="wij-live" class="wij-sr" role="status" aria-live="polite"></div>
+</main>
+</div>
+<div class="wij-cap" aria-hidden="true">Lamplight Weight Rail</div>
+<script>
+(function(){
+
+var $=function(i){return document.getElementById(i)},root=document.documentElement,st=$('wij-root'),cv=$('wij-cv'),cx=cv.getContext('2d'),W=100,H=100,U=1,D=1,C={},raf=0,last=0,tm=0,mo=matchMedia('(prefers-reduced-motion: reduce)');
+var IT=[{n:'Emotional baggage',w:16},{n:'Laptop',w:14},{n:'Snacks',w:6},{n:'Phone charger',w:6}],CAP=36,ord=[0,2],BT=[];
+function has(i){return ord.indexOf(i)>=0}
+function tot(){return ord.reduce(function(a,i){return a+IT[i].w},0)}
+function say(s){$('wij-live').textContent=s}
+function toggle(i){var e=has(i),n=IT[i].n;
+if(e)ord.splice(ord.indexOf(i),1);else if(tot()+IT[i].w>CAP){say(n+' does not fit. '+tot()+' of '+CAP+' pounds');return -1}else ord.push(i);
+say(n+(e?' removed. ':' equipped. ')+tot()+' of '+CAP+' pounds');return e?0:1}
+function sync(){BT.forEach(function(b,i){b.setAttribute('aria-pressed',has(i))})}
+function mk(){IT.forEach(function(x,i){var b=document.createElement('button');b.type='button';b.className='wij-b';b.textContent=x.w;b.setAttribute('aria-label',x.n+', '+x.w+' pounds');b.setAttribute('aria-pressed',has(i));st.appendChild(b);BT.push(b)})}
+function pt(e){var r=cv.getBoundingClientRect();return[(e.clientX-r.left)/U,(e.clientY-r.top)/U]}
+function clr(){cx.setTransform(D,0,0,D,0,0);cx.clearRect(0,0,W,H)}
+function ln(x1,y1,x2,y2,col,al,sd,n,wd){var L=Math.hypot(x2-x1,y2-y1)||1,nx=-(y2-y1)/L,ny=(x2-x1)/L;cx.strokeStyle=col;cx.lineCap='round';cx.lineWidth=wd;
+for(var k=0;k<n;k++){var o=(k-(n-1)/2)*wd*.7;cx.globalAlpha=al*(.4+.5*Math.abs(Math.sin(k*2.3+sd)));cx.beginPath();cx.moveTo(x1+nx*o,y1+ny*o);cx.lineTo(x2+nx*o,y2+ny*o);cx.stroke()}cx.globalAlpha=1}
+function cols(){var s=getComputedStyle(root);'sky s1 s2 s3 lamp warm ink mut'.split(' ').forEach(function(k){C[k]=s.getPropertyValue('--'+k).trim()})}
+function fit(){var r=cv.getBoundingClientRect();W=r.width;H=r.height;U=W/100;D=Math.min(devicePixelRatio||1,2);cv.width=Math.round(W*D);cv.height=Math.round(H*D);st.style.setProperty('--u',U+'px');onfit();kick()}
+function frame(t){raf=0;var dt=Math.min(Math.max(t-last,0),50)/16.667;last=t;tm+=dt;var b=step(dt);draw();if(b&&!document.hidden)raf=requestAnimationFrame(frame)}
+function kick(){if(document.hidden||raf)return;last=performance.now();raf=requestAnimationFrame(frame)}
+function theme(t){root.setAttribute('data-theme',t);cols();kick()}
+var BX=6,BW=88,BY=36,X=[],Y=[],VX=[0,0,0,0],VY=[0,0,0,0],LX=[],LY=[],PX=[],tl=[0,0,0,0],K=[.1,.075,.13,.11],dr=-1,mv=0,ox=0,oy=0,sx=0,sy=0,lt=0,fl=0,tE=$('wij-t'),nE=$('wij-n');
+function iw(i){return IT[i].w/CAP*BW}
+function lay(){var x=BX,tx=BX,ty=66;
+ord.forEach(function(i){LX[i]=x+iw(i)/2;LY[i]=BY;x+=iw(i)});
+IT.forEach(function(_,i){if(has(i))return;var w=iw(i);if(tx+w>94){tx=BX;ty+=16}LX[i]=tx+w/2;LY[i]=ty;tx+=w+3})}
+function onfit(){BT.forEach(function(b,i){b.style.width=iw(i)*U+'px'})}
+function step(dt){lay();var b=0,m=mo.matches,f=Math.pow(.86,dt);
+IT.forEach(function(_,i){
+if(X[i]===undefined){X[i]=LX[i];Y[i]=LY[i];PX[i]=X[i]}
+if(i!==dr){
+if(m){X[i]=LX[i];Y[i]=LY[i];VX[i]=VY[i]=0}
+else{var k=1-Math.pow(1-K[i],dt);VX[i]*=f;VY[i]*=f;X[i]+=VX[i]*dt+(LX[i]-X[i])*k;Y[i]+=VY[i]*dt+(LY[i]-Y[i])*k;
+if(Math.abs(LX[i]-X[i])>.05||Math.abs(LY[i]-Y[i])>.05||Math.abs(VX[i])>.02||Math.abs(VY[i])>.02)b=1;else{X[i]=LX[i];Y[i]=LY[i];VX[i]=VY[i]=0}}}
+else b=1;
+var g=m?0:Math.max(-.3,Math.min(.3,(X[i]-PX[i])/Math.max(dt,.1)*.05));PX[i]=X[i];
+tl[i]+=(g-tl[i])*(m?1:1-Math.pow(.7,dt));if(Math.abs(tl[i])>.002)b=1});
+fl=m?0:fl*Math.pow(.93,dt);if(fl>.02)b=1;else fl=0;return b}
+function body(x,y,w,h,col,al,sd,r){cx.save();cx.translate(x,y);cx.rotate(r);cx.strokeStyle=col;cx.lineCap='round';cx.lineWidth=h/7*1.3;
+for(var j=0;j<7;j++){var yy=-h/2+h*(j+.5)/7;cx.globalAlpha=al*(.7+.3*Math.sin(j*2.1+sd));cx.beginPath();cx.moveTo(-w/2+Math.abs(Math.sin(j*3.1+sd))*2.5*U,yy);cx.lineTo(w/2-Math.abs(Math.sin(j*5.3+sd))*2.5*U,yy);cx.stroke()}
+cx.restore();cx.globalAlpha=1}
+function draw(){clr();var hot=dr>=0&&Y[dr]<52,tc=fl>.05?C.warm:hot?C.lamp:C.s2,y1=(BY-8.5)*U,y2=(BY+8.5)*U;
+ln(BX*U-U,y1,(BX+BW)*U+U,y1,tc,.9,1,3,U*.8);ln(BX*U-U,y2,(BX+BW)*U+U,y2,tc,.9,2,3,U*.8);
+ln((BX+BW)*U+U,y1,(BX+BW)*U+U,y2,C.mut,.9,3,3,U*.8);ln(BX*U-U,y1,BX*U-U,y2,tc,.9,4,3,U*.8);
+IT.forEach(function(_,i){var e=has(i);cx.shadowColor=C.lamp;cx.shadowBlur=e?U*2.5:0;
+body(X[i]*U,Y[i]*U,iw(i)*U,12*U,e?C.lamp:C.s3,1,i,tl[i]);
+var w=iw(i)*U,h=12*U;BT[i].style.transform='translate('+(X[i]*U-w/2)+'px,'+(Y[i]*U-h/2)+'px) rotate('+tl[i]+'rad)'});
+cx.shadowBlur=0;var t=tot();if(tE.textContent!=t)tE.textContent=t;nE.classList.toggle('wij-w',fl>.15)}
+function rej(i){fl=1;VY[i]=-7}
+function act(i){if(toggle(i)<0)rej(i);sync()}
+function drop(i){var inb=Y[i]<52;
+if(inb&&!has(i)){if(toggle(i)<0)rej(i)}
+else if(!inb&&has(i))toggle(i);
+else if(inb)ord.sort(function(a,c){return X[a]-X[c]});
+sync()}
+mk();
+BT.forEach(function(b,i){
+b.addEventListener('pointerdown',function(e){if(e.button)return;b.setPointerCapture(e.pointerId);var p=pt(e);dr=i;mv=0;ox=X[i]-p[0];oy=Y[i]-p[1];sx=p[0];sy=p[1];lt=e.timeStamp;VX[i]=VY[i]=0;kick()});
+b.addEventListener('pointermove',function(e){if(dr!==i)return;var p=pt(e);if(!mv&&Math.hypot(p[0]-sx,p[1]-sy)<4/U)return;mv=1;
+var nx=p[0]+ox,ny=p[1]+oy,d=Math.max(e.timeStamp-lt,1)/16.667;VX[i]=(nx-X[i])/d;VY[i]=(ny-Y[i])/d;lt=e.timeStamp;X[i]=nx;Y[i]=ny;kick()});
+b.addEventListener('pointerup',function(){if(dr!==i)return;dr=-1;if(mv)drop(i);else act(i);kick()});
+b.addEventListener('pointercancel',function(){dr=-1;kick()});
+b.addEventListener('click',function(e){if(!e.detail){act(i);kick()}})});
+addEventListener('message',function(e){var m=e.data;if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark'))theme(m.theme)});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+mo.addEventListener('change',kick);
+cols();new ResizeObserver(fit).observe(st);fit();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoTimer=0,demoIndex=0;
+function demoStop(){demoEnabled=false;clearInterval(demoTimer);demoTimer=0}
+function demoStart(){if(demoTimer||!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;demoTimer=setInterval(function(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;act(demoIndex++%IT.length);kick()},1400)}
+window.addEventListener('forever:interactive',demoStop);
+['pointerdown','keydown','wheel','click'].forEach(function(t){document.addEventListener(t,function(e){if(e.isTrusted)demoStop()},{capture:true,passive:true})});
+document.addEventListener('visibilitychange',function(){clearInterval(demoTimer);demoTimer=0;if(!document.hidden)demoStart()});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',function(){clearInterval(demoTimer);demoTimer=0;demoStart()});
+demoStart();
+})();
+</script>
+</body>
+</html>

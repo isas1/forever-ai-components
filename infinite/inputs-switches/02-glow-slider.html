@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Plum-to-teal neon-glow range slider with a glowing knob and a floating value bubble that tracks the handle.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Glow Slider</title>
@@ -22,20 +23,24 @@
     --c02-bub-ink:#fff; --c02-knob:#794d64;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c02-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  .wrap{height:100%;display:flex;align-items:center;justify-content:center}
-  .stage{width:min(74vmin,340px)}
-  svg{width:100%;height:auto;overflow:visible}
+  .c02-wrap{height:100%;display:flex;align-items:center;justify-content:center}
+  .c02-stage{width:min(74vmin,340px)}
+  .c02-svg{width:100%;height:auto;overflow:visible}
   .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c02-cap);opacity:var(--c02-cap-o);text-transform:uppercase}
-  .bub{font:700 16px ui-sans-serif,system-ui,sans-serif;fill:var(--c02-bub-ink)}
+  .c02-bub{font:700 16px ui-sans-serif,system-ui,sans-serif;fill:var(--c02-bub-ink)}
+
+
+.c02-stage{position:relative}.c02-range{position:absolute;left:10%;top:58%;width:80%;height:24%;margin:0;opacity:0;cursor:ew-resize;touch-action:none}
+.c02-stage:has(.c02-range:focus-visible){outline:2px solid var(--c02-cap);outline-offset:6px;border-radius:12px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/inputs-switches/02-glow-slider.html",
  "title": "Glow Slider",
- "description": "SVG range slider with a plum-to-teal gradient fill, glowing knob, and a floating value bubble that tracks the handle; auto-oscillates when idle.",
+ "description": "SVG range slider with a muted plum-to-teal fill, glow and value bubble, driven by a native range input. First input stops demo oscillation; drag and keyboard changes settle fully.",
  "useWhen": "Settings panels, volume/brightness controls, or any numeric input needing a high-contrast neon aesthetic on dark backgrounds.",
- "avoidWhen": "Light-background UIs (background hardcoded dark plum). Production use requires wiring a real value-change callback and removing the auto-oscillation loop.",
- "agentPrompt": "Change the gradient from plum-teal to amber-gold by updating the two stop-color values in #fill to #A68D3F and #BFA98C, and slow the oscillation by changing t*0.018 to t*0.010. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "avoidWhen": "Forms needing immediate visual response with no interpolation; use reduced-motion behavior or set val directly.",
+ "agentPrompt": "Adjust gradient tokens, smoothing and range limits together. Read numeric input.value for application changes. Keep native range input, visible focus, sticky demoEnabled and bubble clamp. Theme: dark tokens live in :root; the [data-theme=\"light\"] block and forever:theme message switch palette.",
  "editableAreas": [
   "gradient colors (stop-color in #fill linearGradient)",
   "oscillation speed (t*0.018)",
@@ -49,12 +54,16 @@
   "prefers-reduced-motion guard",
   "visibilitychange pause",
   "bubble clamp logic (Math.min/Math.max on bx)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "native controls, visible focus and keyboard handlers",
+  "sticky preview demo lifecycle (forever-preview-lifecycle demo-v1; __foreverPreview.demoEnabled; forever:interactive window event)",
+  "visibilitychange suspension with manual settling retained",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Auto-oscillates by default — remove the !manual sine loop for production use",
-  "Not keyboard accessible (no input[type=range] underneath)",
-  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default"
+  "Value range is 0–100; connect the native input event to application data.",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -79,57 +88,31 @@
 </script>
 </head>
 <body>
-<div class="wrap"><div class="stage">
-<svg viewBox="0 0 200 120" role="img" aria-label="Glowing slider">
-  <defs>
-    <linearGradient id="fill" x1="0" x2="1"><stop offset="0" style="stop-color:var(--c02-grad-a)"/><stop offset="1" style="stop-color:var(--c02-grad-b)"/></linearGradient>
-    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-  </defs>
-  <rect x="20" y="78" width="160" height="8" rx="4" fill="var(--c02-track-bg)"/>
-  <rect id="prog" x="20" y="78" width="40" height="8" rx="4" fill="url(#fill)" filter="url(#glow)"/>
-  <g id="bubg" filter="url(#glow)">
-    <path id="bubp" d="" fill="url(#fill)"/>
-    <text id="bubt" class="bub" x="60" y="40" text-anchor="middle">40</text>
-  </g>
-  <circle id="knob" cx="60" cy="82" r="9" fill="var(--c02-knob)" filter="url(#glow)"/>
-</svg>
-</div></div>
-<div class="cap">Glow Slider</div>
+<div class="c02-wrap"><div class="c02-stage"><svg class="c02-svg" viewBox="0 0 200 120" aria-hidden="true">
+<defs><linearGradient id="c02-fill" x1="0" x2="1"><stop offset="0" stop-color="var(--c02-grad-a)"/><stop offset="1" stop-color="var(--c02-grad-b)"/></linearGradient><filter id="c02-glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+<rect x="20" y="78" width="160" height="8" rx="4" fill="var(--c02-track-bg)"/><rect id="c02-prog" x="20" y="78" width="64" height="8" rx="4" fill="url(#c02-fill)" filter="url(#c02-glow)"/><g filter="url(#c02-glow)"><path id="c02-bubp" fill="url(#c02-fill)"/><text id="c02-bubt" class="c02-bub" x="84" y="40" text-anchor="middle">40</text></g><circle id="c02-knob" cx="84" cy="82" r="9" fill="var(--c02-knob)" filter="url(#c02-glow)"/></svg>
+<input class="c02-range" id="c02-range" type="range" min="0" max="100" value="40" aria-label="Glow slider value"></div></div><div class="cap" aria-hidden="true">Glow Slider</div>
 <script>
 (function(){
-  const prog=document.getElementById('prog'),knob=document.getElementById('knob'),bubg=document.getElementById('bubg'),bubt=document.getElementById('bubt'),bubp=document.getElementById('bubp');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  const X0=20,X1=180;let t=0,running=true,manual=false,target=.4,val=.4;
-  function bubblePath(cx){return 'M'+(cx-15)+' 30 q0 -14 15 -14 q15 0 15 14 q0 12 -10 16 l-5 9 l-5 -9 q-10 -4 -10 -16 z';}
-  function frame(){
-    if(!running)return;
-    t++;
-    if(!manual){target=.5+0.42*Math.sin(t*0.018);}
-    val+=(target-val)*0.12;
-    const x=X0+(X1-X0)*val;
-    prog.setAttribute('width',Math.max(8,x-X0));
-    knob.setAttribute('cx',x);
-    bubg.setAttribute('transform','translate('+(x-Math.min(Math.max(x,X0+15),X1-15))+',0)');
-    // keep bubble centered on knob but clamped
-    const bx=Math.min(Math.max(x,X0+16),X1-16);
-    bubp.setAttribute('d',bubblePath(bx));
-    bubt.setAttribute('x',bx);
-    bubt.textContent=Math.round(val*100);
-    requestAnimationFrame(frame);
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,raf=0;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});
+  document.addEventListener('click',stopDemo,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+  addEventListener('message',e=>{const d=e.data;if(d?.type==='forever:theme'&&['light','dark'].includes(d.theme)){document.documentElement.dataset.theme=d.theme;syncTheme();}});
+  function wake(){if(!document.hidden&&!raf)raf=requestAnimationFrame(frame);}
+  document.addEventListener('visibilitychange',()=>{cancelAnimationFrame(raf);raf=0;if(!document.hidden)wake();});
+  const input=document.getElementById('c02-range'),prog=document.getElementById('c02-prog'),knob=document.getElementById('c02-knob'),bubt=document.getElementById('c02-bubt'),bubp=document.getElementById('c02-bubp');
+  let t=0,target=.4,val=.4;
+  function syncTheme(){}
+  function paint(){const x=20+160*val,bx=Math.min(Math.max(x,36),164);prog.setAttribute('width',Math.max(0,x-20));knob.setAttribute('cx',x);bubp.setAttribute('d','M'+(bx-15)+' 30 q0 -14 15 -14 q15 0 15 14 q0 12 -10 16 l-5 9 l-5 -9 q-10 -4 -10 -16 z');bubt.setAttribute('x',bx);bubt.textContent=Math.round(val*100);}
+  input.addEventListener('input',()=>{stopDemo();target=Number(input.value)/100;if(reduce){val=target;paint();}else wake();});
+  function frame(){raf=0;if(document.hidden)return;if(demoEnabled&&!reduce){target=.5+.42*Math.sin(++t*.018);input.value=Math.round(target*100);}
+    val=reduce?target:val+(target-val)*.12;if(Math.abs(target-val)<.0001)val=target;paint();if((demoEnabled&&!reduce)||val!==target)wake();
   }
-  const svg=document.querySelector('svg');
-  function set(e){const r=svg.getBoundingClientRect();const px=(e.clientX-r.left)/r.width*200;target=Math.min(1,Math.max(0,(px-X0)/(X1-X0)));}
-  svg.addEventListener('pointerdown',e=>{manual=true;set(e);});
-  svg.addEventListener('pointermove',e=>{if(manual&&e.buttons)set(e);});
-  window.addEventListener('pointerup',()=>{setTimeout(()=>manual=false,1400);});
-  document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
-  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
-  addEventListener('message', function(e){
-    var d=e.data;
-    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
-  });
-  bubp.setAttribute('d',bubblePath(60));
-  if(!reduce)requestAnimationFrame(frame);
+  paint();if(!reduce&&demoEnabled)wake();
 })();
 </script>
 </body>

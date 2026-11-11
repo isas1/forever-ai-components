@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="utf-8">
 <meta name="description" content="The word MORPH on dark umber morphs its variable-font axes (weight, width, slant) with a copper-to-vermillion glow, breathing wide and italic.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -15,17 +16,18 @@
      canvas paints its own bg (trail fade) every frame, so JS reads these via syncTheme(), not CSS. */
   :root{
     --oam-bg:#1A1614; --oam-bg-rgb:26,22,20; --oam-accent:#E04729; --oam-accent-rgb:224,71,41;
-    --oam-cool-rgb:160,194,138; --cap-o:.34;
+    --kt17-cool-rgb:160,194,138; --cap-o:.34;
   }
   :root[data-theme="light"]{
     --oam-bg:#f5f0e8; --oam-bg-rgb:245,240,232; --oam-accent:#c8391d; --oam-accent-rgb:200,57,29;
-    --oam-cool-rgb:83,117,61; --cap-o:.5;
+    --kt17-cool-rgb:83,117,61; --cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--oam-bg);}
-  #oam-c{display:block;width:100%;height:100%;}
+  #kt17-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
        letter-spacing:.14em;color:var(--oam-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+#kt17-c:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -49,12 +51,15 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space activation and visible focus; manual word/geometry changes finish before the renderer sleeps"
  ],
  "knownLimitations": [
   "Letters are custom segment lists — only M, O, R, P, H are defined; adding new letters requires authoring segment arrays",
   "Text is canvas-drawn so not selectable or accessible to screen readers",
-  "Background color hardcoded in CSS and canvas clear — must change both to retheme"
+  "Background color hardcoded in CSS and canvas clear — must change both to retheme",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -79,11 +84,11 @@
 </script>
 </head>
 <body>
-<canvas id="oam-c"></canvas>
+<canvas id="kt17-c" tabindex="0" role="button" aria-label="Activate kinetic text."></canvas>
 <div class="cap">Optical Axis Morph</div>
 <script>
 (function(){
-  const cv=document.getElementById('oam-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('kt17-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR;
   // JS-drawn colours — read from tokens so the canvas repaints correctly on theme switch
@@ -96,7 +101,7 @@
     C.bgRgb=(cs.getPropertyValue('--oam-bg-rgb')||'26,22,20').trim();
     C.accent=(cs.getPropertyValue('--oam-accent')||'#E04729').trim();
     C.accentRgb=parseRgb((cs.getPropertyValue('--oam-accent-rgb')||'224,71,41').trim(),[224,71,41]);
-    C.coolRgb=parseRgb((cs.getPropertyValue('--oam-cool-rgb')||'160,194,138').trim(),[160,194,138]);
+    C.coolRgb=parseRgb((cs.getPropertyValue('--kt17-cool-rgb')||'160,194,138').trim(),[160,194,138]);
   }
   syncTheme();
   function size(){
@@ -119,26 +124,16 @@
   };
   const glyphs=WORD.split('').map(c=>G[c]);
 
-  let t=0,boost=0;
-  cv.addEventListener('pointermove',()=>{boost=Math.min(boost+.35,1.4);});
-  cv.addEventListener('click',()=>{boost=1.4;});
-
-  function rr(x0,y0,x1,y1,w){ // rounded bar from p0->p1 of thickness w
-    const dx=x1-x0,dy=y1-y0,len=Math.hypot(dx,dy)||1,nx=-dy/len*w/2,ny=dx/len*w/2,r=w/2;
-    ctx.beginPath();
-    ctx.moveTo(x0+nx,y0+ny);ctx.lineTo(x1+nx,y1+ny);
-    ctx.arc(x1,y1,r,Math.atan2(ny,nx),Math.atan2(-ny,-nx),false);
-    ctx.lineTo(x0-nx,y0-ny);
-    ctx.arc(x0,y0,r,Math.atan2(-ny,-nx),Math.atan2(ny,nx),false);
-    ctx.closePath();ctx.fill();
-  }
+  let t=0,boost=0,demo=window.__foreverPreview?.demoEnabled!==false;
+  cv.addEventListener('pointermove',()=>{boost=Math.min(boost+.35,1.4);if(!demo)start();});
+  cv.addEventListener('click',()=>{takeover();t+=1.2;boost=1.4;if(reduce){boost=0;frame();}else start();});
 
   function frame(){
-    if(!reduce){t+=0.012+boost*0.02;boost*=0.95;}
+    if(demo)t+=0.012+boost*0.02;if(!reduce)boost*=0.95;
     ctx.fillStyle='rgba('+C.bgRgb+',0.28)';ctx.fillRect(0,0,W,H);
 
     // optical axis phase: 0 = narrow upright, 1 = wide italic display
-    const ph=reduce?0.32:(Math.sin(t)*0.5+0.5);
+    const ph=reduce?(0.32+Math.sin(t)*0.2):(Math.sin(t)*0.5+0.5);
     const ease=ph*ph*(3-2*ph);
     const weight=0.06+ease*0.20;          // stem thickness (in cell units)
     const widthAxis=0.62+ease*0.78;        // horizontal expansion
@@ -160,25 +155,29 @@
       // accent gradient: cool violet core -> hot magenta edge as it opens
       const hot=ease*0.5+0.5;
       const cr=C.coolRgb, ar=C.accentRgb;
-      ctx.fillStyle=`rgba(${Math.round(cr[0]+hot*(ar[0]-cr[0]))},${Math.round(cr[1]+hot*(ar[1]-cr[1]))},${Math.round(cr[2]+hot*(ar[2]-cr[2]))},${0.92})`;
-      ctx.shadowColor='rgba('+ar.join(',')+','+(0.25+ease*0.5)+')';
-      ctx.shadowBlur=(8+ease*26);
-      for(const s of glyphs[i]){
-        // shear: shift x by slant proportional to height above baseline
-        const sx0=x+s[0]*cellW+(0.5-s[1])*slant*cellH;
-        const sy0=top+s[1]*cellH;
-        const sx1=x+s[2]*cellW+(0.5-s[3])*slant*cellH;
-        const sy1=top+s[3]*cellH;
-        rr(sx0,sy0,sx1,sy1,lw);
-      }
+      // glow = two wider, translucent passes under the core (no per-frame shadow blur)
+      const gl=8+ease*26, ga=0.25+ease*0.5;
+      ctx.lineCap='round';
+      const pass=(w,col)=>{
+        ctx.strokeStyle=col;ctx.lineWidth=w;ctx.beginPath();
+        for(const s of glyphs[i]){
+          // shear: shift x by slant proportional to height above baseline
+          ctx.moveTo(x+s[0]*cellW+(0.5-s[1])*slant*cellH,top+s[1]*cellH);
+          ctx.lineTo(x+s[2]*cellW+(0.5-s[3])*slant*cellH,top+s[3]*cellH);
+        }
+        ctx.stroke();
+      };
+      for(let j=5;j>0;j--) pass(lw+gl*j*0.26,'rgba('+ar.join(',')+','+(ga*0.07).toFixed(3)+')');
+      pass(lw,`rgba(${Math.round(cr[0]+hot*(ar[0]-cr[0]))},${Math.round(cr[1]+hot*(ar[1]-cr[1]))},${Math.round(cr[2]+hot*(ar[2]-cr[2]))},${0.92})`);
       x+=cellW+gap;
     }
-    ctx.shadowBlur=0;
-    if(!reduce) raf=requestAnimationFrame(frame);
+    if(demo||boost>0.02)raf=requestAnimationFrame(frame);else raf=0;
   }
   let raf=0;
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();});
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message',e=>{
@@ -189,7 +188,8 @@
       if(reduce){ ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H); frame(); }
     }
   });
-  if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);frame();}else start();
+  if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);frame();}else if(demo)start();else{ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);frame();}
+  cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();cv.click();}});
 })();
 </script>
 </body>

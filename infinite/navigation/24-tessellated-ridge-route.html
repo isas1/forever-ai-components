@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Tessellated Ridge Route — Navigation. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tessellated Ridge Route</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root[data-theme="light"]{--wre-paper:#EFE8D8;--wre-ink:#1E1B16;--wre-mid:#8A8068;--wre-acc:#7A2E22}
+
+:root{--wre-paper:#15130F;--wre-ink:#E9E2D0;--wre-mid:#8F8670;--wre-acc:#C8745A}
+
+.wre-stage,.wre-stage *{box-sizing:border-box;margin:0;padding:0}
+.wre-stage{width:100%;height:100%;display:grid;place-items:center;background:var(--wre-paper);font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
+#wre-root{width:min(100vmin,640px);aspect-ratio:1;touch-action:none;cursor:grab;-webkit-tap-highlight-color:transparent}
+#wre-root:focus-visible{outline:2px solid var(--wre-acc);outline-offset:-4px}
+#wre-c{display:block;width:100%;height:100%}
+
+:root{--bg:var(--wre-paper)}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.wre-stage{width:100%;height:100%;display:grid;place-items:center}
+.wre-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--wre-ink);opacity:.45;pointer-events:none}
+
+
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/24-tessellated-ridge-route.html",
+ "title": "Tessellated Ridge Route",
+ "description": "Stone-and-parchment palette with terracotta accents; drag between six ridge checkpoints above a progressively filled triangular lattice.",
+ "useWhen": "A compact route or multi-stop progress selector with keyboard access.",
+ "avoidWhen": "Real navigation without replacing illustrative elevations and checkpoints.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "route",
+  "checkpoint",
+  "ridge",
+  "tessellation",
+  "drag"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wre-stage" role="group" aria-label="Tessellated Ridge Route">
+<div id="wre-root" role="slider" tabindex="0" aria-label="Route checkpoints along a ridge profile; drag or use arrow keys to move between 6 checkpoints" aria-orientation="horizontal" aria-valuemin="1" aria-valuemax="6" aria-valuenow="1" aria-valuetext="Checkpoint 1 of 6"><canvas id="wre-c" aria-hidden="true"></canvas></div>
+</div>
+<div class="wre-cap" aria-hidden="true">Tessellated Ridge Route</div>
+<script>
+(function(){
+var R=document.getElementById('wre-root'),C=document.getElementById('wre-c'),X=C.getContext('2d'),S=0,K={},raf=0,last=0,TAU=Math.PI*2;
+function rm(){return matchMedia('(prefers-reduced-motion: reduce)').matches}
+function cols(){var s=getComputedStyle(document.documentElement);['paper','ink','mid','acc'].forEach(function(k){K[k]=s.getPropertyValue('--wre-'+k).trim()})}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+function tick(n){raf=0;var dt=Math.min(n-last,50)/16.667;last=n;var l=step(dt);draw();if(l)raf=requestAnimationFrame(tick)}
+function fit(){var d=Math.min(devicePixelRatio||1,2);S=R.clientWidth;C.width=C.height=Math.round(S*d);X.setTransform(d,0,0,d,0,0);layout();wake()}
+function aria(i){R.setAttribute('aria-valuenow',i+1);R.setAttribute('aria-valuetext','Checkpoint '+(i+1)+' of '+6)}
+function clamp(v,a,b){return v<a?a:v>b?b:v}
+function ease(k,dt){return 1-Math.pow(1-k,dt)}
+addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){document.documentElement.setAttribute('data-theme',d.theme);cols();wake()}});
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else wake()});
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',wake);
+
+var E=[8,30,22,58,44,76],N=6,pos=0,vel=0,tgt=0,drag=false,px0=0,pm=0,lt=0,dv=0,moved=0;
+function elev(p){p=clamp(p,0,N-1);var i=Math.min(Math.floor(p),N-2),f=(1-Math.cos((p-i)*Math.PI))/2;return E[i]+(E[i+1]-E[i])*f}
+function X_(p){return S*.1+S*.8*p/(N-1)}
+function Y_(p){return S*.76-elev(p)/100*S*.42}
+function prof(to){X.moveTo(X_(0),Y_(0));for(var p=.04;p<to;p+=.04)X.lineTo(X_(p),Y_(p));X.lineTo(X_(to),Y_(to))}
+function layout(){}
+function go(i){tgt=clamp(i,0,N-1);aria(tgt);wake()}
+function step(dt){
+ if(rm()){pos=tgt;vel=0;return false}
+ if(drag)return false;
+ vel+=(tgt-pos)*.045*dt;vel*=Math.pow(.8,dt);pos+=vel*dt;
+ if(Math.abs(tgt-pos)<.001&&Math.abs(vel)<.001){pos=tgt;vel=0;return false}
+ return true}
+function lattice(){var w=S/14,h=w*.866,b=S*.9,L=S*1.3;X.beginPath();
+ for(var y=b;y>0;y-=h){X.moveTo(0,y);X.lineTo(S,y)}
+ for(var k=-24;k<24;k++){var x=k*w;X.moveTo(x,b);X.lineTo(x+L*.5,b-L*.866);X.moveTo(x,b);X.lineTo(x-L*.5,b-L*.866)}
+ X.stroke()}
+function draw(){
+ X.clearRect(0,0,S,S);var b=S*.9,mx=X_(pos),my=Y_(pos),cp=Math.round(clamp(pos,0,N-1));
+ X.save();X.beginPath();prof(N-1);X.lineTo(X_(N-1),b);X.lineTo(X_(0),b);X.closePath();X.clip();
+ X.strokeStyle=K.mid;X.globalAlpha=.55;X.lineWidth=1;lattice();
+ X.beginPath();X.rect(0,0,mx,S);X.clip();X.strokeStyle=K.acc;X.globalAlpha=1;X.lineWidth=1.5;lattice();X.restore();
+ X.lineJoin='round';X.lineCap='round';
+ X.strokeStyle=K.ink;X.lineWidth=2.2;X.beginPath();prof(N-1);X.stroke();
+ X.strokeStyle=K.acc;X.lineWidth=3.4;X.beginPath();prof(clamp(pos,0,N-1));X.stroke();
+ for(var i=0;i<N;i++){var x=X_(i),y=Y_(i),r=S*(i===cp?.034:.022);
+  X.beginPath();X.moveTo(x,y-r);X.lineTo(x+r,y);X.lineTo(x,y+r);X.lineTo(x-r,y);X.closePath();
+  X.fillStyle=i<=pos+.02?K.acc:K.paper;X.fill();X.strokeStyle=K.ink;X.lineWidth=1.8;X.stroke()}
+ X.strokeStyle=K.ink;X.lineWidth=1;X.setLineDash([2,5]);X.beginPath();X.moveTo(mx,my+6);X.lineTo(mx,b);X.stroke();X.setLineDash([]);
+ var t=S*.032,a=my-S*.06;X.fillStyle=K.ink;X.beginPath();X.moveTo(mx,a+t*1.4);X.lineTo(mx-t,a-t*.6);X.lineTo(mx+t,a-t*.6);X.closePath();X.fill();
+ X.fillStyle=K.ink;X.font=(S*.15)+'px Georgia,serif';X.textAlign='left';X.textBaseline='alphabetic';X.fillText(cp+1,S*.08,S*.2)}
+R.addEventListener('pointerdown',function(e){R.setPointerCapture(e.pointerId);drag=true;px0=pm=e.clientX;lt=e.timeStamp;dv=0;vel=0;moved=0});
+R.addEventListener('pointermove',function(e){if(!drag)return;var dx=e.clientX-pm,dtm=Math.max(e.timeStamp-lt,1);pm=e.clientX;lt=e.timeStamp;moved+=Math.abs(dx);
+ var dp=dx/(R.clientWidth*.8)*(N-1);dv=dv*.6+(dp/(dtm/16.667))*.4;pos=clamp(pos+dp,-.35,N-.65);wake()});
+function up(e){if(!drag)return;drag=false;
+ if(moved<5){var r=R.getBoundingClientRect(),p=(e.clientX-r.left-S*.1)/(S*.8)*(N-1);go(Math.round(p));return}
+ vel=dv;go(Math.round(clamp(pos+vel*10,0,N-1)))}
+R.addEventListener('pointerup',up);R.addEventListener('pointercancel',up);
+R.addEventListener('keydown',function(e){var k=e.key,c=Math.round(tgt);
+ if(k==='ArrowRight'||k==='ArrowUp')go(c+1);else if(k==='ArrowLeft'||k==='ArrowDown')go(c-1);else if(k==='Home')go(0);else if(k==='End')go(N-1);else return;e.preventDefault()});
+
+cols();new ResizeObserver(fit).observe(R);fit();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoClock=0;
+function demoStep(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;go((Math.round(tgt)+1)%N);}
+function demoStop(){if(demoClock){clearInterval(demoClock);demoClock=0}}
+function demoStart(){demoStop();if(demoEnabled&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches)demoClock=setInterval(demoStep,1600)}
+function takeover(){if(window.__foreverPreview?.surface==='wall')return;demoEnabled=false;demoStop()}
+window.addEventListener('forever:interactive',takeover);
+var stage=document.querySelector('.wre-stage');
+stage.addEventListener('pointerdown',takeover,true);stage.addEventListener('keydown',takeover,true);stage.addEventListener('input',takeover,true);stage.addEventListener('wheel',takeover,{capture:true,passive:true});
+document.addEventListener('visibilitychange',function(){document.hidden?demoStop():demoStart()});
+var demoMotion=matchMedia('(prefers-reduced-motion: reduce)');demoMotion.addEventListener('change',function(){demoStart();wake()});
+demoStart();
+})();
+</script>
+</body>
+</html>

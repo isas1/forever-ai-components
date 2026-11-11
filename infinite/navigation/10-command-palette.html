@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="A Cmd+K command palette that opens over a blurred overlay, auto-types search queries, filters command rows, and highlights selections.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Command Palette</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -50,7 +51,7 @@
   }
   .c10-cmd__trigger:hover{border-color:var(--border-mid)}
   .c10-cmd__trigger kbd{
-    margin-left:auto;font-family:"Inter",system-ui,sans-serif;font-size:11px;
+    margin-left:auto;font-family:"Inter",system-ui,sans-serif;font-size:12px;
     padding:2px 7px;border-radius:5px;background:var(--kbd-bg);
     border:1px solid var(--border-soft);color:var(--text-3);
   }
@@ -73,7 +74,7 @@
   .c10-cmd__input{
     width:100%;border:0;border-bottom:1px solid var(--border-soft);background:none;
     padding:12px 14px;color:var(--text-0);font-family:"Inter",system-ui,sans-serif;
-    font-size:14px;outline:none;
+    font-size:14px;
   }
   .c10-cmd__input::placeholder{color:var(--text-3)}
   .c10-cmd__list{list-style:none;margin:0;padding:6px;max-height:150px;overflow-y:auto}
@@ -86,6 +87,10 @@
   .c10-cmd__empty{padding:14px;font-size:12px;color:var(--text-3);text-align:center}
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;z-index:9}
   @media (prefers-reduced-motion:reduce){.c10-cmd__overlay,.c10-cmd__panel{transition-duration:.001ms!important}}
+.c10-cmd__list{overflow-y:auto}@media(max-width:220px){.c10-cmd__trigger{font-size:12px;padding:10px 8px;gap:4px}.c10-cmd__trigger kbd{font-size:12px;padding:2px}.c10-cmd__panel{max-height:78vh}.c10-cmd__list{max-height:calc(78vh - 40px)}.c10-cmd__input{font-size:12px;padding:10px}}
+  .c10-cmd__input:focus:not(:focus-visible){outline:none}
+  .c10-cmd__trigger:focus-visible,.c10-cmd__input:focus-visible{outline:2px solid var(--accent-cyan);outline-offset:2px}
+  .c10-cmd__input:focus-visible{outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -93,14 +98,14 @@
  "title": "Command Palette",
  "description": "A Cmd+K command palette that opens over a blurred overlay, auto-types queries, filters rows live, and highlights the selection with a spring-eased panel entry.",
  "useWhen": "App shells, developer tools, or dashboards needing a keyboard-driven command interface or search-filter nav pattern.",
- "avoidWhen": "Simple sites with fewer than 5 commands — the modal overhead outweighs the UX benefit. Auto-cycle must be removed before production use.",
+ "avoidWhen": "Simple sites with fewer than 5 commands — the modal overhead outweighs the UX benefit. Auto-cycle must be removed before production use. Autonomous preview ends at first deliberate input and never resumes.",
  "agentPrompt": "Add a new command {i:'⬇', t:'Export CSV'} to the commands array and change the accent color from marigold (#C09C59) to rose (#f43f5e). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "commands array (label + icon pairs)",
   "accent color (--accent-cyan)",
   "panel max-width (300px)",
   "panel open animation duration (--dur-base)",
-  "idle demo cadence (DEMO_EVERY=4600 ms) + query list (queries array)",
+  "autonomous preview until first deliberate input cadence (DEMO_EVERY=4600 ms) + query list (queries array)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -109,12 +114,14 @@
   "visibilitychange stop/cycle handler",
   "overlay click-outside-to-close logic",
   "idle demo clock (setInterval tick() driving open/filter/render — takeover on real pointerdown + input)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
+  "autonomous preview cycle that stops at first deliberate input runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
   "Trigger button lacks aria-haspopup/aria-expanded attributes for full accessibility",
-  "backdrop-filter blur unsupported in older browsers (degrades gracefully to semi-transparent overlay)"
+  "backdrop-filter blur unsupported in older browsers (degrades gracefully to semi-transparent overlay)",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -146,7 +153,7 @@
   <div class="c10-cmd__overlay" id="c10-overlay">
     <div class="c10-cmd__panel">
       <input class="c10-cmd__input" id="c10-input" type="text" placeholder="Type a command...">
-      <ul class="c10-cmd__list" id="c10-list"></ul>
+      <ul class="c10-cmd__list" data-fit-clip-ok id="c10-list"></ul>
     </div>
   </div>
 </div>
@@ -223,14 +230,14 @@
      clears it, closes. Real input takes over; the demo resumes after RESUME ms of quiet. */
   var queries=['sync','set','share','arch','fav'];
   var TICK=100,DEMO_EVERY=4600,RESUME=3600;
-  var demo=!reduce,qi=0,t=0,idle=0,timer=0;
+  var demo=!reduce&&window.__foreverPreview?.demoEnabled!==false,qi=0,t=0,timer=0;
   function type(s){input.value=s;filter();}
   function move(){if(filtered.length>1){sel=(sel+1)%filtered.length;render();}}
-  function takeover(){demo=false;idle=0;}
-  root.addEventListener('pointerdown',takeover,true);
+  function takeover(){demo=false;stop();}
+  window.addEventListener("forever:interactive",takeover);root.addEventListener('pointerdown',takeover,true);root.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
   input.addEventListener('input',takeover);input.addEventListener('keydown',takeover);
   function tick(){
-    if(!demo){idle+=TICK;if(idle>=RESUME){demo=true;t=0;close();}return;}
+    if(!demo)return;
     var q=queries[qi];
     if(t===200)open();                                 /* panel in by ~0.6s */
     else if(t===900||t===1400)move();                  /* selection walks down */
@@ -239,7 +246,7 @@
     else if(t===3800)close();
     t+=TICK;if(t>=DEMO_EVERY){t=0;qi=(qi+1)%queries.length;}
   }
-  function start(){if(!timer&&!reduce)timer=setInterval(tick,TICK);}  function stop(){clearInterval(timer);timer=0;}
+  function start(){if(!timer&&!reduce&&demo)timer=setInterval(tick,TICK);}  function stop(){clearInterval(timer);timer=0;}
   document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
   if(reduce){open();type(queries[0]);}   /* reduced motion: one static filtered state */
   else start();

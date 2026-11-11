@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="A hamburger morphs to an X while a side panel slides in over a scrim, revealing staggered nav items inside a dark card.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Slide-in Drawer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -94,6 +95,8 @@
   @keyframes c05-drawer-in{to{opacity:1;transform:translateX(0)}}
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:system-ui,sans-serif}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;transition-duration:.001ms!important}}
+.c05-drawer{height:min(220px,82vmin)}@media(max-width:220px){.c05-drawer__panel{padding:8px;gap:4px}.c05-drawer__item{font-size:12px;padding:5px}}
+  .c05-drawer__hb:focus-visible{outline:2px solid var(--text-1);outline-offset:3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -101,14 +104,14 @@
  "title": "Slide-in Drawer",
  "description": "Hamburger icon morphs to an X while a side panel slides in over a dark scrim, revealing four nav items with staggered fade-in animations.",
  "useWhen": "Mobile-style nav demos, workspace sidebars, or any UI needing a collapsible navigation drawer pattern.",
- "avoidWhen": "Contexts where persistent navigation is required — the auto-cycle loop must be removed and the drawer wired to real routing before shipping.",
+ "avoidWhen": "Contexts where persistent navigation is required — the auto-cycle loop must be removed and the drawer wired to real routing before shipping. Autonomous preview ends at first deliberate input and never resumes.",
  "agentPrompt": "Change the nav items to ['Home', 'Analytics', 'Team', 'Billing'], set the panel accent border to rgba(192,180,89,0.45), and increase animation delay step to 100ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "nav item labels (.c05-drawer__item text)",
   "panel width (width:64%)",
   "stagger delay step (80/150/220/290ms)",
   "border glow color (--border-glow)",
-  "auto-cycle interval (2400ms)",
+  "auto-cycle interval (2400ms) Autonomous preview ends at first deliberate input and never resumes.",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -116,12 +119,14 @@
   "prefers-reduced-motion guard (@media + JS matchMedia check)",
   "visibilitychange pause (stop on hidden)",
   "scrim click-to-close handler",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Auto-cycles every 2.4s by default — remove loop() call before production use",
   "Drawer width hardcoded at 64% — may clip on very narrow viewports",
-  "Nav items use div not anchor tags — add href and keyboard focus styles for real nav"
+  "Nav items use div not anchor tags — add href and keyboard focus styles for real nav",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -178,6 +183,9 @@
   });
   function toggle(){drawer.classList.toggle('c05-drawer--open');}
   function close(){drawer.classList.remove('c05-drawer--open');}
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function takeover(){demoEnabled=false;stop();}
+  window.addEventListener("forever:interactive",takeover);drawer.addEventListener("pointerdown",takeover,true);drawer.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
   hb.addEventListener('click',toggle);
   hb.addEventListener('keydown',function(e){
     if(e.key==='Enter'||e.key===' '){e.preventDefault();toggle();}
@@ -186,12 +194,12 @@
   /* autonomous idle: open and close on a cadence */
   var timer;
   function loop(){
-    if(reduce)return;
+    if(reduce||!demoEnabled)return;
     timer=setTimeout(function(){toggle();loop();},2400);
   }
   function stop(){clearTimeout(timer);}
-  document.addEventListener('visibilitychange',function(){document.hidden?stop():loop();});
-  loop();
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():(demoEnabled&&loop());});
+  if(demoEnabled)loop();
 })();
 </script>
 </body>

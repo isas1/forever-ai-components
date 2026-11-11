@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="description" content="Fresh Brioche Tray — Particles & Physics. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Particles & Physics — Fresh Brioche Tray</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Work+Sans:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --pa-board: #3D5A45;
+    --pa-board-deep: #27412F;
+    --pa-blush: #E8B4A8;
+    --pa-butter: #E9C96A;
+  }
+  .pa02-tray-wrap, .pa02-tray-wrap * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    background: var(--pa-board-deep);
+    color: var(--pa-blush);
+    font-family: 'Work Sans', sans-serif;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    user-select: none;
+  }
+  .pa02-tray-wrap {
+    width: 100%;
+    max-width: 440px;
+    height: 100%;
+    max-height: 440px;
+    background: var(--pa-board);
+    border-radius: 16px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 16px 36px rgba(18, 32, 22, 0.5);
+    cursor: pointer;
+  }
+  .pa02-tray-wrap canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+  .pa02-tray-hud {
+    position: absolute;
+    top: 18px;
+    left: 20px;
+    pointer-events: none;
+  }
+  .pa02-tray-hud h3 {
+    font-family: 'Caprasimo', serif;
+    font-size: 20px;
+    color: var(--pa-blush);
+    line-height: 1;
+  }
+  .pa02-tray-hud p {
+    font-size: 12px;
+    color: var(--pa-butter);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .pa02-sub-hud {
+    position: absolute;
+    bottom: 14px;
+    right: 18px;
+    font-size: 12px;
+    color: rgba(232, 180, 168, 0.7);
+    pointer-events: none;
+  }
+
+
+.pa02-cap{position:fixed;left:10px;bottom:8px;font:10px system-ui;opacity:.55;pointer-events:none}
+@media(prefers-reduced-motion:reduce){.pa02-tray-wrap, .pa02-tray-wrap *{animation:none!important;transition:none!important}}
+
+.pa02-tray-wrap[data-paused] *,.pa02-tray-wrap[data-paused]{animation-play-state:paused!important}
+@media(prefers-reduced-motion:reduce){.pa02-tray-wrap,.pa02-tray-wrap *{animation:none!important;transition:none!important}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/particles-physics/22-bakers-gravity-steam-tray.html",
+ "title": "Fresh Brioche Tray",
+ "description": "Fresh Brioche Tray control in the Artisan Café system.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps"
+ ],
+ "tags": [
+  "coffee",
+  "sensory",
+  "artisan",
+  "soundscape",
+  "steam",
+  "organic",
+  "fresh-brioche-tray",
+  "particles",
+  "physics",
+  "smoke",
+  "brioche",
+  "parioca",
+  "warmth"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="pa02-tray-wrap" id="pa02-trayWrap" role="region" aria-label="Fresh Bakery Pastry Tray">
+  <div class="pa02-tray-hud">
+    <h3>fresh brioche</h3>
+    <p id="pa02-countLabel">6 pastries in tray</p>
+  </div>
+  <canvas id="pa02-cv" width="440" height="440"></canvas>
+  <div class="pa02-sub-hud">tap to bake · drag to toss</div>
+</div>
+<div class="pa02-cap" aria-hidden="true">Fresh Brioche Tray</div>
+<script>
+(()=>{
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;pauseCSS();}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+  const tileRoot = document.querySelector('.pa02-tray-wrap');
+  const pauseCSS=()=>tileRoot.toggleAttribute('data-paused',document.hidden||!demoEnabled);addEventListener('forever:interactive',pauseCSS);
+  document.addEventListener('visibilitychange', pauseCSS); pauseCSS();
+
+  // Local frame lifecycle: stop hidden work, repaint reduced-motion state on input.
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  const frames = new Map(), drivers = new Set(); let painting = false;
+  function scheduleFrame(fn) {
+    drivers.add(fn);
+    if (document.hidden || frames.has(fn) || (motion.matches && painting)) return;
+    frames.set(fn, requestAnimationFrame(t => {
+      frames.delete(fn); if (document.hidden) return;
+      painting = true; try { fn(t); } finally { painting = false; }
+    }));
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { frames.forEach(cancelAnimationFrame); frames.clear(); }
+    else if(demoEnabled||sessionActive)drivers.forEach(scheduleFrame);
+  });
+  const repaint=e=>{if(!e.target.closest(".pa02-tray-wrap"))return;sessionActive=true;drivers.forEach(scheduleFrame);};
+  ['click','input','pointermove'].forEach(type => document.addEventListener(type, repaint));
+  motion.addEventListener('change', () => { reduce = motion.matches; drivers.forEach(scheduleFrame); });
+
+  const canvas = document.getElementById('pa02-cv');
+  const ctx = canvas.getContext('2d');
+  const countLabel = document.getElementById('pa02-countLabel');
+  let reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Keep pastry physics in design coordinates; fit bitmap to its visible element.
+  const width = 440, height = 440;
+  function resize() {
+    const box = canvas.getBoundingClientRect();
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.round(box.width * dpr));
+    canvas.height = Math.max(1, Math.round(box.height * dpr));
+    ctx.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
+    if(demoEnabled||activeBall||steams.length||balls.some(b=>Math.abs(b.vx)>.04||Math.abs(b.y+b.r-floor)>.2))scheduleFrame(loop);
+  }
+  window.addEventListener('resize', resize);
+  let running = true;
+  document.addEventListener('visibilitychange', () => { running = !document.hidden; });
+
+  class Ball {
+    constructor(x, y) {
+      this.x = x; this.y = y;
+      this.r = 24 + Math.random() * 4;
+      this.vx = (Math.random() - 0.5) * 4;
+      this.vy = Math.random() * -3 - 2;
+      this.isDrag = false;
+    }
+    update(floor) {
+      if (this.isDrag) return;
+      this.vy += 0.45;
+      this.vx *= 0.985;
+      this.vy *= 0.985;
+      this.x += this.vx;
+      this.y += this.vy;
+      if (this.y + this.r > floor) {
+        this.y = floor - this.r;
+        this.vy = -this.vy * 0.55;
+        this.vx *= 0.88;
+      }
+      if (this.x - this.r < 14) { this.x = 14 + this.r; this.vx = -this.vx * 0.6; }
+      else if (this.x + this.r > width - 14) { this.x = width - 14 - this.r; this.vx = -this.vx * 0.6; }
+    }
+    draw(ctx) {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      // Golden puff
+      ctx.beginPath();
+      ctx.arc(0, 0, this.r, 0, Math.PI * 2);
+      const grad = ctx.createRadialGradient(-this.r * 0.3, -this.r * 0.3, 2, 0, 0, this.r);
+      grad.addColorStop(0, '#FFF5D6');
+      grad.addColorStop(0.5, '#E9C96A');
+      grad.addColorStop(1, '#C78C46');
+      ctx.fillStyle = grad;
+      ctx.fill();
+      // Baked specks
+      ctx.fillStyle = 'rgba(194, 91, 74, 0.7)';
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.arc((i % 2 === 0 ? 6 : -6), (i < 2 ? 6 : -6), 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+
+  class Steam {
+    constructor(x, y) {
+      this.x = x; this.y = y;
+      this.vx = (Math.random() - 0.5) * 0.6;
+      this.vy = -1.2 - Math.random();
+      this.r = 4; this.life = 0; this.max = 45;
+    }
+    update() { this.x += this.vx; this.y += this.vy; this.r += 0.3; this.life++; }
+    draw(ctx) {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(232, 180, 168, ${0.4 * (1 - this.life / this.max)})`;
+      ctx.fill();
+    }
+  }
+
+  const balls = [];
+  const steams = [];
+  const floor = height - 24;
+  for (let i = 0; i < 6; i++) balls.push(new Ball(80 + i * 55, 200 + (i % 2) * 30));
+
+  function addBun(x, y) {
+    if (balls.length >= 14) balls.shift();
+    const b = new Ball(x, y);
+    balls.push(b);
+    for (let i = 0; !reduce && i < 6 && steams.length < 80; i++) steams.push(new Steam(x, y));
+    countLabel.textContent = `${balls.length} pastries in tray`;
+  }
+
+  let activeBall = null, dragOffset = {x: 0, y: 0}, lastPos = {x: 0, y: 0}, hasMoved = false;
+
+  canvas.addEventListener('pointerdown', (e) => {
+    const r = canvas.getBoundingClientRect();
+    const mx = (e.clientX - r.left) * (width / r.width);
+    const my = (e.clientY - r.top) * (height / r.height);
+    hasMoved = false;
+
+    for (let b of balls) {
+      if (Math.hypot(b.x - mx, b.y - my) < b.r + 6) {
+        activeBall = b;
+        b.isDrag = true;
+        dragOffset.x = b.x - mx;
+        dragOffset.y = b.y - my;
+        lastPos = { x: mx, y: my };
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+    addBun(mx, my);
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!activeBall) return;
+    hasMoved = true;
+    const r = canvas.getBoundingClientRect();
+    const mx = (e.clientX - r.left) * (width / r.width);
+    const my = (e.clientY - r.top) * (height / r.height);
+    activeBall.vx = (mx - lastPos.x) * 0.7;
+    activeBall.vy = (my - lastPos.y) * 0.7;
+    activeBall.x = mx + dragOffset.x;
+    activeBall.y = my + dragOffset.y;
+    lastPos = { x: mx, y: my };
+  });
+
+  const endDrag = () => { if (activeBall) { activeBall.isDrag = false; activeBall = null; } };
+  canvas.addEventListener('pointerup', endDrag);
+  canvas.addEventListener('pointercancel', endDrag);
+
+  function resolveCollisions() {
+    for (let i = 0; i < balls.length; i++) {
+      for (let j = i + 1; j < balls.length; j++) {
+        const b1 = balls[i], b2 = balls[j];
+        const dx = b2.x - b1.x, dy = b2.y - b1.y;
+        const d = Math.hypot(dx, dy);
+        const min = b1.r + b2.r;
+        if (d < min && d > 0.01) {
+          const overlap = (min - d) * 0.5;
+          const nx = dx / d, ny = dy / d;
+          if (!b1.isDrag) { b1.x -= nx * overlap; b1.y -= ny * overlap; b1.vx -= nx * 0.3; b1.vy -= ny * 0.3; }
+          if (!b2.isDrag) { b2.x += nx * overlap; b2.y += ny * overlap; b2.vx += nx * 0.3; b2.vy += ny * 0.3; }
+        }
+      }
+    }
+  }
+
+  function loop() {
+    if (!running) return;
+    ctx.fillStyle = '#27412F';
+    ctx.fillRect(0, 0, width, height);
+
+    // Basket rim
+    ctx.strokeStyle = 'rgba(232, 180, 168, 0.15)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(14, floor); ctx.lineTo(width - 14, floor);
+    ctx.stroke();
+
+    if (demoEnabled && !reduce && Math.random() > 0.9 && balls.length > 0) {
+      const b = balls[Math.floor(Math.random() * balls.length)];
+      steams.push(new Steam(b.x, b.y));
+    }
+
+    for (let i = steams.length - 1; i >= 0; i--) {
+      steams[i].update(); steams[i].draw(ctx);
+      if (steams[i].life >= steams[i].max) steams.splice(i, 1);
+    }
+
+    if (!reduce) resolveCollisions();
+    balls.forEach(b => { if (!reduce) b.update(floor); b.draw(ctx); });
+    if(demoEnabled||activeBall||steams.length||balls.some(b=>Math.abs(b.vx)>.04||Math.abs(b.y+b.r-floor)>.2))scheduleFrame(loop);
+  }
+  resize();
+})();
+</script>
+</body>
+</html>

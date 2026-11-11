@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block. The canvas keeps the
@@ -18,17 +19,17 @@
   :root{
     --dsp-bg:#241327; --dsp-p1:244,140,210; --dsp-p2:232,121,185;
     --dsp-p3:124,58,118; --dsp-rim:255,210,240; --dsp-hub:255,235,248;
-    --dsp-cap:#e879b9; --dsp-cap-o:.34;
+    --ci18-cap:#e879b9; --ci18-cap-o:.34;
   }
   :root[data-theme="light"]{
     --dsp-bg:#faf0f6; --dsp-p1:214,94,168; --dsp-p2:205,35,133;
     --dsp-p3:92,26,86; --dsp-rim:120,20,90; --dsp-hub:150,26,110;
-    --dsp-cap:#cd2385; --dsp-cap-o:.6;
+    --ci18-cap:#cd2385; --ci18-cap-o:.6;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--dsp-bg);}
-  #dsp-c{display:block;width:100%;height:100%;}
+  #ci18-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.16em;color:var(--dsp-cap);opacity:var(--dsp-cap-o);text-transform:uppercase;
+       letter-spacing:.16em;color:var(--ci18-cap);opacity:var(--ci18-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
 </style>
 <script type="application/json" id="forever-agent-meta">
@@ -53,12 +54,14 @@
   "DPR-aware canvas sizing",
   "visibility pause/resume",
   "reduced-motion static frame fallback",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and fillRect — must change both",
   "No aria semantics; purely decorative canvas",
-  "nudge decay via pointer/click adds mild interactivity but no persistent state"
+  "nudge decay via pointer/click adds mild interactivity but no persistent state",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -81,12 +84,18 @@
 </script>
 </head>
 <body>
-<canvas id="dsp-c"></canvas>
+<canvas id="ci18-c" class="ci18-root"></canvas>
 <div class="cap">Depth-Sorted Petals</div>
 <script>
 (function(){
-  const cv=document.getElementById('dsp-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('ci18-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
   let W,H,DPR,cx,cy,S;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -101,7 +110,7 @@
   // cached gradient to invalidate beyond these strings.
   const root=document.documentElement, C={};
   function syncTheme(){
-    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    const FB={'--dsp-bg':'#241327','--dsp-p1':'244,140,210','--dsp-p2':'232,121,185','--dsp-p3':'124,58,118','--dsp-rim':'255,210,240','--dsp-hub':'255,235,248'}, cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim()||FB[n];
     C.bg=g('--dsp-bg'); C.p1=g('--dsp-p1'); C.p2=g('--dsp-p2');
     C.p3=g('--dsp-p3'); C.rim=g('--dsp-rim'); C.hub=g('--dsp-hub');
   }
@@ -199,11 +208,11 @@
   }
 
   let raf=0;
-  function frame(){t+=1;nudge*=0.95;draw();raf=requestAnimationFrame(frame);}
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function frame(){if(demo)t+=1;nudge*=0.95;draw();if(demo||performance.now()<interactionUntil)raf=requestAnimationFrame(frame);else raf=0;}
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){t=20;draw();}else start();
+  if(reduce||!demo){t=20;draw();}else start();
 })();
 </script>
 </body>

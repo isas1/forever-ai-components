@@ -23,7 +23,7 @@
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c04-bg);
     font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-  canvas{display:block;width:100%;height:100%}
+  .c04-cv{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:6px;font-size:10px;letter-spacing:.08em;
     color:var(--c04-cap);opacity:var(--c04-cap-o);text-transform:uppercase}
 </style>
@@ -77,16 +77,17 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas class="c04-cv"></canvas>
 <div class="cap">sparkline</div>
 <script>
 (function(){
-  const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+  const cv=document.querySelector('.c04-cv'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   const root=document.documentElement;
   let W,H,DPR; let COL='#3ee08f';
   const C={base:'',dot:'',blur:7};
   const N=28; let pts=[];
+  function halo(w){if(!C.blur)return;ctx.globalAlpha=.12;ctx.lineWidth=w+C.blur;ctx.stroke();ctx.globalAlpha=.22;ctx.lineWidth=w+C.blur*.5;ctx.stroke();ctx.globalAlpha=1;}   // stacked translucent strokes stand in for per-frame shadowBlur
   function syncTheme(){            // every colour the canvas draws with comes from the tokens
     const cs=getComputedStyle(root);
     COL=cs.getPropertyValue('--c04-line').trim();   // ghost line (COL+'2a') and glow rebuild from COL
@@ -105,7 +106,7 @@
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);}
   let last=0,prog=0;
   function draw(t){
-    if(document.hidden){last=t;return raf()}
+    if(document.hidden){last=t;return}
     const dt=Math.min(64,t-last);last=t;
     if(!reduce)prog+=dt/4200; else prog=0.999;
     if(prog>=1){prog=0;gen();}
@@ -126,15 +127,15 @@
     let dx,dy;
     if(idx<N-1){dx=px(idx)+(px(idx+1)-px(idx))*fr;dy=py(pts[idx])+(py(pts[idx+1])-py(pts[idx]))*fr;ctx.lineTo(dx,dy);}
     else{dx=px(N-1);dy=py(pts[N-1]);}
-    ctx.strokeStyle=COL;ctx.lineWidth=2.4;ctx.shadowColor=COL;ctx.shadowBlur=C.blur;ctx.stroke();ctx.shadowBlur=0;
+    ctx.strokeStyle=COL;halo(2.4);ctx.lineWidth=2.4;ctx.stroke();
     // moving dot
     ctx.fillStyle=C.dot;ctx.beginPath();ctx.arc(dx,dy,4,0,7);ctx.fill();
     ctx.strokeStyle=COL;ctx.lineWidth=2;ctx.beginPath();ctx.arc(dx,dy,7,0,7);ctx.stroke();
     raf();
   }
-  function raf(){requestAnimationFrame(draw)}
+  let rafId=0;function raf(){rafId=requestAnimationFrame(draw)}
   addEventListener('resize',resize);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)last=performance.now()});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){last=performance.now();cancelAnimationFrame(rafId);raf()}else{cancelAnimationFrame(rafId);rafId=0}});
   cv.addEventListener('pointerdown',()=>{prog=0;gen();});
   syncTheme();resize();gen();raf();
 })();

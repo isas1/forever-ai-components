@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A glowing pink ring trails the pointer with damped-spring momentum, stretching and squashing along its velocity with an echo and dotted reti">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Elastic Ring</title>
 <script>
@@ -14,25 +15,24 @@
 :root[data-theme="light"]{
   --ccp04-bg:#f2f2f6; --ccp04-acc:#d60064; --cap-o:.55;
 }
-html,body{margin:0;height:100%;overflow:hidden}
-body{background:var(--ccp04-bg);display:grid;place-items:center}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ccp04-bg)}
 #ccp04-c{display:block;width:100%;height:100%;touch-action:none;cursor:none}
+.ccp04-canvas:focus-visible{outline:2px solid var(--ccp04-acc);outline-offset:-4px}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:var(--ccp04-acc);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/cursor-pointer/04-elastic-ring.html",
  "title": "Elastic Ring",
- "description": "Glowing pink ring trails the pointer with damped-spring physics, stretching along velocity and squashing across it. Auto-demos on a Lissajous path when idle.",
+ "description": "Glowing pink ring trails the pointer with damped-spring physics, stretching along velocity and squashing across it. Auto-demos on a Lissajous path until first deliberate input.",
  "useWhen": "Creative portfolio heroes, cursor-replacement effects, interactive showcases where pointer physics add tactile feel.",
  "avoidWhen": "Utility UIs where a hidden cursor frustrates users. Touch-only devices where pointermove never fires.",
- "agentPrompt": "Change ACC to '#00eaff', increase base ring size from Math.min(W,H)*0.085 to 0.12, and slow the spring by changing the acceleration factor from 0.14 to 0.08. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Adjust the existing palette tokens and effect parameters while preserving manual control. Arrow keys steer; first click/touch stops the attract path permanently for this mount. Keep demo-v1 lifecycle marker, __foreverPreview.demoEnabled initialization and forever:interactive handler. Preserve reduced motion, visibility suspension and theme switching.",
  "editableAreas": [
   "accent color (ACC = '#ff5ca8')",
   "ring base size (Math.min(W,H)*0.085)",
   "spring stiffness (ax=(tx-rx)*0.14)",
   "damping factor ((vx+ax)*0.80)",
-  "idle timeout before demo resumes (2600ms)",
   "Lissajous radius scale (R*0.30)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
@@ -40,17 +40,20 @@ body{background:var(--ccp04-bg);display:grid;place-items:center}
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange pause guard",
   "prefers-reduced-motion static fallback render",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "sticky demo-v1 preview lifecycle; stop attract work, retain manual feedback and settling",
+  "pointer/touch takeover, keyboard access and visibility suspension",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Cursor is hidden (cursor:none) — must restore for production if replacing only part of a page",
-  "No touch fallback — demo auto-plays but ring never tracks finger on touch devices"
+  "Control state is local to each mount; format changes preserve preview takeover but create a fresh source instance.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
   "agent-ready",
   "easy-to-modify",
-  "mobile-ready",
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
@@ -68,11 +71,14 @@ body{background:var(--ccp04-bg);display:grid;place-items:center}
 }
 </script>
 </head><body>
-<canvas id="ccp04-c" role="img" aria-label="Elastic ring trailing a moving pointer"></canvas>
+<canvas class="ccp04-canvas" tabindex="0" aria-label="Pointer effect. Use arrow keys to steer." id="ccp04-c" role="img" aria-label="Elastic ring trailing a moving pointer"></canvas>
 <div class="cap">Elastic Ring</div>
 <script>(function(){
 var cv=document.getElementById('ccp04-c'),ctx=cv.getContext('2d');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+window.addEventListener('forever:interactive',takeover);
+document.addEventListener('pointerdown',function(e){if(e.button===0)takeover();},{capture:true,passive:true});
 var root=document.documentElement;
 var W=0,H=0,DPR=1,raf=0,running=true,t=0;
 
@@ -91,7 +97,7 @@ addEventListener('message',function(e){
   var d=e.data;
   if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
     root.setAttribute('data-theme',d.theme);syncTheme();
-    if(reduce)render();    // no rAF loop in reduced motion — force a recolor
+    render();    // no rAF loop in reduced motion — force a recolor
   }
 });
 syncTheme();
@@ -99,7 +105,7 @@ syncTheme();
 // pointer state: target (where we steer toward) and ring (lagging follower)
 var tx=0,ty=0,rx=0,ry=0,vx=0,vy=0; // ring pos + velocity
 var px=0,py=0; // raw pointer for spring target when real
-var real=false,lastMove=-1e9,prx=0,pry=0;
+var real=!demoEnabled,lastMove=-1e9,prx=0,pry=0;
 
 function size(){
   DPR=Math.min(2,window.devicePixelRatio||1);
@@ -107,7 +113,7 @@ function size(){
   cv.width=Math.max(1,W*DPR);cv.height=Math.max(1,H*DPR);
   ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-size();window.addEventListener('resize',size);
+size();window.addEventListener('resize',function(){size();render();wake();});
 
 // Self-demo path: eased Lissajous figure, centred, scaled to frame
 function demoPath(time){
@@ -118,32 +124,61 @@ function demoPath(time){
   return {x:cx+Math.sin(a*2)*br*1.02, y:cy+Math.sin(a*3+0.6)*br*0.66};
 }
 
-cv.addEventListener('pointermove',function(e){
+function move(e){
   var r=cv.getBoundingClientRect();
   px=e.clientX-r.left;py=e.clientY-r.top;
   real=true;lastMove=t;
-},{passive:true});
+  if(reduce){tx=rx=px;ty=ry=py;vx=vy=0;render();}else wake();
+}
+cv.addEventListener('pointermove',move,{passive:true});cv.addEventListener('pointerdown',move,{passive:true});
 
-function drawRing(cx,cy,base,sx,sy,ang,glow,alpha,lw){
+cv.addEventListener('keydown',function(e){
+  if(!/^Arrow(Left|Right|Up|Down)$/.test(e.key))return;
+  e.preventDefault();takeover();var r=cv.getBoundingClientRect(),step=Math.max(8,Math.min(W,H)*.06);
+  var x=px+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0),y=py+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0);
+  move({clientX:r.left+Math.max(0,Math.min(W,x)),clientY:r.top+Math.max(0,Math.min(H,y))});
+});
+function takeover(){if(!demoEnabled)return;demoEnabled=false;real=true;px=tx;py=ty;wake();}
+function wake(){if(!reduce&&!document.hidden&&!raf){running=true;raf=requestAnimationFrame(loop);}}
+
+// Glows are baked once as shadow-only sprites (rebuilt on resize / theme switch);
+// the crisp stroke is still drawn live, so only the cheap part runs per frame.
+var HS={key:''};
+function halo(r,lw,glow,dash,fill){
+  var h=Math.ceil(r+glow*2+lw+2),n=Math.ceil(h*2*DPR),off=n+16,c=document.createElement('canvas'),g=c.getContext('2d');
+  c.width=c.height=n;g.setTransform(DPR,0,0,DPR,n/2-off,n/2);
+  g.shadowOffsetX=off;g.shadowBlur=glow;g.shadowColor=C.acc;
+  g.strokeStyle=g.fillStyle=C.acc;g.lineWidth=lw;g.setLineDash(dash||[]);
+  g.beginPath();g.arc(0,0,r,0,Math.PI*2);fill?g.fill():g.stroke();
+  return {c:c,h:h};
+}
+function ensureHalos(base){
+  var k=[base,DPR,C.acc].join();
+  if(HS.key===k)return;HS.key=k;
+  HS.tgt=halo(base*0.34,1.5,8,[2,5]);HS.echo=halo(base*0.92,2,10);
+  HS.main=halo(base,3,18);HS.dot=halo(base*0.10,0,14,null,true);
+}
+function drawRing(cx,cy,base,sx,sy,ang,alpha,lw,hs){
   ctx.save();ctx.translate(cx,cy);ctx.rotate(ang);ctx.scale(sx,sy);
+  ctx.globalAlpha=alpha;ctx.drawImage(hs.c,-hs.h,-hs.h,hs.h*2,hs.h*2);
   ctx.beginPath();ctx.arc(0,0,base,0,Math.PI*2);ctx.restore();
-  ctx.lineWidth=lw;ctx.globalAlpha=alpha;
-  ctx.shadowBlur=glow;ctx.shadowColor=C.acc;ctx.strokeStyle=C.acc;ctx.stroke();
+  ctx.lineWidth=lw;ctx.globalAlpha=alpha;ctx.strokeStyle=C.acc;ctx.stroke();
 }
 
 function render(){
   // trailing fade clears canvas + leaves faint motion trail
-  ctx.globalAlpha=1;ctx.shadowBlur=0;
+  ctx.globalAlpha=1;
   ctx.fillStyle='rgba('+C.bgRgb+','+C.trailA+')';ctx.fillRect(0,0,W,H);
 
   var base=Math.max(10,Math.min(W,H)*0.085);
+  ensureHalos(base);
 
   // ---- pointer target selection ----
-  if(real&&(t-lastMove)>2600){real=false;} // idle: hand back to demo
+  if(demoEnabled&&real&&(t-lastMove)>2600){real=false;} // idle: hand back to demo
   if(real){
     // spring the demo target onto the real pointer
     tx+=(px-tx)*0.35;ty+=(py-ty)*0.35;
-  }else{
+  }else if(demoEnabled){
     var d=demoPath(t);tx+=(d.x-tx)*0.10;ty+=(d.y-ty)*0.10; // ease onto path
   }
 
@@ -164,32 +199,36 @@ function render(){
 
   // dotted target reticle (where it's chasing)
   ctx.setLineDash([2,5]);
-  drawRing(tx,ty,base*0.34,1,1,0,8,0.30,1.5);
+  drawRing(tx,ty,base*0.34,1,1,0,0.30,1.5,HS.tgt);
   ctx.setLineDash([]);
 
   // echo
-  drawRing(ex,ey,base*0.92,1+k*0.5,1-k*0.3,ang,10,0.18,2);
+  drawRing(ex,ey,base*0.92,1+k*0.5,1-k*0.3,ang,0.18,2,HS.echo);
   // main elastic ring
-  drawRing(rx,ry,base,sx,sy,ang,18,0.95,3);
+  drawRing(rx,ry,base,sx,sy,ang,0.95,3,HS.main);
   // inner core dot, scales subtly with speed
-  ctx.globalAlpha=0.9;ctx.shadowBlur=14;ctx.shadowColor=C.acc;ctx.fillStyle=C.acc;
-  ctx.beginPath();ctx.arc(rx,ry,Math.max(1.5,base*0.10*(1+k*0.5)),0,Math.PI*2);ctx.fill();
+  var dr=Math.max(1.5,base*0.10*(1+k*0.5)),ds=dr/(base*0.10);
+  ctx.globalAlpha=0.9;ctx.drawImage(HS.dot.c,rx-HS.dot.h*ds,ry-HS.dot.h*ds,HS.dot.h*ds*2,HS.dot.h*ds*2);
+  ctx.fillStyle=C.acc;ctx.beginPath();ctx.arc(rx,ry,dr,0,Math.PI*2);ctx.fill();
 
   // velocity streak from echo to head
-  ctx.globalAlpha=Math.min(0.5,sp*0.03);ctx.shadowBlur=6;
+  // a wider faint underlay stands in for the old per-frame shadow on this line
+  ctx.globalAlpha=Math.min(0.5,sp*0.03);
   ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(ex,ey);ctx.lineTo(rx,ry);ctx.stroke();
+  ctx.globalAlpha*=0.3;ctx.lineWidth=7;ctx.stroke();
 
-  ctx.globalAlpha=1;ctx.shadowBlur=0;
+  ctx.globalAlpha=1;
 }
 
 function loop(){
-  if(!running)return;
-  t+=16.7;render();raf=requestAnimationFrame(loop);
+  raf=0;if(!running)return;
+  t+=16.7;render();
+  if(demoEnabled||Math.abs(tx-rx)+Math.abs(ty-ry)+Math.abs(tx-px)+Math.abs(ty-py)+Math.abs(vx)+Math.abs(vy)>.03)raf=requestAnimationFrame(loop);
 }
 
 function start(){
   // seed positions at centre
-  tx=rx=W/2;ty=ry=H/2;
+  px=tx=rx=W/2;py=ty=ry=H/2;
   if(reduce){
     var d=demoPath(0);tx=d.x;ty=d.y;rx=tx-40;ry=ty-26;
     vx=8;vy=5; // frozen mid-flight so deformation is visible
@@ -201,7 +240,7 @@ function start(){
 
 function vis(){
   if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
-  else if(!reduce&&!running){running=true;loop();}
+  else wake();
 }
 document.addEventListener('visibilitychange',vis);
 start();

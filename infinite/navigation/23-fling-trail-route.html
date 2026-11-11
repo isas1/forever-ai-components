@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Fling Trail Route — Navigation. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fling Trail Route</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root[data-theme="light"]{--wrd-bg:#fff;--wrd-paper:#F6F2E8;--wrd-ink:#181511;--wrd-mid:#A8A196;--wrd-red:#E0312E;--wrd-fd:Impact,-apple-system,"Segoe UI",Roboto,sans-serif}
+
+:root{--wrd-fd:Impact,-apple-system,"Segoe UI",Roboto,sans-serif;--wrd-bg:#12100E;--wrd-paper:#181511;--wrd-ink:#F6F2E8;--wrd-mid:#5E584F;--wrd-red:#FF4A47}
+
+.wrd-stage,.wrd-stage *{box-sizing:border-box}
+.wrd-stage{margin:0;width:100%;height:100%;display:grid;place-items:center;background:var(--wrd-bg);color:var(--wrd-ink)}
+.wrd-root{position:relative;width:min(92vmin,640px);aspect-ratio:1;background:var(--wrd-paper);border:2px solid var(--wrd-ink);box-shadow:3px 3px 0 var(--wrd-ink);touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;overflow:hidden}
+.wrd-root:active{cursor:grabbing}
+.wrd-root:focus-visible{outline:2px solid var(--wrd-red);outline-offset:4px}
+.wrd-c{position:absolute;inset:0;width:100%;height:100%;display:block}
+.wrd-n{position:absolute;left:0;right:0;bottom:5%;text-align:center;font:900 clamp(44px,16vmin,110px)/1 var(--wrd-fd);letter-spacing:-.02em;font-variant-numeric:tabular-nums;pointer-events:none}
+
+:root{--bg:var(--wrd-bg)}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.wrd-stage{width:100%;height:100%;display:grid;place-items:center}
+.wrd-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--wrd-ink);opacity:.45;pointer-events:none}
+
+
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/23-fling-trail-route.html",
+ "title": "Fling Trail Route",
+ "description": "Editorial ink-and-vermilion palette; fling a dotted route trail with inertial travel, snap-to-checkpoint settling and a bold elevation readout in feet.",
+ "useWhen": "A compact route or multi-stop progress selector with keyboard access.",
+ "avoidWhen": "Real navigation without replacing illustrative elevations and checkpoints.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "route",
+  "checkpoint",
+  "fling",
+  "inertia",
+  "elevation"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wrd-stage" role="group" aria-label="Fling Trail Route">
+<div id="wrd-root" class="wrd-root" role="slider" tabindex="0" aria-label="Walking route checkpoints. Fling or use arrow keys." aria-valuemin="1" aria-valuemax="5" aria-valuenow="1" aria-valuetext="Checkpoint 1, 39 feet">
+<canvas id="wrd-c" class="wrd-c" aria-hidden="true"></canvas>
+<div id="wrd-n" class="wrd-n" aria-hidden="true">12</div>
+</div>
+</div>
+<div class="wrd-cap" aria-hidden="true">Fling Trail Route</div>
+<script>
+(function(){
+var E=[12,48,96,64,4],root=document.getElementById('wrd-root'),cv=document.getElementById('wrd-c'),nEl=document.getElementById('wrd-n'),g=cv.getContext('2d');
+var rm=matchMedia('(prefers-reduced-motion: reduce)'),C={},S=0,dpr=1,U=1;
+var c=0,v=0,t=0,free=false,drag=false,lx=0,lt=0,raf=0,last=0,shown=-1,PER=18;
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+function colors(){C={ink:css('--wrd-ink'),paper:css('--wrd-paper'),mid:css('--wrd-mid'),red:css('--wrd-red')}}
+function setTheme(x){if(x!=='light'&&x!=='dark')return;document.documentElement.setAttribute('data-theme',x);colors();wake()}
+addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+function size(){var r=root.getBoundingClientRect();dpr=Math.min(devicePixelRatio||1,2);S=root.clientWidth;U=S/2.2;cv.width=cv.height=Math.round(S*dpr);wake()}
+new ResizeObserver(size).observe(root);
+function elev(q){q=Math.max(0,Math.min(4,q));var i=Math.min(3,Math.floor(q)),f=q-i;f=f*f*(3-2*f);return E[i]+(E[i+1]-E[i])*f}
+function Y(e){return S*.66-e/100*S*.3}
+function draw(){
+ g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,S,S);
+ var cx=S/2,u0=Math.max(0,Math.floor(c-1.2)),u1=Math.min(4,Math.ceil(c+1.2)),base=Math.max(1.2,U*.012),sq=Math.min(1,Math.abs(v)*6);
+ g.lineWidth=2;g.strokeStyle=C.ink;
+ for(var i=Math.round(u0*PER);i<=Math.round(u1*PER);i++){
+  var q=i/PER,x=cx+(q-c)*U,d=Math.abs(q-c),px=Math.exp(-d*d*28);
+  var r=base*(1+px*3.2);
+  g.fillStyle=px>.55?C.red:(q<=c+.001?C.ink:C.mid);
+  g.beginPath();g.ellipse(x,Y(elev(q))-px*S*.02,r*(1+sq*.8),r*(1-sq*.25),0,0,7);g.fill();
+ }
+ for(i=u0;i<=u1;i++){
+  var xs=cx+(i-c)*U,k=S*.032;g.fillStyle=i<=c+.01?C.ink:C.paper;
+  g.fillRect(xs-k/2,S*.8,k,k);g.strokeRect(xs-k/2,S*.8,k,k);
+  g.beginPath();g.moveTo(xs,S*.8);g.lineTo(xs,Y(E[i])+base*3);g.stroke();
+ }
+ var n=Math.round(elev(c));
+ if(n!==shown){shown=n;nEl.textContent=Math.round(n*3.28)}
+ var m=Math.round(c)+1;
+ if(+root.getAttribute('aria-valuenow')!==m){root.setAttribute('aria-valuenow',m);root.setAttribute('aria-valuetext','Checkpoint '+m+', '+Math.round(E[m-1]*3.28)+' feet')}
+}
+function step(dt){
+ if(drag)return false;
+ if(rm.matches){c=t;v=0;free=false;return true}
+ if(free){c+=v*dt;v*=Math.pow(.94,dt);
+  if(c<0||c>4){c=c<0?0:4;v=0}
+  if(Math.abs(v)<.012){free=false;t=Math.round(c)}return false}
+ var o=t-c;v=o*(1-Math.pow(1-.1,dt));c+=v;v=v/Math.max(dt,.01);
+ if(Math.abs(o)<.001){c=t;v=0;return true}
+ return false;
+}
+function tick(now){raf=0;var dt=Math.min(now-last,50)/16.667;last=now;var d=step(dt);draw();if(!d)raf=requestAnimationFrame(tick)}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else wake()});
+root.addEventListener('pointerdown',function(e){drag=true;free=false;root.setPointerCapture(e.pointerId);lx=e.clientX;lt=performance.now();v=0;wake()});
+root.addEventListener('pointermove',function(e){if(!drag)return;
+ var n=performance.now(),dq=-(e.clientX-lx)/U,d=Math.max(n-lt,1)/16.667;
+ c=Math.max(0,Math.min(4,c+dq));v=v*.6+dq/d*.4;lx=e.clientX;lt=n;wake()});
+function up(){if(!drag)return;drag=false;if(performance.now()-lt>90)v=0;
+ if(Math.abs(v)>.012&&!rm.matches)free=true;else{free=false;t=Math.round(c)}wake()}
+root.addEventListener('pointerup',up);root.addEventListener('pointercancel',up);
+root.addEventListener('wheel',function(e){e.preventDefault();c=Math.max(0,Math.min(4,c+(e.deltaX||e.deltaY)/U*.5));free=false;t=Math.round(c);wake()},{passive:false});
+root.addEventListener('keydown',function(e){var d={ArrowRight:1,ArrowUp:1,ArrowLeft:-1,ArrowDown:-1}[e.key];
+ if(e.key==='Home')t=0;else if(e.key==='End')t=4;else if(d)t=Math.max(0,Math.min(4,Math.round(t)+d));else return;free=false;e.preventDefault();wake()});
+colors();setTheme(document.documentElement.getAttribute('data-theme'));
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoClock=0;
+function demoStep(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;t=(Math.round(t)+1)%5;free=false;wake();}
+function demoStop(){if(demoClock){clearInterval(demoClock);demoClock=0}}
+function demoStart(){demoStop();if(demoEnabled&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches)demoClock=setInterval(demoStep,1600)}
+function takeover(){if(window.__foreverPreview?.surface==='wall')return;demoEnabled=false;demoStop()}
+window.addEventListener('forever:interactive',takeover);
+var stage=document.querySelector('.wrd-stage');
+stage.addEventListener('pointerdown',takeover,true);stage.addEventListener('keydown',takeover,true);stage.addEventListener('input',takeover,true);stage.addEventListener('wheel',takeover,{capture:true,passive:true});
+document.addEventListener('visibilitychange',function(){document.hidden?demoStop():demoStart()});
+var demoMotion=matchMedia('(prefers-reduced-motion: reduce)');demoMotion.addEventListener('change',function(){demoStart();wake()});
+demoStart();
+})();
+</script>
+</body>
+</html>

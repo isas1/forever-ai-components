@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="utf-8">
 <meta name="description" content="A bright gold scan bar sweeps down outlined letters, developing them into solid glowing fill with a hot edge, like a darkroom print emerging">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -22,10 +23,11 @@
     --lws-hot:#664c00; --lws-spark:#664c00; --cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--lws-bg);}
-  #lws-c{display:block;width:100%;height:100%;}
-  .lws-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+  #kt16-c{display:block;width:100%;height:100%;}
+  .kt16-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
        letter-spacing:.14em;color:var(--lws-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+#kt16-c:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -48,12 +50,15 @@
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause/stop",
   "DPR-aware canvas sizing",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space activation and visible focus; manual word/geometry changes finish before the renderer sleeps"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS and JS — must change both BG constant and CSS to recolor",
   "Pointer nudge only accelerates sweep, not a full pointer interaction",
-  "No aria labels on canvas or click target"
+  "No aria labels on canvas or click target",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -78,11 +83,11 @@
 </script>
 </head>
 <body>
-<canvas id="lws-c"></canvas>
-<div class="lws-cap">Line Wipe Sweep</div>
+<canvas id="kt16-c" tabindex="0" role="button" aria-label="Activate kinetic text."></canvas>
+<div class="kt16-cap">Line Wipe Sweep</div>
 <script>
 (function(){
-  const cv=document.getElementById('lws-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('kt16-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const words=["DEVELOP","REVEAL","IMPRINT","EXPOSE"];
   // JS-drawn colours — read from tokens so the canvas repaints correctly on theme switch
@@ -111,10 +116,31 @@
   // sweep position in px, plus afterglow trail markers
   let y=0,hold=0,raf=0,nudge=0;
   function reset(){ word=words[wi]; size(); y=top-fs*0.5; hold=0; }
-  cv.addEventListener('pointermove',function(){ nudge=Math.min(nudge+0.6,2.4); });
-  cv.addEventListener('click',function(){ wi=(wi+1)%words.length; reset(); });
+  cv.addEventListener('pointermove',function(){ nudge=Math.min(nudge+0.6,2.4); if(!demo)start(); });
+  cv.addEventListener('click',function(){ takeover();wi=(wi+1)%words.length;reset();if(reduce)paintReduced();else start(); });
 
+  // Glows are baked into offscreen sprites (rebuilt on resize / word / theme change)
+  // so the sweep only blits them; a live shadow blur per frame was the cost.
+  let SP=null,spk='';
+  function sprites(){
+    const k=[W,H,DPR,fs,word,baseY,C.accent,C.accentRgb,C.hot,C.spark].join();
+    if(spk===k)return;spk=k;
+    const mk=(w,h,fn)=>{const c=document.createElement('canvas');c.width=Math.ceil(w*DPR);c.height=Math.ceil(h*DPR);
+      const g=c.getContext('2d');g.setTransform(DPR,0,0,DPR,0,0);fn(g);return c;};
+    const wordPaint=(col,glow,blur)=>g=>{
+      g.font='900 '+fs+'px ui-monospace,"SFMono-Regular",Menlo,monospace';g.textAlign='center';g.textBaseline='alphabetic';
+      g.fillStyle=col;g.shadowColor=glow;g.shadowBlur=blur;g.fillText(word,W/2,baseY);};
+    const halfW=Math.min(W*0.42,word.length*fs*0.34),m=fs*0.8+4;
+    SP={fill:mk(W,H,wordPaint(C.accent,'rgba('+C.accentRgb+',0.55)',fs*0.10)),
+      hot:mk(W,H,wordPaint(C.hot,C.accent,fs*0.18)),m:m,
+      bar:mk(halfW*2+m*2,m*2,g=>{
+        const gr=g.createLinearGradient(m,0,m+halfW*2,0);
+        gr.addColorStop(0,'rgba('+C.accentRgb+',0)');gr.addColorStop(.5,C.spark);gr.addColorStop(1,'rgba('+C.accentRgb+',0)');
+        g.strokeStyle=gr;g.lineWidth=Math.max(2,fs*0.03);g.shadowColor=C.accent;g.shadowBlur=fs*0.4;
+        g.beginPath();g.moveTo(m,m);g.lineTo(m+halfW*2,m);g.stroke();})};
+  }
   function drawWord(sweepY){
+    sprites();
     ctx.font='900 '+fs+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
     ctx.textAlign='center'; ctx.textBaseline='alphabetic';
     const cx=W/2, txt=word;
@@ -128,26 +154,20 @@
     ctx.beginPath();
     ctx.rect(0,0,W,Math.max(0,sweepY));
     ctx.clip();
-    ctx.fillStyle=C.accent;
-    ctx.shadowColor='rgba('+C.accentRgb+',0.55)';
-    ctx.shadowBlur=fs*0.10;
-    ctx.fillText(txt,cx,baseY);
+    ctx.drawImage(SP.fill,0,0,W,H);
     ctx.restore();
-    ctx.shadowBlur=0;
     // 3) hot edge where fill meets outline: a thin re-stroke clipped to a band at the line
     if(sweepY>top-2 && sweepY<bot+fs*0.3){
       ctx.save();
       ctx.beginPath();
       ctx.rect(0,sweepY-fs*0.06,W,fs*0.12);
       ctx.clip();
-      ctx.fillStyle=C.hot;
-      ctx.shadowColor=C.accent; ctx.shadowBlur=fs*0.18;
-      ctx.fillText(txt,cx,baseY);
+      ctx.drawImage(SP.hot,0,0,W,H);
       ctx.restore();
-      ctx.shadowBlur=0;
     }
   }
 
+  var demo=window.__foreverPreview?.demoEnabled!==false;
   function frame(){
     ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     // active band for the scan bar
@@ -156,14 +176,7 @@
     // the scan bar itself (bright horizontal line + glow), spanning text width
     const cx=W/2, halfW=Math.min(W*0.42, word.length*fs*0.34);
     if(y>start-4 && y<end+4){
-      const g=ctx.createLinearGradient(cx-halfW,0,cx+halfW,0);
-      g.addColorStop(0,'rgba('+C.accentRgb+',0)');
-      g.addColorStop(.5,C.spark);
-      g.addColorStop(1,'rgba('+C.accentRgb+',0)');
-      ctx.strokeStyle=g; ctx.lineWidth=Math.max(2,fs*0.03);
-      ctx.shadowColor=C.accent; ctx.shadowBlur=fs*0.4;
-      ctx.beginPath(); ctx.moveTo(cx-halfW,y); ctx.lineTo(cx+halfW,y); ctx.stroke();
-      ctx.shadowBlur=0;
+      ctx.drawImage(SP.bar,cx-halfW-SP.m,y-SP.m,halfW*2+SP.m*2,SP.m*2);
       // faint scan ticks above/below the bar
       ctx.strokeStyle='rgba('+C.accentRgb+',0.12)'; ctx.lineWidth=1;
       ctx.beginPath();
@@ -173,10 +186,9 @@
     if(!reduce){
       const spd=fs*(0.012+nudge*0.02);
       nudge*=0.93;
-      if(y<end){ y+=spd; }
-      else { hold++; if(hold>70){ wi=(wi+1)%words.length; reset(); } }
+      if(y<end){y+=spd;}else{hold++;if(demo&&hold>70){wi=(wi+1)%words.length;reset();}}
     }
-    raf=requestAnimationFrame(frame);
+    if(demo||y<end)raf=requestAnimationFrame(frame);else raf=0;
   }
   function start(){ if(!raf && !reduce) raf=requestAnimationFrame(frame); }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
@@ -185,6 +197,8 @@
     ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H);
     y=bot+fs; drawWord(y);
   }
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();});
   document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message', function(e){
@@ -196,7 +210,8 @@
     }
   });
   reset();
-  if(reduce){ paintReduced(); } else { start(); }
+  if(reduce){ paintReduced(); } else if(demo){start();} else {paintReduced();}
+  cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();cv.click();}});
 })();
 </script>
 </body>

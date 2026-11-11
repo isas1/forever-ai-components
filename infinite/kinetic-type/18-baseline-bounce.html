@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="utf-8">
 <meta name="description" content="Amber monospace letters spelling BOUNCE drop and spring on a baseline rail with squash-stretch and shadow puddles in a staggered ripple.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -22,10 +23,11 @@
     --cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bb-bg);}
-  #bb-c{display:block;width:100%;height:100%;}
+  #kt18-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;right:10px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
        letter-spacing:.14em;color:var(--bb-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+#kt18-c:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -49,11 +51,14 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space activation and visible focus; manual word/geometry changes finish before the renderer sleeps"
  ],
  "knownLimitations": [
   "Background color hardcoded in BG constant — must edit both CSS and JS to change",
-  "pointermove kicks only the nearest letter; no multi-touch support"
+  "pointermove kicks only the nearest letter; no multi-touch support",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -78,11 +83,11 @@
 </script>
 </head>
 <body>
-<canvas id="bb-c"></canvas>
+<canvas id="kt18-c" tabindex="0" role="button" aria-label="Activate kinetic text."></canvas>
 <div class="cap">Baseline Bounce</div>
 <script>
 (function(){
-  const cv=document.getElementById('bb-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('kt18-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const WORD="BOUNCE", N=WORD.length;
   let W,H,DPR,fs,base,advW;
@@ -110,22 +115,20 @@
   }
   addEventListener('resize',size);size();
 
-  // spring state per letter
   const L=[];
   for(let i=0;i<N;i++) L.push({y:0,v:0,ph:0});
   const PERIOD=2.4;                    // seconds for a wave to cross + rest
   const LAG=0.13;                      // stagger per letter (the travelling ripple)
-  let t=0,last=0,nudge=0;
+  let t=0,last=0,nudge=0,demo=window.__foreverPreview?.demoEnabled!==false;
 
-  cv.addEventListener('pointermove',e=>{
+  cv.addEventListener('pointermove',e=>{if(!demo)start();
     const x=(e.offsetX)/W, i=Math.round(x*(N-1));
     if(i>=0&&i<N){ L[i].v-=fs*3.2; }   // kick a letter up
     nudge=0.5;
   });
-  cv.addEventListener('click',()=>{ for(let i=0;i<N;i++) L[i].v-=fs*(1.6+i*0.2); });
+  cv.addEventListener('click',()=>{takeover();for(let i=0;i<N;i++)L[i].v-=fs*(1.6+i*0.2);if(reduce){step(.05);for(const o of L)o.v=0;draw();}else start();});
 
   function impulse(i,time){
-    // each letter gets a launch impulse once per period, staggered L->R
     const local=((time - i*LAG)%PERIOD+PERIOD)%PERIOD;
     return local;
   }
@@ -133,23 +136,31 @@
   function step(dt){
     for(let i=0;i<N;i++){
       const lt=impulse(i,t);
-      // fire a fresh upward kick at the top of each letter's cycle
-      if(lt < dt){ L[i].v = -fs*2.7; }
+      if(demo&&lt < dt){ L[i].v = -fs*2.7; }
       const o=L[i];
-      // critically-ish damped spring back to baseline (y=0 rest)
-      const k=140, c=11;
-      o.v += (-k*o.y - c*o.v)*dt;
+      o.v += (-140*o.y - 11*o.v)*dt;
       o.y += o.v*dt;
     }
     nudge*=0.9;
   }
 
+  // glow baked once per letter at half resolution; the bloom is a cheap radial gradient
+  let gs={},gsk='';
+  function halo(ch){
+    const k=[fs,DPR,C.accent].join();if(gsk!==k){gsk=k;gs={};}
+    if(!gs[ch]){
+      const q=DPR*0.5,h=Math.ceil(fs*1.4),n=Math.ceil(h*2*q),off=n+16,c=document.createElement('canvas'),g=c.getContext('2d');
+      c.width=c.height=n;g.setTransform(q,0,0,q,n/2-off,n/2);g.font="800 "+fs+"px ui-monospace,'SFMono-Regular',Menlo,monospace";g.textAlign="center";
+      g.shadowOffsetX=off;g.shadowBlur=fs*0.3*q;g.shadowColor=C.accent;g.fillStyle=C.accent;g.fillText(ch,0,0);
+      gs[ch]={c:c,h:h};
+    }
+    return gs[ch];
+  }
   function draw(){
     ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     const totW=advW*(N-1);
     const x0=W/2 - totW/2;
 
-    // ground rail — the springy baseline
     ctx.strokeStyle="rgba("+C.accentRgb.join(',')+",0.16)";
     ctx.lineWidth=Math.max(1,fs*0.012);
     ctx.beginPath();
@@ -176,7 +187,6 @@
         sx=1-st*0.7; sy=1+st;
       }
       const height=-o.y/(fs*2.6);               // 0 floor .. ~1 apex
-      // shadow puddle on the baseline
       const sw=advW*0.34*(1-Math.min(0.55,height*0.6));
       ctx.fillStyle="rgba(0,0,0,0.35)";
       ctx.beginPath();
@@ -185,13 +195,19 @@
       ctx.save();
       ctx.translate(x,y);
       ctx.scale(sx,sy);
-      // hot accent when high, deeper amber at rest
       const hot=Math.min(1,height*1.4);
       const rr=C.restRgb, ar=C.accentRgb;
       const r=Math.round(rr[0]+hot*(ar[0]-rr[0])), g=Math.round(rr[1]+hot*(ar[1]-rr[1])), b=Math.round(rr[2]+hot*(ar[2]-rr[2]));
       ctx.fillStyle="rgb("+r+","+g+","+b+")";
-      ctx.shadowColor=C.accent;
-      ctx.shadowBlur=fs*(0.12+0.5*hot);
+      const hl=halo(WORD[i]);
+      ctx.globalAlpha=1;ctx.drawImage(hl.c,-hl.h,-hl.h,hl.h*2,hl.h*2);ctx.globalAlpha=0.5+0.5*hot;ctx.drawImage(hl.c,-hl.h,-hl.h,hl.h*2,hl.h*2);
+      if(hot>0.02){
+        const br=fs*(0.35+0.45*hot),bg=ctx.createRadialGradient(0,-fs*0.3,0,0,-fs*0.3,br);
+        bg.addColorStop(0,'rgba('+C.accentRgb.join(',')+','+(0.30*hot).toFixed(3)+')');
+        bg.addColorStop(1,'rgba('+C.accentRgb.join(',')+',0)');
+        ctx.globalAlpha=1;ctx.fillStyle=bg;ctx.fillRect(-br,-fs*0.3-br,br*2,br*2);
+      }
+      ctx.globalAlpha=1;ctx.fillStyle="rgb("+r+","+g+","+b+")";
       ctx.fillText(WORD[i],0,0);
       ctx.restore();
     }
@@ -201,14 +217,16 @@
     if(!last)last=now;
     let dt=(now-last)/1000; last=now;
     if(dt>0.05)dt=0.05;
-    t+=dt;
-    step(dt);
-    draw();
-    raf=requestAnimationFrame(frame);
+    if(demo)t+=dt;
+    step(dt);draw();
+    const moving=L.some(o=>Math.abs(o.v)>0.08||Math.abs(o.y)>0.25);
+    if(demo||moving)raf=requestAnimationFrame(frame);else raf=0;
   }
   let raf=0;
   function start(){if(!raf&&!reduce){last=0;raf=requestAnimationFrame(frame);}}
   function stop(){cancelAnimationFrame(raf);raf=0;}
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();});
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message',e=>{
@@ -224,7 +242,8 @@
     // one static resting frame
     for(let i=0;i<N;i++){L[i].y=0;L[i].v=0;}
     draw();
-  } else start();
+  } else if(demo)start(); else draw();
+  cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();cv.click();}});
 })();
 </script>
 </body>

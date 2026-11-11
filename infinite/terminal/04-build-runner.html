@@ -4,17 +4,19 @@
 <title>Build Runner</title>
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0a;color:#00ff41;font:13px/1.7 ui-monospace,Menlo,"Courier New",monospace}
-.trm-wrap{padding:12px 14px;height:100%;overflow:hidden;display:flex;flex-direction:column}
-.trm-line{white-space:pre}
-.trm-dim{color:#2a5a2a}
-.trm-ok{color:#4ade80}
-.trm-warn{color:#ffa500}
-.trm-err{color:#ff5555}
-.trm-hi{color:#e2e8f0}
-.trm-cursor{display:inline-block;width:8px;height:.85em;background:#00ff41;animation:trm-blink 1s step-start infinite;vertical-align:middle}
-@keyframes trm-blink{0%,100%{opacity:1}50%{opacity:0}}
-.trm-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#00ff41;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0a;color:#00ff41;font:clamp(11px,2.3vmin,13px)/1.6 ui-monospace,Menlo,"Courier New",monospace}
+.bld04-wrap{padding:10px 10px 24px;height:100%;overflow:hidden;display:flex;flex-direction:column}
+.bld04-line{flex-shrink:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.bld04-dim{color:#829c82}
+.bld04-ok{color:#4ade80}
+.bld04-warn{color:#ffa500}
+.bld04-err{color:#ff5555}
+.bld04-hi{color:#e2e8f0}
+.bld04-cursor{display:inline-block;width:8px;height:.85em;background:#00ff41;animation:bld04-blink 1s step-start infinite;vertical-align:middle}
+@keyframes bld04-blink{0%,100%{opacity:1}50%{opacity:0}}
+.bld04-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#00ff41;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+.bld04-paused .bld04-cursor{animation-play-state:paused}
+@media(prefers-reduced-motion:reduce){.bld04-cursor{animation:none}}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/terminal/04-build-runner.html",
@@ -22,26 +24,24 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0a;color:#00ff41;
  "description": "Simulates npm install + build pipeline in a scrolling terminal; packages, lint/compile steps, and file-change events stream in sequence and loop endlessly.",
  "useWhen": "Developer-tool landing pages, loading screens for build/deploy dashboards, or any context needing a credible \"code is running\" ambient backdrop.",
  "avoidWhen": "Non-technical audiences (output is meaningless without dev context). Light-background UIs — background is hardcoded dark (#0d0f0a).",
- "agentPrompt": "Change the package list in the pkgs array to your project's dependencies, update the bundle output line, and slow each step interval to 350ms.",
+ "agentPrompt": "Edit the OUTPUT array of [text,class] lines, the compact reduced-motion frame, setInterval(tick,440) and hold=3. This is a local demonstration, not a real build.",
  "editableAreas": [
-  "package list (pkgs array)",
-  "build step messages (steps array)",
-  "per-phase interval timings (120/180/280ms)",
-  "MAX visible lines (MAX=16)",
-  "terminal accent color (#00ff41)",
-  "line cadence (setInterval(tick, 440 ms); rerun after a ~1.3 s hold)"
+  "build output (OUTPUT array of [text,class])",
+  "line interval (440ms) and completion hold (3 ticks)",
+  "compact reduced-motion frame below320px",
+  "terminal palette (.bld04-* classes)"
  ],
  "preserveElements": [
-  "visibilitychange stop/play guard",
-  "prefers-reduced-motion instant-render path",
   "IIFE wrapper",
-  "while(running) loop with running flag",
-  "pre-rolled prompt + tick loop (paused on visibilitychange)"
+  "visibilitychange stop/play guard",
+  "prefers-reduced-motion representative completed build",
+  "whole newest-row trimming after line insertion and resize",
+  "pre-rolled prompt and autonomous tick loop"
  ],
  "knownLimitations": [
-  "Cursor CSS class defined but never injected into DOM during streaming",
-  "Background hardcoded dark — must edit CSS to change terminal look",
-  "Loops forever with no pause control exposed to the user"
+  "Invented output only; no package install, command or real build runs",
+  "Dark terminal palette; no light-mode claim",
+  "Local passive demo; no exposed pause button"
  ],
  "tier": "curated",
  "labels": [
@@ -63,15 +63,15 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0a;color:#00ff41;
 }
 </script>
 </head><body>
-<div class="trm-wrap" id="trm-wrap" role="img" aria-label="Terminal running npm install and npm run build: packages resolve and install, then lint, compile and bundle steps stream in and finish successfully before the watcher picks up a file change."></div>
-<div class="trm-cap" aria-hidden="true">build runner</div>
+<div class="bld04-wrap" id="bld04-wrap" role="img" aria-label="Terminal running npm install and npm run build: packages resolve and install, then lint, compile and bundle steps stream in and finish successfully before the watcher picks up a file change."></div>
+<div class="bld04-cap" aria-hidden="true">build runner</div>
 <script>(()=>{
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  const wrap=document.getElementById('trm-wrap');
+  const wrap=document.getElementById('bld04-wrap');
   if(!wrap)return;
-  const D='trm-dim',K='trm-ok',H='trm-hi',W='trm-warn';
+  const D='bld04-dim',K='bld04-ok',H='bld04-hi',W='bld04-warn';
   // one entry = one emitted line: [text, class]. resolve -> fetch -> install -> build -> watch
-  const SCRIPT=[
+  const OUTPUT=[
     ['$ npm install',H],['',''],
     ['  resolving packages ...',D],
     ['  fetched 127 manifests in 640ms',D],
@@ -92,18 +92,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0a;color:#00ff41;
     ['  watching for file changes...',D],
     ['  change detected: src/server.ts',W]
   ];
-  const caret=document.createElement('span');caret.className='trm-cursor';
+  const caret=document.createElement('span');caret.className='bld04-cursor';
 
-  let LH=22,MAX=10;
-  function fit(){                       // keep the newest line on screen: cap rows to what fits
-    LH=parseFloat(getComputedStyle(wrap).lineHeight)||22;
-    MAX=Math.max(4,Math.floor((wrap.clientHeight-24)/LH));
-    trim();
-  }
-  function trim(){while(wrap.children.length>MAX)wrap.removeChild(wrap.firstChild);}
+  function trim(){while(wrap.children.length>1&&wrap.scrollHeight>wrap.clientHeight)wrap.firstChild.remove();}
+  function fit(){trim();}
   function line(txt,cls){
     const d=document.createElement('div');
-    d.className='trm-line'+(cls?' '+cls:'');
+    d.className='bld04-line'+(cls?' '+cls:'');
     d.textContent=txt;
     wrap.appendChild(d);trim();
     return d;
@@ -113,21 +108,25 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d0f0a;color:#00ff41;
   function tick(){                      // one visible line per tick; blanks ride along with the next
     if(!running)return;
     if(hold){hold--;return;}
-    if(i>=SCRIPT.length){wrap.textContent='';i=0;}
+    if(i>=OUTPUT.length){wrap.textContent='';i=0;}
     let last;
-    do{last=line(SCRIPT[i][0],SCRIPT[i][1]);i++;}while(i<SCRIPT.length&&SCRIPT[i-1][0]==='');
-    last.appendChild(caret);
-    if(i>=SCRIPT.length)hold=3;         // hold the finished build ~1.3s, then rerun
+    do{last=line(OUTPUT[i][0],OUTPUT[i][1]);i++;}while(i<OUTPUT.length&&OUTPUT[i-1][0]==='');
+    last.appendChild(caret);trim();
+    if(i>=OUTPUT.length)hold=3;         // hold the finished build ~1.3s, then rerun
   }
 
   fit();
   addEventListener('resize',fit);
   if(reduce){                           // static representative frame: a finished, successful build
-    SCRIPT.forEach(s=>line(s[0],s[1]));
+    const frame=wrap.clientHeight<320?[['$ npm run build',H],['✓ lint · 0 errors',K],['✓ 42 modules',K],['✓ bundle 84.2 kB',K],['✓ built in 1.8s',K],['watching src/',D]]:OUTPUT;
+    frame.forEach(s=>line(s[0],s[1]));
     return;
   }
   tick();tick();                        // pre-roll so the prompt is up before the first tick
-  document.addEventListener('visibilitychange',()=>{running=!document.hidden;});
-  setInterval(tick,440);
+  let timer;
+  function stop(){running=false;clearInterval(timer);wrap.classList.add('bld04-paused');}
+  function play(){stop();if(document.hidden)return;running=true;wrap.classList.remove('bld04-paused');timer=setInterval(tick,440);}
+  document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+  play();
 })();</script>
 </body></html>

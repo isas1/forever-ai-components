@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A radial ring of seven colored cards around a glowing hub that you fling with inertia and it settles to the nearest card under a marker.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Carousel Throw</title>
@@ -70,12 +71,14 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion early-exit guard",
   "counterRotate() keeping glyphs upright during ring spin",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Cards counter-rotate to stay upright — removing counterRotate() will spin the labels with the ring",
   "Angular drag uses pointer angle from center; very small ring sizes reduce drag precision",
-  "Auto-demo fires after idle timeout — remove the demoT/idle block before shipping in production"
+  "Auto-demo fires after idle timeout — remove the demoT/idle block before shipping in production",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -104,12 +107,18 @@
      aria-label="Carousel Throw. Drag or use arrow keys to fling the carousel; it settles to the nearest card.">
   <div id="dr08-ring"></div>
   <div class="dr08-marker" aria-hidden="true"></div>
+  <div class="dr08-hint" aria-hidden="true">drag / ← →</div>
 </div>
-<div class="dr08-hint" aria-hidden="true">drag / ← →</div>
 <div class="cap">Carousel Throw</div>
 <script>
 (function(){
   "use strict";
+  function wake(){if(document.hidden)return;running=true;if(reduce){place();counterRotate();}else if(!raf)raf=requestAnimationFrame(loop);}
+  ['pointerdown','pointermove','pointerup','pointercancel','keydown','keyup'].forEach(type=>document.addEventListener(type,wake));
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;clearTimeout(attractSnap);}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   var ring=document.getElementById('dr08-ring');
   var stage=document.getElementById('dr08-stage');
@@ -154,7 +163,7 @@
 
   function nearest(){return Math.round(ang/STEP)*STEP;}
 
-  function fling(v){ // user/synth throw
+  function fling(v){ if(reduce){ang+=v>0?STEP:-STEP;vel=0;target=null;place();counterRotate();return;} // user/synth throw
     vel+=v; target=null; idle=0;
   }
   function snap(){target=nearest();}
@@ -179,20 +188,21 @@
     else if(e.key==='ArrowLeft'){fling(-STEP*0.42);snapSoon();e.preventDefault();}
   });
   var snapTimer=0;
-  function snapSoon(){clearTimeout(snapTimer);snapTimer=setTimeout(snap,260);}
+  function snapSoon(){clearTimeout(snapTimer);snapTimer=setTimeout(()=>{snap();wake();},260);}
 
   // ---- self-demo ----
+  var attractSnap=0;
   function demo(){ // gentle randomized throw
     var dir=Math.random()<0.5?-1:1;
     fling(dir*(STEP*0.7+Math.random()*STEP*1.4));
-    setTimeout(snap,520);
+    attractSnap=setTimeout(()=>{if(demoEnabled){snap();wake();}},520);
   }
 
   if(reduce){ang=0;place();counterRotate();return;}
 
   var running=true,raf=0;
   function loop(){
-    if(!running)return;
+    raf=0;if(!running||document.hidden)return;
     if(dragging){
       // momentum tracked live; nothing to integrate
     }else if(target!==null){
@@ -209,10 +219,10 @@
     idle++;
     if(!dragging&&target===null&&Math.abs(vel)<0.05){
       demoT++;
-      if(idle>150&&demoT>180){demo();demoT=0;}
+      if(demoEnabled&&!reduce&&idle>150&&demoT>180){demo();demoT=0;}
     }else{demoT=0;}
 
-    raf=requestAnimationFrame(loop);
+    if(!reduce&&(demoEnabled||dragging||target!==null||Math.abs(vel)>.001))wake();
   }
   // kick off with an initial idle demo soon after load
   idle=152;demoT=120;

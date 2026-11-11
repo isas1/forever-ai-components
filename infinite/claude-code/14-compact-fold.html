@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Compact context — Claude Code. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="component-profile" content="tile">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Claude Code · Compact context</title>
+<script>
+(function () {
+  var t = new URLSearchParams(location.search).get('theme');
+  if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+})();
+</script>
+<style>
+:root{--bg:#141210;--surface:#1d1a17;--ink:#ede6da;--muted:#9a9084;--line:rgba(237,230,218,.14);--accent:#d97757;--on-accent:#1a0d07;
+      --good:#8fb573;--warn:#e0b350;--bad:#e5694f}
+:root[data-theme="light"]{--bg:#f5f0e6;--surface:#ebe4d6;--ink:#211d18;--muted:#6b6256;--line:rgba(33,29,24,.16);--accent:#b4492b;--on-accent:#fff3ea;
+      --good:#4f7a36;--warn:#8a6410;--bad:#a8341c}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg);color:var(--ink);
+  font-family:ui-sans-serif,system-ui,-apple-system,sans-serif}
+.cc02-root{box-sizing:border-box;width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;display:grid;grid-template-rows:1fr auto;
+  gap:clamp(6px,2vmin,14px);padding:clamp(14px,5vmin,32px);user-select:none}
+.cc02-root *{box-sizing:border-box}
+.cc02-hit{position:absolute;inset:0;margin:0;padding:0;border:0;background:transparent;border-radius:8px;cursor:pointer;touch-action:none;-webkit-tap-highlight-color:transparent}
+.cc02-hit:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.cc02-stack{position:relative;min-height:0;overflow:hidden}
+.cc02-bar{position:absolute;left:0;top:0;height:0;border-radius:3px;background:var(--muted);transform-origin:0 0}
+.cc02-bar[data-u="1"]{background:var(--ink)}
+.cc02-sum{background:var(--accent)}
+.cc02-read{display:flex;align-items:baseline;justify-content:center;gap:8px;height:44px;white-space:nowrap}
+.cc02-val{font:700 clamp(20px,7vmin,40px)/1 ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.cc02-unit{font:600 12px/1 ui-monospace,"SF Mono",Menlo,monospace;color:var(--muted)}
+.cc02-sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.cc02-cap{position:fixed;left:8px;bottom:2px;font:8px/1 system-ui,sans-serif;color:var(--muted);opacity:.65;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code/14-compact-fold.html",
+ "title": "Compact context",
+ "description": "Fold message bars into one token summary. Warm graphite and clay instrument palette.",
+ "useWhen": "Illustrative local developer-tool controls.",
+ "avoidWhen": "Real Claude commands or persistent storage are needed.",
+ "agentPrompt": "Keep reviewed graphite/clay palette (clean-modern exception), state mutators, dt springs, theme hook, demo-v1 takeover, reduced motion, visibility guards and keyboard/touch controls. Synthetic data only.",
+ "editableAreas": [
+  "theme tokens",
+  "seed data and demo interval"
+ ],
+ "preserveElements": [
+  "namespace/IIFE and state mutators",
+  "theme, demo-v1 and motion guards"
+ ],
+ "knownLimitations": [
+  "Local simulation; no Claude integration, persistence or physical-device verification."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "claude-code",
+  "developer-tools",
+  "interactive",
+  "instrument",
+  "minimal"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="cc02-root" id="cc02-root" role="group"
+   aria-label="Compact the conversation like the slash compact command: ten messages fold into one summary and the token count falls. Press and hold the button, or hold Space or Enter, to fold; release early to cancel; press again after compacting to reset; Escape cancels.">
+<div class="cc02-stack" id="cc02-stack"></div>
+<div class="cc02-read"><span class="cc02-val" id="cc02-val">142k</span><span class="cc02-unit">tokens</span></div>
+<button class="cc02-hit" id="cc02-hit" type="button" aria-pressed="false" aria-label="Compact conversation, hold to fold"></button>
+<span class="cc02-sr" id="cc02-live" aria-live="polite"></span>
+</div>
+<div class="cc02-cap" aria-hidden="true">Compact context</div>
+<script>
+(function () {
+'use strict';
+var root = document.getElementById('cc02-hit'), stack = document.getElementById('cc02-stack');
+var valEl = document.getElementById('cc02-val'), live = document.getElementById('cc02-live');
+var TOK = [14, 9, 22, 6, 18, 11, 27, 8, 15, 12];       // k tokens per message
+var USER = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0];
+var SUM = 9, SCALE = 30, OV = 3, HOLD_FRAMES = 54;     // summary k, k per full width, fold wave overlap, ~0.9s hold
+var N = TOK.length, TOTAL = TOK.reduce(function (a, b) { return a + b; }, 0);
+var mq = matchMedia('(prefers-reduced-motion: reduce)');
+var reduce = function () { return mq.matches; };
+var s = { hp: 0, p: 0, v: 0, press: 0, pv: 0, hold: false, done: false, armed: true };
+var raf = 0, last = 0, inView = true, H = 0, W = 0;
+var bars = TOK.map(function (t, i) {
+  var b = document.createElement('div');
+  b.className = 'cc02-bar'; b.dataset.u = USER[i];
+  stack.appendChild(b);
+  return b;
+});
+var sum = document.createElement('div');
+sum.className = 'cc02-bar cc02-sum';
+stack.appendChild(sum);
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function sm(x) { return x * x * (3 - 2 * x); }
+function fold(i) { return sm(clamp((clamp(s.p, 0, 1) * (N + OV) - i) / OV, 0, 1)); }
+function snapToTarget() { s.p = s.hp; s.v = 0; s.press = s.hold ? 1 : 0; s.pv = 0; }
+function step(dt) {
+  if (s.hold) {
+    s.hp += dt / HOLD_FRAMES;
+    if (s.hp >= 1) setDone(true, 'Compacted: ' + TOTAL + 'k to ' + SUM + 'k tokens');
+  }
+  s.v = (s.v + (s.hp - s.p) * 0.24 * dt) * Math.pow(0.74, dt);
+  s.p += s.v * dt;
+  var pt = s.hold ? 1 : 0;
+  s.pv = (s.pv + (pt - s.press) * 0.3 * dt) * Math.pow(0.7, dt);
+  s.press += s.pv * dt;
+  var calm = Math.abs(pt - s.press) < 0.01 && Math.abs(s.pv) < 0.01;
+  if (!s.hold && Math.abs(s.hp - s.p) < 0.002 && Math.abs(s.v) < 0.002 && calm) { snapToTarget(); return false; }
+  return true;
+}
+// One function writes every bar and the readout from the same fold values.
+function draw() {
+  if (!H) return;
+  var rowH = H / (N + 1), g = Math.max(1.5, rowH * 0.22), y = 0, tokens = 0, sweep = 0, fsum = 0, f = [], i;
+  for (i = 0; i < N; i++) { f[i] = fold(i); fsum += f[i]; sweep += TOK[i] * f[i]; tokens += TOK[i] * (1 - f[i]); }
+  var share = sweep / TOTAL, sumH = clamp(fsum / N * 2.5, 0, 1);
+  tokens += SUM * share;
+  var gh = 0;
+  for (i = 0; i < N; i++) gh += rowH * (1 - f[i]);
+  gh += rowH * sumH;
+  y = (H - gh) / 2;
+  var sq = 1 - 0.04 * s.press;
+  for (i = 0; i < N; i++) {
+    var h = Math.max(0, (rowH - g) * (1 - f[i]));
+    bars[i].style.height = h.toFixed(2) + 'px';
+    bars[i].style.width = (TOK[i] / SCALE * W).toFixed(2) + 'px';
+    bars[i].style.transform = 'translate(0,' + y.toFixed(2) + 'px) scaleX(' + sq.toFixed(3) + ')';
+    bars[i].style.opacity = f[i] > 0.98 ? 0 : 1;
+    y += rowH * (1 - f[i]);
+  }
+  sum.style.height = ((rowH - g) * sumH).toFixed(2) + 'px';
+  sum.style.width = (SUM * share / SCALE * W).toFixed(2) + 'px';
+  sum.style.transform = 'translate(0,' + y.toFixed(2) + 'px) scaleX(' + sq.toFixed(3) + ')';
+  var txt = Math.round(tokens) + 'k';
+  if (valEl.textContent !== txt) valEl.textContent = txt;
+}
+function resize() { H = stack.clientHeight; W = stack.clientWidth; draw(); }
+function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+function frame(now) {
+  var dt = last ? Math.min(now - last, 50) / 16.667 : 1;
+  last = now;
+  var moving = reduce() ? (snapToTarget(), false) : step(dt);
+  draw();
+  raf = moving ? requestAnimationFrame(frame) : 0;
+}
+function kick() {
+  if (reduce()) { stop(); snapToTarget(); draw(); return; }
+  if (!raf && !document.hidden && inView) { last = 0; raf = requestAnimationFrame(frame); }
+}
+function announce(msg) {
+  live.textContent = '';
+  requestAnimationFrame(function () { live.textContent = msg; });
+}
+// Single mutator of the compact state (done flag, target, ARIA).
+function setDone(d, msg) {
+  s.done = d; s.hold = false; s.hp = d ? 1 : 0;
+  root.setAttribute('aria-pressed', String(d));
+  if (msg) announce(msg);
+  kick();
+}
+function begin() {
+  if (!s.armed) return;
+  s.armed = false;
+  if (reduce()) { setDone(!s.done, s.done ? 'Reset: ' + TOTAL + 'k tokens' : 'Compacted: ' + TOTAL + 'k to ' + SUM + 'k tokens'); return; }
+  if (s.done) { setDone(false, 'Reset: ' + TOTAL + 'k tokens'); return; }
+  s.hold = true; kick();
+}
+function release() {
+  s.armed = true;
+  if (!s.hold) return;
+  s.hold = false; s.hp = 0;
+  announce('Cancelled: ' + TOTAL + 'k tokens');
+  kick();
+}
+root.addEventListener('pointerdown', function (e) {
+  if (e.button) return;
+  root.setPointerCapture(e.pointerId);
+  begin();
+});
+root.addEventListener('pointerup', release);
+root.addEventListener('pointercancel', release);
+root.addEventListener('keydown', function (e) {
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); if (!e.repeat) begin(); }
+  else if (e.key === 'Escape') { if (s.hold) release(); else if (s.done) setDone(false, 'Reset: ' + TOTAL + 'k tokens'); }
+});
+root.addEventListener('keyup', function (e) { if (e.key === ' ' || e.key === 'Enter') release(); });
+window.addEventListener('message', function (e) {
+  if (e.source !== parent || !e.data || e.data.type !== 'forever:theme') return;
+  if (e.data.theme === 'light' || e.data.theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', e.data.theme);
+    draw();
+  }
+});
+mq.addEventListener('change', function () { if (reduce()) { stop(); snapToTarget(); draw(); } });
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(function (es) {
+    inView = es[0].isIntersecting;
+    if (!inView) stop(); else draw();
+  }, { threshold: 0 }).observe(root);
+}
+document.addEventListener('visibilitychange', function () { if (document.hidden) stop(); else draw(); });
+window.addEventListener('pagehide', stop);
+new ResizeObserver(resize).observe(stack);
+resize();
+// Demo uses the same state mutators as manual controls; no remote Claude session.
+var demoRoot=document.getElementById('cc02-root'),demoClock=0,demoAge=0,demoStep=0,demoVisible=true;
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+function demoTick(){setDone(!s.done);}
+function syncDemo(){
+clearInterval(demoClock);demoClock=0;
+if(!demoEnabled||reduce()||document.hidden||!demoVisible)return;
+demoClock=setInterval(function(){demoAge+=250;if(demoAge>=1000){demoAge=-2200;demoTick()}},250);
+}
+function takeover(){
+if(window.__foreverPreview?.surface==='wall')return;
+if(!demoEnabled)return;demoEnabled=false;clearInterval(demoClock);demoClock=0;
+}
+['pointerdown','keydown','input'].forEach(function(type){demoRoot.addEventListener(type,takeover,true)});
+window.addEventListener('forever:interactive',takeover);
+window.addEventListener('pagehide',function(){demoEnabled=false;clearInterval(demoClock)});
+document.addEventListener('visibilitychange',function(){syncDemo();if(!document.hidden)kick()});
+mq.addEventListener('change',syncDemo);
+if('IntersectionObserver' in window)new IntersectionObserver(function(es){demoVisible=es[0].isIntersecting;syncDemo();if(demoVisible)kick()}).observe(demoRoot);
+syncDemo();
+})();
+</script>
+</body>
+</html>

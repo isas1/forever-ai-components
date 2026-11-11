@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Struck Print — Navigation. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Struck Print</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#f2b705}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#8a6400}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt23-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.dt23-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt23-c{display:block;width:100%;height:100%}
+.dt23-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/33-struck-print-trail.html",
+ "title": "Struck Print Trail",
+ "description": "A breadcrumb as a row of struck prints: tap or drag across a print to step back to it, and each reach presses it one deeper. The deepest print takes the accent. Clean modern: off-black and saffron with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and saffron (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "Print depth is uncapped on manual use, but only the first 10 layers draw. Opens dark by default; the source defaulted to light.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "breadcrumb",
+  "footprints",
+  "navigation",
+  "press",
+  "canvas"
+ ]
+}
+</script>
+</head><body>
+<div class="dt23-root" role="slider" tabindex="0" aria-valuemin="1" aria-valuemax="5" aria-valuenow="5" aria-label="breadcrumb in footprints: the trail back up from cat-pics-2 to forever. tap or drag across a print to step back to it; each reach presses it one deeper. the deepest print is gold. arrows choose a print, enter or space strikes it, escape returns to the newest print."></div>
+<div class="dt23-cap" aria-hidden="true">Struck Print</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.dt23-root'),cv=document.createElement('canvas');
+  cv.className='dt23-c';root.appendChild(cv);var ctx=cv.getContext('2d');
+  var names=['forever','forever plan','monday','emotional baggage','cat-pics-2'];
+  var P=names.map(function(n,i){return{n:n,t:5-i,v:0,dv:0,s:0,sv:0,del:8+i*7}});
+  var sel=4,W=300,dpr=1,down=false,lastHit=-1;
+  new ResizeObserver(function(){W=root.clientWidth;dpr=Math.min(devicePixelRatio||1,2);
+    cv.width=Math.round(W*dpr);cv.height=Math.round(W*dpr);draw()}).observe(root);
+  function cx(i){return W*(0.14+i*0.18)}
+  function cy(i){return W*0.46+(i%2?1:-1)*W*0.035}
+  function deepest(){var b=0;for(var i=1;i<P.length;i++)if(P[i].t>P[b].t)b=i;return b}
+  function spring(o,k,x,vk,tg,d){var a=(tg-o[x])*k;o[vk]=(o[vk]+a*d)*Math.pow(0.8,d);o[x]+=o[vk]*d;
+    return Math.abs(tg-o[x])>0.001||Math.abs(o[vk])>0.001}
+  function step(dt){var m=false;P.forEach(function(p){
+    if(p.del>0){p.del-=dt;m=true;return}
+    if(spring(p,0.16,'v','dv',p.t,dt))m=true;
+    if(spring(p,0.2,'s','sv',0,dt))m=true});return m}
+  function snapToTarget(){P.forEach(function(p){p.v=p.t;p.dv=0;p.s=0;p.sv=0;p.del=0})}
+  function shape(a,b,sc){ctx.beginPath();for(var j=0;j<=44;j++){var t=j/44*Math.PI*2,s=Math.sin(t),c=Math.cos(t);
+    var x=a*c*(1-0.24*s)*(1-0.12*Math.cos(2*t))*sc,y=b*s*sc;j?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.closePath()}
+  function draw(){var cs=getComputedStyle(document.documentElement),
+    ink=cs.getPropertyValue('--ink').trim(),acc=cs.getPropertyValue('--acc').trim();
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,W);
+    var u=Math.max(1,W/420),dp=deepest(),b=W*0.078,a=b*0.44;
+    ctx.globalAlpha=0.14;ctx.strokeStyle=ink;ctx.lineWidth=1;ctx.beginPath();
+    ctx.moveTo(0,Math.round(W*0.46)+0.5);ctx.lineTo(W,Math.round(W*0.46)+0.5);ctx.stroke();
+    P.forEach(function(p,i){var m=i%2?1:-1,d=Math.max(p.v,0),col=i===dp?acc:ink;
+      ctx.save();ctx.translate(cx(i),cy(i)-p.s*b*0.4);ctx.rotate(m*0.09);ctx.scale(1-p.s*0.7,1+p.s);
+      ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=(i===sel?1.7:1)*u;
+      var n=Math.ceil(d),den=Math.max(d,1)+0.7,inner=1;
+      for(var k=0;k<=n;k++){var sc=1-k/den*0.82;if(sc<0.08)break;
+        var fr=k===0?1:Math.min(1,Math.max(0,d-k+1));ctx.globalAlpha=k===0?1:0.25+0.75*fr;
+        shape(a,b,sc);ctx.stroke();inner=sc}
+      if(i===dp){ctx.globalAlpha=1;shape(a,b,inner);ctx.fill()}
+      ctx.restore()});
+    var q=P[sel];ctx.globalAlpha=1;ctx.fillStyle=ink;ctx.textAlign='center';ctx.textBaseline='middle';
+    var fs=Math.max(13,W*0.075)*(1-q.s*0.8);
+    ctx.font='600 '+fs.toFixed(1)+'px -apple-system,system-ui,"Helvetica Neue",sans-serif';
+    ctx.fillText(String(q.t),cx(sel),W*0.68);
+    ctx.globalAlpha=0.5;ctx.fillRect(cx(sel)-W*0.02,Math.round(W*0.6),W*0.04,1)}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  function aria(){var p=P[sel];root.setAttribute('aria-valuenow',String(5-sel));
+    root.setAttribute('aria-valuetext',p.n+', depth '+p.t+(sel===deepest()?', deepest':''))}
+  function strike(i){sel=i;var p=P[i];p.del=0;p.t+=1;p.sv=-0.11;aria();kick()}
+  function choose(i){i=Math.max(0,Math.min(4,i));if(i===sel)return;sel=i;P[i].sv=-0.035;aria();kick()}
+  function hit(e){var r=root.getBoundingClientRect(),x=(e.clientX-r.left)*W/r.width,y=(e.clientY-r.top)*W/r.width;
+    if(y<W*0.2||y>W*0.82)return -1;var i=Math.round((x/W-0.14)/0.18);
+    return i>=0&&i<5&&Math.abs(x-cx(i))<W*0.09?i:-1}
+  root.addEventListener('pointerdown',function(e){down=true;try{root.setPointerCapture(e.pointerId)}catch(_){}
+    var i=hit(e);lastHit=i;if(i>=0)strike(i)});
+  root.addEventListener('pointermove',function(e){if(!down)return;var i=hit(e);
+    if(i>=0&&i!==lastHit)strike(i);lastHit=i});
+  function up(){down=false;lastHit=-1}
+  root.addEventListener('pointerup',up);root.addEventListener('pointercancel',up);
+  root.addEventListener('keydown',function(e){var k=e.key;
+    if(k==='ArrowLeft'||k==='ArrowDown')choose(sel-1);
+    else if(k==='ArrowRight'||k==='ArrowUp')choose(sel+1);
+    else if(k==='Home')choose(0);else if(k==='End'||k==='Escape')choose(4);
+    else if(k==='Enter'||k===' ')strike(sel);else return;e.preventDefault()});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  aria();draw();kick();
+  // Idle demo (demo-v1): performs the control on its own until the first real input.
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,demoI=0,demoT=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  demoT=setInterval(function(){if(!demo||document.hidden||reduce())return;var i=[3,1,4,2,0][demoI++%5];if(P[i].t<7)strike(i);else choose(i)},1300);
+  window.addEventListener('forever:interactive',stopDemo);
+  ['pointerdown','keydown','wheel'].forEach(function(t){root.addEventListener(t,stopDemo,true)});
+  document.addEventListener('pointerdown',stopDemo,true);
+})();</script>
+</body></html>

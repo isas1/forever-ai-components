@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="utf-8">
 <meta name="description" content="Teal split-flap letter reels spin and brake to lock onto each glyph of a word with motion-blur streaks and a flash on the dark green canvas.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -14,10 +15,11 @@
   :root{ --ttf-bg:#07120f; --ttf-bg-rgb:7,18,15; --ttf-accent:#2ec4b6; --ttf-accent-rgb:46,196,182; --ttf-ink:#d8fff7; --cap-o:.34; } /* canvas paints its own bg — JS reads these via syncTheme() */
   :root[data-theme="light"]{ --ttf-bg:#eef4f1; --ttf-bg-rgb:238,244,241; --ttf-accent:#1d7a71; --ttf-accent-rgb:29,122,113; --ttf-ink:#005c49; --cap-o:.5; }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--ttf-bg);}
-  #ttf-c{display:block;width:100%;height:100%;}
-  .ttf-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
+  #kt15-c{display:block;width:100%;height:100%;}
+  .kt15-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
        letter-spacing:.14em;color:var(--ttf-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+#kt15-c:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -41,12 +43,15 @@
   "reduced-motion static fallback (single resting frame)",
   "visibilitychange pause/start guard",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space activation and visible focus; manual word/geometry changes finish before the renderer sleeps"
  ],
  "knownLimitations": [
   "Background color hardcoded to #07120f — must change CSS and canvas fillRect to use a different background",
   "pointermove accelerates spinning reels but has no touch equivalent beyond click",
-  "Very long words shrink glyphs significantly on short viewports"
+  "Very long words shrink glyphs significantly on short viewports",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -71,11 +76,11 @@
 </script>
 </head>
 <body>
-<canvas id="ttf-c"></canvas>
-<div class="ttf-cap">Ticker Tape Fall</div>
+<canvas id="kt15-c" tabindex="0" role="button" aria-label="Activate kinetic text."></canvas>
+<div class="kt15-cap">Ticker Tape Fall</div>
 <script>
 (function(){
-  const cv=document.getElementById('ttf-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('kt15-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const ALPHA="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const WORDS=["DESCEND","CASCADE","FALLING","GRAVITY"];
@@ -113,12 +118,31 @@
     }
     phase=0;
   }
+  const fnt=()=>'700 '+fs.toFixed(1)+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
+  let gc={},gk='';
+  function gsp(ch,q){  // pre-rendered glow; q = lock flash 0..1, -1 = moving glyph
+    const k=[fs,DPR,C.accentRgb,C.ink,C.accent].join();
+    if(gk!==k){gk=k;gc={};}
+    const id=ch+q;
+    if(!gc[id]){
+      const gl=q<0?8:10+q*22;
+      const h=Math.ceil(fs*0.75+gl*2+4),n=Math.ceil(h*2*DPR),c=document.createElement('canvas'),g=c.getContext('2d');
+      c.width=c.height=n;g.setTransform(DPR,0,0,DPR,n/2,n/2);
+      g.font=fnt();
+      g.textAlign='center';g.textBaseline='middle';
+      g.shadowColor='rgba('+C.accentRgb+','+(q<0?.5:.55+q*.4).toFixed(2)+')';g.shadowBlur=gl;
+      g.fillStyle=q<0?C.accent:C.ink;g.fillText(ch,0,0);
+      gc[id]={c:c,h:h};
+    }
+    return gc[id];
+  }
   function glyph(idx){ idx=((idx%26)+26)%26; return ALPHA[idx]; }
 
   let raf=0,last=0,hold=0;
-  cv.addEventListener('pointermove',()=>{ reels&&reels.forEach(r=>{ if(!r.locked) r.vel+=2.2; }); });
-  cv.addEventListener('click',()=>{ wi=(wi+1)%WORDS.length; build(); });
+  cv.addEventListener('pointermove',()=>{ reels&&reels.forEach(r=>{ if(!r.locked) r.vel+=2.2; }); if(!demo)start(); });
+  cv.addEventListener('click',()=>{ takeover();wi=(wi+1)%WORDS.length;build();if(reduce)paintReduced();else start(); });
 
+  let demo=window.__foreverPreview?.demoEnabled!==false;
   function frame(ts){
     if(!last)last=ts;
     let dt=(ts-last)/1000; last=ts; if(dt>0.05)dt=0.05;
@@ -127,7 +151,7 @@
     ctx.fillStyle='rgba('+C.bgRgb+',0.34)';ctx.fillRect(0,0,W,H);
 
     ctx.textAlign='center';ctx.textBaseline='middle';
-    const ff='700 '+fs.toFixed(1)+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
+    const ff=fnt();
     let allLocked=true;
     for(let i=0;i<reels.length;i++){
       const r=reels[i], cy=oy+i*cell;
@@ -138,11 +162,8 @@
           r.pos+=r.vel*dt;
         } else {
           // ease the residual distance to the target glyph (pos integer == tgt at frac 0)
-          // we want final pos so that round(pos) maps to tgt; track a target pos.
           if(r.targetPos===undefined){
             const base=Math.ceil(r.pos)+6+i; // a few more spins
-            // choose nearest pos >= base whose glyph index == tgt offset alignment
-            // glyph shown = glyph(floor(pos)+? ) -> define display index = -floor(pos) mod 26 below
             r.targetPos=base;
             // adjust so the resting glyph equals tgt
             const restIdx=((-Math.round(base))%26+26)%26;
@@ -178,32 +199,28 @@
         if(gy<cy-cell*0.9||gy>cy+cell*0.9) continue;
         const center=1-Math.min(1,Math.abs(gy-cy)/(cell*0.62));
         if(r.locked){
-          ctx.globalAlpha=k===0?1:0;
-          ctx.shadowColor='rgba('+C.accentRgb+','+(0.55+r.flash*0.4)+')';
-          ctx.shadowBlur=(10+r.flash*22);
-          ctx.fillStyle=C.ink;
-        } else {
-          // moving glyph: dim, streaked
-          ctx.globalAlpha=(0.16+center*0.7)*(1-blur*0.45);
-          ctx.shadowColor='rgba('+C.accentRgb+',0.5)';
-          ctx.shadowBlur=6+blur*4;
-          ctx.fillStyle=C.accent;
+          if(k!==0) continue;
+          ctx.globalAlpha=1;
+          const e=gsp(ch,Math.round(r.flash*3)/3);
+          ctx.drawImage(e.c,ox-e.h,gy-e.h,e.h*2,e.h*2);
+          continue;
         }
+        ctx.globalAlpha=(0.16+center*0.7)*(1-blur*0.45);
+        ctx.fillStyle=C.accent;
         // motion-blur streaks: stamp ghosts along the travel direction
-        if(!r.locked && blur>0.08){
+        if(blur>0.08){
           const streak=blur*cell*0.5;
-          ctx.shadowBlur=2;
           for(let s=1;s<=3;s++){
             ctx.globalAlpha=(0.10+center*0.22)*(1-s/4)*(1-blur*0.2);
             ctx.fillText(ch,ox,gy - streak*(s/3));
           }
           ctx.globalAlpha=0.16+center*0.62;
-          ctx.shadowBlur=6+blur*4;
         }
-        ctx.fillText(ch,ox,gy);
+        const e=gsp(ch,-1);
+        ctx.drawImage(e.c,ox-e.h,gy-e.h,e.h*2,e.h*2);
       }
       ctx.restore();
-      ctx.shadowBlur=0;ctx.globalAlpha=1;
+      ctx.globalAlpha=1;
 
       // lock indicator: a thin accent baseline that snaps in
       if(r.locked||r.flash>0){
@@ -217,35 +234,37 @@
 
     if(allLocked){
       hold+=dt;
-      if(hold>2.6){ hold=0; wi=(wi+1)%WORDS.length; build(); }
+      if(demo&&hold>2.6){hold=0;wi=(wi+1)%WORDS.length;build();}
     } else hold=0;
 
-    raf=requestAnimationFrame(frame);
+    if(demo||!allLocked)raf=requestAnimationFrame(frame);else raf=0;
   }
   function start(){ if(!raf&&!reduce){ last=0; raf=requestAnimationFrame(frame);} }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
   function paintReduced(){ // single resting frame: every reel locked on target
     ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.font='700 '+fs.toFixed(1)+'px ui-monospace,"SFMono-Regular",Menlo,monospace';
+    ctx.font=fnt();
     for(let i=0;i<reels.length;i++){
       const cy=oy+i*cell;
-      ctx.shadowColor='rgba('+C.accentRgb+',0.6)';ctx.shadowBlur=12;
-      ctx.fillStyle=C.ink;ctx.fillText(word[i],ox,cy);
-      ctx.shadowBlur=0;
+      const e=gsp(word[i],0.1);
+      ctx.drawImage(e.c,ox-e.h,cy-e.h,e.h*2,e.h*2);
       ctx.strokeStyle='rgba('+C.accentRgb+',0.2)';ctx.lineWidth=1;
       const lw=fs*0.34;ctx.beginPath();
       ctx.moveTo(ox-lw,cy+cell*0.42);ctx.lineTo(ox+lw,cy+cell*0.42);ctx.stroke();
     }
   }
   addEventListener('resize',size);
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();});
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message', e=>{ const d=e.data;
     if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')){ htmlEl.setAttribute('data-theme', d.theme); syncTheme(); if(reduce) paintReduced(); }
   });
   size();
-  if(reduce){ paintReduced(); } else start();
+  if(reduce){ paintReduced(); } else if(demo)start(); else paintReduced();
+  cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();cv.click();}});
 })();
 </script>
 </body>

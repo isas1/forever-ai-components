@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Mint plus/minus stepper with a rolling number reel that springs and overshoots between digits on each step.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Spring Stepper</title>
@@ -24,22 +25,27 @@
     --c03-shadow:rgba(0,127,89,.18);
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c03-bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  .wrap{height:100%;display:flex;align-items:center;justify-content:center}
-  .stepper{display:flex;align-items:center;gap:14px;user-select:none}
-  .btn{width:54px;height:54px;border-radius:16px;background:var(--c03-btn-bg);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--c03-btn-ink);font-size:30px;font-weight:600;line-height:1;box-shadow:0 6px 18px var(--c03-shadow);transition:transform .12s,background .2s}
-  .btn:active{transform:scale(.9);background:var(--c03-btn-active)}
-  .num{width:78px;height:74px;overflow:hidden;position:relative;border-radius:14px;background:var(--c03-num-bg)}
-  .roll{position:absolute;left:0;width:100%;text-align:center;font-size:46px;font-weight:800;color:var(--c03-roll-ink);line-height:74px;will-change:transform}
+  .c03-wrap{height:100%;display:flex;align-items:center;justify-content:center}
+  .c03-stepper{display:flex;align-items:center;gap:14px;user-select:none}
+  .c03-btn{width:54px;height:54px;border-radius:16px;background:var(--c03-btn-bg);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--c03-btn-ink);font-size:30px;font-weight:600;line-height:1;box-shadow:0 6px 18px var(--c03-shadow);transition:transform .12s,background .2s}
+  .c03-btn:active{transform:scale(.9);background:var(--c03-btn-active)}
+  .c03-num{width:78px;height:74px;overflow:hidden;position:relative;border-radius:14px;background:var(--c03-num-bg)}
+  .c03-roll{position:absolute;left:0;width:100%;text-align:center;font-size:46px;font-weight:800;color:var(--c03-roll-ink);line-height:74px;will-change:transform}
   .cap{position:fixed;left:10px;bottom:9px;font-size:11px;letter-spacing:.08em;color:var(--c03-cap);opacity:var(--c03-cap-o);text-transform:uppercase}
+
+
+.c03-btn{border:0;font-family:inherit}.c03-btn:focus-visible{outline:2px solid var(--c03-btn-ink);outline-offset:4px}
+.c03-roll{height:888px}.c03-row{height:74px}.c03-value{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+@media(max-width:210px){.c03-stepper{gap:8px}.c03-btn{width:38px;height:48px}.c03-num{width:58px}}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/inputs-switches/03-spring-stepper.html",
  "title": "Spring Stepper",
- "description": "Mint-themed +/- stepper with a number reel that springs and overshoots between digits 0–9; auto-cycles as a demo. Dark green palette.",
+ "description": "Mint stepper with native minus/plus buttons and a number reel that settles with spring feedback. First deliberate input stops automatic steps; the chosen value stays put.",
  "useWhen": "Quantity selectors, numeric inputs, settings with discrete integer steps where tactile spring feedback adds polish.",
- "avoidWhen": "Ranges beyond 0–9 (strip is hardcoded 12 rows). Remove auto-cycle timer before shipping in production.",
- "agentPrompt": "Change the value range to 0–99 by rebuilding the strip with 100 rows, set spring stiffness k=0.22, and change accent color from #5fffcf to #a78bfa. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "avoidWhen": "Ranges beyond 0–9 unless the digit strip and clamps are expanded together.",
+ "agentPrompt": "Adjust spring stiffness .16 and damping .62 in frame(). Expand the digit strip and value clamp together for a wider range. Keep native buttons, output value, reduced-motion snapping and sticky demoEnabled. Theme: dark tokens live in :root; the [data-theme=\"light\"] block and forever:theme message switch palette.",
  "editableAreas": [
   "spring stiffness (k=0.16)",
   "damping factor (damp=0.62)",
@@ -52,12 +58,16 @@
   "IIFE wrapper",
   "prefers-reduced-motion guard (static translateY fallback)",
   "visibilitychange pause guard",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "native controls, visible focus and keyboard handlers",
+  "sticky preview demo lifecycle (forever-preview-lifecycle demo-v1; __foreverPreview.demoEnabled; forever:interactive window event)",
+  "visibilitychange suspension with manual settling retained",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Value clamped 0–9; strip only contains 12 rows so ranges beyond single digits need a rebuild",
-  "Auto-cycles every ~90 frames — remove for production",
-  "Buttons are divs with no aria role or keyboard support"
+  "Value clamps to 0–9; wider ranges require rebuilding the digit strip and clamps.",
+  "Local UI example; connect value updates to application data.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -82,43 +92,30 @@
 </script>
 </head>
 <body>
-<div class="wrap">
-  <div class="stepper">
-    <div class="btn" id="minus">&minus;</div>
-    <div class="num"><div class="roll" id="roll"></div></div>
-    <div class="btn" id="plus">+</div>
-  </div>
-</div>
-<div class="cap">Spring Stepper</div>
+<div class="c03-wrap"><div class="c03-stepper" id="c03-stepper"><button type="button" class="c03-btn" id="c03-minus" aria-label="Decrease value">&minus;</button><div class="c03-num" aria-hidden="true"><div class="c03-roll" id="c03-roll"></div></div><output class="c03-value" data-fit-clip-ok id="c03-value" aria-live="polite">4</output><button type="button" class="c03-btn" id="c03-plus" aria-label="Increase value">+</button></div></div><div class="cap" aria-hidden="true">Spring Stepper</div>
 <script>
 (function(){
-  const roll=document.getElementById('roll');
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  const H=74;let val=4,disp=4,vel=0,running=true,auto=0;
-  // build a tall strip of numbers
-  let html='';for(let i=0;i<12;i++)html+='<div style="height:'+H+'px">'+i+'</div>';
-  roll.innerHTML=html;roll.style.height=(12*H)+'px';
-  function step(d){val=Math.max(0,Math.min(9,val+d));vel+=d*4;}
-  document.getElementById('plus').addEventListener('pointerdown',()=>{step(1);auto=0;});
-  document.getElementById('minus').addEventListener('pointerdown',()=>{step(-1);auto=0;});
-  function frame(){
-    if(!running)return;
-    auto++;
-    if(auto>90){auto=0;step(Math.random()>.5?1:-1);}
-    // spring toward val
-    const k=0.16,damp=0.62;
-    const f=(val-disp)*k;vel=(vel+f)*damp;disp+=vel;
-    roll.style.transform='translateY('+(-disp*H)+'px)';
-    requestAnimationFrame(frame);
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,raf=0;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});
+  document.addEventListener('click',stopDemo,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+  addEventListener('message',e=>{const d=e.data;if(d?.type==='forever:theme'&&['light','dark'].includes(d.theme)){document.documentElement.dataset.theme=d.theme;syncTheme();}});
+  function wake(){if(!document.hidden&&!raf)raf=requestAnimationFrame(frame);}
+  document.addEventListener('visibilitychange',()=>{cancelAnimationFrame(raf);raf=0;if(!document.hidden)wake();});
+  const roll=document.getElementById('c03-roll'),root=document.getElementById('c03-stepper'),output=document.getElementById('c03-value');
+  let val=4,disp=4,vel=0,auto=0;
+  for(let i=0;i<12;i++){const row=document.createElement('div');row.className='c03-row';row.textContent=i;roll.append(row);}
+  function syncTheme(){}
+  function paint(){roll.style.transform='translateY('+(-disp*74)+'px)';root.dataset.value=val;}
+  function step(d){val=Math.max(0,Math.min(9,val+d));output.value=val;if(reduce){disp=val;vel=0;paint();}else wake();}
+  document.getElementById('c03-plus').addEventListener('click',()=>step(1));document.getElementById('c03-minus').addEventListener('click',()=>step(-1));
+  function frame(){raf=0;if(document.hidden)return;if(demoEnabled&&!reduce&&++auto>90){auto=0;step(Math.random()>.5?1:-1);}
+    vel=(vel+(val-disp)*.16)*.62;disp+=vel;if(Math.abs(val-disp)<.001&&Math.abs(vel)<.001){disp=val;vel=0;}paint();if((demoEnabled&&!reduce)||disp!==val||vel)wake();
   }
-  document.addEventListener('visibilitychange',()=>{running=!document.hidden;if(running&&!reduce)requestAnimationFrame(frame);});
-  // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
-  addEventListener('message', function(e){
-    var d=e.data;
-    if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark')) document.documentElement.setAttribute('data-theme', d.theme);
-  });
-  if(reduce){roll.style.transform='translateY('+(-val*H)+'px)';}
-  else requestAnimationFrame(frame);
+  paint();if(!reduce&&demoEnabled)wake();
 })();
 </script>
 </body>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Minute Drum Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Minute Drum Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#16221A;--card:#1E2E24;--ink:#F3D6CE;--mute:#B89B93;--rose:#E8B4A8;--gold:#E9C96A;--car:#8C482A;color-scheme:dark}
+:root[data-theme="light"]{--bg:#F9F4F0;--card:#FFFFFF;--ink:#2E1F18;--mute:#7A5B4D;--rose:#B05D4D;--gold:#C68E17;--car:#6D3E24;color-scheme:light}
+.wtc-root,.wtc-root *{box-sizing:border-box;margin:0}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.wtc-root{width:100%;height:100%;background:var(--bg);display:grid;place-items:center;overflow:hidden}
+#wtc-stage{width:min(92vmin,640px);aspect-ratio:1;touch-action:none;cursor:grab;user-select:none;border-radius:8px}
+#wtc-stage:focus-visible{outline:2px solid var(--rose);outline-offset:4px}
+.wtc-canvas{width:100%;height:100%;display:block}
+.wtc-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.wtc-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/24-minute-drum-timer.html",
+ "title": "Minute Drum Timer",
+ "description": "Drag, fling or scroll a minute drum with a rising caramel fill. Forest pâtisserie palette: pine, rose, pastry gold and caramel.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "drum",
+  "fling",
+  "wheel",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wtc-root" role="group" aria-label="Minute Drum Timer">
+<div id="wtc-stage" role="slider" tabindex="0" aria-label="Bake minutes. Drag or fling the drum, scroll, or use arrow keys. Tap or Enter to start, again to stop." aria-valuemin="0" aria-valuemax="30" aria-valuenow="0"><canvas class="wtc-canvas"></canvas></div>
+<div class="wtc-sr" id="wtc-status" role="status" data-fit-clip-ok="screen-reader-only"></div>
+</div>
+<div class="wtc-cap" aria-hidden="true">Minute Drum Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||RM.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var MAX=30,T=1500; // demo clock: one baking minute passes in 1.5 s
+var R=document.getElementById('wtc-stage'),C=R.firstElementChild,X=C.getContext('2d'),S=document.getElementById('wtc-status');
+var RM=matchMedia('(prefers-reduced-motion: reduce)'),W=1,P,raf=0,last=0;
+var mode=0,pos=0,vp=0,end=0,tot=1,rem=0,drag=0,moved=0,py=0,pt=0,ph=0,sl=0,sp=0,lastN=-1;
+function pal(){var s=getComputedStyle(document.documentElement);P={};['bg','card','ink','mute','rose','gold','car'].forEach(function(k){P[k]=s.getPropertyValue('--'+k).trim()})}
+function mx(a,b,t){var o='#',i,p=function(h,j){return parseInt(h.substr(1+j*2,2),16)};for(i=0;i<3;i++)o+=('0'+Math.round(p(a,i)+(p(b,i)-p(a,i))*t).toString(16)).slice(-2);return o}
+function size(){var r=Math.min(devicePixelRatio||1,2);W=R.clientWidth;C.width=C.height=Math.round(W*r);X.setTransform(r,0,0,r,0,0);wake()}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+function tick(now){raf=0;var dt=Math.min(now-last,50)/16.667;last=now;demoBeat(dt*16.667);var b=demoPaused?false:step(dt,now);draw();if((b||(demoEnabled&&!RM.matches))&&!demoPaused&&!document.hidden&&!raf)raf=requestAnimationFrame(tick)}
+function clamp(x){return Math.max(0,Math.min(MAX,x))}
+function start(){demoPaused=false;demoSession=demoEnabled;tot=Math.max(1,Math.round(pos));end=performance.now()+tot*T;mode=1;vp=0;S.textContent='Baking '+tot+' minutes';wake()}
+function step(dt,now){
+  var b=false,old=pos;
+  if(mode==1){rem=Math.max(0,(end-now)/T);pos=rem;if(rem<=0){mode=2;S.textContent='Done'}b=true}
+  else if(RM.matches){if(!drag){pos=mode==2?0:clamp(Math.round(pos))}vp=0}
+  else if(!drag){
+    var g=mode==2?0:clamp(Math.round(pos)),a=0;
+    if(mode==2||Math.abs(vp)<.25||pos<0||pos>MAX)a=(g-pos)*(pos<0||pos>MAX?.2:.14);
+    vp=(vp+a*dt)*Math.pow(.94,dt);pos+=vp*dt;
+    if(Math.abs(vp)>.002||Math.abs(g-pos)>.002)b=true;else{pos=g;vp=0}
+  }
+  var dv=(pos-old)/Math.max(dt,.01);sp+=((RM.matches?0:Math.min(.04,Math.abs(dv)*.012))-sp)*(1-Math.pow(.88,dt));sl+=RM.matches?0:.12*dt;
+  var n=Math.round(pos);if(n!=lastN){lastN=n;R.setAttribute('aria-valuenow',n)}
+  return b||sp>.0006||drag;
+}
+function nums(col,rw,cy){
+  X.fillStyle=col;X.textAlign='center';X.textBaseline='middle';
+  var c=Math.round(pos),i,k,d,sc;
+  for(i=-4;i<=4;i++){k=c+i;if(k<0||k>MAX)continue;d=k-pos;sc=Math.max(0,1-Math.abs(d)*.27);if(sc<=0)continue;
+    if(mode==2&&k==0)continue;
+    X.globalAlpha=sc*sc;X.font='700 '+W*.15*sc+'px ui-monospace,Menlo,monospace';X.fillText(k,W/2,cy+d*rw*(1+(1-sc)*.2))}
+  X.globalAlpha=1}
+function draw(){
+  var s=W,x0=s*.27,w=s*.46,y0=s*.04,h=s*.92,rw=s*.15,cy=s/2,p=mode==1?1-rem/tot:mode==2?1:0;
+  X.clearRect(0,0,s,s);
+  X.beginPath();X.roundRect(x0,y0,w,h,w/2);X.fillStyle=P.card;X.fill();
+  X.strokeStyle=P.mute;X.globalAlpha=.4;X.lineWidth=1.5;X.stroke();X.globalAlpha=1;
+  X.save();X.beginPath();X.roundRect(x0,y0,w,h,w/2);X.clip();
+  nums(P.ink,rw,cy);
+  var top=y0+h-(clamp(pos)/MAX)*h,amp=s*.006+sp*s*.9,i;
+  X.save();X.beginPath();X.moveTo(x0,y0+h);
+  for(i=0;i<=24;i++){var xx=x0+w*i/24;X.lineTo(xx,top+Math.sin(sl+i*.5)*amp)}
+  X.lineTo(x0+w,y0+h);X.closePath();X.globalAlpha=.9;X.fillStyle=mx(P.gold,P.car,.5*p);X.fill();X.globalAlpha=1;X.clip();
+  nums(document.documentElement.getAttribute('data-theme')=='light'?P.ink:P.bg,rw,cy);
+  X.restore();X.restore();
+  X.strokeStyle=P.rose;X.lineWidth=2;X.beginPath();X.moveTo(x0+w*.12,cy-rw*.5);X.lineTo(x0+w*.88,cy-rw*.5);X.moveTo(x0+w*.12,cy+rw*.5);X.lineTo(x0+w*.88,cy+rw*.5);X.stroke();
+  if(mode==2){X.lineWidth=s*.02;X.lineCap='round';X.beginPath();X.moveTo(s*.46,cy);X.lineTo(s*.49,cy+s*.035);X.lineTo(s*.55,cy-s*.04);X.stroke()}
+}
+R.addEventListener('pointerdown',function(e){demoPaused=false;R.setPointerCapture(e.pointerId);drag=1;moved=0;py=e.clientY;pt=performance.now();vp=0;ph=mode;R.style.cursor='grabbing'});
+R.addEventListener('pointermove',function(e){
+  if(!drag)return;var dy=e.clientY-py,now=performance.now();
+  if(!moved&&Math.abs(dy)<4)return;
+  if(!moved){moved=1;if(mode!=0){mode=0;if(ph==2)pos=0}}
+  var u=-dy/(R.clientWidth*.15),dtm=Math.max(1,(now-pt)/16.667);
+  pos+=(pos<0||pos>MAX)?u*.4:u;vp+=(u/dtm-vp)*.5;py=e.clientY;pt=now;wake()});
+function up(){if(!drag)return;drag=0;R.style.cursor='';
+  if(!moved){if(ph==1){mode=0;pos=rem}else if(ph==2){mode=0;pos=0}else if(Math.round(pos)>=1)start()}
+  if(performance.now()-pt>90)vp=0;wake()}
+R.addEventListener('pointerup',up);R.addEventListener('pointercancel',up);
+R.addEventListener('wheel',function(e){demoPaused=false;e.preventDefault();if(mode==1)return;if(mode==2)mode=0;pos=clamp(pos+e.deltaY/90);vp=0;wake()},{passive:false});
+R.addEventListener('keydown',function(e){demoPaused=false;var k=e.key,dd=0;
+  if(k=='ArrowUp'||k=='ArrowRight')dd=1;else if(k=='ArrowDown'||k=='ArrowLeft')dd=-1;
+  if(dd){e.preventDefault();if(mode==1)pos=rem;if(mode==2)pos=0;mode=0;pos=clamp(Math.round(pos)+dd);vp=0;wake()}
+  else if(k=='Enter'||k==' '){e.preventDefault();if(mode==1){mode=0;pos=rem}else if(mode==2){mode=0;pos=0}else if(Math.round(pos)>=1)start();wake()}
+  else if(k=='Escape'){mode=0;pos=0;vp=0;wake()}});
+document.addEventListener('visibilitychange',function(){if(document.hidden){hiddenAt=performance.now();cancelAnimationFrame(raf);raf=0}else{if(hiddenAt&&mode==1)end+=performance.now()-hiddenAt;hiddenAt=0;wake()}});
+function setTheme(t){document.documentElement.setAttribute('data-theme',t=='light'?'light':'dark');pal();wake()}
+addEventListener('message',function(e){var m=e.data;if(m&&m.type=='forever:theme')setTheme(m.theme)});
+function demoFinished(){return mode==2}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;pos=12;rem=12;start()}
+new ResizeObserver(size).observe(R);pos=12;if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,performance.now());pal();size();if(demoEnabled&&!RM.matches)demoStart();
+RM.addEventListener('change',function(){if(RM.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

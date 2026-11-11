@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A 3x3 grid of primary-colored numbered tiles that spring-reorder as they are dragged or swapped, with auto-demo shuffling.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sortable Grid</title>
@@ -17,13 +18,15 @@
   html,body{height:100%}
   body{background:var(--bg);overflow:hidden;font-family:ui-monospace,Menlo,monospace}
   #dr05-stage{position:fixed;inset:0;display:grid;place-items:center}
-  #dr05-grid{position:relative;outline:none}
+  #dr05-grid{position:relative}
+  #dr05-grid:focus:not(:focus-visible){outline:none}
+  #dr05-grid:focus-visible{outline:2px solid var(--dr05-foc);outline-offset:6px}
   .dr05-t{position:absolute;left:0;top:0;border-radius:7px;will-change:transform;
     display:grid;place-items:center;color:var(--dr05-num-ink);font-weight:700;
     box-shadow:0 6px 22px var(--dr05-shadow),inset 0 0 0 1.5px rgba(255,255,255,.14)}
   .dr05-t span{font-size:clamp(11px,3.4cqw,20px);letter-spacing:.04em;mix-blend-mode:luminosity;opacity:.92}
-  .dr05-t.lift{box-shadow:0 18px 40px var(--dr05-lift-shadow),inset 0 0 0 2px var(--ac);z-index:9}
-  .dr05-t.foc{outline:2px solid var(--dr05-foc);outline-offset:3px;z-index:8}
+  .dr05-t.dr05-lift{box-shadow:0 18px 40px var(--dr05-lift-shadow),inset 0 0 0 2px var(--ac);z-index:9}
+  .dr05-t.dr05-foc{outline:2px solid var(--dr05-foc);outline-offset:3px;z-index:8}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--cap);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
   @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important;animation-iteration-count:1!important}}
@@ -32,7 +35,7 @@
 {
  "file": "infinite/drag-reorder/05-sortable-grid.html",
  "title": "Sortable Grid",
- "description": "3x3 grid of colored numbered tiles that spring-animate into position as tiles are dragged or swapped; auto-shuffles on idle as a demo.",
+ "description": "3x3 grid of colored numbered tiles that spring-animate into position as tiles are dragged or swapped; initial idle shuffle stops after first input.",
  "useWhen": "Dashboard card reordering, settings panels, any UI where users need to manually sort a fixed set of items with tactile feedback.",
  "avoidWhen": "Lists longer than ~12 items (spring loop scales linearly); contexts where ordering state must persist — this resets on page reload.",
  "agentPrompt": "Change the grid to 4 columns (set COLS=4, N=16, add 7 more PAL entries), increase spring stiffness by changing K from 0.14 to 0.22. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
@@ -41,7 +44,7 @@
   "grid size (N and COLS)",
   "spring stiffness (K=0.14) and damping (D=0.74)",
   "tile corner radius (border-radius:7px)",
-  "idle-to-demo timeout (3600ms)",
+  "idle demo cadence while demoEnabled; first deliberate input disables it permanently",
   "demo swap interval (1300ms)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
@@ -50,12 +53,14 @@
   "visibilitychange stop/start guard",
   "prefers-reduced-motion early return",
   "pointer capture (setPointerCapture)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Order is not persisted — resets on reload; wire localStorage or a backend to save state",
-  "Spring loop runs on every rAF frame even when tiles are at rest — no idle settling optimization",
-  "Keyboard mode focuses the grid container, not individual tiles — screen-reader UX is minimal"
+  "Manual springs finish settling; requestAnimationFrame sleeps once stable.",
+  "Keyboard mode focuses the grid container, not individual tiles — screen-reader UX is minimal",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -89,6 +94,12 @@
 <script>
 (function(){
   "use strict";
+  function wake(){if(document.hidden)return;running=true;if(reduce)frame();else if(!raf)raf=requestAnimationFrame(frame);}
+  ['pointerdown','pointermove','pointerup','pointercancel','keydown','keyup'].forEach(type=>document.addEventListener(type,wake));
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;clearTimeout(demoTO);clearTimeout(idleTO);demoOn=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   var reduce=matchMedia("(prefers-reduced-motion:reduce)").matches;
   var grid=document.getElementById("dr05-grid");
   // De Stijl / Constructivist primaries warmed toward the cyan accent.
@@ -135,14 +146,14 @@
   // ---- spring loop ----
   var running=true,raf=0,K=0.14,D=0.74;
   function frame(){
-    if(!running)return;
+    raf=0;if(!running||document.hidden)return;
     for(var i=0;i<N;i++){
       var ax=(px[i]-pos[i].x)*K, ay=(py[i]-pos[i].y)*K;
       vx[i]=(vx[i]+ax)*D; vy[i]=(vy[i]+ay)*D;
-      pos[i].x+=vx[i]; pos[i].y+=vy[i];
+      if(reduce){pos[i].x=px[i];pos[i].y=py[i];vx[i]=vy[i]=0;}else{pos[i].x+=vx[i];pos[i].y+=vy[i];}
       tiles[i].style.transform="translate3d("+pos[i].x+"px,"+pos[i].y+"px,0)";
     }
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&pos.some((p,i)=>Math.abs(p.x-px[i])>.02||Math.abs(p.y-py[i])>.02||Math.abs(vx[i])>.02||Math.abs(vy[i])>.02))wake();
   }
 
   // ---- pointer drag ----
@@ -152,7 +163,7 @@
     e.preventDefault();userActive();
     var i=tiles.indexOf(t);
     drag={i:i,ox:e.clientX,oy:e.clientY,bx:pos[i].x,by:pos[i].y};
-    t.classList.add("lift");grid.setPointerCapture&&grid.setPointerCapture(e.pointerId);
+    t.classList.add("dr05-lift");grid.setPointerCapture&&grid.setPointerCapture(e.pointerId);
   }
   function ptMove(e){
     if(!drag)return;userActive();
@@ -169,14 +180,14 @@
   }
   function ptUp(){
     if(!drag)return;var i=drag.i;
-    tiles[i].classList.remove("lift");
+    tiles[i].classList.remove("dr05-lift");
     var p=slotXY(slotOf(i));px[i]=p.x;py[i]=p.y;drag=null;
   }
 
   // ---- keyboard reorder ----
   var foc=0,held=-1;
-  function showFoc(){for(var s=0;s<N;s++)tiles[order[s]].classList.toggle("foc",s===foc&&held<0);
-    if(held>=0)tiles[order[held]].classList.add("foc");}
+  function showFoc(){for(var s=0;s<N;s++)tiles[order[s]].classList.toggle("dr05-foc",s===foc&&held<0);
+    if(held>=0)tiles[order[held]].classList.add("dr05-foc");}
   function key(e){
     var k=e.key,d={ArrowLeft:-1,ArrowRight:1,ArrowUp:-COLS,ArrowDown:COLS}[k];
     if(d!==undefined){
@@ -186,23 +197,22 @@
       showFoc();
     }else if(k===" "||k==="Enter"){
       e.preventDefault();userActive();
-      if(held<0){held=foc;tiles[order[held]].classList.add("lift");}
-      else{tiles[order[held]].classList.remove("lift");held=-1;}
+      if(held<0){held=foc;tiles[order[held]].classList.add("dr05-lift");}
+      else{tiles[order[held]].classList.remove("dr05-lift");held=-1;}
       showFoc();
     }
   }
 
   // ---- self-demo: synthesize swaps on a gentle timer ----
-  var demoOn=true,idleTO=0,demoTO=0;
+  var demoOn=demoEnabled&&!reduce,idleTO=0,demoTO=0;
   function userActive(){
     demoOn=false;clearTimeout(idleTO);clearTimeout(demoTO);
-    idleTO=setTimeout(function(){demoOn=true;foc=0;held=-1;showFoc();demoStep();},3600);
   }
   function demoStep(){
-    if(!demoOn||reduce||document.hidden)return;
+    if(!demoEnabled||!demoOn||reduce||document.hidden)return;
     var a=(Math.random()*N)|0, b=(Math.random()*N)|0;
     if(a===b)b=(b+1)%N;
-    reorder(a,b);retarget();
+    reorder(a,b);retarget();wake();
     demoTO=setTimeout(demoStep,1300);
   }
 

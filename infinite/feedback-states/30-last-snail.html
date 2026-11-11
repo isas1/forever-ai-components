@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Last Snail — Feedback &amp; States. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Last Snail</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#3cc4a8;--mute:#6c6d72}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#0b7a66;--mute:#8a8b8f}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt17-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.dt17-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt17-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dt17-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/feedback-states/30-last-snail.html",
+ "title": "Last Snail",
+ "description": "A list as a snail in a still tide pool: tap the snail or press Enter to add an item that settles into its shell, tap the water or press Delete to remove one. Clean modern: off-black and verdigris with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and verdigris (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "At most 24 items. The light-theme Empty label is low contrast (about 3.3:1) and decorative.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "empty-state",
+  "list",
+  "snail",
+  "spiral",
+  "tide-pool"
+ ]
+}
+</script>
+</head><body>
+<div class="dt17-root" id="dt17-root" role="spinbutton" tabindex="0" aria-valuemin="0" aria-valuemax="24" aria-valuenow="0" aria-valuetext="Empty" aria-label="Forever list, shown as a snail in a still pool. Tap the snail to add an item; each item settles into its shell. Tap the water to remove the last one. Arrow up or Enter adds, arrow down or Delete removes, Escape empties the list."></div>
+<div class="dt17-cap" aria-hidden="true">Last Snail</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.getElementById('dt17-root'),cv=document.createElement('canvas');
+  cv.className='dt17-cv';root.appendChild(cv);var cx=cv.getContext('2d');
+  var S=300,dpr=1,MAX=24,CX=44,CY=44,R=18,A=R/(6*Math.PI);
+  var dots=[],parts=[],rings=[],t=0,env=1;
+  var head={x:1,v:0},emp={x:1,v:0};
+  var K=0.18,D=0.8;
+  function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+  function slot(k){var th=6*Math.PI-0.7,i;for(i=0;i<k;i++)th-=4.2/(A*th);
+    var r=A*th-A*Math.PI;return{x:CX+r*Math.cos(th),y:CY+r*Math.sin(th)*0.92}}
+  function spring(o,tg,dt){o.v+=(tg-o.x)*K*dt;o.v*=Math.pow(D,dt);o.x+=o.v*dt;
+    return Math.abs(o.v)>0.0008||Math.abs(tg-o.x)>0.0008}
+  function burst(x,y,n,c,sp,g){for(var i=0;i<n;i++){var a=Math.random()*6.283,s=sp*(0.5+Math.random());
+    parts.push({x:x,y:y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-(g?0.3:0),g:g,l:1,c:c})}}
+  function sync(){var n=dots.length;root.setAttribute('aria-valuenow',n);
+    root.setAttribute('aria-valuetext',n?n+(n>1?' items':' item'):'Empty')}
+  function add(){env=1;if(dots.length>=MAX){head.v-=0.08;kick();return}
+    var p=slot(dots.length);dots.push({x:p.x,y:p.y,s:{x:0,v:0}});
+    burst(p.x,p.y,12,'acc',1,false);head.v-=0.12;sync();kick()}
+  function rem(){env=1;if(!dots.length){head.v+=0.1;kick();return}
+    var d=dots.pop();burst(d.x,d.y,10,'ink',0.7,true);rings.push({r:2,a:1,x:d.x,y:66});
+    sync();kick()}
+  function clear(){if(!dots.length){rem();return}while(dots.length)rem()}
+  function step(dt){var m=false,i;t+=dt;
+    m=spring(head,dots.length?0.45:1,dt)||m;m=spring(emp,dots.length?0:1,dt)||m;
+    for(i=0;i<dots.length;i++)m=spring(dots[i].s,1,dt)||m;
+    for(i=parts.length-1;i>=0;i--){var p=parts[i];p.vx*=Math.pow(0.9,dt);p.vy*=Math.pow(0.9,dt);
+      if(p.g)p.vy+=0.06*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.l-=0.022*dt;if(p.l<=0)parts.splice(i,1)}
+    for(i=rings.length-1;i>=0;i--){var r=rings[i];r.r+=0.5*dt;r.a-=0.018*dt;if(r.a<=0)rings.splice(i,1)}
+    env*=Math.pow(0.994,dt);if(env<0.01)env=0;
+    return m||parts.length>0||rings.length>0||env>0}
+  function snapToTarget(){head.x=dots.length?0.45:1;head.v=0;emp.x=dots.length?0:1;emp.v=0;
+    for(var i=0;i<dots.length;i++){dots[i].s.x=1;dots[i].s.v=0}parts.length=0;rings.length=0;env=0}
+  function draw(){var ink=col('--ink'),acc=col('--acc'),mute=col('--mute'),bg=col('--bg'),i;
+    cx.setTransform(1,0,0,1,0,0);cx.fillStyle=bg;cx.fillRect(0,0,cv.width,cv.height);
+    var k=cv.width/100;cx.setTransform(k,0,0,k,0,0);
+    var lw=Math.max(0.42,1.5*100/S),hw=Math.max(0.28,100/S);
+    cx.lineCap='round';cx.lineJoin='round';
+    cx.strokeStyle=mute;cx.lineWidth=hw;cx.beginPath();cx.arc(50,50,46,0,6.283);cx.stroke();
+    cx.beginPath();cx.moveTo(10,66.4);cx.lineTo(90,66.4);cx.stroke();
+    for(i=0;i<rings.length;i++){var r=rings[i];cx.globalAlpha=Math.max(0,r.a);cx.beginPath();
+      cx.ellipse(r.x,r.y,r.r,r.r*0.22,0,0,6.283);cx.stroke()}
+    cx.globalAlpha=1;
+    var sw=reduce()?0:Math.sin(t*0.045)*env*2.2,br=reduce()?0:Math.sin(t*0.03)*env*0.5;
+    var e=head.x,hx=58+10*e;
+    cx.strokeStyle=ink;cx.lineWidth=lw;cx.fillStyle=bg;
+    cx.beginPath();cx.moveTo(22,64.6);cx.quadraticCurveTo(44,67.6,hx+4,64.6);
+    cx.quadraticCurveTo(hx+8.5,62,hx+5.5,56.5+br);cx.quadraticCurveTo(hx+1,51.5+br,hx-5,54.5+br);
+    cx.lineTo(54,58);cx.stroke();
+    var ty=40-6*(e-0.45)+br;
+    cx.beginPath();cx.moveTo(hx-1.5,53.5+br);cx.lineTo(hx+1+sw,ty+2);
+    cx.moveTo(hx+2.5,54+br);cx.lineTo(hx+7+sw*0.7,ty+4.5);cx.stroke();
+    cx.fillStyle=ink;cx.beginPath();cx.arc(hx+1+sw,ty+2,1.1,0,6.283);
+    cx.arc(hx+7+sw*0.7,ty+4.5,1.1,0,6.283);cx.fill();
+    cx.fillStyle=bg;cx.beginPath();cx.ellipse(CX,CY,R+0.6,(R+0.6)*0.92,0,0,6.283);cx.fill();
+    cx.beginPath();for(var th=0.3;th<=6*Math.PI;th+=0.08){var rr=A*th,x=CX+rr*Math.cos(th),y=CY+rr*Math.sin(th)*0.92;
+      if(th===0.3)cx.moveTo(x,y);else cx.lineTo(x,y)}
+    cx.stroke();
+    cx.lineWidth=hw;cx.beginPath();for(i=0;i<5;i++){var a=2.3+i*0.22;
+      cx.moveTo(CX+R*0.82*Math.cos(a),CY+R*0.82*0.92*Math.sin(a));cx.lineTo(CX+R*Math.cos(a),CY+R*0.92*Math.sin(a))}
+    cx.stroke();
+    cx.fillStyle=acc;for(i=0;i<dots.length;i++){var d=dots[i],s=Math.max(0,d.s.x);
+      cx.beginPath();cx.arc(d.x,d.y,1.5*s,0,6.283);cx.fill()}
+    for(i=0;i<parts.length;i++){var p=parts[i];cx.globalAlpha=Math.max(0,p.l);
+      cx.fillStyle=p.c==='acc'?acc:ink;cx.beginPath();cx.arc(p.x,p.y,0.6,0,6.283);cx.fill()}
+    cx.globalAlpha=Math.max(0,Math.min(1,emp.x));
+    if(cx.globalAlpha>0.01){cx.fillStyle=mute;cx.font='500 4.6px system-ui,-apple-system,sans-serif';
+      cx.textAlign='center';cx.textBaseline='middle';cx.fillText('Empty',50,79+(1-emp.x)*3)}
+    cx.globalAlpha=1}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  new ResizeObserver(function(){var b=root.getBoundingClientRect();S=Math.max(1,b.width);
+    dpr=Math.min(2,window.devicePixelRatio||1);cv.width=Math.round(S*dpr);cv.height=Math.round(S*dpr);draw()}).observe(root);
+  root.addEventListener('pointerdown',function(e){var b=root.getBoundingClientRect();
+    var x=(e.clientX-b.left)/b.width*100,y=(e.clientY-b.top)/b.height*100;
+    var onShell=Math.hypot(x-CX,y-CY)<R+5,onBody=x>18&&x<80&&y>34&&y<68;
+    if(onShell||onBody)add();else rem();root.focus({preventScroll:true});e.preventDefault()});
+  root.addEventListener('keydown',function(e){var k=e.key;
+    if(k==='ArrowUp'||k==='ArrowRight'||k==='Enter'||k===' '){add();e.preventDefault()}
+    else if(k==='ArrowDown'||k==='ArrowLeft'||k==='Delete'||k==='Backspace'){rem();e.preventDefault()}
+    else if(k==='Escape'){clear();e.preventDefault()}});
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,di=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  var demoT=setInterval(function(){if(!demo||document.hidden||reduce())return;var o='aaarrrnn'[di++%8];if(o==='a')add();else if(o==='r')rem()},900);
+  window.addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,true);document.addEventListener('keydown',stopDemo,true);
+  draw();kick();
+})();</script>
+</body></html>

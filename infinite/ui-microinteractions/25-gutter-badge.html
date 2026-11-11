@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Gutter Badge — UI Micro-interactions. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gutter</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#3cc4a8;--line:#2c2e33}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#0b7a66;--line:#d5d5d1}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg);color:var(--ink)}
+.dt11-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;cursor:grab;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.dt11-root:active{cursor:grabbing}
+.dt11-root:focus{outline:none}
+.dt11-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt11-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dt11-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/ui-microinteractions/25-gutter-badge.html",
+ "title": "Gutter Badge",
+ "description": "A gutter of drops above a badge: drag a drop down to add one, drag up to split one off. Clean modern: off-black and verdigris with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and verdigris (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "The idle motion is a small nudge every 3.6 s. The metaball buffer is capped at 420 px.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "badge",
+  "gutter",
+  "droplet",
+  "counter",
+  "drag"
+ ]
+}
+</script>
+</head><body>
+<div class="dt11-root" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="9" aria-label="Forever tally, a gutter of drops above a badge. Drag a drop down the gutter into the badge to add one. Drag up out of the badge to split one off. Arrow down or Enter adds, arrow up or Backspace splits, Escape lets go."></div>
+<div class="dt11-cap" aria-hidden="true">Gutter</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.dt11-root'),cv=document.createElement('canvas');
+  cv.className='dt11-cv';root.appendChild(cv);
+  var ctx=cv.getContext('2d'),oc=document.createElement('canvas'),octx=oc.getContext('2d');
+  var S=0,dpr=1,q=1,gw=0,gh=0,img=null;
+  var N=9,RD=.032,BY=.8,B0=.065,X0=.3,CW=.4,drops=[],st=[],B={r:0,vr:0},held=null;
+  function slot(i){return .1+i*.056}
+  for(var i=0;i<N;i++){var d={x:.5,y:BY,vx:0,vy:0,s:'in'};drops.push(d);
+    if(i>=3){d.s='stack';d.y=slot(st.length);st.push(d)}}
+  function count(){var n=0;for(var i=0;i<N;i++)if(drops[i].s==='in')n++;return n}
+  function bT(){return Math.sqrt(B0*B0+count()*RD*RD)}
+  B.r=bT();
+  function upd(){var n=count();root.setAttribute('aria-valuenow',n);
+    root.setAttribute('aria-valuetext',n+(n===1?' drop':' drops')+' in the badge, '+(N-n)+' waiting')}
+  upd();
+  function ping(){}
+  function merge(d){d.s='in';d.y=BY;d.vy=0;B.vr+=.006;ping(1);upd()}
+
+  function step(dt){
+    var mv=!!held,k=.16,dm=Math.pow(.8,dt);
+    for(var i=0;i<st.length;i++){var d=st[i],t=slot(i);
+      d.vy=(d.vy+(t-d.y)*k*dt)*dm;d.y+=d.vy*dt;
+      d.vx=(d.vx+(.5-d.x)*k*dt)*dm;d.x+=d.vx*dt;
+      if(Math.abs(d.vy)+Math.abs(t-d.y)+Math.abs(d.vx)+Math.abs(.5-d.x)>2e-4)mv=true;
+      else{d.y=t;d.vy=0;d.x=.5;d.vx=0}}
+    for(i=0;i<N;i++){d=drops[i];if(d.s!=='free')continue;
+      d.vy=(d.vy+.0011*dt)*Math.pow(.975,dt);d.y+=d.vy*dt;d.x+=(.5-d.x)*(1-Math.pow(.8,dt));mv=true;
+      if(d.y>=BY-B.r*.4)merge(d)}
+    var T=bT();B.vr=(B.vr+(T-B.r)*.18*dt)*Math.pow(.78,dt);B.r+=B.vr*dt;
+    if(Math.abs(B.vr)+Math.abs(T-B.r)>1e-4)mv=true;else{B.r=T;B.vr=0}
+    return mv}
+  function snapToTarget(){
+    for(var i=0;i<N;i++)if(drops[i].s==='free')merge(drops[i]);
+    for(i=0;i<st.length;i++){st[i].y=slot(i);st[i].x=.5;st[i].vy=st[i].vx=0}
+    B.r=bT();B.vr=0}
+
+  function hex(h){h=h.trim().replace('#','');return[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]}
+  function draw(){
+    if(!S||!img)return;
+    var cs=getComputedStyle(document.documentElement),acc=hex(cs.getPropertyValue('--acc')),
+      bg=cs.getPropertyValue('--bg').trim(),ln=cs.getPropertyValue('--line').trim();
+    var src=[],sc=S*q,i,d;
+    for(i=0;i<N;i++){d=drops[i];if(d.s!=='in')src.push([(d.x-X0)*sc,d.y*sc,RD*sc])}
+    src.push([(.5-X0)*sc,BY*sc,B.r*sc]);
+    var px=img.data,rc=RD*sc,n=src.length,x,y,j,f,a,p,dy2=new Float32Array(n),act=[];
+    for(y=0;y<gh;y++){act.length=0;
+      for(j=0;j<n;j++){var dy=y+.5-src[j][1];if(Math.abs(dy)<src[j][2]*5){dy2[j]=dy*dy;act.push(j)}}
+      p=y*gw*4;
+      for(x=0;x<gw;x++,p+=4){f=0;
+        for(var m=0;m<act.length;m++){j=act[m];var s=src[j],dx=x+.5-s[0],r=s[2];f+=r*r/(dx*dx+dy2[j]+.01)}
+        a=.5+(Math.sqrt(f)-1)*rc;a=a<0?0:a>1?1:a;
+        px[p]=acc[0];px[p+1]=acc[1];px[p+2]=acc[2];px[p+3]=a*255}}
+    octx.putImageData(img,0,0);
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,S,S);
+    ctx.strokeStyle=ln;ctx.lineWidth=1;ctx.beginPath();
+    var wl=Math.round((.5-.05)*S)+.5,wr=Math.round((.5+.05)*S)+.5,top=Math.round(.05*S),bot=Math.round(.66*S);
+    ctx.moveTo(wl,top);ctx.lineTo(wl,bot);ctx.moveTo(wr,top);ctx.lineTo(wr,bot);ctx.stroke();
+    ctx.imageSmoothingEnabled=true;ctx.drawImage(oc,X0*S,0,CW*S,S);
+    var fs=Math.max(11,B.r*S*1.05);
+    ctx.fillStyle=bg;ctx.font='600 '+fs.toFixed(1)+'px -apple-system,system-ui,"Segoe UI",sans-serif';
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(String(count()),.5*S,BY*S+fs*.04)}
+
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+
+  new ResizeObserver(function(){var r=root.getBoundingClientRect();S=r.width;if(!S)return;
+    dpr=Math.min(window.devicePixelRatio||1,2);cv.width=Math.round(S*dpr);cv.height=Math.round(S*dpr);
+    q=Math.min(dpr,420/S);gw=Math.max(8,Math.round(CW*S*q));gh=Math.max(8,Math.round(S*q));
+    oc.width=gw;oc.height=gh;img=octx.createImageData(gw,gh);draw()}).observe(root);
+
+  var off=0,py=0,pt=0,vel=0;
+  function pos(e){var r=root.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]}
+  function place(p){var d=held;d.x=Math.max(.44,Math.min(.56,.5+(p[0]-.5)*.15));
+    d.y=d.s==='held'?Math.max(.05,Math.min(BY-.02,p[1]+off)):Math.max(.05,Math.min(BY,p[1]))}
+  function release(throwIt){var d=held;if(!d)return;held=null;
+    if(d.s==='held'){var sy=slot(st.length);
+      if(throwIt&&(d.y-sy>.1||vel>.01)){d.s='free';d.vy=Math.max(vel,0)}
+      else{d.s='stack';d.vy=throwIt?vel:0;st.push(d)}}
+    else{if(throwIt&&(BY-d.y>.09||vel<-.01)){d.s='stack';d.vy=vel;st.push(d);ping(0)}
+      else{d.s='free';d.vy=Math.max(vel,0)}}
+    upd();kick()}
+  root.addEventListener('pointerdown',function(e){if(held)return;var p=pos(e),dx=p[0]-.5,dy=p[1]-BY;
+    if(Math.sqrt(dx*dx+dy*dy)<B.r+.05&&count()>0){
+      for(var i=0;i<N;i++)if(drops[i].s==='in'){held=drops[i];break}
+      held.s='pull';held.vy=0;place(p);upd()}
+    else if(st.length){held=st.pop();held.s='held';held.vy=0;off=held.y-p[1]}
+    else return;
+    root.setPointerCapture(e.pointerId);py=p[1];pt=e.timeStamp;vel=0;kick()});
+  root.addEventListener('pointermove',function(e){if(!held)return;var p=pos(e),
+    dtf=Math.max(1,e.timeStamp-pt)/16.667;vel=vel*.4+((p[1]-py)/dtf)*.6;py=p[1];pt=e.timeStamp;place(p);kick()});
+  function up(){if(held)release(true)}
+  root.addEventListener('pointerup',up);root.addEventListener('pointercancel',up);
+
+  function add(){if(!st.length)return;var d=st.pop();d.s='free';d.vy=.006;kick()}
+  function split(){for(var i=0;i<N;i++)if(drops[i].s==='in'){var d=drops[i];
+    d.s='stack';d.x=.5;d.y=BY-B.r;d.vy=-.035;st.push(d);ping(0);upd();kick();return}}
+  root.addEventListener('keydown',function(e){var k=e.key;
+    if(k==='ArrowDown'||k==='ArrowRight'||k==='Enter'||k===' '){e.preventDefault();add()}
+    else if(k==='ArrowUp'||k==='ArrowLeft'||k==='Backspace'){e.preventDefault();split()}
+    else if(k==='Escape'){e.preventDefault();vel=0;release(false)}});
+
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,demoT=0,demoT2=0;
+  function stopDemo(){demo=false;clearTimeout(demoT);clearInterval(demoT2)}
+  demoT2=setInterval(function(){if(!demo||reduce()||held||!st.length||document.hidden)return;
+    st[st.length-1].vy+=.006;kick()},3600);
+  demoT=setTimeout(function(){if(demo&&!reduce()&&st.length){st[st.length-1].vy+=.007;kick()}},700);
+  window.addEventListener('forever:interactive',stopDemo);
+  root.addEventListener('pointerdown',stopDemo,true);root.addEventListener('keydown',stopDemo,true);
+  document.addEventListener('pointerdown',stopDemo,true);
+  draw();
+})();</script>
+</body></html>

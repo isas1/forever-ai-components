@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Gold and teal charged particles attract and repel via Coulomb forces, forming teal bonds that crystallize and melt as temperature pulses.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Charged Plasma Lattice</title>
@@ -52,12 +53,14 @@
   "prefers-reduced-motion static fallback",
   "visibilitychange pause/start",
   "DPR-aware canvas sizing",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "O(N²) force calculation — CPU-bound on low-end devices at N=64",
   "Reduced-motion shows only a static snapshot, no fallback animation",
-  "Background color hardcoded in CSS (#0b0014)"
+  "Background color hardcoded in CSS (#0b0014)",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -81,17 +84,22 @@
 </script>
 </head>
 <body>
-<canvas id="cpl-c"></canvas>
+<canvas id="cpl-c" class="cpl-root"></canvas>
 <div class="cpl-cap">Charged Plasma Lattice</div>
 <script>
 (function(){
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   const cv=document.getElementById('cpl-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,scale,P=[],N=0;
   // charge colours come from the tokens; a theme flip re-reads them once (not per frame)
   const root=document.documentElement, C={};
   function syncTheme(){
-    const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+    const FB={'--cpl-bg':'#17181A','--cpl-fade':'rgba(23,24,26,0.30)','--cpl-pos':'#C0B459','--cpl-neg':'#1DACC9','--cpl-bond':'29,172,201','--cpl-bond-a':'0.55','--cpl-core':'#ffffff','--cpl-core-a':'.9','--cpl-blend':'lighter','--cpl-halo':'rgba(0,0,0,0)'}, cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim()||FB[n];
     C.pos=g('--cpl-pos');C.neg=g('--cpl-neg');C.bg=g('--cpl-bg');C.fade=g('--cpl-fade');
     C.bond=g('--cpl-bond');C.bondA=+g('--cpl-bond-a');C.core=g('--cpl-core');C.coreA=+g('--cpl-core-a');
     C.blend=g('--cpl-blend');C.halo=g('--cpl-halo');
@@ -161,19 +169,20 @@
     }
     ctx.globalCompositeOperation='source-over';
   }
-  function frame(){
-    t+=0.012;
+  function frame(){raf=0;if(document.hidden)return;
+    if(demoEnabled&&!reduce)t+=0.012;
     // temperature slowly pulses: crystallize <-> melt
-    const temp=0.5-0.5*Math.cos(t*0.55); // 0..1
+    const temp=demoEnabled?0.5-0.5*Math.cos(t*0.55):0; // 0..1
     step(temp);draw(temp);
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(demoEnabled||(sessionActive)))start();
   }
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!document.hidden&&!reduce&&(demoEnabled||(sessionActive)))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     for(let k=0;k<260;k++)step(0.04);draw(0.04);}else start();
+  ['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;if(reduce){for(let k=0;k<4;k++)step(0);draw(0);}else start();}));
 })();
 </script>
 </body>

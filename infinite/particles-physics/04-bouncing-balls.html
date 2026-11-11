@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A handful of glossy pastel balls bounce off walls and collide elastically with each other, repelled gently by the cursor.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Bouncing Balls</title>
@@ -22,7 +23,7 @@
     --c04-pal:#159e88,#f83a3a,#b08703,#288bfb,#6138fa,#15a248;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c04-bg)}
-  #c{display:block;width:100%;height:100%}
+  #c04-canvas{display:block;width:100%;height:100%}
   .cap{position:fixed;right:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--c04-cap);opacity:var(--c04-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style>
@@ -46,12 +47,14 @@
   "DPR-aware canvas sizing and setTransform",
   "visibilitychange pause/play guard",
   "elastic collision momentum transfer math (p=2*(dvx*nx+dvy*ny)/(a.m+c.m))",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "O(n²) collision detection — scales poorly beyond ~20 balls",
   "No reduced-motion fallback beyond skipping the animation loop (draws one static frame)",
-  "Background color hardcoded in CSS (#0a1418)"
+  "Background color hardcoded in CSS (#0a1418)",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -75,11 +78,16 @@
 </script>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c04-canvas" class="c04-root"></canvas>
 <div class="cap">Bouncing Balls</div>
 <script>
 (function(){
-const cv=document.getElementById('c'),x=cv.getContext('2d');
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+const cv=document.getElementById('c04-canvas'),x=cv.getContext('2d');
 let W,H,DPR,balls=[],reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 const root=document.documentElement;
 let pal=['#5eead4'],hi='#fff';
@@ -125,10 +133,11 @@ function step(){
     x.fillStyle=g;x.beginPath();x.arc(b.x,b.y,b.r,0,7);x.fill();
   }
 }
-let raf;function loop(){step();raf=requestAnimationFrame(loop);}
-function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+let raf=0;function loop(){raf=0;if(document.hidden)return;step();if(!reduce&&(demoEnabled||(sessionActive)))play();}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}raf=requestAnimationFrame(loop);}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
 document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;play();}));
 play();
 })();
 </script>

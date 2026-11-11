@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A glass jar of sand strata fills with conversation until a lid presses everything into one dense summary band.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Context Jar</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --co01-bg:#171614; --co01-surface:#211f1c; --co01-line:#3a3631; --co01-ink:#e8e3d8; --co01-muted:#a39c90;
+    --co01-clay:#c87456; --co01-ochre:#b88b58; --co01-sage:#6f8f79; --co01-brick:#a85858; --co01-stone:#7a746b;
+    --co01-dense:#8f4a33; --co01-shelf:#2a2622; --co01-brass:#c9a15e; --co01-brass2:#7d5f2f;
+    --co01-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --co01-bg:#f3efe6; --co01-surface:#fbf8f1; --co01-line:#d9d2c4; --co01-ink:#1d1b18; --co01-muted:#5f594f;
+    --co01-clay:#a4532f; --co01-ochre:#8a6232; --co01-sage:#46664f; --co01-brick:#8e3b3b; --co01-stone:#8f887c;
+    --co01-dense:#7d3a24; --co01-shelf:#e6dfd0; --co01-brass:#b08a4a; --co01-brass2:#7a5c2c;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--co01-bg)}
+  .co01-root{position:fixed;inset:0;background:var(--co01-bg);cursor:pointer;outline:none;user-select:none;-webkit-user-select:none;
+    font:clamp(8px,6.4vmin,36px)/1 var(--co01-mono);color:var(--co01-ink);-webkit-tap-highlight-color:transparent}
+  .co01-root:focus-visible{outline:2px solid var(--co01-clay);outline-offset:-4px}
+  .co01-cv{display:block;width:100%;height:100%}
+  .co01-pct{position:absolute;left:0;right:0;top:calc(50% + var(--co01-label-offset,38vmin));text-align:center;font-weight:600;letter-spacing:.04em;font-variant-numeric:tabular-nums}
+  .co01-pct i{font-style:normal;font-size:.6em;color:var(--co01-muted);margin-left:.1em}
+  .co01-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .co01-cap{position:fixed;left:8px;bottom:7px;font:10px var(--co01-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--co01-ink);opacity:.28}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code-objects/01-context-jar.html",
+ "title": "Context Jar",
+ "description": "Glass jar of sand strata (system, memory, files, conversation). Grains pour until a lid presses the jar into one dense summary band, like /compact.",
+ "useWhen": "Explaining context windows, compaction or auto-compact.",
+ "avoidWhen": "A literal token meter or exact usage figures are needed.",
+ "agentPrompt": "Palette: warm graphite, clay, ochre and sage. Glass jar with four sand strata that compress into one summary band when a lid presses down; one percentage as text.",
+ "editableAreas": [
+  "colour tokens on :root (strata use stone, ochre, sage, clay, dense)",
+  "ST strata table, pour rates and the 0.8 compact threshold in the script"
+ ],
+ "preserveElements": [
+  "demo-v1: __foreverPreview.demoEnabled, forever:interactive, first-input takeover",
+  "theme: ?theme=, forever:theme messages, light tokens",
+  "IIFE, visibilitychange, reduced motion, keyboard, aria-live"
+ ],
+ "knownLimitations": [
+  "Canvas drawn; strata percentages are illustrative, not real token counts.",
+  "After a deliberate input the pour slows but keeps going and still auto-compacts."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "jar",
+  "sand",
+  "glass",
+  "context",
+  "compact",
+  "canvas"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="co01-root" id="co01-root" role="button" tabindex="0" aria-label="Context jar. Press to compact the conversation.">
+  <canvas class="co01-cv" id="co01-cv" aria-hidden="true"></canvas>
+  <div class="co01-pct" aria-hidden="true"><span id="co01-pct">54</span><i>%</i></div>
+  <div class="co01-sr" id="co01-sr" aria-live="polite" data-fit-clip-ok></div>
+</div>
+<div class="co01-cap" aria-hidden="true">Context Jar</div>
+<script>
+(function(){
+  'use strict';
+  var $=function(i){return document.getElementById(i)};
+  var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var root=$('co01-root'),cv=$('co01-cv'),g=cv.getContext('2d'),pctEl=$('co01-pct'),sr=$('co01-sr');
+  var C={},K='ink muted clay ochre sage stone dense shelf brass brass2 line'.split(' ');
+  var W=1,H=1,unit=1,park=84,raf=0,last=0,iv=0,t0=0,pat=null;
+
+  var ST=[{k:'stone',h:.10,t:.10,p:0},{k:'ochre',h:.07,t:.07,p:1.7},{k:'dense',h:0,t:0,p:3.1},{k:'sage',h:.16,t:.16,p:4.4},{k:'clay',h:.22,t:.22,p:5.2}];
+  var grains=[],acc=0,phase=0,pt=0,pressed=false,lx=84,ly=16,pour=0,tau=170,seed=7;
+  var JT=79.5,JH=53,JX0=32,JX1=68;
+  function tok(){var s=getComputedStyle(document.documentElement);K.forEach(function(k){C[k]=s.getPropertyValue('--co01-'+k).trim()||'#888'});}
+  function setTheme(t){if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);tok();kick();}}
+  window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+  function rnd(){seed=(seed*16807)%2147483647;return seed/2147483647;}
+  function mkPat(){var c=document.createElement('canvas');c.width=c.height=64;var x=c.getContext('2d'),i;
+    for(i=0;i<260;i++){x.fillStyle=i%2?'rgba(0,0,0,.12)':'rgba(255,255,255,.10)';x.fillRect(rnd()*64,rnd()*64,.45,.45);}
+    pat=g.createPattern(c,'repeat');}
+  function size(){var r=root.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);W=r.width;H=r.height;
+    var portrait=H>W*1.35;unit=Math.min(W/(portrait?64:100),H/100);park=portrait?66:84;
+    if(!phase){lx=park;ly=16;}root.style.setProperty('--co01-label-offset',(38*unit)+'px');
+    cv.width=Math.max(1,W*d);cv.height=Math.max(1,H*d);kick();}
+  function tot(){var s=0;ST.forEach(function(a){s+=a.h});return s;}
+  function ttot(){var s=0;ST.forEach(function(a){s+=a.t});return s;}
+  function topY(){return JT-JH*tot();}
+  function announce(){sr.textContent='Context at '+Math.round(ttot()*100)+' percent';}
+  function startPress(){if(reduced()){instant();return;}if(phase)return;phase=1;pt=0;pressed=false;}
+  function instant(){
+    ST[3].t=ST[4].t=0;ST[2].t=.07;grains.length=0;phase=0;pour=0;lx=park;ly=16;
+    ST.forEach(function(a){a.h=a.t});announce();kick();}
+  function spawn(v){var a=ST[3].t<.2?3:4;grains.push({x:50+(rnd()-.5)*3.4,y:9,vy:6,a:a,v:v});}
+  function step(dt){
+    var s=dt/1000,more=false,k=1-Math.exp(-dt/tau),i;
+    ST.forEach(function(a){var d=a.t-a.h;if(Math.abs(d)>.0004){a.h+=d*k;more=true;}else a.h=a.t});
+    if(reduced()){grains.length=0;return more;}
+    if(phase===0){
+      acc+=s*22;while(acc>=1){acc--;spawn((demoEnabled?.08:.02)/22);}
+      pour+=(1-pour)*Math.min(1,s*6);
+      if(ttot()>=.8)startPress();
+    }else{
+      pour+=(0-pour)*Math.min(1,s*6);pt+=s;
+      var tx=50,ty=16;
+      if(pt>=.9&&pt<2.5){ty=Math.min(79,topY());if(!pressed){pressed=true;tau=480;ST[3].t=0;ST[4].t=0;ST[2].t=.07;announce();}}
+      else if(pt>=3.2){tx=park;}
+      if(pt>=3.2&&pt<3.9)tx=park;
+      if(pt>=3.9){phase=0;tau=170;}
+      lx+=(tx-lx)*(1-Math.exp(-dt/130));ly+=(ty-ly)*(1-Math.exp(-dt/110));
+    }
+    if(phase===0){lx+=(park-lx)*(1-Math.exp(-dt/140));ly+=(16-ly)*(1-Math.exp(-dt/140));}
+    for(i=grains.length-1;i>=0;i--){var p=grains[i];p.vy+=150*s;p.y+=p.vy*s;
+      if(p.y>=topY()){ST[p.a].t+=p.v;grains.splice(i,1);}}
+    return true;
+  }
+  function wave(x,p,amp){return Math.sin(x*.34+p)*amp+Math.sin(x*.9+p*2)*amp*.4;}
+  function strataPath(y,p,amp,bump){
+    g.beginPath();g.moveTo(JX0-2,y+wave(JX0,p,amp));
+    for(var x=JX0;x<=JX1+2;x+=2)g.lineTo(x,y+wave(x,p,amp)-bump*Math.exp(-Math.pow((x-50)/8,2)));
+    g.lineTo(JX1+2,84);g.lineTo(JX0-2,84);g.closePath();}
+  function jarPath(x0,x1,y0,y1,r){g.beginPath();g.moveTo(x0,y0);g.lineTo(x0,y1-r);g.quadraticCurveTo(x0,y1,x0+r,y1);g.lineTo(x1-r,y1);g.quadraticCurveTo(x1,y1,x1,y1-r);g.lineTo(x1,y0);}
+  function draw(){
+    var d=cv.width/W,u=unit,i,ys=[],y=JT;
+    g.setTransform(d,0,0,d,0,0);g.clearRect(0,0,W,H);
+    g.setTransform(d*u,0,0,d*u,d*(W-100*u)/2,d*(H-100*u)/2);
+
+    g.fillStyle=C.shelf;g.fillRect(-40,81.5,180,40);g.fillStyle=C.line;g.fillRect(-40,81.5,180,.5);
+    g.save();g.translate(51,82);g.scale(1,.13);var sh=g.createRadialGradient(0,0,5,0,0,24);sh.addColorStop(0,'rgba(0,0,0,.3)');sh.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=sh;g.fillRect(-24,-24,48,48);g.restore();
+
+    jarPath(31,69,20,81,8);g.closePath();g.fillStyle='rgba(180,200,190,.06)';g.fill();
+
+    g.save();jarPath(JX0,JX1,20,81,7);g.closePath();g.clip();
+    for(i=0;i<ST.length;i++){y-=JH*ST[i].h;ys[i]=y;}
+    for(i=ST.length-1;i>=0;i--){var a=ST[i];if(a.h<.002)continue;
+      strataPath(ys[i],a.p,.55,i===ST.length-1||(i===3&&ST[4].h<.002)?1.8*pour:0);
+      g.fillStyle=C[a.k];g.fill();g.fillStyle=pat;g.fill();
+      g.strokeStyle='rgba(255,255,255,.16)';g.lineWidth=.35;g.beginPath();g.moveTo(JX0,ys[i]+wave(JX0,a.p,.55));
+      for(var x=JX0;x<=JX1;x+=2)g.lineTo(x,ys[i]+wave(x,a.p,.55));g.stroke();}
+    var glass=g.createLinearGradient(32,0,68,0);glass.addColorStop(0,'rgba(0,0,0,.16)');glass.addColorStop(.12,'rgba(255,255,255,.12)');glass.addColorStop(.38,'rgba(255,255,255,0)');glass.addColorStop(.8,'rgba(0,0,0,0)');glass.addColorStop(1,'rgba(0,0,0,.13)');g.fillStyle=glass;g.fillRect(32,20,36,61);g.restore();
+
+    grains.forEach(function(p){g.fillStyle=C[ST[p.a].k];g.beginPath();g.arc(p.x,p.y,.55,0,7);g.fill();});
+
+    g.fillStyle=C.stone;g.beginPath();g.moveTo(43,2);g.lineTo(57,2);g.lineTo(51.4,9);g.lineTo(48.6,9);g.closePath();g.fill();
+    g.fillStyle='rgba(255,255,255,.18)';g.fillRect(44,2,12,.9);
+
+    g.save();g.translate(lx,ly);g.rotate(.32*Math.max(0,Math.min(1,(lx-50)/(park-50))));
+    var lg=g.createLinearGradient(-14,0,14,0);lg.addColorStop(0,C.brass2);lg.addColorStop(.35,C.brass);lg.addColorStop(1,C.brass2);
+    g.fillStyle='rgba(0,0,0,.25)';g.fillRect(-13.5,-3.2,28,4);
+    g.fillStyle=lg;g.beginPath();g.rect(-14,-3.6,28,3.6);g.fill();
+    g.fillStyle=C.brass2;g.fillRect(-1.6,-9,3.2,5.6);g.fillStyle=lg;g.beginPath();g.arc(0,-10,3,0,7);g.fill();
+    g.fillStyle='rgba(255,255,255,.35)';g.fillRect(-13,-3.4,26,.6);g.restore();
+
+    jarPath(31,69,20,81,8);g.strokeStyle=C.ink;g.globalAlpha=.42;g.lineWidth=.9;g.stroke();
+    g.globalAlpha=.55;g.lineWidth=1.8;g.beginPath();g.moveTo(30,20.2);g.lineTo(70,20.2);g.stroke();
+    g.globalAlpha=.2;g.lineWidth=.6;g.beginPath();g.moveTo(32.2,22.4);g.lineTo(67.8,22.4);g.stroke();
+    var hg=g.createLinearGradient(0,26,0,78);hg.addColorStop(0,'rgba(255,255,255,.34)');hg.addColorStop(1,'rgba(255,255,255,.04)');
+    g.globalAlpha=1;g.fillStyle=hg;g.beginPath();g.rect(34,26,.9,50);g.fill();g.fillRect(36.6,26,.5,50);
+    g.globalAlpha=.16;g.fillStyle=C.ink;g.fillRect(65,30,.9,44);g.globalAlpha=1;
+    pctEl.textContent=Math.round(tot()*100);
+  }
+  function frame(now){raf=0;if(document.hidden){last=0;return;}
+    var dt=last?Math.min(now-last,50):16;last=now;var more=step(dt);draw();
+    if(more&&!reduced())raf=requestAnimationFrame(frame);else last=0;}
+  function kick(){if(!raf&&!document.hidden)raf=requestAnimationFrame(frame);}
+  function takeover(){demoEnabled=false;}
+  window.addEventListener('forever:interactive',takeover);
+  root.addEventListener('pointerdown',takeover,true);
+  root.addEventListener('click',function(){takeover();startPress();kick();});
+  root.addEventListener('keydown',function(e){takeover();if(e.key===' '||e.key==='Enter'){e.preventDefault();startPress();kick();}});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0;}last=0;}else kick();});
+  window.addEventListener('resize',size);
+  tok();mkPat();size();announce();
+  if(reduced()){ST[3].h=ST[3].t=.16;}
+  kick();
+})();
+</script>
+</body>
+</html>

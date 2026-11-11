@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="utf-8">
 <meta name="description" content="Clashing mixed-font letters on cut-paper swatches fly in from random edges and spring-tumble into the word RANSOM, then reassemble.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -22,10 +23,11 @@
     --ra-ink:#141414; --cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--ra-bg);}
-  #ra-c{display:block;width:100%;height:100%;}
-  .ra-cap{position:fixed;right:10px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
+  #kt14-c{display:block;width:100%;height:100%;}
+  .kt14-cap{position:fixed;right:10px;bottom:8px;font:600 10px/1.2 system-ui,sans-serif;
        letter-spacing:.14em;color:var(--ra-accent);opacity:var(--cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+#kt14-c:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -49,12 +51,15 @@
   "visibilitychange stop/start guard",
   "prefers-reduced-motion static fallback",
   "glyphW cache (measureText called once in layout, not per frame)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space activation and visible focus; manual word/geometry changes finish before the renderer sleeps"
  ],
  "knownLimitations": [
   "WORD is hardcoded to 6 chars — fams/wts/caseFlip/wsc arrays must be extended to match if word length changes",
   "Background color hardcoded in both BG constant and CSS — two places to update",
-  "Pointer nudge only works on unsettled glyphs"
+  "Pointer nudge only works on unsettled glyphs",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -79,11 +84,11 @@
 </script>
 </head>
 <body>
-<canvas id="ra-c"></canvas>
-<div class="ra-cap">Ransom Assembly</div>
+<canvas id="kt14-c" tabindex="0" role="button" aria-label="Activate kinetic text."></canvas>
+<div class="kt14-cap">Ransom Assembly</div>
 <script>
 (function(){
-  const cv=document.getElementById('ra-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('kt14-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const WORD="RANSOM";
   // JS-drawn colours — read from tokens so the canvas repaints correctly on theme switch
@@ -164,7 +169,7 @@
     const ar=(g.tilt-g.rot)*0.14;
     g.vrot=(g.vrot+ar)*0.80; g.rot+=g.vrot;
     const dist=Math.abs(g.tx-g.x)+Math.abs(g.ty-g.y);
-    g.settled = dist<0.6 && Math.abs(g.vx)+Math.abs(g.vy)<0.3;
+    g.settled = dist<0.6 && Math.abs(g.vx)+Math.abs(g.vy)<0.3 && Math.abs(g.tilt-g.rot)<0.01 && Math.abs(g.vrot)<0.01;
   }
   function paper(i,g,statc){
     const s=g.sz, ch=WORD[i];
@@ -196,6 +201,7 @@
     ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
     ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
   }
+  let demo=window.__foreverPreview?.demoEnabled!==false;
   function frame(){
     ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     // faint baseline guide
@@ -206,21 +212,23 @@
     for(let i=0;i<G;i++){const g=glyphs[i];step(g);if(!g.settled)allSet=false;}
     // draw settled-ish last for crisp overlap; simple z by index
     for(let i=0;i<G;i++) paper(i,glyphs[i],false);
-    if(allSet){ settleHold++; if(settleHold>120){settleHold=0; resetAll();} }
+    if(allSet){settleHold++;if(demo&&settleHold>120){settleHold=0;resetAll();}}
     else settleHold=0;
-    raf=requestAnimationFrame(frame);
+    if(demo||!allSet)raf=requestAnimationFrame(frame);else raf=0;
   }
   function sizes_max(){return sizesMax;}
   let raf=0;
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();});
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   addEventListener('resize',()=>{layout();});
-  cv.addEventListener('click',()=>{if(!reduce)resetAll();});
+  cv.addEventListener('click',()=>{takeover();resetAll();if(reduce)rest();else start();});
   cv.addEventListener('pointermove',e=>{ // nudge nearest unsettled glyph
     if(reduce)return; const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
     for(let i=0;i<G;i++){const g=glyphs[i];const d=Math.hypot(g.x-mx,g.y-my);
-      if(d<g.sz*0.7){g.vx+=(g.x-mx)*0.06;g.vy+=(g.y-my)*0.06;g.vrot+=0.05;}}
+      if(d<g.sz*0.7){g.vx+=(g.x-mx)*0.06;g.vy+=(g.y-my)*0.06;g.vrot+=0.05;}} if(!demo)start();
   });
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message', e=>{
@@ -231,12 +239,13 @@
       if(reduce){ ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,H); for(let i=0;i<G;i++) paper(i,glyphs[i],true); }
     }
   });
-  layout();
-  if(reduce){
+  function rest(){
     ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
-    for(let i=0;i<G;i++){const g=glyphs[i];g.x=g.tx;g.y=g.ty;g.rot=0;g.tilt=(i%2?1:-1)*0.04;}
-    for(let i=0;i<G;i++) paper(i,glyphs[i],true);
-  } else { resetAll(); start(); }
+    for(let i=0;i<G;i++){const g=glyphs[i];Object.assign(g,{x:g.tx,y:g.ty,rot:g.tilt,vx:0,vy:0,vrot:0,t:0,settled:true});paper(i,g,true);}
+  }
+  layout();resetAll();
+  if(reduce||!demo)rest();else start();
+  cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();cv.click();}});
 })();
 </script>
 </body>

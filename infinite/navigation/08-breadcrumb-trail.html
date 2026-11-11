@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="A breadcrumb path where chevron separators draw themselves in with a stroke animation and the active gold crumb advances down the trail.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Breadcrumb Trail</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -68,6 +69,7 @@
   @keyframes c08-crumb-draw{to{stroke-dashoffset:0}}
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
   @media (prefers-reduced-motion:reduce){.c08-crumb__chev path{animation:none!important;stroke-dashoffset:0!important}}
+  .c08-crumb__link:focus-visible{outline:2px solid var(--accent-cyan);outline-offset:2px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -75,7 +77,7 @@
  "title": "Breadcrumb Trail",
  "description": "SVG chevron separators draw themselves in with a stroke-dashoffset animation; the active gold crumb auto-advances down the trail every 2.6 seconds.",
  "useWhen": "Navigation demos, onboarding flows, or any UI showing hierarchical page location with a polished dark-mode aesthetic.",
- "avoidWhen": "Light-background layouts (background hardcoded dark navy). Production breadcrumbs — remove the auto-cycle loop and wire real navigation links.",
+ "avoidWhen": "Light-background layouts (background hardcoded dark navy). Production breadcrumbs — remove the auto-cycle loop and wire real navigation links. Autonomous preview ends at first deliberate input and never resumes.",
  "agentPrompt": "Change the accent color from gold to a different hue by setting --accent-cyan to your color of choice (e.g. #6f9b7a for sage), and slow the active-crumb cycle interval from 2600ms to 4000ms. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "accent color (--accent-cyan)",
@@ -83,7 +85,7 @@
   "chevron draw duration (520ms)",
   "stagger delay per chevron (k*120ms)",
   "number of crumb segments",
-  "idle demo cadence (TICK=100, FIRST=500, EVERY=1200 ms, resume IDLE_BACK=3600 ms)",
+  "autonomous preview until first deliberate input cadence (TICK=100, FIRST=500, EVERY=1200 ms, resume IDLE_BACK=3600 ms)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -91,12 +93,14 @@
   "prefers-reduced-motion guard (reduce check + CSS @media block)",
   "visibilitychange pause/resume",
   "idle demo walk (setInterval phase clock; a real click takes over)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Auto-cycles by default — remove the loop() call for production use",
   "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
-  "Button elements lack aria-current on the active crumb — add aria-current='page' for production"
+  "Button elements lack aria-current on the active crumb — add aria-current='page' for production",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -182,14 +186,15 @@
      calls. A real click takes over; the walk returns after IDLE_BACK ms of quiet. */
   var STEPS=[5,2,3,4], si=0;
   var TICK=100, FIRST=500, EVERY=1200, IDLE_BACK=3600;
-  var demo=true, first=true, t=0, idle=0, timer=0;
-  function takeover(){demo=false;idle=0;}
+  var demo=window.__foreverPreview?.demoEnabled!==false&&!reduce, first=true, t=0, timer=0;
+  function takeover(){if(!demo)return;demo=false;stop();}
+  window.addEventListener("forever:interactive",takeover);nav.addEventListener("pointerdown",takeover,true);nav.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
   function step(){
-    if(!demo){ if((idle+=TICK)>=IDLE_BACK){demo=true;first=true;t=0;} return; }
+    if(!demo)return;
     if((t+=TICK)<(first?FIRST:EVERY))return;
     t=0;first=false;setDepth(STEPS[si++%STEPS.length]);
   }
-  function start(){if(!timer&&!reduce)timer=setInterval(step,TICK);}
+  function start(){if(!timer&&!reduce&&demo)timer=setInterval(step,TICK);}
   function stop(){clearInterval(timer);timer=0;}
   document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
   start();   // reduced motion: no walk — the trail rests on the full Home › … › Nebula path

@@ -10,6 +10,7 @@
    Runs before first paint — no dark flash. Standalone default stays dark. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   /* theme tokens — dark values are the defaults (solid-dark-bg contract);
      the light re-theme is the [data-theme="light"] block. Light turns the lit
@@ -104,12 +105,14 @@
   "prefers-reduced-motion static fallback",
   "visibilitychange pause via gyr-paused class",
   "transform-style:preserve-3d on all nested elements",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded to dark brown (#1a1410) in CSS",
   "Ring geometry built entirely from flat divs — no true toroid mesh, so segments visible at high zoom",
-  "Pointer nudge disabled under reduced-motion"
+  "Pointer nudge disabled under reduced-motion",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -149,6 +152,7 @@
 <script>
 (function(){
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demo=window.__foreverPreview?.demoEnabled!==false;
   const scene = document.getElementById('gyr-scene');
   const SEGS = 40;               // segments per ring -> smooth bent circle
   const RAD = 0.46;              // ring radius as fraction of box (translateZ-style via translate)
@@ -181,7 +185,11 @@
 
   // Pause / resume via play-state class (CSS animations) on hide.
   function stop(){ document.body.classList.add('gyr-paused'); }
-  function start(){ document.body.classList.remove('gyr-paused'); }
+  function start(){ if(demo)document.body.classList.remove('gyr-paused'); }
+  function takeover(){demo=false;stop();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true});
   document.addEventListener('visibilitychange',function(){ document.hidden?stop():start(); });
 
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}.
@@ -190,7 +198,8 @@
     if(d && d.type==='forever:theme' && (d.theme==='light'||d.theme==='dark'))
       document.documentElement.setAttribute('data-theme',d.theme); });
 
-  if(reduce){
+  if(reduce||!demo){
+    stop();
     // static resting frame: kill animations, set a clean orientation.
     document.body.classList.add('gyr-paused');
     document.querySelector('.gyr-precess').style.transform='rotateY(28deg) rotateX(8deg)';

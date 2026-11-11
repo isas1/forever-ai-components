@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Three manila folders stacked in depth with tabs for user, project and local memory; paper notes drop in and a tap pulls a folder forward.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Memory Stack</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --co14-bg:#171614; --co14-man1:#a88f5f; --co14-man2:#8c754b; --co14-note:#efe7d3; --co14-ink:#25201a;
+    --co14-stone:#7a746b; --co14-clay:#c87456; --co14-sage:#6f8f79; --co14-muted:#a39c90; --co14-accent:#c87456;
+    --co14-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --co14-bg:#f3efe6; --co14-man1:#e4cc96; --co14-man2:#cdb077; --co14-note:#fffaf0; --co14-ink:#2b241b;
+    --co14-stone:#8f887c; --co14-clay:#a4532f; --co14-sage:#46664f; --co14-muted:#5f594f; --co14-accent:#a4532f;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--co14-bg)}
+  .co14-root{position:fixed;inset:0;cursor:pointer;user-select:none;-webkit-user-select:none;outline:none;-webkit-tap-highlight-color:transparent}
+  .co14-root:focus-visible{outline:2px solid var(--co14-accent);outline-offset:-5px}
+  .co14-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .co14-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .co14-cap{position:fixed;left:8px;bottom:7px;font:10px var(--co14-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--co14-muted);opacity:.28}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code-objects/14-memory-stack.html",
+ "title": "Memory Stack",
+ "description": "Three manila folders in depth with tabs U, P and L for user, project and local memory. Paper notes marked with a hash drop into the front folder and the folders shuffle; tap a folder to pull it forward. Words replace the letters on larger tiles.",
+ "useWhen": "Explaining layered memory files or scopes for a coding agent.",
+ "avoidWhen": "A file tree or settings list is needed.",
+ "agentPrompt": "Edit folder names, tints and the demo tick in the script; keep the slot spring and the demo-v1 lifecycle.",
+ "editableAreas": [
+  "colour tokens on :root and the light block (--co14-*)",
+  "folder names, tab tints and demo tick length in the script"
+ ],
+ "preserveElements": [
+  "demo-v1: __foreverPreview.demoEnabled, forever:interactive, first-input takeover",
+  "theme: ?theme=, forever:theme messages, light tokens",
+  "IIFE, visibilitychange, reduced motion, keyboard, aria-live"
+ ],
+ "knownLimitations": [
+  "Canvas drawn; tab text is not selectable.",
+  "Folder contents are invented demo data."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "accessible",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "folders",
+  "memory",
+  "notes",
+  "manila",
+  "canvas",
+  "claude-code"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="co14-root" id="co14-root" role="button" tabindex="0" aria-label="Memory folders: user, project, local. Tap a folder to pull it forward, Enter cycles.">
+  <canvas class="co14-cv" id="co14-cv" aria-hidden="true"></canvas>
+  <span class="co14-sr" id="co14-sr" aria-live="polite"></span>
+</div>
+<div class="co14-cap" aria-hidden="true">Memory Stack</div>
+<script>
+(function(){
+  'use strict';
+  var root=document.getElementById('co14-root'),cv=document.getElementById('co14-cv'),sr=document.getElementById('co14-sr');
+  var ctx=cv.getContext('2d'),grain=null,shade=document.createElement('canvas');
+  var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var MONO='ui-monospace,"SF Mono",Menlo,monospace',STEP=8,FH=42,TH=6.5,LIP=7;
+  var T={},W=0,H=0,u=1,dpr=1,raf=0,last=0,demoI=0,tick=0;
+  var F=[{n:'user',c:'U',sl:1,tg:1,v:0,k:3,t:'stone'},{n:'project',c:'P',sl:0,tg:0,v:0,k:4,t:'clay'},{n:'local',c:'L',sl:2,tg:2,v:0,k:1,t:'sage'}];
+  var notes=[];
+
+  function tok(){var s=getComputedStyle(document.documentElement);
+    ['bg','man1','man2','note','ink','stone','clay','sage','muted','accent'].forEach(function(k){T[k]=s.getPropertyValue('--co14-'+k).trim()||'#888';});}
+  function setTheme(v){if(v==='light'||v==='dark'){document.documentElement.setAttribute('data-theme',v);tok();kick();}}
+  window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+
+  function size(){dpr=Math.min(window.devicePixelRatio||1,2);W=cv.clientWidth||180;H=cv.clientHeight||180;
+    cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);u=Math.min(W,H)/100;
+    var g=document.createElement('canvas');g.width=g.height=128;var x=g.getContext('2d'),i,seed=41;function rnd(){seed=seed*16807%2147483647;return seed/2147483647;}
+    for(i=0;i<700;i++){x.fillStyle=rnd()<.5?'rgba(255,255,255,.045)':'rgba(0,0,0,.06)';x.fillRect(rnd()*128,rnd()*128,rnd()*1.2+.5,rnd()<.7?.6:1);}
+    grain=ctx.createPattern(g,'repeat');
+    shade.width=156;shade.height=112;var sh=shade.getContext('2d');sh.fillStyle='rgba(0,0,0,.22)';sh.shadowColor='rgba(0,0,0,.22)';sh.shadowBlur=4;sh.shadowOffsetY=2;sh.beginPath();sh.roundRect(10,8,136,84,4);sh.fill();}
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+  function geo(f){var w=(68-f.sl*4)*u;return{w:w,x:W/2-w/2,y:H/2-(10+f.sl*STEP)*u};}
+  function paper(){ctx.fillStyle=grain;ctx.fill();}
+  function folder(f){
+    var g=geo(f),x=g.x,y=g.y,w=g.w,tw=(W>=270?27:15)*u,th=TH*u,tx=x+(w-tw)*[.05,.5,.95][f.n==='user'?0:f.n==='project'?1:2],fh=FH*u,sh=1-f.sl*.17,i;
+    ctx.drawImage(shade,x-w*10/136,y-4*u,w*156/136,56*u);
+    ctx.fillStyle=T.man2;rr(x,y,w,fh,2*u);ctx.fill();
+    ctx.beginPath();ctx.moveTo(tx,y+.5);ctx.lineTo(tx+2*u,y-th);ctx.lineTo(tx+tw-2*u,y-th);ctx.lineTo(tx+tw,y+.5);ctx.closePath();ctx.fill();paper();
+    ctx.fillStyle=T[f.t];ctx.globalAlpha=.85;ctx.fillRect(tx+2.2*u,y-th+.5*u,tw-4.4*u,1.1*u);ctx.globalAlpha=1;
+    ctx.fillStyle=T.ink;ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='700 '+(W>=270?3.6:4.8)*u+'px system-ui,sans-serif';
+    ctx.fillText(W>=270?f.n:f.c,tx+tw/2,y-th*.4);
+    for(i=0;i<Math.min(f.k,6);i++){ctx.fillStyle=T.note;ctx.globalAlpha=.85;ctx.fillRect(x+3*u+i*.5*u,y+LIP*u-(i+1)*.75*u,w-6*u-i*1*u,.55*u);}
+    ctx.globalAlpha=1;
+    notes.forEach(function(n){if(n.to===f)note(n);});
+    ctx.fillStyle=T.man1;rr(x,y+LIP*u,w,fh-LIP*u,2*u);ctx.fill();paper();
+    ctx.fillStyle='rgba(0,0,0,'+(.1+(1-sh)*.9).toFixed(2)+')';rr(x,y+LIP*u,w,fh-LIP*u,2*u);ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.28)';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x+2*u,y+LIP*u+.5);ctx.lineTo(x+w-2*u,y+LIP*u+.5);ctx.stroke();
+    ctx.strokeStyle='rgba(0,0,0,.25)';ctx.beginPath();ctx.moveTo(x+w*.08,y+fh*.72);ctx.lineTo(x+w*.92,y+fh*.72);ctx.stroke();
+  }
+  function note(n){
+    ctx.save();ctx.translate(n.x*u,n.y*u);ctx.rotate(n.r);
+    ctx.fillStyle='rgba(0,0,0,.3)';ctx.fillRect(-7*u+.6*u,-5*u+.8*u,14*u,10*u);ctx.fillStyle=T.note;ctx.fillRect(-7*u,-5*u,14*u,10*u);
+    ctx.fillStyle=T.clay;ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='700 '+6.4*u+'px '+MONO;ctx.fillText('#',0,.4*u);
+    ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(-5*u,2.6*u,10*u,.5*u);ctx.restore();
+  }
+  function draw(){
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+    F.slice().sort(function(a,b){return b.sl-a.sl;}).forEach(folder);
+  }
+  function frame(now){
+    raf=0;if(document.hidden)return;
+    var dt=last?Math.min(now-last,50)/1000:.016,busy=false;last=now;
+    F.forEach(function(f){if(reduced()){f.sl=f.tg;f.v=0;return;}
+      f.v+=((f.tg-f.sl)*170-f.v*17)*dt;f.sl+=f.v*dt;if(Math.abs(f.tg-f.sl)<.002&&Math.abs(f.v)<.02){f.sl=f.tg;f.v=0;}else busy=true;});
+    notes=notes.filter(function(n){
+      if(n.d>0){n.d-=dt;busy=true;return true;}
+      var g=geo(n.to),ty=g.y/u+3.5;n.x+=(g.x/u+g.w/u/2+n.o-n.x)*Math.min(1,dt*6);busy=true;
+      if(!n.s){n.vy+=dt*300;n.y+=n.vy*dt;n.r*=Math.pow(.05,dt);if(n.y>=ty){n.y=ty;n.s=1;}}
+      else{n.y+=dt*16;if(n.y>ty+7){n.to.k=n.to.k>=6?2:n.to.k+1;return false;}}
+      return true;});
+    draw();
+    if(!reduced()&&(busy||demoEnabled))raf=requestAnimationFrame(frame);
+  }
+  function kick(){if(document.hidden)return;if(reduced()){F.forEach(function(f){f.sl=f.tg;f.v=0;});draw();return;}if(!raf){last=0;raf=requestAnimationFrame(frame);}}
+  function drop(f,delay){
+    if(reduced()){f.k=f.k>=6?2:f.k+1;draw();return;}
+    notes.push({to:f,x:W/(2*u),y:(H-100*u)/(2*u)-10,vy:0,r:(Math.random()-.5)*.8,o:(Math.random()-.5)*18,d:delay||0,s:0});kick();}
+  function pull(f){var old=f.tg;F.forEach(function(g){if(g===f)g.tg=0;else if(g.tg<old)g.tg++;});
+    sr.textContent=f.n+' memory folder forward';kick();}
+  function front(){return F.filter(function(f){return f.tg===0;})[0];}
+  function back(){return F.filter(function(f){return f.tg===2;})[0];}
+  function hit(px,py){
+    var o=F.slice().sort(function(a,b){return a.sl-b.sl;}),i,g;
+    for(i=0;i<o.length;i++){g=geo(o[i]);if(px>=g.x&&px<=g.x+g.w&&py>=g.y-TH*u&&py<=g.y+FH*u)return o[i];}
+    return null;}
+  function act(f){if(f===front()||!f){pull(back());drop(front(),.3);}else{pull(f);drop(f,.28);}}
+  function takeover(){demoEnabled=false;clearInterval(demoI);demoI=0;}
+  function startDemo(){if(demoI||!demoEnabled||reduced()||document.hidden)return;
+    demoI=setInterval(function(){tick++;if(tick%2)drop(front(),0);else{pull(back());}},1350);}
+  window.addEventListener('forever:interactive',takeover);
+  root.addEventListener('pointerdown',function(e){takeover();var r=root.getBoundingClientRect();
+    act(hit((e.clientX-r.left)*W/r.width,(e.clientY-r.top)*H/r.height));});
+  root.addEventListener('click',function(e){if(e.detail===0){takeover();act(null);}});
+  root.addEventListener('keydown',function(e){var k=e.key.toLowerCase(),m={u:0,p:1,l:2};takeover();
+    if(k===' '||k==='enter'||k==='arrowright'||k==='arrowdown'){e.preventDefault();act(null);}
+    else if(k==='arrowleft'||k==='arrowup'){e.preventDefault();pull(back());}
+    else if(m[k]!==undefined){e.preventDefault();act(F[m[k]]);}});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0;}last=0;clearInterval(demoI);demoI=0;}
+    else{kick();startDemo();}});
+  window.addEventListener('resize',function(){size();kick();});
+  tok();size();draw();kick();
+  if(demoEnabled&&!reduced())setTimeout(function(){if(demoEnabled){drop(front(),0);tick=1;startDemo();}},380);
+})();
+</script>
+</body>
+</html>

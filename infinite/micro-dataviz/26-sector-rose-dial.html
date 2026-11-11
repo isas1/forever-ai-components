@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Sector Rose Dial — Micro Data-Viz. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sector Rose Dial</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root[data-theme="light"]{--wkb-bg:#DED9CF;--wkb-tile:#F6F1E7;--wkb-ink:#17263B;--wkb-mut:#57677A;--wkb-grout:#CEC7BA;--wkb-acc:#1D5295;--wkb-c0:#4F8889;--wkb-c1:#1D5295;--wkb-c2:#C99A20;--wkb-c3:#B94430}
+
+:root{--wkb-bg:#111B25;--wkb-tile:#1B2937;--wkb-ink:#EDF3FA;--wkb-mut:#96A6B8;--wkb-grout:#0A1118;--wkb-acc:#4B85D1;--wkb-c0:#6EB2B3;--wkb-c1:#4B85D1;--wkb-c2:#E5B438;--wkb-c3:#E06752}
+
+.wkb-stage,.wkb-stage *{box-sizing:border-box;margin:0;padding:0}
+
+.wkb-stage{background:var(--wkb-bg);display:grid;place-items:center;overflow:hidden}
+#wkb-root{width:min(100vmin,640px);height:min(100vmin,640px);background:var(--wkb-tile);border:3px solid var(--wkb-grout);border-radius:50%;touch-action:none;cursor:crosshair;user-select:none;-webkit-user-select:none}
+#wkb-root:focus-visible{outline:2px solid var(--wkb-acc);outline-offset:-8px}
+#wkb-c{display:block;width:100%;height:100%}
+
+:root{--bg:var(--wkb-bg)}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.wkb-stage{width:100%;height:100%;display:grid;place-items:center}
+.wkb-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--wkb-ink);opacity:.45;pointer-events:none}
+
+
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/micro-dataviz/26-sector-rose-dial.html",
+ "title": "Sector Rose Dial",
+ "description": "Sector Rose Dial compares focus, commits, coffee ounces and bugs across Monday, Friday and Forever in a cobalt glaze, teal and ochre grout palette.",
+ "useWhen": "A compact comparison of illustrative metrics across selectable days.",
+ "avoidWhen": "Financial reporting without replacing the sample data and adding accessible data tables.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Canvas/SVG labels scale with artwork; inspect readability at small sizes."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "kpi",
+  "day-comparison",
+  "metrics",
+  "spring",
+  "dial"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wkb-stage" role="group" aria-label="Sector Rose Dial">
+<div id="wkb-root" role="slider" tabindex="0" aria-label="Day KPI rose: focus, commits, coffee, bugs. Sweep around the dial or use arrow keys to switch day" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1" aria-valuetext="">
+<canvas id="wkb-c"></canvas>
+</div>
+</div>
+<div class="wkb-cap" aria-hidden="true">Sector Rose Dial</div>
+<script>
+(function(){
+var D=[["Monday",[84.5,1420,342,18]],["Friday",[72.4,980,215,34]],["Forever",[92.1,2150,580,6]]],
+MX=[92.1,2150,580,34],AX=[-90,0,90,180],A0=-75,R=Math.PI/180,
+root=document.getElementById('wkb-root'),cv=document.getElementById('wkb-c'),cx=cv.getContext('2d'),
+rm=matchMedia('(prefers-reduced-motion: reduce)'),S=0,C={},raf=0,last=0,idx=0,pos=0,tp=0;
+function fmt(i,x){x=Math.max(0,x);return i==0?x.toFixed(1)+'%':i==2?Math.round(x)+' oz':Math.round(x).toLocaleString('en')}
+function cols(){var s=getComputedStyle(document.documentElement);['bg','tile','ink','mut','grout','acc','c0','c1','c2','c3'].forEach(function(k){C[k]=s.getPropertyValue('--wkb-'+k).trim()})}
+function say(){root.setAttribute('aria-valuenow',idx+1);root.setAttribute('aria-valuetext',D[idx][0]+': '+D[idx][1].map(function(v,i){return fmt(i,v)}).join(', '))}
+function size(){S=root.clientWidth;var d=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(S*d);cx.setTransform(d,0,0,d,0,0);draw()}
+function cd(a,b){var d=a-b;return d-3*Math.round(d/3)}
+function wrap(p){return((p%3)+3)%3}
+function vals(){var f=Math.floor(pos),i=f%3,j=(i+1)%3,t=pos-f;return MX.map(function(m,k){return D[i][1][k]*(1-t)+D[j][1][k]*t})}
+function step(dt){
+ if(rm.matches){pos=wrap(tp);return false}
+ var d=cd(tp,pos);pos=wrap(pos+d*(1-Math.pow(.88,dt)));
+ var m=Math.abs(d)>.001;if(!m)pos=wrap(tp);return m}
+function draw(){
+ if(!S)return;cx.clearRect(0,0,S,S);
+ var m=S/2,L=S*.24,v=vals(),i,s,a;
+ cx.save();cx.translate(m,m);cx.lineJoin='round';cx.lineCap='round';cx.textAlign='center';cx.textBaseline='middle';
+ for(s=0;s<3;s++){
+  var w=Math.max(0,1-Math.abs(cd(pos,s)));a=(A0+120*s)*R;
+  cx.globalAlpha=1;cx.strokeStyle=C.grout;cx.lineWidth=S*.012;cx.beginPath();cx.arc(0,0,S*.455,a-.9,a+.9);cx.stroke();
+  cx.globalAlpha=w;cx.strokeStyle=C.acc;cx.lineWidth=S*.022;cx.beginPath();cx.arc(0,0,S*.455,a-.9,a+.9);cx.stroke();
+  cx.font='700 '+S*.027+'px ui-monospace,Menlo,monospace';
+  var nx=Math.cos(a)*S*.365,ny=Math.sin(a)*S*.365,t=D[s][0].toUpperCase();
+  cx.globalAlpha=1;cx.fillStyle=C.mut;cx.fillText(t,nx,ny);cx.globalAlpha=w;cx.fillStyle=C.ink;cx.fillText(t,nx,ny)}
+ cx.globalAlpha=.5;cx.strokeStyle=C.mut;cx.lineWidth=1;cx.setLineDash([3,4]);
+ for(s=0;s<3;s++){cx.beginPath();for(i=0;i<4;i++){var l=D[s][1][i]/MX[i]*L;a=AX[i]*R;cx[i?'lineTo':'moveTo'](Math.cos(a)*l,Math.sin(a)*l)}cx.closePath();cx.stroke()}
+ cx.setLineDash([]);
+ for(i=0;i<4;i++){
+  var l=Math.max(v[i]/MX[i]*L,S*.012),cw=Math.min(S*.1,l*.7);a=AX[i]*R;
+  cx.save();cx.rotate(a);cx.beginPath();cx.moveTo(0,0);cx.quadraticCurveTo(l*.5,-cw,l,0);cx.quadraticCurveTo(l*.5,cw,0,0);
+  cx.globalAlpha=.92;cx.fillStyle=C['c'+i];cx.fill();cx.globalAlpha=1;cx.strokeStyle=C.ink;cx.lineWidth=1.2;cx.stroke();cx.restore();
+  cx.font='900 '+S*.04+'px "Archivo Black",system-ui,sans-serif';
+  var tx=fmt(i,v[i]),d=l+S*.02+(i%2?cx.measureText(tx).width/2:S*.025);
+  cx.fillStyle=C.ink;cx.fillText(tx,Math.cos(a)*d,Math.sin(a)*d)}
+ cx.fillStyle=C.ink;cx.beginPath();cx.arc(0,0,S*.012,0,7);cx.fill();cx.restore()}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+function tick(n){raf=0;var dt=Math.min(n-last,50)/16.667;last=n;if(step(dt))raf=requestAnimationFrame(tick);draw()}
+document.addEventListener('visibilitychange',function(){if(document.hidden){cancelAnimationFrame(raf);raf=0}else wake()});
+function set(i){idx=i;say()}
+function aim(e){
+ var r=root.getBoundingClientRect(),dx=e.clientX-r.left-r.width/2,dy=e.clientY-r.top-r.height/2;
+ if(Math.hypot(dx,dy)<S*.1)return;
+ tp=wrap((Math.atan2(dy,dx)/R-A0)/120);
+ var n=Math.round(tp)%3;if(n!=idx)set(n);wake()}
+function snap(){tp=Math.round(tp)%3;set(tp);wake()}
+root.addEventListener('pointerdown',function(e){root.setPointerCapture(e.pointerId);aim(e)});
+root.addEventListener('pointermove',aim);
+root.addEventListener('pointerup',function(e){if(e.pointerType!='mouse')snap()});
+root.addEventListener('pointercancel',snap);
+root.addEventListener('pointerleave',function(e){if(e.pointerType=='mouse'&&!(e.buttons&1))snap()});
+root.addEventListener('keydown',function(e){
+ var k=e.key,i=Math.round(tp)%3;
+ if(k=='ArrowRight'||k=='ArrowUp')i++;else if(k=='ArrowLeft'||k=='ArrowDown')i+=2;
+ else if(k=='Home')i=0;else if(k=='End')i=2;else if(k>='1'&&k<='3')i=k-1;else return;
+ e.preventDefault();tp=i%3;set(tp);wake()});
+function theme(t){document.documentElement.setAttribute('data-theme',t);cols();draw()}
+window.addEventListener('message',function(e){var m=e.data;if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark'))theme(m.theme)});
+if(rm.addEventListener)rm.addEventListener('change',wake);
+cols();say();
+if(window.ResizeObserver)new ResizeObserver(size).observe(root);else addEventListener('resize',size);
+size();
+
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoClock=0;
+function demoStep(){if(!demoEnabled||document.hidden||matchMedia('(prefers-reduced-motion: reduce)').matches)return;tp=(idx+1)%3;set(tp);wake();}
+function demoStop(){if(demoClock){clearInterval(demoClock);demoClock=0}}
+function demoStart(){demoStop();if(demoEnabled&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches)demoClock=setInterval(demoStep,1600)}
+function takeover(){if(window.__foreverPreview?.surface==='wall')return;demoEnabled=false;demoStop()}
+window.addEventListener('forever:interactive',takeover);
+var stage=document.querySelector('.wkb-stage');
+stage.addEventListener('pointerdown',takeover,true);stage.addEventListener('keydown',takeover,true);stage.addEventListener('input',takeover,true);stage.addEventListener('wheel',takeover,{capture:true,passive:true});
+document.addEventListener('visibilitychange',function(){document.hidden?demoStop():demoStart()});
+var demoMotion=matchMedia('(prefers-reduced-motion: reduce)');demoMotion.addEventListener('change',function(){demoStart();wake()});
+demoStart();
+})();
+</script>
+</body>
+</html>

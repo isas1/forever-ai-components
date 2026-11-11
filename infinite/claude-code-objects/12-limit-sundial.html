@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A weathered stone sundial: a bronze gnomon casts a shadow across five hour marks while a clay arc fills with the used share of a five-hour usage window.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Limit Sundial</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --co12-bg:#171614; --co12-stone1:#8f887b; --co12-stone2:#6a645a; --co12-stone3:#4a463f; --co12-side:#38352f;
+    --co12-lichen:#6f8f79; --co12-brass:#b88b58; --co12-clay:#c87456; --co12-plaque:#24221f; --co12-ink:#e8e3d8;
+    --co12-muted:#a39c90; --co12-groove:#2c2924; --co12-accent:#c87456; --co12-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --co12-bg:#f3efe6; --co12-stone1:#d8d0bf; --co12-stone2:#bdb4a2; --co12-stone3:#9d9482; --co12-side:#8c8473;
+    --co12-lichen:#46664f; --co12-brass:#8a6232; --co12-clay:#a4532f; --co12-plaque:#2f2b25; --co12-ink:#efe9dc;
+    --co12-muted:#5f594f; --co12-groove:#7c7464; --co12-accent:#a4532f;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--co12-bg)}
+  .co12-root{position:fixed;inset:0;cursor:pointer;user-select:none;-webkit-user-select:none;outline:none;-webkit-tap-highlight-color:transparent}
+  .co12-root:focus-visible{outline:2px solid var(--co12-accent);outline-offset:-5px}
+  .co12-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .co12-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .co12-cap{position:fixed;left:8px;bottom:7px;font:10px var(--co12-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--co12-muted);opacity:.28}
+  @keyframes co12-breathe{from{opacity:.94}to{opacity:1}}
+  .co12-cv{animation:co12-breathe 6s ease-in-out infinite alternate}
+  @media (prefers-reduced-motion:reduce){.co12-cv{animation:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code-objects/12-limit-sundial.html",
+ "title": "Limit Sundial",
+ "description": "Weathered stone sundial with bronze shadow and five hour marks. A clay arc shows the used share of an illustrative five-hour window, then resets. Tap switches time left and reset time.",
+ "useWhen": "Showing a usage-limit window or time-to-reset for a coding agent.",
+ "avoidWhen": "Precise countdowns or seconds-level timers are needed.",
+ "agentPrompt": "Change the window length, reset time and sweep speed in the script; keep the stone texture build and the demo-v1 lifecycle.",
+ "editableAreas": [
+  "colour tokens on :root and the light block (--co12-*)",
+  "window minutes, reset clock string and sweep duration in the script"
+ ],
+ "preserveElements": [
+  "demo-v1: __foreverPreview.demoEnabled, forever:interactive, first-input takeover",
+  "theme: ?theme=, forever:theme messages, light tokens",
+  "IIFE, visibilitychange, reduced motion, keyboard, aria-live"
+ ],
+ "knownLimitations": [
+  "Canvas drawn; the time text is not selectable.",
+  "Times are invented demo data and the sweep is accelerated."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "accessible",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "sundial",
+  "usage-limit",
+  "stone",
+  "timer",
+  "canvas",
+  "claude-code"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="co12-root" id="co12-root" role="button" tabindex="0" aria-label="Limit sundial. Activate to switch between time left and reset time.">
+  <canvas class="co12-cv" id="co12-cv" aria-hidden="true"></canvas>
+  <span class="co12-sr" id="co12-sr" aria-live="polite"></span>
+</div>
+<div class="co12-cap" aria-hidden="true">Limit Sundial</div>
+<script>
+(function(){
+  'use strict';
+  var root=document.getElementById('co12-root'),cv=document.getElementById('co12-cv'),sr=document.getElementById('co12-sr');
+  var ctx=cv.getContext('2d'),tex=document.createElement('canvas'),tx=tex.getContext('2d');
+  var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var MONO='ui-monospace,"SF Mono",Menlo,monospace',K=.58,WIN=300;
+  var T={},W=0,H=0,u=1,dpr=1,raf=0,last=0,cx=0,cy=0,R=0;
+  var p=.5533,show='left',wash=0,vis=1,rip=0;
+
+  function tok(){var s=getComputedStyle(document.documentElement);
+    ['bg','stone1','stone2','stone3','side','lichen','brass','clay','plaque','ink','muted','groove','accent'].forEach(function(k){T[k]=s.getPropertyValue('--co12-'+k).trim()||'#888';});}
+  function setTheme(t){if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);tok();build();kick();}}
+  window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+
+  function P(th,r){return[cx+Math.cos(th)*r,cy+Math.sin(th)*r*K];}
+  function ell(c,x,y,r,a){c.beginPath();c.ellipse(x,y,r,r*K,0,0,6.2832);}
+  function build(){
+    tex.width=cv.width;tex.height=cv.height;tx.setTransform(dpr,0,0,dpr,0,0);tx.clearRect(0,0,W,H);
+    var th=5*u,g,seed=23;function rnd(){seed=seed*16807%2147483647;return seed/2147483647;}
+    tx.save();tx.shadowColor='rgba(0,0,0,.5)';tx.shadowBlur=3*u;tx.shadowOffsetY=2*u;tx.fillStyle=T.side;ell(tx,cx,cy+th,R);tx.fill();tx.restore();
+    tx.fillStyle=T.side;tx.fillRect(cx-R,cy,2*R,th);ell(tx,cx,cy+th,R);tx.fill();
+    g=tx.createLinearGradient(cx-R,0,cx+R,0);g.addColorStop(0,'rgba(255,255,255,.12)');g.addColorStop(.5,'rgba(0,0,0,.1)');g.addColorStop(1,'rgba(0,0,0,.28)');
+    tx.fillStyle=g;tx.fillRect(cx-R,cy,2*R,th);ell(tx,cx,cy+th,R);tx.fill();
+    g=tx.createRadialGradient(cx-R*.3,cy-R*.2,R*.1,cx,cy,R);g.addColorStop(0,T.stone1);g.addColorStop(.7,T.stone2);g.addColorStop(1,T.stone3);
+    tx.fillStyle=g;ell(tx,cx,cy,R);tx.fill();
+    tx.save();ell(tx,cx,cy,R);tx.clip();
+    for(var i=0;i<46;i++){var a=rnd()*6.28,rr=Math.sqrt(rnd())*R,q=P(a,rr);tx.fillStyle=T.lichen;tx.globalAlpha=.035+rnd()*.04;
+      tx.beginPath();tx.ellipse(q[0],q[1],(.6+rnd()*2.2)*u,(.4+rnd()*1.2)*u,rnd()*3,0,6.3);tx.fill();}
+    for(i=0;i<620;i++){a=rnd()*6.28;rr=Math.sqrt(rnd())*R;q=P(a,rr);tx.globalAlpha=.05+rnd()*.1;
+      tx.fillStyle=rnd()<.5?'#fff':'#000';tx.fillRect(q[0],q[1],Math.max(.6,rnd()*1.3),Math.max(.6,rnd()*1.1));}
+    tx.globalAlpha=.1;tx.strokeStyle='#000';tx.lineWidth=Math.max(.6,.25*u);
+    for(i=0;i<4;i++){a=rnd()*6.28;q=P(a,R*(.5+rnd()*.5));tx.beginPath();tx.moveTo(q[0],q[1]);
+      for(var j=0;j<5;j++){q[0]+=(rnd()-.5)*7*u;q[1]+=(rnd()-.5)*3*u;tx.lineTo(q[0],q[1]);}tx.stroke();}
+    tx.restore();tx.globalAlpha=1;
+    tx.strokeStyle=T.groove;tx.lineWidth=Math.max(1,.5*u);[.97,.7].forEach(function(f){ell(tx,cx,cy,R*f);tx.stroke();});
+    tx.strokeStyle='rgba(255,255,255,.3)';tx.lineWidth=1;ell(tx,cx,cy-.4,R);tx.stroke();
+  }
+  function size(){dpr=Math.min(window.devicePixelRatio||1,2);W=cv.clientWidth||180;H=cv.clientHeight||180;
+    cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);u=Math.min(W,H)/100;R=40*u;cx=W/2;cy=H/2-1*u;build();}
+  function band(a,b,r1,r2){var n=Math.max(2,Math.ceil((b-a)*14)),i,q;ctx.beginPath();
+    for(i=0;i<=n;i++){q=P(a+(b-a)*i/n,r2);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);}
+    for(i=n;i>=0;i--){q=P(a+(b-a)*i/n,r1);ctx.lineTo(q[0],q[1]);}ctx.closePath();}
+  function fmt(){var m=Math.round((1-p)*WIN);return Math.floor(m/60)+'h '+('0'+(m%60)).slice(-2)+'m';}
+  function label(){return show==='left'?fmt():'15:40';}
+
+  function draw(){
+    var th0=Math.PI*1.1,th=th0+Math.PI*.8*p,i,q,g;
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);ctx.drawImage(tex,0,0,W,H);
+    ctx.globalAlpha=vis;ctx.fillStyle=T.clay;band(th0,th,.8*R,.96*R);ctx.globalAlpha=.8*vis;ctx.fill();
+    ctx.globalAlpha=.5*vis;ctx.strokeStyle='rgba(0,0,0,.5)';ctx.lineWidth=1;ctx.stroke();ctx.globalAlpha=1;
+    ctx.strokeStyle=T.groove;ctx.lineWidth=Math.max(.6,.3*u);ctx.beginPath();for(i=1;i<20;i++){if(i%5===0)continue;var A=P(th0+Math.PI*.8*i/20,.88*R),B=P(th0+Math.PI*.8*i/20,.96*R);ctx.moveTo(A[0],A[1]);ctx.lineTo(B[0],B[1]);}ctx.stroke();
+    for(i=0;i<5;i++){var a=th0+Math.PI*.8*i/4,A=P(a,.7*R),B=P(a,.98*R),on=th>=a-.001;
+      ctx.lineWidth=Math.max(1.6,.9*u);ctx.lineCap='round';ctx.strokeStyle='rgba(255,255,255,.28)';ctx.beginPath();ctx.moveTo(A[0],A[1]+1);ctx.lineTo(B[0],B[1]+1);ctx.stroke();
+      ctx.strokeStyle=on?T.brass:T.groove;ctx.beginPath();ctx.moveTo(A[0],A[1]);ctx.lineTo(B[0],B[1]);ctx.stroke();}
+
+    var L=.86*R,tip=P(th,L),nx=Math.sin(th)*K,ny=-Math.cos(th),nl=Math.hypot(nx,ny)||1;nx/=nl;ny/=nl;
+    ctx.fillStyle='rgba(0,0,0,.4)';ctx.beginPath();ctx.moveTo(cx-nx*1.7*u,cy-ny*1.7*u);ctx.lineTo(cx+nx*1.7*u,cy+ny*1.7*u);
+    ctx.lineTo(tip[0]+nx*.5*u,tip[1]+ny*.5*u);ctx.lineTo(tip[0]-nx*.5*u,tip[1]-ny*.5*u);ctx.closePath();ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,.18)';ctx.beginPath();ctx.arc(tip[0],tip[1],.9*u,0,6.3);ctx.fill();
+
+    g=ctx.createLinearGradient(cx-4*u,0,cx+4*u,0);g.addColorStop(0,T.brass);g.addColorStop(.55,'#f0d6a8');g.addColorStop(1,T.brass);
+    ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(cx-3.6*u,cy+2*u);ctx.lineTo(cx+3.6*u,cy+2*u);ctx.lineTo(cx+.7*u,cy-16*u);ctx.lineTo(cx-.7*u,cy-16*u);ctx.closePath();ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.moveTo(cx+.3*u,cy+2*u);ctx.lineTo(cx+3.6*u,cy+2*u);ctx.lineTo(cx+.7*u,cy-16*u);ctx.lineTo(cx+.1*u,cy-16*u);ctx.closePath();ctx.fill();
+    ctx.fillStyle=T.brass;ctx.beginPath();ctx.ellipse(cx,cy+2*u,4.6*u,2.3*u,0,0,6.3);ctx.fill();
+
+    var pw=(W>=270?34:32)*u,ph=11.5*u,px=cx-pw/2,py=cy+R*K*.42;
+    ctx.fillStyle='rgba(0,0,0,.35)';ctx.fillRect(px-.5*u,py-.2*u,pw+1*u,ph+1.2*u);ctx.fillStyle=T.plaque;ctx.fillRect(px,py,pw,ph);
+    ctx.strokeStyle='rgba(255,255,255,.14)';ctx.lineWidth=1;ctx.strokeRect(px+.5,py+.5,pw-1,ph-1);
+    ctx.fillStyle=T.ink;ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='700 '+(W>=270?6.2:6.8)*u+'px '+MONO;
+    ctx.fillText(label(),cx,py+ph*(W>=270?.38:.52));
+    if(W>=270){ctx.font='600 '+3.1*u+'px system-ui,sans-serif';ctx.globalAlpha=.85;ctx.fillText(show==='left'?'left':'resets',cx,py+ph*.8);ctx.globalAlpha=1;}
+    if(rip>0){ctx.strokeStyle='rgba(255,255,255,'+(.5*Math.min(1,rip*1.4)).toFixed(2)+')';ctx.lineWidth=Math.max(1,.8*u);
+      [0,.18].forEach(function(o){var r=(1-rip+o)*1.05*R;if(r>0&&r<R*1.04){ell(ctx,cx,cy,r);ctx.stroke();}});
+      ctx.fillStyle='rgba(255,255,255,'+(.2*rip).toFixed(3)+')';ell(ctx,cx,cy,R);ctx.fill();}
+  }
+  function frame(now){
+    raf=0;if(document.hidden)return;
+    var dt=last?Math.min(now-last,50)/1000:.016;last=now;
+    if(demoEnabled&&!reduced()){
+      if(wash>0){wash-=dt/1.5;rip=Math.max(0,wash);vis=Math.max(0,Math.min(1,wash*2));if(wash<=0){wash=0;p=0;vis=1;rip=0;}
+        else p=Math.max(0,p-dt*.7);}
+      else{p+=dt/9;if(p>=1){p=1;wash=1;sayOnce('Window reset');}}
+    }
+    draw();
+    if(!reduced()&&demoEnabled)raf=requestAnimationFrame(frame);
+  }
+  function kick(){if(document.hidden)return;if(reduced()||!demoEnabled){draw();return;}if(!raf){last=0;raf=requestAnimationFrame(frame);}}
+  function sayOnce(s){sr.textContent=s;}
+  function act(){show=show==='left'?'reset':'left';sayOnce(show==='left'?fmt()+' left':'Resets at 15:40');draw();}
+  function takeover(){demoEnabled=false;wash=0;vis=1;rip=0;if(!raf)draw();}
+  window.addEventListener('forever:interactive',takeover);
+  root.addEventListener('pointerdown',function(){takeover();act();});
+  root.addEventListener('click',function(e){if(e.detail===0){takeover();act();}});
+  root.addEventListener('keydown',function(e){takeover();if(e.key===' '||e.key==='Enter'||e.key.indexOf('Arrow')===0){e.preventDefault();act();}});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0;}last=0;}else kick();});
+  window.addEventListener('resize',function(){size();kick();});
+  tok();size();draw();kick();
+})();
+</script>
+</body>
+</html>

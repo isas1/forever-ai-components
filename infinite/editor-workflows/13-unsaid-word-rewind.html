@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Unsaid Word Rewind — Editor Workflows. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unsaid Word Rewind</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#ff4d5e}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#c8102e}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.uns-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;container-type:inline-size;overflow:hidden;color:var(--ink);cursor:pointer;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.uns-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.uns-l,.uns-h{position:absolute;left:0;top:50%;font:600 clamp(1.25rem,11cqw,5rem)/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:-.02em;transform-origin:0 50%;will-change:transform,opacity}
+.uns-l{white-space:pre}
+.uns-h{width:max(2px,.06em);height:1em;background:var(--acc);border-radius:1px}
+.uns-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/editor-workflows/13-unsaid-word-rewind.html",
+ "title": "Unsaid Word Rewind",
+ "description": "Undo as an unsaid word: the last action is written as a word; hold it and it rewinds letter by letter, and when a word runs out the action before it appears. Let go early and the word comes back. Clean modern: off-black and carmine with a light theme. From the daily-team 'Wrong-Way Reel' set (2026-10-20).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and carmine (docs/style-clean-modern.md) (--bg, --ink, --acc). Edit V for action words and the seeded log; hold speed is the 70 ms step in tick().",
+ "editableAreas": [
+  "colour tokens on :root (--bg, --ink, --acc) and the light block",
+  "V action words and the seeded log",
+  "hold speed and spring constants K, D"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had click sounds; removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "undo",
+  "rewind",
+  "history",
+  "typography",
+  "hold",
+  "letters"
+ ]
+}
+</script>
+</head><body>
+<div class="uns-root" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="40" aria-label="Unsaid. The word is the last thing you did. Press and hold the word, or hold Space or Left Arrow, and it rewinds letter by letter. When a word runs out, that action is undone and the one before it appears. Keep holding to keep undoing. Let go early and the word comes back. Tap empty space, Enter or Right Arrow, to do something new. Escape cancels a rewind."></div>
+<div class="uns-cap" aria-hidden="true">Unsaid Word Rewind</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.uns-root');
+  var V=['Typed','Pasted','Deleted','Cropped','Renamed','Bolded','Moved','Sent','Saved','Overpacked','Overshared','Kept forever'];
+  var log=['Typed','Overshared','Kept forever'];
+  var L=[],wid=0,cur=-1,W=root.clientWidth||300,em=40,bounds=[0,0];
+  var head=document.createElement('div');head.className='uns-h';root.appendChild(head);
+  var hp={p:1,v:0,t:1,d:0};
+  var holding=false,next=0,ac=null;
+  var K=.18,D=.8;
+  function spawn(word,stag){wid++;cur=wid;
+    for(var i=0;i<word.length;i++){var e=document.createElement('span');e.className='uns-l';
+      e.textContent=word[i]===' '?'\u00a0':word[i];root.appendChild(e);
+      L.push({el:e,w:e.offsetWidth,p:stag<0?1:0,v:0,t:1,d:stag<0?0:i*stag,id:wid})}}
+  function aria(){root.setAttribute('aria-valuenow',log.length);
+    root.setAttribute('aria-valuetext',log.length?log[log.length-1]:'Nothing left to undo')}
+  function tock(){}
+  function removeOne(now){
+    if(cur<0){hp.v+=.12;return}
+    var live=L.filter(function(l){return l.id===cur&&l.t===1});
+    if(!live.length)return;
+    var l=live[live.length-1];l.t=0;l.v=-.04;hp.v+=.05;
+    if(live.length===1){log.pop();tock();
+      if(log.length){spawn(log[log.length-1],28);next=now+420}else{cur=-1}
+      aria()}}
+  function startHold(){if(holding)return;holding=true;hp.t=1.3;next=performance.now();kick()}
+  function release(){if(!holding)return;holding=false;hp.t=1;
+    L.forEach(function(l){if(l.id===cur&&l.t===0){l.t=1;l.d=0}});kick()}
+  function add(){release();if(log.length>=40)log.shift();
+    var top=log[log.length-1],v;do{v=V[Math.floor(Math.random()*V.length)]}while(v===top);
+    L.forEach(function(l){if(l.id===cur)l.t=0});
+    log.push(v);spawn(v,40);hp.v-=.1;aria();kick()}
+  function tick(now){if(holding&&now>=next){removeOne(now);next=Math.max(next+70,now+40)}return holding}
+  function spring(o,dt){if(o.d>0){o.d-=dt*16.667;return true}
+    o.v=(o.v+(o.t-o.p)*K*dt)*Math.pow(D,dt);o.p+=o.v*dt;
+    return Math.abs(o.v)>.001||Math.abs(o.t-o.p)>.001}
+  function cull(){for(var i=L.length-1;i>=0;i--){var l=L[i];
+    if(l.t===0&&l.d<=0&&l.p<.02&&Math.abs(l.v)<.02){root.removeChild(l.el);L.splice(i,1)}}}
+  function step(dt){var m=false;
+    for(var i=0;i<L.length;i++)if(spring(L[i],dt))m=true;
+    if(spring(hp,dt))m=true;cull();return m}
+  function draw(){
+    var tot=0,i,l,p;
+    for(i=0;i<L.length;i++){l=L[i];tot+=l.w*Math.max(l.d>0?0:l.p,0)}
+    var gap=em*.08,x=(W-tot-gap)/2;bounds[0]=x;
+    for(i=0;i<L.length;i++){l=L[i];p=l.d>0?0:Math.max(l.p,0);
+      var sy=p<1?1+(1-p)*.6:p,sk=(1-Math.min(p,1))*-24;
+      l.el.style.transform='translate('+x.toFixed(2)+'px,-50%) skewX('+sk.toFixed(1)+'deg) scale('+p.toFixed(3)+','+sy.toFixed(3)+')';
+      l.el.style.opacity=Math.min(1,p*1.4).toFixed(3);
+      x+=l.w*p}
+    bounds[1]=x+gap;
+    head.style.transform='translate('+(x+gap).toFixed(2)+'px,-50%) scaleY('+Math.max(hp.p,.2).toFixed(3)+')'}
+  function snapToTarget(){L.forEach(function(l){l.p=l.t;l.v=0;l.d=0});hp.p=hp.t;hp.v=0;cull()}
+  function measure(){W=root.clientWidth;em=parseFloat(getComputedStyle(head).fontSize)||40;
+    L.forEach(function(l){l.w=l.el.offsetWidth});draw()}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var h=tick(now);
+    var moving=reduce()?(snapToTarget(),h):(step(dt)||h);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  function audio(){}
+  root.addEventListener('pointerdown',function(e){e.preventDefault();root.focus();audio();
+    try{root.setPointerCapture(e.pointerId)}catch(_){}
+    var r=root.getBoundingClientRect(),s=r.width/W,x=(e.clientX-r.left)/s,y=(e.clientY-r.top)/s;
+    var px=Math.max(22,em*.3),py=Math.max(22,em*.7);
+    if(x>bounds[0]-px&&x<bounds[1]+px&&Math.abs(y-W/2)<py)startHold();else add()});
+  ['pointerup','pointercancel','lostpointercapture'].forEach(function(t){root.addEventListener(t,release)});
+  var HK={' ':1,ArrowLeft:1,ArrowDown:1,Backspace:1};
+  root.addEventListener('keydown',function(e){var k=e.key;
+    if(HK[k]){e.preventDefault();if(!e.repeat){audio();startHold()}}
+    else if(k==='Enter'||k==='ArrowRight'||k==='ArrowUp'){e.preventDefault();if(!e.repeat)add()}
+    else if(k==='Escape'){e.preventDefault();release()}});
+  root.addEventListener('keyup',function(e){if(HK[e.key])release()});
+  root.addEventListener('blur',release);
+  root.addEventListener('contextmenu',function(e){e.preventDefault()});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0;release()}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  spawn(log[log.length-1],-1);aria();
+  if(window.ResizeObserver)new ResizeObserver(measure).observe(root);
+  measure();
+  // Idle demo (demo-v1): performs the control on its own until the first real input.
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,demoI=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  var demoT=setInterval(function(){if(!demo||document.hidden||reduce())return;var o='h.r.ahr.aa.'[demoI++%11];if(o==='h')startHold();else if(o==='r')release();else if(o==='a')add()},600);
+  window.addEventListener('forever:interactive',stopDemo);
+  root.addEventListener('pointerdown',stopDemo,true);root.addEventListener('keydown',stopDemo,true);
+  document.addEventListener('pointerdown',stopDemo,true);
+  draw();
+})();</script>
+</body></html>

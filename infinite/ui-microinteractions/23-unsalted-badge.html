@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Unsalted Badge — UI Micro-interactions. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Unsalted</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#f2b705}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#8a6400}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt09-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;cursor:pointer;border-radius:4px}
+.dt09-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt09-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dt09-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/ui-microinteractions/23-unsalted-badge.html",
+ "title": "Unsalted Badge",
+ "description": "Press and hold a droplet to grow it drop by drop, tap to shed a bead that rolls off the edge. Clean modern: off-black and saffron with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and saffron (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "No idle demo: it stays still until touched. At most 24 drops.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "badge",
+  "counter",
+  "droplet",
+  "metaball",
+  "hold"
+ ]
+}
+</script>
+</head><body>
+<div class="dt09-root" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="24" aria-label="Forever plan drop counter. Press and hold the drop to add drops; tap it to shed one. Arrow keys add and shed, Space or Enter can be held, Escape cancels a hold."></div>
+<div class="dt09-cap" aria-hidden="true">Unsalted</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.dt09-root');
+  var cv=document.createElement('canvas');cv.className='dt09-cv';root.appendChild(cv);
+  var ctx=cv.getContext('2d');
+  var off=document.createElement('canvas'),octx=off.getContext('2d'),img=null;
+  var cw=0,ow=0,dpr=1;
+  var MAX=24,CX=.5,CY=.42,FLOOR=.86;
+  var n=5,r=0,rv=0,s=0,sv=0,pr=0,prv=0,beads=[];
+  var holding=false,added=0,timer=0;
+  function rad(k){return .07+.042*Math.sqrt(k)}
+  function Rt(){return rad(n)+(holding?.016:0)}
+  function Pt(){return n>0?.034*(holding?1.25:1):0}
+  function pendY(){return CY+r*(1-s)+pr}
+  function spr(x,v,t,k,d,dt){v+=(t-x)*k*dt;v*=Math.pow(d,dt);return [x+v*dt,v]}
+  function aria(){root.setAttribute('aria-valuenow',n);
+    root.setAttribute('aria-valuetext',n+(n===1?' drop':' drops')+' in the Forever plan')}
+  function tone(){}
+  function add(){if(n<MAX){n++;rv+=.012;sv+=.07;tone(420-n*8,300-n*6,.08)}else sv+=.025;aria();kick()}
+  function shed(){if(n>0){n--;beads.push({x:CX,y:pendY(),r:Math.max(pr,.022),vx:0,vy:.002,s:0,sv:0,
+      dir:Math.random()<.5?-1:1,land:false});pr=0;prv=0;sv-=.09;rv-=.004;tone(900,260,.12)}
+    else sv+=.05;aria();kick()}
+  function tick(){add();added++;timer=setTimeout(tick,Math.max(140,380-added*24))}
+  function startHold(){if(holding)return;holding=true;added=0;timer=setTimeout(tick,300);kick()}
+  function endHold(){if(!holding)return;clearTimeout(timer);holding=false;if(added===0)shed();kick()}
+  function cancelHold(){if(!holding)return;clearTimeout(timer);holding=false;kick()}
+  function step(dt){var a;
+    a=spr(r,rv,Rt(),.16,.8,dt);r=a[0];rv=a[1];
+    a=spr(s,sv,0,.2,.78,dt);s=a[0];sv=a[1];
+    a=spr(pr,prv,Pt(),.12,.82,dt);pr=a[0];prv=a[1];
+    for(var i=beads.length-1;i>=0;i--){var b=beads[i];
+      a=spr(b.s,b.sv,0,.22,.78,dt);b.s=a[0];b.sv=a[1];
+      if(!b.land){b.vy+=.0011*dt;b.y+=b.vy*dt;
+        if(b.y+b.r*(1-b.s)>FLOOR){b.y=FLOOR-b.r*(1-b.s);
+          if(b.vy>.004){b.sv+=Math.min(.35,b.vy*30);b.vy*=-.28}else{b.vy=0;b.land=true;b.sv+=.12}}}
+      else{b.vx+=b.dir*.00022*dt;b.vx*=Math.pow(.995,dt);b.x+=b.vx*dt;b.y=FLOOR-b.r*(1-b.s);
+        b.s+=Math.sin(b.x*90)*.004}
+      if(b.x<-.1||b.x>1.1)beads.splice(i,1)}
+    return holding||beads.length>0||Math.abs(rv)>1e-5||Math.abs(r-Rt())>1e-4||Math.abs(sv)>1e-5||
+      Math.abs(s)>1e-4||Math.abs(prv)>1e-5||Math.abs(pr-Pt())>1e-4}
+  function snapToTarget(){r=Rt();rv=0;s=0;sv=0;pr=Pt();prv=0;beads=[]}
+  function hex(h){h=h.trim().replace('#','');if(h.length===3)h=h.replace(/./g,'$&$&');
+    return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]}
+  function draw(){if(!cw)return;
+    var cs=getComputedStyle(document.documentElement),bg=cs.getPropertyValue('--bg'),
+      ink=cs.getPropertyValue('--ink'),ac3=hex(cs.getPropertyValue('--acc'));
+    var balls=[{x:CX,y:CY,r:Math.max(r,.001),s:s}];
+    if(pr>.002)balls.push({x:CX,y:pendY(),r:pr,s:0});
+    for(var i=0;i<beads.length;i++)balls.push(beads[i]);
+    var L=balls.length,bx=[],by=[],br=[],sx=[],sy=[];
+    for(i=0;i<L;i++){bx[i]=balls[i].x*ow;by[i]=balls[i].y*ow;br[i]=balls[i].r*balls[i].r*ow*ow;
+      sx[i]=1/(1+balls[i].s);sy[i]=1/Math.max(.3,1-balls[i].s)}
+    var d=img.data,p=0;
+    for(var y=0;y<ow;y++){var fy=y+.5;for(var x=0;x<ow;x++){var fx=x+.5,f=0,gx=0,gy=0;
+      for(i=0;i<L;i++){var dx=(fx-bx[i])*sx[i],dy=(fy-by[i])*sy[i],q=dx*dx+dy*dy+1e-3,w=br[i]/q;
+        f+=w;w=2*w/q;gx-=w*dx;gy-=w*dy}
+      var al=f<.4?0:.5+(f-1)/(Math.sqrt(gx*gx+gy*gy)+1e-9);al=al<0?0:al>1?1:al;
+      d[p]=ac3[0];d[p+1]=ac3[1];d[p+2]=ac3[2];d[p+3]=al*255;p+=4}}
+    octx.putImageData(img,0,0);
+    ctx.fillStyle=bg;ctx.fillRect(0,0,cw,cw);
+    ctx.imageSmoothingEnabled=true;ctx.drawImage(off,0,0,cw,cw);
+    ctx.globalAlpha=.22;ctx.fillStyle=ink;ctx.fillRect(0,Math.round(FLOOR*cw),cw,Math.max(1,Math.round(dpr)));
+    ctx.globalAlpha=1}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  new ResizeObserver(function(){dpr=Math.min(window.devicePixelRatio||1,2);
+    var w=Math.round(root.clientWidth*dpr);if(w<1)return;cw=cv.width=cv.height=w;
+    ow=off.width=off.height=Math.min(400,Math.round(w/2));img=octx.createImageData(ow,ow);draw();kick()}).observe(root);
+  root.addEventListener('pointerdown',function(e){e.preventDefault();root.focus({preventScroll:true});
+    try{root.setPointerCapture(e.pointerId)}catch(_){}startHold()});
+  root.addEventListener('pointerup',endHold);
+  root.addEventListener('pointercancel',cancelHold);
+  root.addEventListener('contextmenu',function(e){e.preventDefault()});
+  root.addEventListener('keydown',function(e){var k=e.key;
+    if(k===' '||k==='Enter'){e.preventDefault();if(!e.repeat)startHold()}
+    else if(k==='ArrowUp'||k==='ArrowRight'){e.preventDefault();add()}
+    else if(k==='ArrowDown'||k==='ArrowLeft'||k==='Backspace'){e.preventDefault();shed()}
+    else if(k==='Escape')cancelHold()});
+  root.addEventListener('keyup',function(e){if(e.key===' '||e.key==='Enter'){e.preventDefault();endHold()}});
+  root.addEventListener('blur',cancelHold);
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0;cancelHold()}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  aria();draw();kick();
+})();</script>
+</body></html>

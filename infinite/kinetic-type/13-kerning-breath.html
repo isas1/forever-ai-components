@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="utf-8">
 <meta name="description" content="Thin pink word BREATHE whose letter-spacing widens and tightens like a slow breath, hairlines glowing in the gaps from the center out.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -24,7 +25,7 @@
        font-family:"Helvetica Neue",Helvetica,Arial,"Segoe UI",sans-serif;}
   .kb-word{
     display:flex;white-space:nowrap;
-    font-size:clamp(40px,17vw,150px);
+    font-size:clamp(18px,12vw,112px);
     font-weight:200;
     color:var(--kb-accent);
     will-change:contents;
@@ -40,13 +41,14 @@
   .kb-cap{position:fixed;right:11px;bottom:9px;font-size:10px;letter-spacing:.22em;
        color:var(--kb-accent);opacity:var(--cap-o);text-transform:uppercase;pointer-events:none;
        font-family:ui-monospace,"SFMono-Regular",monospace;}
+#kb-kbWord:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/kinetic-type/13-kerning-breath.html",
  "title": "Kerning Breath",
  "description": "The word BREATHE expands and contracts letter-spacing in a slow 5.2-second breath cycle; hairline glows pulse in each gap, rippling outward from center.",
- "useWhen": "Meditation, wellness, or calm-brand hero sections. Ambient idle screens where slow organic motion sets tone.",
+ "useWhen": "Meditation, wellness, or calm-brand hero sections. Ambient idle screens where slow organic motion sets tone. Autonomous preview ends at first deliberate input and never resumes.",
  "avoidWhen": "High-information layouts where subtle glow competes with content. Contexts needing static, legible display text.",
  "agentPrompt": "Change the word to 'INHALE', slow the breath to 8 seconds (period=8), and shift the glow color from #ff7b9c to #7bc8ff. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
@@ -62,11 +64,14 @@
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause/resume",
   "phase offset array for center-out ripple",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space activation and visible focus; manual word/geometry changes finish before the renderer sleeps"
  ],
  "knownLimitations": [
   "Pointer nudge (push) adds abrupt gap expansion that may feel jarring in calm contexts",
-  "Font weight 200 requires a system font with thin weight — may render heavier on some Android devices"
+  "Font weight 200 requires a system font with thin weight — may render heavier on some Android devices",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -91,13 +96,13 @@
 </script>
 </head>
 <body>
-  <div class="kb-stage"><div class="kb-word" id="kbWord"></div></div>
+  <div class="kb-stage"><div class="kb-word" id="kb-kbWord" tabindex="0" role="button" aria-label="Activate kinetic text."></div></div>
   <div class="kb-cap">Kerning Breath</div>
 <script>
 (function(){
   var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   var word = "BREATHE";
-  var root = document.getElementById('kbWord');
+  var root = document.getElementById('kb-kbWord');
   var glyphs=[], gaps=[];
 
   // build glyph spans interleaved with breathing-gap spans
@@ -127,7 +132,7 @@
   }
   function ease(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
 
-  var MINGAP=0.02, MAXGAP=0.74; // em
+  var MINGAP=0.02, MAXGAP=0.30; // em
 
   // cache font size once; re-read only on resize (never inside the rAF loop)
   var fs=100;
@@ -180,22 +185,24 @@
   }
   var lastPeak=-1;
 
-  var last=0, period=5.2; // seconds per full breath
+  var last=0, period=5.2, demo=window.__foreverPreview?.demoEnabled!==false; // seconds per full breath
   function tick(now){
     if(!last) last=now;
     var dt=(now-last)/1000; last=now;
-    t += dt/period;
+    if(demo)t += dt/period;
     push *= Math.pow(0.9, dt*60);
     render();
-    raf=requestAnimationFrame(tick);
+    if(demo||push>0.02)raf=requestAnimationFrame(tick);else raf=0;
   }
   function start(){ if(!raf&&!reduce){ last=0; raf=requestAnimationFrame(tick); } }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();});
   document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
   window.addEventListener('resize',function(){ measure(); render(); });
   // pointer nudge: a sharp inhale
-  document.addEventListener('pointermove',function(){ push=Math.min(push+0.15,1.4); });
-  document.addEventListener('click',function(){ push=1.8; });
+  document.addEventListener('pointermove',function(){ push=Math.min(push+0.15,1.4); if(!demo)start(); });
+  document.addEventListener('click',function(){ push=reduce&&push>0?0:1.8; if(reduce)render();else if(!demo)start(); });
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message', function(e){
     var d = e.data;
@@ -207,7 +214,8 @@
   });
   syncTheme();
 
-  if(reduce){ t=0.46; render(); } else { render(); start(); }
+  if(reduce){ t=0.46; render(); } else { render(); if(demo)start(); }
+  root.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();root.click();}});
 })();
 </script>
 </body>

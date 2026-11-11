@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="description" content="Hex Rosette Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hex Rosette Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--paper:#15130F;--ink:#E9E2D0;--mid:#6F6858;--acc:#C9604F}
+:root[data-theme="light"]{--paper:#EFE8D8;--ink:#1E1B16;--mid:#9A917F;--acc:#7A2E22}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--paper)}
+.wte-root{width:100%;height:100%;display:grid;place-items:center;overflow:hidden}
+#wte-r{width:min(88vmin,640px);aspect-ratio:1}
+#wte-c{display:block;width:100%;height:100%;touch-action:none;cursor:pointer;outline:none}
+#wte-c:focus-visible{outline:2px solid var(--acc);outline-offset:4px}
+.wte-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/26-hex-rosette-timer.html",
+ "title": "Hex Rosette Timer",
+ "description": "Drag a hex rosette to set minutes and flip each cell as time passes. Charcoal linocut and parchment palette with brick red.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "hexagon",
+  "rosette",
+  "drag",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wte-root" role="group" aria-label="Hex Rosette Timer">
+<div id="wte-r" role="group" aria-label="Bake timer"><canvas id="wte-c" tabindex="0" role="slider" aria-label="Bake minutes, drag around the rosette" aria-valuemin="1"></canvas></div>
+</div>
+<div class="wte-cap" aria-hidden="true">Hex Rosette Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||rm.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var LAB='Bake minutes, drag around the rosette';
+var R=document.documentElement,box=document.getElementById('wte-r'),cv=document.getElementById('wte-c'),g=cv.getContext('2d'),W=200,dpr=1,C={},raf=0,last=0,U=1000,
+rm=matchMedia('(prefers-reduced-motion: reduce)'),S={dur:8,run:false,done:false,el:0,t0:0},lab='';
+function reduced(){return rm.matches}
+function col(){var s=getComputedStyle(R);['paper','ink','mid','acc'].forEach(function(k){C[k]=s.getPropertyValue('--'+k).trim()})}
+function setTheme(t){R.setAttribute('data-theme',t==='light'?'light':'dark');col();wake()}
+addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme')setTheme(d.theme)});
+function size(){var r=box.getBoundingClientRect();W=r.width||200;dpr=Math.min(devicePixelRatio||1,2);cv.width=cv.height=Math.round(W*dpr);wake()}
+new ResizeObserver(size).observe(box);
+function sp(o,k,vk,t,s,d,dt){o[vk]+=(t-o[k])*s*dt;o[vk]*=Math.pow(d,dt);o[k]+=o[vk]*dt;return Math.abs(t-o[k])<.002&&Math.abs(o[vk])<.002}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function pt(e){var r=cv.getBoundingClientRect();return[(e.clientX-r.left)*W/r.width,(e.clientY-r.top)*W/r.height]}
+function left(){return S.done?0:S.run?Math.ceil(S.dur-S.el):S.dur}
+function num(t,x,y,sz){g.font=sz+'px ui-monospace,Menlo,monospace';g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';g.lineWidth=sz*.35;g.strokeStyle=C.paper;g.strokeText(t,x,y);g.fillStyle=C.ink;g.fillText(t,x,y)}
+function start(){demoPaused=false;demoSession=demoEnabled;S.run=true;S.done=false;S.el=0;S.t0=performance.now();wake()}
+function reset(){demoPaused=false;S.run=false;S.done=false;S.el=0;wake()}
+function sync(){var t=LAB+': '+(S.done?'done':S.run?left()+' left':S.dur+' set');if(t!==lab){lab=t;cv.setAttribute('aria-label',t);if(cv.getAttribute('role')==='slider')cv.setAttribute('aria-valuenow',S.dur)}}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(frame)}}
+function frame(now){raf=0;var dt=Math.min(now-last,50)/16.667;last=now;demoBeat(dt*16.667);
+if(S.run&&!demoPaused){S.el=(now-S.t0)/U;if(S.el>=S.dur){S.el=S.dur;S.run=false;S.done=true;onDone()}}
+var busy=demoPaused?false:step(dt,now);g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,W);draw();sync();
+if((busy||S.run||demoEnabled)&&!demoPaused&&!rm.matches&&!raf)raf=requestAnimationFrame(frame);else if(S.run&&!demoPaused&&!demoSession&&!raf)raf=requestAnimationFrame(frame)}
+document.addEventListener('visibilitychange',function(){if(document.hidden){hiddenAt=performance.now();cancelAnimationFrame(raf);raf=0}else{if(hiddenAt&&S.run)S.t0+=performance.now()-hiddenAt;hiddenAt=0;wake()}});
+cv.addEventListener('focus',wake);cv.addEventListener('blur',wake);
+var N=37,cells=[],rot=0,rotV=0,base=0,dragRot=0,drag=false,a0=0,acc=0,d0=8,RS={};
+cv.setAttribute('aria-valuemax',N);
+(function(){var D=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];cells.push({q:0,r:0});
+for(var k=1;k<4;k++){var q=-k,r=k;for(var i=0;i<6;i++)for(var j=0;j<k;j++){cells.push({q:q,r:r});q+=D[i][0];r+=D[i][1]}}
+cells.forEach(function(c){c.a=0;c.av=0;c.f=0;c.v=0})})();
+function wrap(a){return a>Math.PI?a-2*Math.PI:a<-Math.PI?a+2*Math.PI:a}
+function setDur(d){S.dur=clamp(Math.round(d),1,N);cv.setAttribute('aria-valuenow',S.dur);wake()}
+function onDone(){base+=Math.PI/6}
+function step(dt){
+ var busy=false,rr=reduced();
+ RS.rot=rot;RS.v=rotV;
+ if(rr){rot=base;rotV=0}else{busy=!sp(RS,'rot','v',base+dragRot,.05,.88,dt);rot=RS.rot;rotV=RS.v}
+ cells.forEach(function(c,i){
+  var at=i<S.dur?1:0,ft=(i<S.dur&&S.el>=i+1)?1:0;
+  if(rr){c.a=at;c.f=ft;c.av=c.v=0}else{
+   if(!sp(c,'a','av',at,.09,.78,dt))busy=true;
+   if(!sp(c,'f','v',ft,.07,.84,dt))busy=true}});
+ return busy}
+function hex(s){g.beginPath();for(var i=0;i<6;i++){var a=Math.PI/3*i+Math.PI/6;g[i?'lineTo':'moveTo'](Math.cos(a)*s,Math.sin(a)*s)}g.closePath()}
+function draw(){
+ var sz=W*.072;g.save();g.translate(W/2,W/2);g.rotate(rot);
+ cells.forEach(function(c,i){
+  var x=sz*Math.sqrt(3)*(c.q+c.r/2),y=sz*1.5*c.r,on=i<S.dur,s=sz*(.8+.14*c.a);
+  g.save();g.translate(x,y);g.scale(Math.cos(Math.PI*c.f),1);
+  hex(s);
+  if(c.f>.5){g.fillStyle=C.ink;g.fill()}
+  else if(on&&S.run&&S.el>i&&S.el<i+1){hex(s*(S.el-i));g.fillStyle=C.acc;g.fill();hex(s)}
+  g.lineWidth=on?1.6:1;g.strokeStyle=on?(S.done?C.acc:C.ink):C.mid;g.stroke();
+  g.restore()});
+ g.restore();
+ num(left(),W/2,W/2,W*.1)}
+function ang(e){var p=pt(e);return Math.atan2(p[1]-W/2,p[0]-W/2)}
+cv.addEventListener('pointerdown',function(e){demoPaused=false;cv.setPointerCapture(e.pointerId);if(S.run||S.done)reset();drag=true;a0=ang(e);acc=0;d0=S.dur});
+cv.addEventListener('pointermove',function(e){if(!drag)return;var a=ang(e);acc+=wrap(a-a0);a0=a;setDur(d0+acc/(2*Math.PI)*36);dragRot=acc*.12;wake()});
+function up(){if(!drag)return;drag=false;dragRot=0;start()}
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+cv.addEventListener('keydown',function(e){demoPaused=false;var k=e.key,d=(k==='ArrowUp'||k==='ArrowRight')?1:(k==='ArrowDown'||k==='ArrowLeft')?-1:0;
+ if(d){e.preventDefault();reset();setDur(S.dur+d)}else if(k==='Enter'||k===' '){e.preventDefault();start()}});
+
+function demoFinished(){return S.done}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;start()}
+if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,performance.now());col();size();if(demoEnabled&&!rm.matches)demoStart();
+rm.addEventListener('change',function(){if(rm.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

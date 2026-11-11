@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A soft radial spotlight follows the pointer, punching through a dark veil to reveal a hidden pink dot grid and the word REVEAL.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Spotlight Mask</title>
 <script>
@@ -16,19 +17,19 @@
 :root[data-theme="light"]{
   --ccp03-bg:#f2f2f6; --ccp03-acc:#d60064; --cap-o:.55;
 }
-html,body{margin:0;height:100%;overflow:hidden}
-body{background:var(--ccp03-bg);display:grid;place-items:center}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ccp03-bg)}
 #ccp03-c{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:none;touch-action:none}
+.ccp03-canvas:focus-visible{outline:2px solid var(--ccp03-acc);outline-offset:-4px}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:var(--ccp03-acc);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/cursor-pointer/03-spotlight-mask.html",
  "title": "Spotlight Mask",
- "description": "Radial spotlight follows the pointer, punching through a dark veil to reveal a pink dot grid and glowing word. Auto-demos via Lissajous path when idle.",
+ "description": "Radial spotlight follows the pointer, punching through a dark veil to reveal a pink dot grid and glowing word. Auto-demos via Lissajous path until first deliberate input.",
  "useWhen": "Dark-theme hero sections, teaser/reveal interactions, portfolio landing pages that want cursor-driven drama.",
  "avoidWhen": "Light backgrounds (veil color hardcoded dark navy). Contexts where cursor visibility matters — cursor is hidden inside the canvas.",
- "agentPrompt": "Change the revealed word by setting WORD='HELLO', shift accent to electric blue by setting ACC='#00eaff' and updating all rgba(255,92,168,...) calls to match. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Adjust the existing palette tokens and effect parameters while preserving manual control. Arrow keys steer; first click/touch stops the attract path permanently for this mount. Keep demo-v1 lifecycle marker, __foreverPreview.demoEnabled initialization and forever:interactive handler. Preserve reduced motion, visibility suspension and theme switching.",
  "editableAreas": [
   "revealed word (WORD variable)",
   "accent color (ACC='#ff5ca8')",
@@ -42,18 +43,22 @@ body{background:var(--ccp03-bg);display:grid;place-items:center}
   "DPR-aware canvas sizing",
   "visibilitychange pause",
   "prefers-reduced-motion static fallback",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "sticky demo-v1 preview lifecycle; stop attract work, retain manual feedback and settling",
+  "pointer/touch takeover, keyboard access and visibility suspension",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
   "cursor:none hides the system cursor inside the tile — must restore in production wrappers",
-  "Dot grid loops over full canvas each frame; dense grids on large screens may drop frames"
+  "Dot grid loops over full canvas each frame; dense grids on large screens may drop frames",
+  "Control state is local to each mount; format changes preserve preview takeover but create a fresh source instance.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
   "agent-ready",
   "easy-to-modify",
-  "mobile-ready",
   "accessible",
   "copy-paste-safe",
   "minimal-deps",
@@ -71,17 +76,20 @@ body{background:var(--ccp03-bg);display:grid;place-items:center}
 }
 </script>
 </head><body>
-<canvas id="ccp03-c" role="img" aria-label="A radial spotlight following the pointer reveals a hidden word grid through a dark veil"></canvas>
+<canvas class="ccp03-canvas" tabindex="0" aria-label="Pointer effect. Use arrow keys to steer." id="ccp03-c" role="img" aria-label="A radial spotlight following the pointer reveals a hidden word grid through a dark veil"></canvas>
 <div class="cap">Spotlight Mask</div>
 <script>(function(){
 var cv=document.getElementById('ccp03-c'),ctx=cv.getContext('2d');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+window.addEventListener('forever:interactive',takeover);
+document.addEventListener('pointerdown',function(e){if(e.button===0)takeover();},{capture:true,passive:true});
 var root=document.documentElement;
 var BG='#0a0a0f',ACC='#ff5ca8';
 var W=0,H=0,DPR=1,running=true,raf=0,t0=0;
 // virtual pointer (in CSS px), real pointer target, blended position
 var vx=0,vy=0,px=0,py=0,bx=0,by=0,rad=0;
-var realActive=false,lastMove=-1e9;
+var realActive=!demoEnabled,lastMove=-1e9;
 var WORD='REVEAL';
 
 // colours JS draws with — read from tokens, re-read + invalidated on theme switch
@@ -89,8 +97,8 @@ var C={};
 function hex2rgb(h){h=h.replace('#','');var n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255];}
 function syncTheme(){
   var cs=getComputedStyle(root);
-  BG=cs.getPropertyValue('--ccp03-bg').trim();
-  ACC=cs.getPropertyValue('--ccp03-acc').trim();
+  BG=cs.getPropertyValue('--ccp03-bg').trim()||'#0a0a0f';
+  ACC=cs.getPropertyValue('--ccp03-acc').trim()||'#ff5ca8';
   C.bgRgb=hex2rgb(BG);
   C.accRgb=hex2rgb(ACC);
   C.veilA=parseFloat(cs.getPropertyValue('--ccp03-veil-a'))||.94;
@@ -105,7 +113,7 @@ addEventListener('message',function(e){
   var d=e.data;
   if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
     root.setAttribute('data-theme',d.theme);syncTheme();
-    if(reduce&&W)frame(bx,by,rad);   // no rAF loop in reduced motion — force a recolor
+    if(W)frame(bx,by,rad);   // no rAF loop in reduced motion — force a recolor
   }
 });
 syncTheme();
@@ -117,7 +125,7 @@ function resize(){
   ctx.setTransform(DPR,0,0,DPR,0,0);
   bx=px=vx=W*0.5;by=py=vy=H*0.5;
 }
-window.addEventListener('resize',resize);
+window.addEventListener('resize',function(){resize();frame(bx,by,rad);wake();});
 
 // eased lissajous demo path — smooth figure that sweeps the whole tile
 function demo(ms){
@@ -127,11 +135,22 @@ function demo(ms){
   vx=nx*W;vy=ny*H;
 }
 
-cv.addEventListener('pointermove',function(e){
+function move(e){
   var r=cv.getBoundingClientRect();
   px=e.clientX-r.left;py=e.clientY-r.top;
   realActive=true;lastMove=performance.now();
-},{passive:true});
+  if(reduce){bx=px;by=py;frame(bx,by,rad);}else wake();
+}
+cv.addEventListener('pointermove',move,{passive:true});cv.addEventListener('pointerdown',move,{passive:true});
+
+cv.addEventListener('keydown',function(e){
+  if(!/^Arrow(Left|Right|Up|Down)$/.test(e.key))return;
+  e.preventDefault();takeover();var r=cv.getBoundingClientRect(),step=Math.max(8,Math.min(W,H)*.06);
+  var x=px+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0),y=py+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0);
+  move({clientX:r.left+Math.max(0,Math.min(W,x)),clientY:r.top+Math.max(0,Math.min(H,y))});
+});
+function takeover(){if(!demoEnabled)return;demoEnabled=false;realActive=true;px=bx;py=by;wake();}
+function wake(){if(!reduce&&!document.hidden&&!raf){running=true;raf=requestAnimationFrame(tick);}}
 
 function font(px){return '700 '+px+'px ui-monospace,Menlo,monospace';}
 
@@ -154,6 +173,7 @@ function drawHidden(){
   ctx.restore();
 }
 
+var wordSpr=null,wordKey='';
 // bright revealed content drawn ONLY inside the spotlight via clip
 function drawRevealed(cx,cy,R){
   ctx.save();
@@ -167,12 +187,19 @@ function drawRevealed(cx,cy,R){
     ctx.beginPath();ctx.arc(x,y,r,0,6.2832);ctx.fill();
   }}
   // bright word
-  ctx.translate(W*0.5,H*0.5);
-  var fs=Math.min(W/(WORD.length*0.72),H*0.42);
-  ctx.font=font(fs);ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.shadowColor=ACC;ctx.shadowBlur=fs*0.18;
-  ctx.fillStyle='#fff';ctx.fillText(WORD,0,0);
-  ctx.fillStyle=ACC;ctx.fillText(WORD,0,0);
+  // the glowing word is baked once (resize / theme switch), not blurred every frame
+  var fs=Math.min(W/(WORD.length*0.72),H*0.42),k=[W,H,DPR,ACC].join();
+  if(wordKey!==k){
+    wordKey=k;var n=Math.ceil(W*DPR),m=Math.ceil(H*DPR),g;
+    if(!wordSpr)wordSpr=document.createElement('canvas');
+    wordSpr.width=n;wordSpr.height=m;g=wordSpr.getContext('2d');
+    g.setTransform(DPR,0,0,DPR,0,0);g.translate(W*0.5,H*0.5);
+    g.font=font(fs);g.textAlign='center';g.textBaseline='middle';
+    g.shadowColor=ACC;g.shadowBlur=fs*0.18;
+    g.fillStyle='#fff';g.fillText(WORD,0,0);
+    g.fillStyle=ACC;g.fillText(WORD,0,0);
+  }
+  ctx.drawImage(wordSpr,0,0,W,H);
   ctx.restore();
 }
 
@@ -202,21 +229,21 @@ function frame(cx,cy,R){
 }
 
 function tick(ms){
-  if(!running)return;
+  raf=0;if(!running)return;
   if(!t0)t0=ms;
   // self-demo unless real pointer moved within last 2.6s
-  if(realActive&&ms-lastMove>2600)realActive=false;
-  demo(ms);
+  if(demoEnabled&&realActive&&ms-lastMove>2600)realActive=false;
+  if(demoEnabled)demo(ms);
   var tx=realActive?px:vx,ty=realActive?py:vy;
   // spring/lerp toward target
   var k=realActive?0.18:0.085;
   bx+=(tx-bx)*k;by+=(ty-by)*k;
   // breathing radius
   var base=Math.min(W,H)*0.22;
-  var tR=base*(1+0.06*Math.sin(ms*0.0021));
+  var tR=demoEnabled?base*(1+0.06*Math.sin(ms*0.0021)):rad;
   rad+=(tR-rad)*0.12;
   frame(bx,by,rad);
-  raf=requestAnimationFrame(tick);
+  if(demoEnabled||Math.abs(tx-bx)+Math.abs(ty-by)>.03)raf=requestAnimationFrame(tick);
 }
 
 function start(){if(!raf){t0=0;raf=requestAnimationFrame(tick);}}
@@ -224,7 +251,7 @@ function stop(){if(raf){cancelAnimationFrame(raf);raf=0;}}
 
 document.addEventListener('visibilitychange',function(){
   if(document.hidden){running=false;stop();}
-  else if(!reduce){running=true;start();}
+  else wake();
 });
 
 resize();

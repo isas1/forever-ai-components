@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A perforated pegboard: a scan line sweeps the pegs and more flip from brick to sage as fixes land, until the suite is all green.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Test Pegboard</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --co16-bg:#171614; --co16-surface:#211f1c; --co16-line:#3a3631; --co16-ink:#e8e3d8; --co16-muted:#a39c90;
+    --co16-clay:#c87456; --co16-ochre:#b88b58; --co16-sage:#6f8f79; --co16-brick:#a85858; --co16-stone:#7a746b;
+    --co16-board:#2c2925; --co16-hole:#0e0d0c;
+    --co16-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --co16-bg:#f3efe6; --co16-surface:#fbf8f1; --co16-line:#d9d2c4; --co16-ink:#1d1b18; --co16-muted:#5f594f;
+    --co16-clay:#a4532f; --co16-ochre:#8a6232; --co16-sage:#46664f; --co16-brick:#8e3b3b; --co16-stone:#8f887c;
+    --co16-board:#e1d8c6; --co16-hole:#7d745f;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--co16-bg)}
+  .co16-root{position:fixed;inset:0;cursor:pointer;outline:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+  .co16-root:focus-visible{box-shadow:inset 0 0 0 2px var(--co16-ochre)}
+  .co16-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .co16-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .co16-cap{position:fixed;left:8px;bottom:7px;font:10px var(--co16-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--co16-ink);opacity:.28}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/claude-code-objects/16-test-pegboard.html",
+ "title": "Test Pegboard",
+ "description": "Pegboard of painted pegs: a scan line sweeps across and failing brick pegs turn sage as fixes land, until the suite is all green and a new one begins.",
+ "useWhen": "A test run converging to green needs a physical, wordless status object.",
+ "avoidWhen": "Per-test names or logs must be readable.",
+ "agentPrompt": "Palette: warm graphite, clay, ochre and sage. Change PEG grid or fail counts in the script; recolour with the --co16 tokens.",
+ "editableAreas": [
+  "colour tokens on :root (--co16-*), board and hole tones",
+  "grid size, fail counts and sweep speed in the script"
+ ],
+ "preserveElements": [
+  "demo-v1: __foreverPreview.demoEnabled, forever:interactive, first-input takeover",
+  "theme: ?theme=, forever:theme messages, light tokens",
+  "IIFE, visibilitychange, reduced motion, keyboard, aria-live"
+ ],
+ "knownLimitations": [
+  "Counter is drawn on canvas; the live region carries the same value for assistive tech.",
+  "State is local to each mounted instance."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "pegboard",
+  "tests",
+  "status",
+  "canvas",
+  "progress"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="co16-root" id="co16-root" role="button" tabindex="0" aria-label="Test pegboard. Press to run the suite again.">
+  <canvas class="co16-cv" id="co16-cv" aria-hidden="true"></canvas>
+  <span class="co16-sr" id="co16-live" aria-live="polite" data-fit-clip-ok></span>
+</div>
+<div class="co16-cap" aria-hidden="true">Test Pegboard</div>
+<script>
+(function(){
+  'use strict';
+  var $=function(i){return document.getElementById(i)};
+  var root=$('co16-root'),cv=$('co16-cv'),ctx=cv.getContext('2d'),live=$('co16-live');
+  var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var C={},W=0,H=0,U=1,raf=0,last=0,T=0,nextDemo=400,seed=7;
+  function rnd(){seed=(seed*16807)%2147483647;return seed/2147483647}
+  function hx(h){h=h.replace('#','');return[0,2,4].map(function(i){return parseInt(h.substr(i,2),16)})}
+  function M(a,b,t){var x=hx(a),y=hx(b);return '#'+[0,1,2].map(function(i){return('0'+Math.round(x[i]+(y[i]-x[i])*t).toString(16)).slice(-2)}).join('')}
+  function A(h,a){return 'rgba('+hx(h).join()+','+a+')'}
+  function tok(){var s=getComputedStyle(document.documentElement);'bg board hole ink muted sage brick ochre'.split(' ').forEach(function(k){C[k]=s.getPropertyValue('--co16-'+k).trim()||'#888888'})}
+  function rr(x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+  function setTheme(t){if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);tok();draw()}}
+  window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+  function fit(){var d=Math.min(window.devicePixelRatio||1,2);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*d;cv.height=H*d;ctx.setTransform(d,0,0,d,0,0);U=Math.min(W,H)/100;draw()}
+
+  /* pegs: 5 x 4 on a 9 x 7 perforated grid; v = 0 brick .. 1 sage */
+  var pegs=[],phase=0,sx=-45,res=[],settle=0,speckle=[];
+  for(var j=0;j<4;j++)for(var i=0;i<5;i++)pegs.push({x:(i*2-4)*7.6,y:(j*2-3)*7.6-7,v:1,pop:0});
+  for(var s=0;s<70;s++)speckle.push([rnd()*78-39,rnd()*60-37,rnd()*.5+.2]);
+  function fails(){return pegs.filter(function(p){return p.v<.5}).length}
+  function green(){return pegs.length-fails()}
+  [1,3,4,7,8,11,13,16,18].forEach(function(k){pegs[k].v=0});
+  function say(){live.textContent=green()+' of '+pegs.length+' passing'}
+  function startRun(){
+    if(phase===1)return;
+    var f=pegs.map(function(p,k){return p.v<.5?k:-1}).filter(function(k){return k>=0});
+    res=pegs.map(function(){return 1});
+    if(!f.length){while(res.filter(function(r){return!r}).length<8)res[Math.floor(rnd()*pegs.length)]=0}
+    else{f.sort(function(){return rnd()-.5});f.slice(Math.ceil(f.length/2)).forEach(function(k){res[k]=0})}
+    phase=1;sx=-44;
+    if(reduced()){finish(true);return}
+    go();
+  }
+  function finish(instant){
+    pegs.forEach(function(p,k){p.v=res[k]});phase=0;sx=-45;
+    settle=fails()?0:1;say();
+    nextDemo=T+(fails()?900:2800);
+    if(instant)draw();
+  }
+  function step(dt){
+    if(phase===1){
+      sx+=dt*34;
+      pegs.forEach(function(p,k){if(sx>p.x&&Math.abs(p.v-res[k])>.01&&!p.fl){p.fl=1;p.pop=1}
+        if(p.fl)p.v+=(res[k]-p.v)*Math.min(1,dt*9)});
+      if(sx>44){pegs.forEach(function(p){p.fl=0});finish()}
+    }
+    pegs.forEach(function(p){p.pop=Math.max(0,p.pop-dt*2.6)});
+    settle=Math.max(0,settle-dt*.7);
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);ctx.save();ctx.translate(W/2,H/2);ctx.scale(U,U);
+    var g=ctx.createLinearGradient(0,-38,0,24);g.addColorStop(0,M(C.board,'#ffffff',.06));g.addColorStop(1,M(C.board,'#000000',.12));
+    ctx.fillStyle=A('#000000',.3);rr(-39.4,-36.2,80,62,4);ctx.fill();
+    ctx.fillStyle=g;rr(-40,-38,80,62,4);ctx.fill();
+    ctx.strokeStyle=A(C.ink,.12);ctx.lineWidth=.35;ctx.stroke();
+    speckle.forEach(function(q){ctx.fillStyle=A(C.ink,.04*q[2]*5);ctx.fillRect(q[0],q[1],.5,.5)});
+    for(var j=0;j<7;j++)for(var i=0;i<9;i++){
+      var x=(i-4)*7.6,y=(j-3)*7.6-7;
+      ctx.fillStyle=C.hole;ctx.beginPath();ctx.arc(x,y,1.25,0,6.283);ctx.fill();
+      ctx.fillStyle=A(C.ink,.1);ctx.beginPath();ctx.arc(x+.2,y+.35,1.25,.1,3.0);ctx.arc(x,y,1.0,3.0,.1,true);ctx.fill();
+    }
+    pegs.forEach(function(p){
+      var l=p.v*1.1+p.pop*2+settle*.2,r=4+p.pop*.5,col=M(C.brick,C.sage,p.v),y=p.y-l*.5;
+      ctx.fillStyle=A('#000000',.38);ctx.beginPath();ctx.ellipse(p.x+.9,p.y+1.1+l*.3,r,r*.92,0,0,6.283);ctx.fill();
+      var rg=ctx.createRadialGradient(p.x-1.4,y-1.6,.3,p.x,y,r);
+      rg.addColorStop(0,M(col,'#ffffff',.32));rg.addColorStop(.55,col);rg.addColorStop(1,M(col,'#000000',.38));
+      ctx.fillStyle=rg;ctx.beginPath();ctx.arc(p.x,y,r,0,6.283);ctx.fill();
+      ctx.strokeStyle=A('#000000',.25);ctx.lineWidth=.3;ctx.stroke();
+      ctx.fillStyle=M(col,'#000000',.45);ctx.beginPath();ctx.arc(p.x,y,2.35,0,6.283);ctx.fill();ctx.strokeStyle='#f3efe6';ctx.lineWidth=.65;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();if(p.v>=.5){ctx.moveTo(p.x-1.25,y);ctx.lineTo(p.x-.35,y+.9);ctx.lineTo(p.x+1.3,y-1);}else{ctx.moveTo(p.x-1.2,y);ctx.lineTo(p.x+1.2,y);}ctx.stroke();
+    });
+    if(phase===1){
+      var sg=ctx.createLinearGradient(sx-9,0,sx+1,0);sg.addColorStop(0,A(C.ochre,0));sg.addColorStop(1,A(C.ochre,.34));
+      ctx.fillStyle=sg;ctx.fillRect(sx-9,-37,10,60);
+      ctx.fillStyle=C.ochre;ctx.fillRect(sx,-37,.9,60);
+    }
+    ctx.fillStyle=C.ink;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font='700 7.4px ui-monospace,Menlo,monospace';
+    ctx.globalAlpha=.85;ctx.fillText(green()+'/'+pegs.length,0,34.5);ctx.globalAlpha=1;
+    ctx.restore();
+  }
+  function loop(now){
+    if(document.hidden){raf=0;last=0;return}
+    var dt=last?Math.min(now-last,50)/1000:.016;last=now;T+=dt*1000;
+    if(demoEnabled&&T>=nextDemo){nextDemo=1e12;startRun()}
+    step(dt);draw();
+    if(reduced()||(phase!==1&&!demoEnabled&&settle<=0&&!pegs.some(function(p){return p.pop>0}))){raf=0;last=0;return}
+    raf=requestAnimationFrame(loop);
+  }
+  function go(){if(!raf&&!document.hidden&&!reduced()){last=0;raf=requestAnimationFrame(loop)}}
+  function takeover(){demoEnabled=false}
+  window.addEventListener('forever:interactive',takeover);
+  root.addEventListener('pointerdown',function(){takeover();startRun();go()});
+  root.addEventListener('click',function(e){if(e.detail===0){takeover();startRun();go()}});
+  root.addEventListener('keydown',function(e){takeover();if(e.key===' '||e.key==='Enter'){e.preventDefault();startRun();go()}});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0}last=0}else go();
+  });
+  window.addEventListener('resize',fit);
+  tok();fit();say();
+  if(reduced()){pegs.forEach(function(p,k){p.v=k%5===2||k===11?0:1});draw();say()}
+  else{nextDemo=400;go()}
+})();
+</script>
+</body>
+</html>

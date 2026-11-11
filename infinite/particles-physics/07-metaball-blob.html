@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Hot-pink gooey metaball blobs drift and merge fluidly via high-contrast threshold, with the cursor adding an extra attracting blob.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Metaball Fluid</title>
@@ -26,8 +27,8 @@
     --c07-fx:contrast(3) blur(0.4px); --c07-rgb0:167.4 137.8 151.8; --c07-rgbk:-2.07 -3.11 -2.51; --c07-scap:10;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c07-bg)}
-  #c{display:block;width:100%;height:100%;filter:var(--c07-fx)}
-  .wrap{position:relative;width:100%;height:100%}
+  #c07-canvas{display:block;width:100%;height:100%;filter:var(--c07-fx)}
+  .c07-wrap{position:relative;width:100%;height:100%}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
     color:var(--c07-cap);opacity:var(--c07-cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none;z-index:2}
 </style>
@@ -50,11 +51,13 @@
   "low-res offscreen canvas pattern (critical for perf)",
   "visibility pause",
   "pointer blob attractor",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "CPU-bound pixel loop — heavy on low-end devices",
-  "No reduced-motion fallback beyond a single static frame"
+  "No reduced-motion fallback beyond a single static frame",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -75,11 +78,16 @@
 </script>
 </head>
 <body>
-<div class="wrap"><canvas id="c"></canvas></div>
+<div class="c07-wrap"><canvas id="c07-canvas" class="c07-root"></canvas></div>
 <div class="cap">Metaball Fluid</div>
 <script>
 (function(){
-const cv=document.getElementById('c'),x=cv.getContext('2d');
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+const cv=document.getElementById('c07-canvas'),x=cv.getContext('2d');
 let W,H,DPR,blobs=[],t=0,reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 // low-res offscreen for cheap metaballs
 const off=document.createElement('canvas'),ox=off.getContext('2d');
@@ -107,7 +115,7 @@ cv.addEventListener('pointermove',e=>{const r=cv.getBoundingClientRect();
   pointer.x=(e.clientX-r.left)/4;pointer.y=(e.clientY-r.top)/4;});
 cv.addEventListener('pointerleave',()=>{pointer.x=-999;pointer.y=-999;});
 function step(){
-  t+=0.012;
+  if(demoEnabled&&!reduce)t+=0.012;
   const img=imgData,d=img.data;
   for(const b of blobs){b.cx=LW/2+Math.cos(t*b.sp+b.ph)*b.ax;b.cy=LH/2+Math.sin(t*b.sp*1.3+b.ph)*b.ay;}
   const px=pointer.x,py=pointer.y,hasP=px>-50;
@@ -125,10 +133,11 @@ function step(){
   x.clearRect(0,0,W,H);x.imageSmoothingEnabled=true;
   x.drawImage(off,0,0,W,H);
 }
-let raf;function loop(){step();raf=requestAnimationFrame(loop);}
-function play(){if(!raf&&!document.hidden){if(reduce){step();return;}loop();}}
+let raf=0;function loop(){raf=0;if(document.hidden)return;step();if(!reduce&&(demoEnabled||(false)))play();}
+function play(){if(!raf&&!document.hidden){if(reduce){step();return;}raf=requestAnimationFrame(loop);}}
 function stop(){cancelAnimationFrame(raf);raf=0;}
-document.addEventListener('visibilitychange',()=>document.hidden?stop():play());
+document.addEventListener('visibilitychange',()=>document.hidden?stop():(demoEnabled?play():step()));
+['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;play();}));
 play();
 })();
 </script>

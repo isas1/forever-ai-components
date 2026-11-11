@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Night Fold Undo — Editor Workflows. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Night Fold Undo</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--acc:#f2b705;--card:#17181b;--back:#22242a}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--acc:#8a6400;--card:#ffffff;--back:#e9e9e6}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.nfd-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+.nfd-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.nfd-cv{display:block;width:100%;height:100%}
+.nfd-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/editor-workflows/14-night-fold-undo.html",
+ "title": "Night Fold Undo",
+ "description": "Undo as a stack of nights: fling the top card up to fold it back over the stack, fling down or tap the turned corner to bring it back, tap empty space to add a night and drop the folded ones. Clean modern: off-black and saffron with a light theme. From the daily-team 'Wrong-Way Reel' set (2026-10-20).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and saffron (docs/style-clean-modern.md) (--bg, --ink, --acc, --card, --back). Edit VERBS for each night's label; G() sets card size.",
+ "editableAreas": [
+  "colour tokens on :root (--bg, --ink, --acc, --card, --back) and the light block",
+  "VERBS labels and the seeded log",
+  "card geometry in G() and idle demo steps"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had click sounds; removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "undo",
+  "rewind",
+  "history",
+  "cards",
+  "fold",
+  "stack",
+  "fling"
+ ]
+}
+</script>
+</head><body>
+<div class="nfd-root" role="slider" tabindex="0" aria-orientation="vertical" aria-valuemin="0" aria-label="Forever undo, a stack of nights. Fling the top night up to fold it back. Fling down or tap the turned corner to bring it back. Tap empty space to add a night. Arrow up folds, arrow down unfolds, Enter adds a night, Escape brings every night back."></div>
+<div class="nfd-cap" aria-hidden="true">Night Fold Undo</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.nfd-root');
+  var cv=document.createElement('canvas');cv.className='nfd-cv';root.appendChild(cv);
+  var ctx=cv.getContext('2d'),S=0,dpr=1;
+  var VERBS=['Renamed cat-pics-2','Packed Emotional baggage','Saved to Forever','Moved Monday','Deleted','Cancel','Upgraded to Forever plan','Renamed cat-pics-final','Unpacked Emotional baggage','Moved Tuesday','Archived cat-pics-2','Kept it Forever'];
+  var log=[0,3,1,6,2,4,10],made=7;
+  var p=2,v=0,T=2,mode='idle',hang=1,drop=0,dv=0,parts=[],lastI=0;
+  function cl(a,lo,hi){return a<lo?lo:a>hi?hi:a}
+  function G(){return{W:S*.6,H:S*.3,X:S/2,Y:S*.53,g:Math.max(3,S*.014)}}
+
+  function ensureAC(){}
+  function tick(){}
+
+  function announce(){var N=log.length;root.setAttribute('aria-valuemax',N);root.setAttribute('aria-valuenow',T);
+    root.setAttribute('aria-valuetext',T>=N?'Every night folded back':'Night '+(N-T)+' of '+N+': '+VERBS[log[N-1-T]]+(T?', '+T+' folded back':''))}
+  function setT(t){T=cl(t,0,log.length);mode='spring';announce();kick()}
+  function addNight(){var N=log.length,Gm=G();
+    if(T>0){if(!reduce())for(var i=0;i<Math.min(T,6)*5;i++)parts.push({x:Gm.X+Gm.W/2-Math.random()*Gm.W*.35,y:Gm.Y-Gm.H-Math.random()*Gm.g*4,vx:(Math.random()-.5)*3,vy:-Math.random()*3,l:1,a:i%2});
+      log.length=N-T}
+    log.push((made++*5)%12);p=0;T=0;v=0;lastI=0;mode='idle';drop=1;dv=0;announce();tick();kick()}
+
+  function step(dt){var N=log.length,mv=false;
+    if(mode==='coast'){v*=Math.pow(.92,dt);p+=v*dt;
+      if(p<-.05||p>N+.05||Math.abs(v)<.035){T=cl(Math.round(p+v*4),0,N);mode='spring';announce()}mv=true}
+    else if(mode==='spring'){v=(v+(T-p)*.18*dt)*Math.pow(.8,dt);p+=v*dt;
+      if(Math.abs(T-p)<.001&&Math.abs(v)<.001){p=T;v=0;mode='idle'}else mv=true}
+    var ht=(mode==='drag'||mode==='coast')?0:1;
+    if(Math.abs(ht-hang)>.002){hang+=(ht-hang)*(1-Math.pow(.86,dt));mv=true}else hang=ht;
+    if(drop||dv){dv=(dv-drop*.2*dt)*Math.pow(.78,dt);drop+=dv*dt;
+      if(Math.abs(drop)<.001&&Math.abs(dv)<.001)drop=dv=0;else mv=true}
+    for(var i=parts.length-1;i>=0;i--){var q=parts[i];q.vy+=.25*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;q.l-=.02*dt;if(q.l<=0)parts.splice(i,1)}
+    if(parts.length)mv=true;
+    return mv}
+  function snapToTarget(){if(mode!=='drag'){p=T;v=0;mode='idle';hang=1}else hang=0;drop=dv=0;parts.length=0}
+
+  function draw(){if(!S)return;
+    var cs=getComputedStyle(document.documentElement),c={};
+    ['ink','acc','card','back'].forEach(function(k){c[k]=cs.getPropertyValue('--'+k).trim()});
+    var Gm=G(),W=Gm.W,H=Gm.H,X=Gm.X,Y=Gm.Y,g=Gm.g,N=log.length,k=Math.min(W,H)*.2,fs=Math.max(20,H*.44);
+    var I=Math.round(p);if(I!==lastI){lastI=I;tick()}
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,S,S);ctx.lineWidth=1;ctx.strokeStyle=c.ink;ctx.lineJoin='round';
+    function quad(yA,wA,yB,wB,fill,noStroke){ctx.beginPath();ctx.moveTo(X-wA/2,yA);ctx.lineTo(X+wA/2,yA);ctx.lineTo(X+wB/2,yB);ctx.lineTo(X-wB/2,yB);ctx.closePath();ctx.fillStyle=fill;ctx.fill();if(!noStroke)ctx.stroke()}
+    function corner(xr,y,dir,s){if(s<1)return;ctx.beginPath();ctx.moveTo(xr,y);ctx.lineTo(xr-s,y);ctx.lineTo(xr,y+dir*s);ctx.closePath();ctx.fillStyle=c.acc;ctx.fill();
+      ctx.beginPath();ctx.moveTo(xr-s,y);ctx.lineTo(xr,y+dir*s);ctx.stroke()}
+    function num(t,yc,sc,al){ctx.save();ctx.globalAlpha*=al;ctx.translate(X,yc);ctx.scale(1,sc);ctx.fillStyle=c.ink;
+      ctx.font='600 '+fs+'px ui-sans-serif,system-ui,-apple-system,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,0,0);ctx.restore()}
+    var hg=T>0?T-1:-1;
+    function fOf(j){var f=cl(p-j,0,1);if(j===hg&&f>.5)f-=.13*hang;return f}
+    for(var j=0;j<N;j++){var f=fOf(j);if(f>=1){var e=p-1-j;if(e>6)continue;ctx.globalAlpha=cl(6-e,0,1);
+      var yt=Y-H-e*g;quad(yt,W,Y,W,c.back);corner(X+W/2,yt,1,k*.7)}}
+    ctx.globalAlpha=1;ctx.setLineDash([4,4]);ctx.strokeRect(X-W/2,Y,W,H);ctx.setLineDash([]);
+    num('0',Y+H/2,1,.5);
+    for(j=N-1;j>=0;j--){if(p-j>0)continue;var d=j-p;if(d>4.5)continue;
+      var dy=j===0?-drop*H*.6:0;ctx.globalAlpha=cl(4.5-d,0,1)*(j===0?cl(1-drop*.8,0,1):1);
+      var y0=Y+d*g+dy;quad(y0,W,y0+H,W,c.card);if(d<2)num(N-j,y0+H/2,1,1)}
+    ctx.globalAlpha=1;
+    for(j=0;j<N;j++){f=fOf(j);if(f<=0||f>=1)continue;
+      var th=f*Math.PI,cc=Math.cos(th),ss=Math.sin(th),wF=W*(1+.2*ss),yF=Y+H*cc,sh='rgba(0,0,0,'+(ss*.3).toFixed(3)+')';
+      if(cc>=0){quad(Y,W,yF,wF,c.card);quad(Y,W,yF,wF,sh,1);if(cc>.08)num(N-j,Y+H*cc/2,cc,1)}
+      else{quad(yF,wF,Y,W,c.back);quad(yF,wF,Y,W,sh,1);corner(X+wF/2,yF,1,k*-cc)}}
+    for(var i=0;i<parts.length;i++){var q=parts[i];ctx.globalAlpha=cl(q.l,0,1);ctx.fillStyle=q.a?c.acc:c.ink;ctx.fillRect(q.x,q.y,3,3)}
+    ctx.globalAlpha=1}
+
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+
+  new ResizeObserver(function(){S=root.getBoundingClientRect().width;dpr=Math.min(2,window.devicePixelRatio||1);
+    cv.width=Math.round(S*dpr);cv.height=Math.round(S*dpr);draw()}).observe(root);
+
+  var down=null;
+  root.addEventListener('pointerdown',function(e){ensureAC();root.setPointerCapture(e.pointerId);
+    down={y:e.clientY,x:e.clientX,t:e.timeStamp,p0:p,lp:p,lt:e.timeStamp,drag:false};v=0});
+  root.addEventListener('pointermove',function(e){if(!down)return;var dy=e.clientY-down.y,N=log.length;
+    if(!down.drag&&Math.abs(dy)+Math.abs(e.clientX-down.x)>8){down.drag=true;mode='drag';down.p0=p;down.y=e.clientY;dy=0}
+    if(!down.drag)return;
+    var r=down.p0-dy/(G().H*1.1);if(r<0)r*=.3;else if(r>N)r=N+(r-N)*.3;
+    var ms=Math.max(1,e.timeStamp-down.lt),inst=(r-down.lp)/(ms/16.667);v=cl(v*.6+inst*.4,-1.2,1.2);
+    down.lp=r;down.lt=e.timeStamp;p=r;kick()});
+  function up(e){if(!down)return;var d=down;down=null;var N=log.length;
+    if(d.drag){if(e.timeStamp-d.lt>90)v=0;
+      if(reduce()){T=cl(Math.round(p+v*6),0,N);mode='spring';announce()}else mode='coast';kick();return}
+    if(e.type==='pointercancel')return;
+    var r=root.getBoundingClientRect(),x=e.clientX-r.left,y=e.clientY-r.top,Gm=G();
+    if(x>Gm.X-Gm.W*.6&&x<Gm.X+Gm.W*.6){
+      if(y>=Gm.Y&&y<=Gm.Y+Gm.H+4*Gm.g&&T<N){setT(T+1);return}
+      if(y<Gm.Y&&y>Gm.Y-Gm.H-6*Gm.g&&T>0){setT(T-1);return}}
+    addNight()}
+  root.addEventListener('pointerup',up);root.addEventListener('pointercancel',up);
+
+  root.addEventListener('keydown',function(e){ensureAC();var k=e.key;
+    if(k==='ArrowUp'||k==='ArrowRight'||k==='PageUp')setT(T+1);
+    else if(k==='ArrowDown'||k==='ArrowLeft'||k==='PageDown')setT(T-1);
+    else if(k==='Enter'||k===' ')addNight();
+    else if(k==='Escape'||k==='Home')setT(0);
+    else if(k==='End')setT(log.length);
+    else return;e.preventDefault()});
+
+  announce();
+  // Idle demo (demo-v1): performs the control on its own until the first real input.
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,demoI=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  var demoT=setInterval(function(){if(!demo||document.hidden||reduce())return;var o='uudddauu'[demoI++%8];if(o==='u')setT(T+1);else if(o==='d')setT(T-1);else addNight()},750);
+  window.addEventListener('forever:interactive',stopDemo);
+  root.addEventListener('pointerdown',stopDemo,true);root.addEventListener('keydown',stopDemo,true);
+  document.addEventListener('pointerdown',stopDemo,true);
+  draw();
+})();</script>
+</body></html>

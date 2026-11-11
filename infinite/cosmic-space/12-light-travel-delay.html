@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Expanding amber light wavefronts ripple from a central star, lighting up distance markers (1 AU, 1 ly, 100 ly) as they arrive.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Light Travel Delay</title>
@@ -11,6 +12,7 @@
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,Consolas,monospace;
        letter-spacing:.14em;color:#ffb347;opacity:.34;text-transform:uppercase;
        pointer-events:none;user-select:none;}
+#ltd-c:focus-visible{outline:2px solid #ffc080;outline-offset:-4px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -31,12 +33,14 @@
   "DPR-aware canvas sizing",
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
-  "IIFE wrapper"
+  "IIFE wrapper",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS — must edit #0a0612 to change theme",
-  "Reduced-motion shows a single static frame, no interactivity",
-  "Marker labels may overlap on very small viewports"
+  "Marker labels may overlap on very small viewports",
+  "Pointer click and Space/Enter launch a pulse; reduced motion shows a resolved static pulse. Automatic emissions stop at first deliberate input.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -60,10 +64,14 @@
 </script>
 </head>
 <body>
-<canvas id="ltd-c"></canvas>
+<canvas class="ltd-root" role="button" tabindex="0" aria-label="Launch light pulse across distance markers" id="ltd-c"></canvas>
 <div class="cap">Light Travel Delay</div>
 <script>
 (function(){
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   const cv=document.getElementById('ltd-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,cx,cy,R;
@@ -85,13 +93,14 @@
     return best; // -1 = dark, 0..1 = recently struck glow
   }
   cv.addEventListener('pointermove',()=>{boost=1;});
-  cv.addEventListener('click',()=>{fronts.push({born:performance.now()/1000});pulse=1;});
-  function frame(){
+  function launch(){fronts.push({born:performance.now()/1000-(reduce?2.5:0)});pulse=1;wake();}
+  cv.addEventListener('click',launch);cv.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();launch();}});
+  function frame(){raf=0;if(document.hidden)return;
     const now=performance.now()/1000;
     ctx.fillStyle='rgba(10,6,18,0.30)';ctx.fillRect(0,0,W,H);
     if(!reduce){
       boost*=0.93;pulse*=0.90;
-      if(now-emit>PERIOD*(0.5)){emit=now;fronts.push({born:now});}
+      if(demoEnabled&&now-emit>PERIOD*(0.5)){emit=now;fronts.push({born:now});}
       fronts=fronts.filter(f=>(now-f.born)*SP < 1.25);
     }
     // faint radial scale grid
@@ -130,12 +139,13 @@
     sg.addColorStop(0.7,'rgba(255,179,71,0.4)');sg.addColorStop(1,'rgba(255,179,71,0)');
     ctx.fillStyle=sg;ctx.beginPath();ctx.arc(cx,cy,sr*4,0,Math.PI*2);ctx.fill();
     ctx.fillStyle='#fff7e6';ctx.beginPath();ctx.arc(cx,cy,sr,0,Math.PI*2);ctx.fill();
-    if(!reduce)raf=requestAnimationFrame(frame);
+    if(!reduce&&(demoEnabled||fronts.length))start();
   }
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function wake(){if(document.hidden)return;if(reduce)frame();else start();}
+  function start(){if(!raf&&!reduce&&!document.hidden)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
-  document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
+  let hiddenAt=0;document.addEventListener('visibilitychange',()=>{if(document.hidden){hiddenAt=performance.now()/1000;stop();}else{const gap=performance.now()/1000-hiddenAt;fronts.forEach(f=>f.born+=gap);emit+=gap;if(demoEnabled||fronts.length)wake();}});
   if(reduce){fronts=[{born:t0-1.4},{born:t0-0.7},{born:t0}];frame();}else start();
 })();
 </script>

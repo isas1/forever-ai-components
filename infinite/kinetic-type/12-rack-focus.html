@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="utf-8">
 <meta name="description" content="Two stacked words trade sharpness in a cinematic rack-focus breath, the defocused one blooming into a soft cyan halo with vignette.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -29,7 +30,7 @@
        gap:clamp(4px,2.4vh,22px);}
   .rf-word{
     color:var(--rf-ink);
-    font-size:clamp(34px,15.5vw,128px);
+    font-size:clamp(20px,13vw,112px);
     font-weight:800;
     line-height:.92;
     letter-spacing:.01em;
@@ -51,6 +52,7 @@
   .cap{position:fixed;right:10px;bottom:8px;font-size:11px;letter-spacing:.16em;
        color:var(--rf-halo);opacity:var(--cap-o);text-transform:uppercase;font-family:monospace;
        pointer-events:none;user-select:none;}
+#rf-rfA:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -73,12 +75,15 @@
   "prefers-reduced-motion static fallback",
   "visibilitychange pause/start",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space activation and visible focus; manual word/geometry changes finish before the renderer sleeps"
  ],
  "knownLimitations": [
   "CSS filter:blur() triggers repaint every frame — quantized to 0.5px steps to reduce cost but still heavier than transform-only animations",
   "Pointer nudge shifts phase timing, which can cause a subtle jump on fast cursor sweeps",
-  "Background color hardcoded to #101418 in CSS — must edit to change dark scheme"
+  "Background color hardcoded to #101418 in CSS — must edit to change dark scheme",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -104,15 +109,15 @@
 </head>
 <body>
   <div class="rf-stage">
-    <div class="rf-word" id="rfA" data-w="ENTER">ENTER</div>
-    <div class="rf-word" id="rfB" data-w="THE FRAME">THE FRAME</div>
+    <div class="rf-word" id="rf-rfA" tabindex="0" role="button" aria-label="Activate kinetic text." data-w="ENTER">ENTER</div>
+    <div class="rf-word" id="rf-rfB" data-w="THE FRAME">THE FRAME</div>
     <div class="rf-grain"></div>
   </div>
   <div class="cap">Rack Focus</div>
 <script>
 (function(){
   var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var A=document.getElementById('rfA'), B=document.getElementById('rfB');
+  var A=document.getElementById('rf-rfA'), B=document.getElementById('rf-rfB');
   var raf=0, t0=0, hold=0;        // hold = pointer nudge accelerator
   var PERIOD=5200;                // ms for a full breath (one word -> other -> back)
 
@@ -153,20 +158,24 @@
   sheet.textContent='.rf-word::before{filter:blur(var(--bb,0));opacity:var(--bo,0);}';
   document.head.appendChild(sheet);
 
+  var demo=window.__foreverPreview?.demoEnabled!==false, heldTime=0;
   function render(now){
-    var dt = (now - t0);
-    var p = (dt % PERIOD) / PERIOD;          // 0..1 phase
+    var dt = demo ? (now - t0) : heldTime;
+    if(demo)heldTime=dt;
+    var p = ((dt % PERIOD)+PERIOD)%PERIOD / PERIOD;          // 0..1 phase
     // triangle: focus sweeps A<->B. fA goes 1->0->1, fB the inverse, offset by half.
     var tri = p<0.5 ? p*2 : (1-p)*2;         // 0..1..0
     var fA = ease(tri);                      // A sharp at phase 0, soft at 0.5
     var fB = ease(1-tri);                    // B is the complement
     paint(A,fA,'A'); paint(B,fB,'B');
     hold*=0.95;
-    raf=requestAnimationFrame(render);
+    if(demo)raf=requestAnimationFrame(render);else raf=0;
   }
 
   function start(){ if(!raf&&!reduce){ t0=performance.now(); raf=requestAnimationFrame(render);} }
   function stop(){ cancelAnimationFrame(raf); raf=0; }
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();});
   document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
   // pointer nudge: jump the focus phase toward whichever word is nearer the cursor
   document.addEventListener('pointermove',function(e){
@@ -174,7 +183,8 @@
     var midY = innerHeight/2;
     // shift t0 so the targeted word resolves sooner
     var up = e.clientY < midY;
-    t0 -= up?60:-60;
+    if(demo)t0 -= up?60:-60;else heldTime += up?60:-60;
+    if(!demo){render(performance.now());}
   });
   // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
   addEventListener('message', function(e){
@@ -185,12 +195,14 @@
       if(reduce){ paint(A,1,'A'); paint(B,0.12,'B'); }
     }
   });
+  A.addEventListener("click",()=>{takeover();heldTime+=PERIOD/2;render(performance.now());});
   syncTheme();
 
   if(reduce){
     // single resting frame: top word sharp, bottom in bloom
     paint(A,1,'A'); paint(B,0.12,'B');
-  } else { start(); }
+  } else if(demo){ start(); } else { paint(A,1,"A");paint(B,0.12,"B"); }
+  A.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();A.click();}});
 })();
 </script>
 </body>

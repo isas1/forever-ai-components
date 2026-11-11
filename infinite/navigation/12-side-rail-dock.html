@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A vertical rail dock pinned to the left edge: six line icons with a sliding active bar, and labels that slide out on hover; idle it steps through the items, each label peeking as it goes.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Side Rail Dock</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --bg:#0d0f16; --glow:rgba(47,183,166,.14);
+    --rail-bg:rgba(28,32,48,.7); --border:rgba(255,255,255,.08); --rail-hl:rgba(255,255,255,.06);
+    --shadow:0 18px 50px -24px rgba(0,0,0,.9);
+    --ink:#c7ccdb; --ink-dim:#6f768c; --accent:#2FB7A6; --accent-soft:rgba(47,183,166,.16);
+    --lbl-bg:#1c2030; --lbl-ink:#f4f6fb;
+    --pane:rgba(255,255,255,.035); --pane-line:rgba(255,255,255,.07);
+    --cap:#fff; --cap-o:.28;
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow:rgba(19,116,104,.10);
+    --rail-bg:rgba(255,255,255,.72); --border:rgba(0,0,0,.08); --rail-hl:rgba(255,255,255,.8);
+    --shadow:0 18px 40px -24px rgba(0,0,0,.18);
+    --ink:#3b4152; --ink-dim:#8a90a3; --accent:#137468; --accent-soft:rgba(19,116,104,.12);
+    --lbl-bg:#1f2430; --lbl-ink:#fff;
+    --pane:rgba(0,0,0,.035); --pane-line:rgba(0,0,0,.07);
+    --cap:#10302c; --cap-o:.5;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(50vw 60vh at 0% 50%,var(--glow),transparent 60%);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  .c12-shell{display:contents}
+  .c12-pane{
+    position:absolute;left:calc(14px + clamp(40px,15vmin,52px) + 16px);right:14px;top:14%;bottom:14%;
+    border-radius:12px;background:var(--pane);border:1px solid var(--pane-line);
+  }
+  .c12-pane i{position:absolute;left:12%;height:6px;border-radius:3px;background:var(--pane-line)}
+  .c12-pane i:nth-child(1){top:18%;width:46%}
+  .c12-pane i:nth-child(2){top:32%;width:70%}
+  .c12-pane i:nth-child(3){top:46%;width:58%}
+  .c12-rail{
+    --w:clamp(40px,15vmin,52px); --h:clamp(30px,11vmin,40px);
+    position:absolute;left:14px;top:50%;transform:translateY(-50%);
+    width:var(--w);padding:8px 0;
+    display:flex;flex-direction:column;gap:2px;
+    background:var(--rail-bg);border:1px solid var(--border);border-radius:14px;
+    box-shadow:inset 0 1px 0 var(--rail-hl),var(--shadow);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  }
+  .c12-ind{
+    position:absolute;left:-1px;top:8px;width:3px;height:var(--h);border-radius:0 3px 3px 0;
+    background:var(--accent);transform:translateY(var(--c12-y,0));
+    transition:transform 360ms cubic-bezier(.22,1,.36,1);
+  }
+  .c12-item{
+    position:relative;height:var(--h);width:100%;border:0;padding:0;background:none;
+    color:var(--ink-dim);cursor:pointer;display:flex;align-items:center;justify-content:center;
+    transition:color .18s;
+  }
+  .c12-item svg{width:45%;height:45%;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+  .c12-item:hover,.c12-item:focus-visible{color:var(--ink);outline:none}
+  .c12-item.c12-on{color:var(--accent)}
+  .c12-item.c12-on::before{content:"";position:absolute;inset:3px 6px;border-radius:9px;background:var(--accent-soft)}
+  .c12-lbl{
+    position:absolute;left:calc(100% + 12px);top:50%;transform:translate(-8px,-50%);
+    padding:4px 10px;border-radius:7px;background:var(--lbl-bg);color:var(--lbl-ink);
+    font-size:12px;font-weight:600;line-height:1.3;white-space:nowrap;
+    opacity:0;pointer-events:none;transition:opacity .16s,transform .16s cubic-bezier(.22,1,.36,1);
+  }
+  .c12-lbl::before{content:"";position:absolute;right:100%;top:50%;margin-top:-4px;border:4px solid transparent;border-right-color:var(--lbl-bg)}
+  .c12-item:hover .c12-lbl,.c12-item:focus-visible .c12-lbl,.c12-item.c12-peek .c12-lbl{opacity:1;transform:translate(0,-50%)}
+  @media(hover:none){.c12-item.c12-on .c12-lbl{opacity:1;transform:translate(0,-50%)}}
+  .c12-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .c12-cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
+  @media (prefers-reduced-motion:reduce){.c12-ind,.c12-lbl,.c12-item{transition:none}}
+@media(max-height:220px){.c12-rail{--h:22px;padding:6px 0}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/12-side-rail-dock.html",
+ "title": "Side Rail Dock",
+ "description": "A vertical rail dock pinned to the left edge: six line icons with an accent bar that slides between them and labels that slide out to the right on hover; it runs autonomously steps down the rail, each label peeking as it lands until first deliberate input.",
+ "useWhen": "App shells and dashboards with a collapsed icon sidebar; any vertical nav that needs an active state and hover labels without a full-width drawer.",
+ "avoidWhen": "Navs whose items need visible text at all times; very short viewports where six rows will not fit.",
+ "agentPrompt": "Swap an icon by replacing the inline <svg> path inside its <button class=\"c12-item\"> and its aria-label + .c12-lbl text; change the accent with --accent/--accent-soft (dark) and their [data-theme=light] pair; slow the walk by raising the 1500 in setInterval. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "icon SVGs and labels",
+  "accent colour (--accent, --accent-soft)",
+  "rail width and row height (--w, --h clamps)",
+  "walk cadence (setInterval 1500) and label peek (950 ms)",
+  "the page hint (.c12-pane) — remove for a bare rail",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "select() computing the indicator from offsetTop once per selection (never per frame)",
+  "IIFE wrapper",
+  "visibilitychange stop/start",
+  "prefers-reduced-motion guard (slower walk, no transitions)",
+  "lastInput pause after real hover or press",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "Touch shows the selected item label; hover and keyboard focus reveal other labels. Selection is local and does not navigate a host page.",
+  "Icons are simple stroked paths at 1.9px; swapping in filled icons needs the stroke rules relaxed",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "dock",
+  "sidebar",
+  "rail",
+  "vertical",
+  "navigation",
+  "icons",
+  "tooltip",
+  "active-indicator"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="c12-shell">
+<div class="c12-pane" aria-hidden="true"><i></i><i></i><i></i></div>
+<nav class="c12-rail" id="c12-rail" aria-label="Side rail">
+  <span class="c12-ind" aria-hidden="true"></span>
+  <button class="c12-item c12-on" type="button" aria-label="Home"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span class="c12-lbl" aria-hidden="true">Home</span></button>
+  <button class="c12-item" type="button" aria-label="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span class="c12-lbl" aria-hidden="true">Search</span></button>
+  <button class="c12-item" type="button" aria-label="Inbox"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 8l9 6 9-6"/></svg><span class="c12-lbl" aria-hidden="true">Inbox</span></button>
+  <button class="c12-item" type="button" aria-label="Calendar"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="c12-lbl" aria-hidden="true">Calendar</span></button>
+  <button class="c12-item" type="button" aria-label="Reports"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/></svg><span class="c12-lbl" aria-hidden="true">Reports</span></button>
+  <button class="c12-item" type="button" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.7 1.7 0 00-1.8-.3 1.7 1.7 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.7 1.7 0 00-1.1-1.5 1.7 1.7 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.7 1.7 0 00.3-1.8 1.7 1.7 0 00-1.5-1H3a2 2 0 110-4h.1a1.7 1.7 0 001.5-1.1 1.7 1.7 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.7 1.7 0 001.8.3H9a1.7 1.7 0 001-1.5V3a2 2 0 114 0v.1a1.7 1.7 0 001 1.5 1.7 1.7 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.7 1.7 0 00-.3 1.8V9a1.7 1.7 0 001.5 1H21a2 2 0 110 4h-.1a1.7 1.7 0 00-1.5 1z"/></svg><span class="c12-lbl" aria-hidden="true">Settings</span></button>
+</nav>
+</div>
+<div class="c12-cap">Side Rail Dock</div>
+<script>
+(function(){
+  var rail=document.getElementById('c12-rail');
+  if(!rail)return;
+  var items=Array.prototype.slice.call(rail.querySelectorAll('.c12-item'));
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
+  var cur=0;
+  function select(n){
+    cur=n;
+    items.forEach(function(it,i){it.classList.toggle('c12-on',i===n);it.setAttribute('aria-pressed',String(i===n));});
+    /* offsetTop is read once per selection, never per frame */
+    rail.style.setProperty('--c12-y',(items[n].offsetTop-items[0].offsetTop)+'px');
+  }
+  var lastInput=0;
+  items.forEach(function(it,i){
+    it.addEventListener('click',function(){lastInput=Date.now();select(i);});
+  });
+  rail.addEventListener('mousemove',function(){lastInput=Date.now();});
+  /* autonomous idle: step down the rail every 1.5 s, the new item's label peeking out;
+     real hover or press pauses the walk for a few seconds */
+  var timer=0,peekT=0,lead=0,demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function tick(){
+    if(document.hidden||Date.now()-lastInput<3200)return;
+    var n=(cur+1)%items.length;
+    select(n);
+    items.forEach(function(it){it.classList.remove('c12-peek');});
+    items[n].classList.add('c12-peek');
+    clearTimeout(peekT);peekT=setTimeout(function(){items[n].classList.remove('c12-peek');},950);
+  }
+  function start(){if(!timer&&demoEnabled){timer=setInterval(tick,reduce?2600:1500);}}
+  function stop(){if(timer){clearInterval(timer);timer=0;}clearTimeout(lead);clearTimeout(peekT);}
+  function takeover(){demoEnabled=false;stop();}
+  window.addEventListener("forever:interactive",takeover);rail.addEventListener("pointerdown",takeover,true);rail.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  select(0);
+  window.addEventListener('resize',function(){select(cur);});
+  if(demoEnabled){lead=setTimeout(tick,500);start();}
+})();
+</script>
+</body>
+</html>

@@ -5,17 +5,17 @@
 <title>Package Install</title>
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#00ff41;font:clamp(10px,2.35vmin,14px)/1.7 ui-monospace,Menlo,Consolas,"Courier New",monospace}
-.pki-wrap{position:relative;height:100%;padding:clamp(10px,3vmin,18px) clamp(12px,3.4vmin,20px);overflow:hidden;display:flex;flex-direction:column}
-.pki-scr{flex:1;overflow:hidden;display:flex;flex-direction:column;gap:2px}
-.pki-line{white-space:pre}
-.pki-dim{color:#2f6a3f}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#00ff41;font:clamp(11px,2.35vmin,14px)/1.7 ui-monospace,Menlo,Consolas,"Courier New",monospace}
+.pki-wrap{position:relative;height:100%;padding:8px 10px 24px;overflow:hidden;display:flex;flex-direction:column}
+.pki-scr{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:2px}
+.pki-line{flex-shrink:0;white-space:pre-wrap;overflow-wrap:anywhere}
+.pki-dim{color:#8bb399}
 .pki-hi{color:#d6f5e0}
 .pki-ok{color:#4ade80;text-shadow:0 0 8px rgba(0,255,65,.35)}
 .pki-tree{color:#7fd39b}
-.pki-row{display:flex;align-items:center;gap:clamp(6px,1.4vmin,10px);white-space:pre}
-.pki-name{color:#9fe0b6;width:22ch;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pki-track{width:clamp(70px,24vw,210px);height:clamp(7px,1.6vmin,10px);background:#12261a;border:1px solid #1e4029;flex-shrink:0;overflow:hidden}
+.pki-row{display:flex;align-items:center;flex-shrink:0;gap:5px;white-space:nowrap}
+.pki-name{color:#9fe0b6;min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pki-track{width:clamp(28px,18vw,150px);height:clamp(7px,1.6vmin,10px);background:#12261a;border:1px solid #1e4029;flex-shrink:0;overflow:hidden}
 .pki-fill{display:block;height:100%;width:0;background:#00ff41;box-shadow:0 0 6px rgba(0,255,65,.7);animation:pki-grow var(--d) cubic-bezier(.35,.08,.2,1) forwards}
 @keyframes pki-grow{to{width:100%}}
 .pki-check{color:#00ff41;opacity:0;animation:pki-pop .28s ease forwards;animation-delay:var(--d)}
@@ -26,6 +26,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;color:#00ff41;
 @keyframes pki-blink{50%{opacity:0}}
 .pki-scan{position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,255,65,.035) 0 1px,transparent 1px 3px);z-index:2}
 .pki-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,Menlo,Consolas,monospace;color:#00ff41;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+.pki-paused .pki-fill,.pki-paused .pki-check,.pki-paused .pki-cursor{animation-play-state:paused}
 @media(prefers-reduced-motion:reduce){.pki-cursor{animation:none}}
 </style>
 </head><body>
@@ -53,7 +54,10 @@ const tree=[
   {t:'└─ lumen-cache@3.1.0'}
 ];
 
-function line(txt,cls){const d=document.createElement('div');d.className='pki-line'+(cls?' '+cls:'');d.textContent=txt;scr.appendChild(d);return d;}
+const compact=()=>document.documentElement.clientHeight<350;
+function trim(){while(scr.children.length>1&&scr.scrollHeight>scr.clientHeight)scr.firstChild.remove();}
+addEventListener('resize',trim);
+function line(txt,cls){const d=document.createElement('div');d.className='pki-line'+(cls?' '+cls:'');d.textContent=txt;scr.appendChild(d);trim();return d;}
 function bar(dep){
   const row=document.createElement('div');row.className='pki-row';
   const nm=document.createElement('span');nm.className='pki-name';nm.textContent=dep.n;
@@ -61,15 +65,16 @@ function bar(dep){
   const fl=document.createElement('i');fl.className='pki-fill';fl.style.setProperty('--d',dep.d);
   tr.appendChild(fl);
   const ck=document.createElement('span');ck.className='pki-check';ck.style.setProperty('--d',dep.d);ck.textContent='✓';
-  row.append(nm,tr,ck);scr.appendChild(row);return row;
+  row.append(nm,tr,ck);scr.appendChild(row);trim();return row;
 }
 function cursor(el){const c=document.createElement('span');c.className='pki-cursor';el.appendChild(c);}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-let running=true;
+let running=true,epoch=0;
 
 function staticFrame(){
   scr.innerHTML='';
+  if(compact()){line('$ pkg add halcyon','pki-hi');line('✓ deps resolved','pki-tree');deps.forEach(dep=>bar(dep).classList.add('pki-done'));line('128 added · 3.2s','pki-ok');return;}
   line('$ pkg add halcyon-core','pki-hi');
   line('','');
   line('  resolving dependencies... done','pki-dim');
@@ -85,25 +90,26 @@ function staticFrame(){
 }
 
 async function cycle(){
-  while(running){
+  const token=++epoch;
+  while(running&&token===epoch){
     scr.innerHTML='';
     cursor(line('$ pkg add halcyon-core','pki-hi'));
     line('','');
     const r=line('  resolving dependencies','pki-dim');
-    for(let i=1;i<=8&&running;i++){await sleep(130);r.textContent='  resolving dependencies'+'.'.repeat(i%4);}
-    if(!running)return;
+    for(let i=1;i<=8&&running;i++){await sleep(130);if(!running||token!==epoch)return;r.textContent='  resolving dependencies'+'.'.repeat(i%4);trim();}
+    if(!running||token!==epoch)return;
     r.textContent='  resolving dependencies... done';
     line('  fetching 4 packages','pki-dim');
-    await sleep(260);if(!running)return;
+    await sleep(260);if(!running||token!==epoch)return;
     line('','');
     deps.forEach(bar);
-    await sleep(2350);if(!running)return;
+    await sleep(2350);if(!running||token!==epoch)return;
     line('','');
-    for(const t of tree){if(!running)return;line('  '+t.t,t.c||'pki-tree');await sleep(150);}
+    for(const t of tree){if(!running||token!==epoch)return;line('  '+t.t,t.c||'pki-tree');await sleep(150);if(!running||token!==epoch)return;}
     line('','');
-    if(!running)return;
+    if(!running||token!==epoch)return;
     line('  added 128 packages in 3.2s','pki-ok');
-    await sleep(260);
+    await sleep(260);if(!running||token!==epoch)return;
     line('  12 packages are looking for funding','pki-dim');
     line('    run `pkg fund` for details','pki-dim');
     await sleep(2900);
@@ -111,7 +117,7 @@ async function cycle(){
 }
 
 if(reduce){staticFrame();return;}
-document.addEventListener('visibilitychange',()=>{if(document.hidden){running=false;}else if(!running){running=true;cycle();}});
+document.addEventListener('visibilitychange',()=>{scr.classList.toggle('pki-paused',document.hidden);if(document.hidden){running=false;epoch++;}else if(!running){running=true;cycle();}});
 cycle();
 })();</script>
 <script type="application/json" id="forever-agent-meta">

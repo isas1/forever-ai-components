@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="description" content="Tide Chart — Feedback &amp; States. A self-contained, zero-dependency animated web component.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tide Chart</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');
+if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#0e0f11;--ink:#f2f2f0;--grey:#6b6e73;--acc:#3cc4a8}
+:root[data-theme="light"]{--bg:#f7f7f5;--ink:#121316;--grey:#8a8c90;--acc:#0b7a66}
+html,body{margin:0;height:100%;overflow:hidden;display:grid;place-items:center;background:var(--bg)}
+.dt20-root{width:clamp(180px,92vmin,640px);aspect-ratio:1;position:relative;touch-action:none;cursor:ew-resize;-webkit-user-select:none;user-select:none}
+.dt20-root:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.dt20-cv{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dt20-n{position:absolute;left:10%;top:76%;font:500 14px/1 system-ui,-apple-system,"Helvetica Neue",sans-serif;font-variant-numeric:tabular-nums;color:var(--ink);letter-spacing:.01em;pointer-events:none}
+.dt20-cap{position:fixed;left:10px;bottom:8px;font:500 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif;letter-spacing:.04em;color:var(--ink);opacity:.5;pointer-events:none}
+</style><script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/feedback-states/33-tide-chart.html",
+ "title": "Tide Chart",
+ "description": "A list as a tide line with a crab riding it: drag, scroll or arrow-key sideways to raise or drain entries, with a live item count. Clean modern: off-black and verdigris with a light theme. From the daily-team 'Control in process' set (2026-10-21 to 2026-10-25).",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Palette: clean modern, off-black and verdigris (docs/style-clean-modern.md). Edit the colour tokens on :root and the light block; keep the demo-v1 lifecycle intact.",
+ "editableAreas": [
+  "colour tokens on :root and the light block",
+  "idle demo steps and interval"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demo from window.__foreverPreview and stop the idle demo on the window forever:interactive event or the first pointer or key input; retain manual feedback, settling, cleanup and explicit sessions",
+  "IIFE scope, prefers-reduced-motion snap, visibilitychange pause, forever:theme listener and ?theme bootstrap"
+ ],
+ "knownLimitations": [
+  "At most 10 entries.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Silent: the original daily-team build had sound where noted; it was removed so the tile stays quiet on the wall."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "empty-state",
+  "list",
+  "slider",
+  "tide",
+  "crab"
+ ]
+}
+</script>
+</head><body>
+<div class="dt20-root" role="slider" tabindex="0" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0" aria-label="Tide chart list. Drag or scroll sideways to raise or drain entries along the tide line. Arrow keys step one entry, Enter adds one, Escape drains to empty."></div>
+<div class="dt20-cap" aria-hidden="true">Tide Chart</div>
+<script>(function(){
+  var reduce=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var raf=0,last=0;
+  var root=document.querySelector('.dt20-root'),cv=document.createElement('canvas'),ctx=cv.getContext('2d'),lbl=document.createElement('div');
+  cv.className='dt20-cv';lbl.className='dt20-n';root.appendChild(cv);root.appendChild(lbl);
+  var NAMES=['Monday','cat-pics-2','Forever plan','Emotional baggage','Socks, 12 ounces','Tuesday','Forever backup','cat-pics-3','Delete later','Cancel gym'];
+  var MAX=10,p=0,v=0,target=0,mode='rest',drag=null,rip=-1,shown=-1,settled=0,W=1,H=1,dpr=1,it=0;
+  function cl(a,lo,hi){return a<lo?lo:a>hi?hi:a}
+  function G(){var x0=W*.1,x1=W*.9;return{x0:x0,x1:x1,s:(x1-x0)/MAX,b:H*.62,a:H*.3,r:W*.042}}
+  function hgt(i){return .68+.32*((i*37+11)%10)/10}
+  function cy(x,pp,g){var i=Math.floor((x-g.x0)/g.s);if(i<0||i>=MAX)return g.b;
+    var f=cl(pp-i,0,1);f=f*f*(3-2*f);var u=(x-g.x0)/g.s-i,sn=Math.sin(Math.PI*u);return g.b-g.a*hgt(i)*f*sn*sn}
+  function ripY(x,g,cx){if(rip<0||x<cx)return 0;var rx=cx+rip*(g.x1-cx)/1.1,k=1-rip/1.3,d=(x-rx)/(W*.045);
+    return 2.4*k*Math.sin((x-rx)/(W*.012))*Math.exp(-d*d)*cl((g.x1-x)/(W*.06),0,1)}
+  function update(){var n=cl(Math.round(p),0,MAX);if(n===shown)return;shown=n;
+    lbl.textContent=n+(n===1?' item':' items');root.setAttribute('aria-valuenow',n);
+    root.setAttribute('aria-valuetext',n?n+(n===1?' item: ':' items: ')+NAMES.slice(0,n).join(', '):'0 items. Still pool, one crab waiting.')}
+  function step(dt){var mv=false;
+    if(rip>=0){rip+=dt/60;if(rip>1.3)rip=-1;else mv=true}
+    if(mode==='coast'){p+=v*dt;v*=Math.pow(.92,dt);
+      if(p<0||p>MAX||Math.abs(v)<.03){target=cl(Math.round(p+v*8),0,MAX);mode='spring'}mv=true}
+    else if(mode==='spring'){v+=(target-p)*.16*dt;v*=Math.pow(.8,dt);p+=v*dt;
+      if(Math.abs(v)<.0008&&Math.abs(target-p)<.001){p=target;v=0;mode='rest';if(settled!==target){settled=target;0}idle()}else mv=true}
+    else if(mode==='drag')mv=mv||false;
+    update();return mv}
+  function snapToTarget(){if(mode==='coast')target=cl(Math.round(p+v*12),0,MAX);
+    if(mode!=='drag'){p=target;v=0;if(mode!=='rest'){mode='rest';settled=target}}rip=-1;update()}
+  function crab(x,y,r,ph,ink){var by=y-r*.95,s=Math.sin(ph);ctx.strokeStyle=ink;ctx.lineWidth=1.5;ctx.lineCap='round';ctx.lineJoin='round';
+    for(var k=-1;k<=1;k+=2)for(var i=0;i<3;i++){var sx=x+k*r*(.35+.18*i),sy=by+r*.3,o=Math.sin(ph+i*2.1+k)*r*.12;
+      ctx.beginPath();ctx.moveTo(sx,sy);ctx.lineTo(x+k*r*(.85+.25*i)+o,by-r*.05);ctx.lineTo(x+k*r*(1.05+.28*i)+o,y);ctx.stroke()}
+    for(k=-1;k<=1;k+=2){var ax=x+k*r*1.2,ay=by-r*.75+(k>0?s:-s)*r*.05;ctx.beginPath();ctx.moveTo(x+k*r*.6,by-r*.2);ctx.lineTo(ax,ay);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(ax-k*r*.05,ay+r*.18);ctx.lineTo(ax,ay);ctx.lineTo(ax+k*r*.2,ay-r*.22);ctx.moveTo(ax,ay);ctx.lineTo(ax+k*r*.28,ay+r*.02);ctx.stroke()}
+    ctx.save();ctx.beginPath();ctx.ellipse(x,by,r,r*.6,0,0,7);ctx.fillStyle=getComputedStyle(root).getPropertyValue('--bg');ctx.fill();ctx.stroke();ctx.clip();
+    ctx.lineWidth=1;ctx.beginPath();for(var hx=-r*1.4;hx<r;hx+=r*.26){ctx.moveTo(x+hx,by+r*.6);ctx.lineTo(x+hx+r*.6,by-r*.05)}ctx.stroke();ctx.restore();
+    ctx.lineWidth=1.5;for(k=-1;k<=1;k+=2){var ex=x+k*r*.28,ey=by-r*1.05+Math.sin(ph*.5+k)*r*.04;ctx.beginPath();ctx.moveTo(x+k*r*.22,by-r*.55);ctx.lineTo(ex,ey);ctx.stroke();
+      ctx.beginPath();ctx.arc(ex,ey,r*.1,0,7);ctx.fillStyle=ink;ctx.fill()}}
+  function draw(){var cs=getComputedStyle(root),ink=cs.getPropertyValue('--ink').trim(),gr=cs.getPropertyValue('--grey').trim(),acc=cs.getPropertyValue('--acc').trim(),g=G();
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);var pp=cl(p,-.4,MAX+.4),cx=g.x0+cl(p,0,MAX)*g.s,x;
+    ctx.globalAlpha=.35;ctx.strokeStyle=gr;ctx.lineWidth=1;ctx.setLineDash([1,4]);ctx.beginPath();
+    for(x=g.x0;x<=g.x1;x+=2){var yy=cy(x,MAX,g);x===g.x0?ctx.moveTo(x,yy):ctx.lineTo(x,yy)}ctx.stroke();ctx.setLineDash([]);
+    ctx.globalAlpha=1;ctx.beginPath();for(var i=0;i<=MAX;i++){x=Math.round(g.x0+i*g.s)+.5;ctx.moveTo(x,g.b+5);ctx.lineTo(x,g.b+(i%5?10:15))}ctx.stroke();
+    ctx.globalAlpha=.5;ctx.strokeStyle=ink;ctx.beginPath();var hs=Math.max(3,W/110);
+    for(x=g.x0+hs/2;x<g.x1;x+=hs){var ty=cy(x,pp,g);if(g.b-ty>2){ctx.moveTo(x,ty+1.5);ctx.lineTo(x,g.b)}}ctx.stroke();ctx.globalAlpha=1;
+    ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(W*.05,g.b);for(x=g.x0;x<=g.x1;x+=1.5)ctx.lineTo(x,cy(x,pp,g)+ripY(x,g,cx));ctx.lineTo(W*.95,g.b);ctx.stroke();
+    var y=cy(cx,pp,g);ctx.strokeStyle=acc;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(Math.round(cx)+.5,H*.12);ctx.lineTo(Math.round(cx)+.5,y-g.r*2.4);
+    ctx.moveTo(cx,g.b+5);ctx.lineTo(cx,g.b+20);ctx.stroke();ctx.fillStyle=acc;ctx.beginPath();ctx.arc(cx,H*.12,2.5,0,7);ctx.fill();
+    crab(cx,y,g.r,p*9+(rip>=0?rip*6:0),ink)}
+  function frame(now){var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var moving=reduce()?(snapToTarget(),false):step(dt);draw();
+    raf=moving?requestAnimationFrame(frame):0;}
+  function kick(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame)}}
+  function idle(){clearTimeout(it);it=setTimeout(function(){if(demo&&!reduce()&&mode==='rest'&&p<MAX&&!document.hidden){rip=0;kick()}idle()},3600)}
+  new ResizeObserver(function(){var b=root.getBoundingClientRect();W=b.width||1;H=b.height||1;dpr=Math.min(devicePixelRatio||1,2);
+    cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);lbl.style.fontSize=Math.max(11,W*.038)+'px';draw()}).observe(root);
+  root.addEventListener('pointerdown',function(e){root.setPointerCapture(e.pointerId);drag={x:e.clientX,t:performance.now()};v=0;mode='drag';rip=-1;
+    });
+  root.addEventListener('pointermove',function(e){if(!drag)return;var g=G(),now=performance.now(),d=(e.clientX-drag.x)/g.s,ms=Math.max(now-drag.t,1);
+    if(p<0||p>MAX)d*=.35;p+=d;v=v*.5+d/(ms/16.667)*.5;drag.x=e.clientX;drag.t=now;update();draw()});
+  function up(){if(!drag)return;drag=null;if(performance.now()-0&&Math.abs(v)<.005)v=0;mode='coast';kick()}
+  root.addEventListener('pointerup',up);root.addEventListener('pointercancel',up);
+  root.addEventListener('wheel',function(e){e.preventDefault();var d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;
+    if(e.deltaMode===1)d*=33;v+=cl(d,-200,200)/G().s*.04;mode='coast';rip=-1;kick()},{passive:false});
+  root.addEventListener('keydown',function(e){var k=e.key,base=mode==='spring'?target:cl(Math.round(p),0,MAX),n=null;
+    if(k==='ArrowRight'||k==='ArrowUp'||k==='Enter'||k===' ')n=base+1;else if(k==='ArrowLeft'||k==='ArrowDown')n=base-1;
+    else if(k==='Escape'||k==='Home')n=0;else if(k==='End')n=MAX;if(n===null)return;e.preventDefault();
+    target=cl(n,0,MAX);mode='spring';rip=-1;kick()});
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){cancelAnimationFrame(raf);raf=0}else kick()});
+  window.addEventListener('message',function(e){var m=e.data;
+    if(m&&m.type==='forever:theme'&&(m.theme==='light'||m.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',m.theme);draw()}});
+  var demo=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true,di=0;
+  function stopDemo(){demo=false;clearInterval(demoT)}
+  var demoT=setInterval(function(){if(!demo||document.hidden||reduce())return;if(mode==='drag'||drag)return;target=[1,2,3,4,3,2,1,0][di++%8];mode='spring';rip=-1;kick()},1100);
+  window.addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,true);document.addEventListener('keydown',stopDemo,true);
+  update();draw();idle();
+})();</script>
+</body></html>

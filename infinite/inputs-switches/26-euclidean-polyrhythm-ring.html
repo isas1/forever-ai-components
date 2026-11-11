@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="description" content="Sixteen-step Euclidean rhythm ring: step the pulse count and rotation, or tap nodes to hand-edit the pattern while a playhead sweeps the ring.">
+<title>Euclidean Polyrhythm Step Ring</title>
+<script>
+/* theme hook: ?theme=light|dark is applied before first paint */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --bg:#0A0A0A; --bg-sunken:#070707; --surface:#111111;
+    --text:#EDEDEA; --text-muted:#8A8A85;
+    --border:rgba(255,255,255,0.08); --border-strong:rgba(255,255,255,0.14);
+    --accent:#C7F000;
+    --font-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --bg:#FAFAF8; --bg-sunken:#F1F1EC; --surface:#F4F4F0;
+    --text:#1A1A18; --text-muted:#6B6B66;
+    --border:rgba(0,0,0,0.08); --border-strong:rgba(0,0,0,0.14);
+    --accent:#4D7A00;
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+  .prs-tile{
+    position:absolute;inset:0;box-sizing:border-box;display:flex;flex-direction:column;
+    justify-content:space-between;gap:min(2vmin,8px);padding:clamp(8px,5vmin,22px) clamp(8px,5.5vmin,24px) clamp(14px,8vmin,30px);
+    background:var(--surface);color:var(--text);font-family:var(--font-mono);
+    font-size:clamp(7px,3.1vmin,11px);user-select:none;-webkit-user-select:none;
+  }
+  .prs-tile *{box-sizing:border-box}
+  .prs-head{display:flex;justify-content:space-between;align-items:center;color:var(--text-muted);gap:6px;white-space:nowrap}
+  .prs-notation{color:var(--text);font-weight:700}
+  .prs-stage{flex:1;min-height:0;display:grid;place-items:center}
+  .prs-svg{width:100%;height:100%;display:block}
+  .prs-orbit{fill:none;stroke:var(--border-strong);stroke-width:1}
+  .prs-poly{fill:var(--text);fill-opacity:.08;stroke:var(--text-muted);stroke-width:1.8;stroke-linejoin:round}
+  .prs-node{cursor:pointer;fill:var(--bg-sunken);stroke:var(--border-strong);stroke-width:1.8}
+  .prs-node.prs-hit{fill:var(--text);stroke:var(--text)}
+  .prs-node.prs-play{fill:var(--accent);stroke:var(--accent);stroke-width:2.5}
+  .prs-ctrls{display:grid;grid-template-columns:1fr 1fr;gap:min(2vmin,8px)}
+  .prs-box{
+    display:flex;justify-content:space-between;align-items:center;gap:3px;
+    background:var(--bg-sunken);border:1px solid var(--border);border-radius:8px;padding:min(1.3vmin,4px) min(2.6vmin,8px);
+  }
+  .prs-btn{
+    flex:none;width:clamp(16px,6.6vmin,24px);height:clamp(16px,6.6vmin,24px);padding:0;
+    background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:5px;
+    cursor:pointer;font-family:inherit;font-size:inherit;touch-action:manipulation;
+  }
+  .prs-btn:hover{border-color:var(--text-muted)}
+  .prs-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .prs-cap{position:absolute;left:min(3vmin,10px);bottom:min(2vmin,7px);font:clamp(6px,2.4vmin,9px) var(--font-mono);color:var(--text-muted);opacity:.55;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/inputs-switches/26-euclidean-polyrhythm-ring.html",
+ "title": "Euclidean Polyrhythm Ring",
+ "description": "Sixteen-step Euclidean rhythm ring: step the pulse count and rotation, or tap nodes to edit the pattern while a playhead sweeps.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [
+  "Forever Opus tokens on :root (--bg, --surface*, --text*, --border*, --accent) — one lime accent, no gradients",
+  "copy and data values in markup/script"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "theme hook: ?theme= bootstrap, forever:theme message listener and :root[data-theme=\"light\"] tokens",
+  "IIFE wrapper, visibilitychange sleep, prefers-reduced-motion guard, time-based (dt) animation"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values.",
+  "Nodes are pointer-only; keyboard reaches the +/- and rotate controls."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "euclidean",
+  "sequencer",
+  "rhythm",
+  "step-ring",
+  "music"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="prs-tile" role="group" aria-label="Euclidean polyrhythm step ring">
+  <div class="prs-head"><span>EUCLIDEAN SEQ</span><span class="prs-notation" id="prs-not" aria-live="polite">E(5, 16) +0</span></div>
+  <div class="prs-stage">
+    <svg class="prs-svg" viewBox="0 0 192 192" aria-hidden="true">
+      <circle class="prs-orbit" cx="96" cy="96" r="72"/>
+      <polygon class="prs-poly" id="prs-poly"/>
+      <g id="prs-nodes"></g>
+    </svg>
+  </div>
+  <div class="prs-ctrls">
+    <div class="prs-box"><button class="prs-btn" id="prs-hm" type="button" aria-label="Fewer pulses">&minus;</button><span id="prs-hl">PULSES: 5</span><button class="prs-btn" id="prs-hp" type="button" aria-label="More pulses">+</button></div>
+    <div class="prs-box"><button class="prs-btn" id="prs-rm" type="button" aria-label="Rotate left">&lsaquo;</button><span id="prs-rl">ROT: 0</span><button class="prs-btn" id="prs-rp" type="button" aria-label="Rotate right">&rsaquo;</button></div>
+  </div>
+</div>
+<div class="prs-cap" aria-hidden="true">Euclidean Step Ring</div>
+<script>
+(() => {
+  const root = document.documentElement;
+  addEventListener('message', (e) => {
+    const d = e.data;
+    if (d && d.type === 'forever:theme' && (d.theme === 'light' || d.theme === 'dark')) root.setAttribute('data-theme', d.theme);
+  });
+  const $ = (id) => document.getElementById(id);
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const STEPS = 16, STEP_MS = 145, NS = 'http://www.w3.org/2000/svg';
+  let pulses = 5, rotation = 0, playStep = 0, pattern = [];
+  let demoEnabled = window.__foreverPreview?.demoEnabled !== false;
+  let raf = 0, last = 0, acc = 0, cycle = 0;
+
+  const coords = Array.from({ length: STEPS }, (_, i) => {
+    const a = (i / STEPS) * Math.PI * 2 - Math.PI / 2;
+    return [96 + Math.cos(a) * 72, 96 + Math.sin(a) * 72];
+  });
+  const nodes = coords.map(([x, y], i) => {
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('class', 'prs-node');
+    c.setAttribute('cx', x.toFixed(1)); c.setAttribute('cy', y.toFixed(1)); c.setAttribute('r', '7');
+    c.addEventListener('click', () => {
+      takeover();
+      pattern[i] = !pattern[i];
+      pulses = pattern.filter(Boolean).length;
+      render();
+    });
+    $('prs-nodes').appendChild(c);
+    return c;
+  });
+
+  function compute() {
+    pattern = Array.from({ length: STEPS }, (_, i) => (((i - rotation + STEPS) % STEPS) * pulses) % STEPS < pulses);
+    render();
+  }
+  function render() {
+    const pts = [];
+    nodes.forEach((n, i) => {
+      n.setAttribute('class', 'prs-node' + (pattern[i] ? ' prs-hit' : '') + (i === playStep ? ' prs-play' : ''));
+      if (pattern[i]) pts.push(coords[i][0].toFixed(1) + ',' + coords[i][1].toFixed(1));
+    });
+    $('prs-poly').setAttribute('points', pts.join(' '));
+    $('prs-hl').textContent = 'PULSES: ' + pulses;
+    $('prs-rl').textContent = 'ROT: ' + rotation;
+    $('prs-not').textContent = 'E(' + pulses + ', 16) +' + rotation;
+  }
+
+  // time-based step clock: same 145 ms grid on 60 and 120 Hz screens
+  function tick(now) {
+    raf = 0;
+    if (document.hidden || reduced()) return;
+    acc += last ? Math.min(now - last, 500) : 0;
+    last = now;
+    let dirty = false;
+    while (acc >= STEP_MS) {
+      acc -= STEP_MS;
+      playStep = (playStep + 1) % STEPS;
+      dirty = true;
+      if (demoEnabled && playStep === 0) {
+        cycle++;
+        pulses = [5, 7, 3, 9][cycle % 4];
+        rotation = (rotation + 1) % 16;
+        compute();
+        dirty = false;
+      }
+    }
+    if (dirty) render();
+    raf = requestAnimationFrame(tick);
+  }
+  function start() {
+    if (raf || document.hidden || reduced()) return;
+    last = 0; acc = 0;
+    raf = requestAnimationFrame(tick);
+  }
+  function stop() { if (raf) { cancelAnimationFrame(raf); raf = 0; } }
+  // only the automatic pattern edits stop; the playhead is the sequencer itself
+  function takeover() { demoEnabled = false; }
+
+  addEventListener('forever:interactive', takeover);
+  document.addEventListener('pointerdown', takeover, true);
+  document.addEventListener('keydown', takeover, true);
+  document.addEventListener('visibilitychange', () => { document.hidden ? stop() : start(); });
+  matchMedia('(prefers-reduced-motion: reduce)').addEventListener?.('change', () => { if (reduced()) { stop(); playStep = 0; render(); } else start(); });
+
+  const bump = (fn) => () => { takeover(); fn(); compute(); };
+  $('prs-hm').addEventListener('click', bump(() => { pulses = Math.max(1, pulses - 1); }));
+  $('prs-hp').addEventListener('click', bump(() => { pulses = Math.min(16, pulses + 1); }));
+  $('prs-rm').addEventListener('click', bump(() => { rotation = (rotation + 15) % 16; }));
+  $('prs-rp').addEventListener('click', bump(() => { rotation = (rotation + 1) % 16; }));
+
+  compute();
+  start();
+})();
+</script>
+</body>
+</html>

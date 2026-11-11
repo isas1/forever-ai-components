@@ -2,21 +2,25 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Cream watch-style engraved drum dial with a milled crown that ratchets through numbered teeth and a smooth value readout.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Crown Dial</title>
 <script>
 /* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
-   This tile's default palette is already light, so both themes render the same; the hook keeps it
-   on the canvas's light wall and lets it answer the forever:theme protocol. */
+   Cream watch palette stays light in both modes; light mode lifts the paper ground. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
 <style>
-  html,body{margin:0;height:100%;overflow:hidden;background:#f4ede0;}
+  :root{--cd-bg:#f4ede0;--cd-acc:#1a1a2e}
+  :root[data-theme="light"]{--cd-bg:#fbf7f0;--cd-acc:#2f2820}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--cd-bg);}
   #cd-c{display:block;width:100%;height:100%;cursor:ew-resize;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
-       letter-spacing:.14em;color:#1a1a2e;opacity:.34;text-transform:uppercase;
+       letter-spacing:.14em;color:var(--cd-acc);opacity:.34;text-transform:uppercase;
        pointer-events:none;user-select:none;}
+
+#cd-c{touch-action:none;outline-offset:-4px}#cd-c:focus-visible{outline:2px solid currentColor}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -25,11 +29,11 @@
  "description": "Cream drum dial with engraved tick bars scrolling as it rotates; a milled crown wheel ratchets on drag or click. Numeric readout below.",
  "useWhen": "Precision numeric inputs with a tactile, mechanical aesthetic. Retro instrument panels, settings UIs, watch-themed interfaces.",
  "avoidWhen": "Touch-only mobile where drag conflicts with scroll. Fast data-entry forms where keyboard input is expected.",
- "agentPrompt": "Change TEETH from 24 to 12 to halve ratchet steps, set ACC to '#8B0000' for burgundy engraving, and slow auto-ratchet interval to 300 frames. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Change TEETH=24 and the ratchet STEP together, adjust --cd-acc and --cd-bg for the cream watch palette, or tune spring interpolation .22. Auto-ratchets run only while demoEnabled; first input disables them permanently. Preserve pointer and arrow-key input plus the forever:theme message hook.",
  "editableAreas": [
   "tooth count (TEETH=24)",
   "spring friction (0.22 lerp factor)",
-  "accent color (ACC='#1a1a2e')",
+  "accent and paper tokens (--cd-acc, --cd-bg)",
   "drum size (R*0.30)",
   "auto-ratchet interval (140+random*120)",
   "crown knurling count (KN=18)",
@@ -40,12 +44,13 @@
   "prefers-reduced-motion guard and static fallback",
   "visibilitychange stop/start",
   "DPR-aware canvas sizing",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Pointer drag threshold (14px) may fire multiple ratchets per swipe on high-DPI trackpads",
-  "Auto-ratchet changes direction randomly — remove auto block for production use",
-  "Background color hardcoded in CSS (#f4ede0) — must edit to change theme"
+  "Ratchet state is local and resets on reload; pointer and arrow-key input remain active after takeover.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -70,13 +75,17 @@
 </script>
 </head>
 <body>
-<canvas id="cd-c"></canvas>
+<canvas class="cd-root" role="spinbutton" tabindex="0" aria-label="Crown dial value" aria-valuenow="0" id="cd-c"></canvas>
 <div class="cap">Crown Dial</div>
 <script>
 (function(){
   const cv=document.getElementById('cd-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const ACC='#1a1a2e',BG='#f4ede0';
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+  let ACC,BG;function syncTheme(){const cs=getComputedStyle(document.documentElement);ACC=cs.getPropertyValue('--cd-acc').trim()||(document.documentElement.getAttribute('data-theme')==='light'?"#2f2820":"#1a1a2e");BG=cs.getPropertyValue('--cd-bg').trim()||(document.documentElement.getAttribute('data-theme')==='light'?"#fbf7f0":"#f4ede0");}syncTheme();
+  addEventListener('message',e=>{const d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){document.documentElement.setAttribute('data-theme',d.theme);syncTheme();start();}});
   let W,H,DPR,cx,cy,R;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -84,7 +93,8 @@
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     cx=W/2;cy=H*0.46;R=Math.min(W,H)*0.30;
   }
-  addEventListener('resize',size);size();
+  // Resizing clears the bitmap; refresh tokens and wake the parked renderer.
+  addEventListener('resize',()=>{syncTheme();size();start();});size();
 
   const TEETH=24, STEP=Math.PI*2/TEETH;
   let drum=0;          // current drum angle (engraved cylinder)
@@ -99,7 +109,7 @@
   }
   cv.addEventListener('click',e=>{ratchet(e.clientX<W/2?-1:1);});
   let lastX=null;
-  cv.addEventListener('pointermove',e=>{
+  cv.addEventListener('pointermove',e=>{if(!e.buttons)return;
     if(lastX!==null && Math.abs(e.clientX-lastX)>14){ratchet(e.clientX>lastX?1:-1);lastX=e.clientX;}
     if(lastX===null)lastX=e.clientX;
   });
@@ -109,15 +119,15 @@
     ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
     ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 
-  function frame(){
+  function frame(){raf=0;if(document.hidden)return;
     t++;
     // idle balance-wheel breathing + occasional auto-ratchet
-    breath=Math.sin(t*0.018)*0.020;
-    if(!reduce){
+    breath=demoEnabled&&!reduce?Math.sin(t*.018)*.020:0;
+    if(!reduce&&demoEnabled){
       if(--auto<=0){ratchet(Math.random()<0.5?-1:1);auto=140+Math.floor(Math.random()*120);}
     }
     // spring drum toward target
-    drum+=(target-drum)*0.22;
+    drum=reduce?target:drum+(target-drum)*.22;
     tick*=0.90;
 
     ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
@@ -200,15 +210,16 @@
     ctx.lineWidth=1.4;ctx.strokeStyle='rgba(26,26,46,0.55)';
     ctx.beginPath();ctx.arc(crX,cy,crR,0,Math.PI*2);ctx.stroke();
 
-    if(!reduce)raf=requestAnimationFrame(frame);
+    cv.setAttribute("aria-valuenow",val);if(!reduce&&(demoEnabled||Math.abs(target-drum)>.001||tick>.001))start();
   }
   let raf=0;
-  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!document.hidden)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
+  cv.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowUp')ratchet(1);else if(e.key==='ArrowLeft'||e.key==='ArrowDown')ratchet(-1);else return;if(reduce)drum=target;e.preventDefault();start();});
+  ['pointerdown','pointermove','pointerup','click'].forEach(type=>document.addEventListener(type,start));
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){frame();}else start();
 })();
 </script>
-<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A row of five stars fills green from a clipped well with spring stagger, with success, denied-shake, and empty states and a status readout.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Star Rating</title>
@@ -72,7 +73,7 @@
   "error color (--fb11-err)",
   "spring stagger step (STEP=0.07)",
   "demo sequence timings (SEQ[].t values)",
-  "idle timeout before demo resumes (3200ms)",
+  "idle demo cadence while demoEnabled; first deliberate input disables it permanently",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -81,12 +82,14 @@
   "prefers-reduced-motion guard with static fallback",
   "visibilitychange pause",
   "aria-valuenow updates + role=slider",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Auto-demo loop restarts after 3.2s idle — must be removed for production use",
+  "First deliberate input permanently disables idle demo; manual input, finite feedback and settling remain active. Host demoEnabled=false skips the initial attract cycle.",
   "deny() is wired to Enter/Space key in demo but has no real trigger condition to customize",
-  "Star count change requires updating N only; aria-valuemax must also be updated manually"
+  "Star count change requires updating N only; aria-valuemax must also be updated manually",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -119,6 +122,11 @@
   <div class="cap">Star Rating</div>
 <script>
 (function(){
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;clearTimeout(timer);clearInterval(watch);idle=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   "use strict";
   var NS="http://www.w3.org/2000/svg";
   var stage=document.getElementById("fb11-stage"),
@@ -215,11 +223,11 @@
   ], si=0, timer=null, idle=true, idleAt=0;
 
   function tick(){
-    if(!idle)return;
+    if(!demoEnabled||reduce||document.hidden||!idle)return;
     SEQ[si].f(); var wait=SEQ[si].t; si=(si+1)%SEQ.length;
     timer=setTimeout(tick,wait);
   }
-  function startDemo(){ idle=true; clearTimeout(timer); empty(); timer=setTimeout(tick,700); }
+  function startDemo(){if(!demoEnabled||reduce||document.hidden)return; idle=true; clearTimeout(timer); empty(); timer=setTimeout(tick,700); }
   function user(){
     idle=false; clearTimeout(timer); idleAt=Date.now();
     if(stage.classList.contains("fb11-bad"))setTag("RATE","rate");
@@ -227,13 +235,7 @@
 
   // hand back to demo after idle
   var watch=null;
-  function watchIdle(){
-    if(watch)return;
-    watch=setInterval(function(){
-      if(!idle && Date.now()-idleAt>3200){ clearInterval(watch);watch=null; startDemo(); }
-    },500);
-  }
-  ["pointerdown","pointerenter","keydown"].forEach(function(e){stage.addEventListener(e,function(){user();watchIdle();});});
+  ["pointerdown","keydown"].forEach(function(e){stage.addEventListener(e,user);});
 
   // keyboard
   stage.addEventListener("keydown",function(e){

@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Compact Swiss-grid title search over six fictional project records. Local demo data only.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stone Record Filter</title>
+<style>
+:root{--rfl-bg:#0e0f11;--rfl-ink:#f2f2f0;--rfl-mute:#a0a2a7;--rfl-line:#2e3034;--rfl-accent:#ff6b3d}
+:root[data-theme="light"]{--rfl-bg:#f7f7f5;--rfl-ink:#121316;--rfl-mute:#5d5f64;--rfl-line:#d8d8d4;--rfl-accent:#c43d12}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:#0e0f11;background:var(--rfl-bg)}
+.rfl-root{display:flex;flex-direction:column;gap:4px;height:100%;padding:clamp(6px,3.5vmin,24px);overflow:hidden}
+.rfl-root{color:var(--rfl-ink);background:var(--rfl-bg);font:14px/1.25 system-ui,-apple-system,"Segoe UI",sans-serif}
+.rfl-root{font-variant-numeric:tabular-nums}
+.rfl-field{display:block}
+.rfl-input{width:100%;min-height:28px;margin-top:1px;padding:2px 4px 3px;font:inherit;font-size:16px;color:var(--rfl-ink)}
+.rfl-input{background:transparent;border:0;border-bottom:1px solid var(--rfl-mute);border-radius:0;outline:none}
+.rfl-input:focus,.rfl-input:focus-visible{outline:none;border-bottom:2px solid var(--rfl-accent);padding-bottom:2px}
+.rfl-list{list-style:none;margin:0;padding:0;min-height:0;overflow:auto}
+.rfl-row{display:grid;grid-template-columns:2.2em 1fr auto;gap:8px;align-items:baseline;padding:5px 0 5px 6px}
+.rfl-row{border-bottom:1px solid var(--rfl-line);border-left:4px solid transparent}
+.rfl-row[hidden],.rfl-empty[hidden]{display:none}
+.rfl-row.rfl-live{border-left-color:var(--rfl-accent)}
+.rfl-row.rfl-live .rfl-num,.rfl-row.rfl-live .rfl-name{color:var(--rfl-accent)}
+.rfl-num{color:var(--rfl-mute);font-size:11px}
+.rfl-name{font-weight:600;font-size:clamp(14px,3.6vmin,20px)}
+.rfl-meta{color:var(--rfl-mute);font-size:11px;text-align:right}
+.rfl-empty{font-size:12px}
+@media (max-width:340px){
+  .rfl-list{display:grid;grid-template-columns:1fr 1fr;column-gap:8px}
+  .rfl-row{grid-template-columns:1.6em 1fr;padding:3px 0 3px 4px}
+  .rfl-meta{display:none}
+  .rfl-name{font-size:13px}
+}
+@media (max-width:210px){
+  .rfl-root{gap:2px;padding:5px}
+  .rfl-num{display:none}
+  .rfl-row{grid-template-columns:1fr}
+  .rfl-input{min-height:26px;font-size:14px}
+}
+@media (prefers-reduced-motion:reduce){.rfl-row,.rfl-input{transition:none;animation:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/business-graphics/91-stone-record-filter.html",
+ "title": "Stone Record Filter",
+ "description": "Compact Swiss-grid search over six fictional project records with only a search input, record list and empty state. An idle row scan starts at once, steps every 300 ms and stops on real input. Local demo data only. Palette: Swiss grid, off-black/off-white with persimmon accent.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Edit the RECORDS array (title, phase, year) to change data. Filtering matches titles case-insensitively. Keep the data-fw-* hooks. Theme tokens are in :root and :root[data-theme=light].",
+ "editableAreas": [
+  "RECORDS array",
+  "CYCLE_MS",
+  "theme tokens"
+ ],
+ "preserveElements": [
+  "[data-fw-search]",
+  "[data-fw-record]",
+  "[data-fw-count]"
+ ],
+ "knownLimitations": [
+  "Local demo data only; no remote search",
+  "Reduced motion shows a static full list with no scan",
+  "Not verified in a browser; the checker owns all evidence"
+ ],
+ "tier": "experimental",
+ "labels": [
+  "filter",
+  "search",
+  "swiss-grid",
+  "themeable",
+  "mobile-ready",
+  "accessible",
+  "light-ready"
+ ],
+ "tags": []
+}
+</script>
+</head>
+<body>
+<main class="rfl-root" aria-label="Project record filter demo">
+  <label class="rfl-field">
+    <input class="rfl-input" data-fw-search type="search" aria-label="Search titles" autocomplete="off" spellcheck="false" placeholder="Atlas, Birch…">
+  </label>
+  <ul class="rfl-list" aria-label="Matching fictional project records">
+    <li class="rfl-empty" role="status" hidden></li>
+  </ul>
+  <output data-fw-count hidden>6</output>
+</main>
+<script>
+(function () {
+  'use strict';
+  const RECORDS = [
+    { title: 'Atlas', phase: 'Survey', year: 2024 },
+    { title: 'Birch', phase: 'Draft', year: 2025 },
+    { title: 'Cairn', phase: 'Review', year: 2023 },
+    { title: 'Delta', phase: 'Live', year: 2025 },
+    { title: 'Ember', phase: 'Paused', year: 2022 },
+    { title: 'Flint', phase: 'Draft', year: 2026 }
+  ];
+  const CYCLE_MS = 300;
+  const LIVE_CLASS = 'rfl-live';
+  const THEMES = ['light', 'dark'];
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let instances = [];
+
+  function setTheme(theme) {
+    if (THEMES.indexOf(theme) !== -1) {
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  }
+
+  function createCell(className, text) {
+    const cell = document.createElement('span');
+    cell.className = className;
+    cell.textContent = text;
+    return cell;
+  }
+
+  function createRow(record, index) {
+    const row = document.createElement('li');
+    row.className = 'rfl-row';
+    row.setAttribute('data-fw-record', '');
+    row.append(
+      createCell('rfl-num', String(index + 1).padStart(2, '0')),
+      createCell('rfl-name', record.title),
+      createCell('rfl-meta', record.phase + ' · ' + record.year)
+    );
+    return row;
+  }
+
+  function mountInstance(root) {
+    const input = root.querySelector('[data-fw-search]');
+    const countEl = root.querySelector('[data-fw-count]');
+    const list = root.querySelector('.rfl-list');
+    const empty = root.querySelector('.rfl-empty');
+    const rows = RECORDS.map(createRow);
+    let timer = 0;
+    let cycleIndex = 0;
+    let userActive = false;
+
+    rows.forEach(function (row) {
+      list.appendChild(row);
+    });
+
+    function applyFilter() {
+      const query = input.value.trim().toLowerCase();
+      let visible = 0;
+      rows.forEach(function (row, i) {
+        const isMatch = RECORDS[i].title.toLowerCase().indexOf(query) !== -1;
+        row.hidden = !isMatch;
+        if (isMatch) {
+          visible += 1;
+        }
+      });
+      countEl.textContent = String(visible);
+      empty.hidden = visible !== 0;
+      empty.textContent = 'No records match "' + input.value.trim() + '". Try another title.';
+    }
+
+    function markLive(index) {
+      rows.forEach(function (row, i) {
+        row.classList.toggle(LIVE_CLASS, i === index);
+      });
+    }
+
+    function stepCycle() {
+      markLive(cycleIndex);
+      cycleIndex = (cycleIndex + 1) % rows.length;
+    }
+
+    function stopCycle() {
+      clearInterval(timer);
+      timer = 0;
+    }
+
+    function startCycle() {
+      if (reducedMotion || userActive || document.hidden || timer) {
+        return;
+      }
+      stepCycle();
+      timer = setInterval(stepCycle, CYCLE_MS);
+    }
+
+    function takeOver() {
+      userActive = true;
+      stopCycle();
+      markLive(-1);
+    }
+
+    function onVisibility() {
+      if (document.hidden) {
+        stopCycle();
+      } else {
+        startCycle();
+      }
+    }
+
+    function onInput() {
+      takeOver();
+      applyFilter();
+    }
+
+    input.addEventListener('input', onInput);
+    input.addEventListener('keydown', takeOver);
+    root.addEventListener('pointerdown', takeOver);
+    document.addEventListener('visibilitychange', onVisibility);
+
+    applyFilter();
+    startCycle();
+
+    return {
+      resume: startCycle,
+      teardown: function () {
+        stopCycle();
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+    };
+  }
+
+  function onThemeMessage(event) {
+    const data = event.data;
+    if (data && data.type === 'forever:theme') {
+      setTheme(data.theme);
+    }
+  }
+
+  function teardownAll() {
+    instances.forEach(function (instance) {
+      instance.teardown();
+    });
+  }
+
+  function onPageShow(event) {
+    if (event.persisted) {
+      instances.forEach(function (instance) {
+        instance.resume();
+      });
+    }
+  }
+
+  function mountAll() {
+    instances = Array.prototype.map.call(document.querySelectorAll('.rfl-root'), mountInstance);
+  }
+
+  setTheme(new URLSearchParams(location.search).get('theme'));
+  addEventListener('message', onThemeMessage);
+  addEventListener('pagehide', teardownAll);
+  addEventListener('pageshow', onPageShow);
+  mountAll();
+})();
+</script>
+</body>
+</html>

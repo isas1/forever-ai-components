@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="A desktop whose dock hides below the bottom edge and slides up when the pointer reaches it; a virtual cursor demonstrates the reveal on a loop until a real one takes over.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auto-hide Dock</title>
+<script>
+/* theme hook: the canvas loads the tile with ?theme=light|dark (or stamps data-theme on <html>).
+   Runs before first paint — no dark flash. Standalone default stays dark. */
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  /* theme tokens — dark values are the defaults (solid-dark-bg contract);
+     the light re-theme is the [data-theme="light"] block */
+  :root{
+    --bg:#0d0f16; --glow-a:rgba(232,171,48,.16); --glow-b:rgba(79,179,240,.12);
+    --win:#181d2b; --win-line:rgba(255,255,255,.1); --win-bar:#222738; --txt:rgba(255,255,255,.16); --chip:linear-gradient(150deg,#E8AB30,#4FB3F0);
+    --dock-bg:rgba(30,34,52,.9); --dock-hl:rgba(255,255,255,.07); --border:rgba(255,255,255,.08);
+    --shadow:0 18px 50px -24px rgba(0,0,0,.9);
+    --item-hl:rgba(255,255,255,.22); --item-sh:rgba(0,0,0,.6);
+    --cur:#f4f6fb; --cur-ring:rgba(232,171,48,.6);
+    --cap:#fff; --cap-o:.28;
+    --g1:linear-gradient(150deg,#E8AB30,#a8661a);
+    --g2:linear-gradient(150deg,#4FB3F0,#1c6ea8);
+    --g3:linear-gradient(150deg,#f4f6fb,#9aa1bd);
+    --g4:linear-gradient(150deg,#F06A9B,#b0245c);
+    --g5:linear-gradient(150deg,#5FB7A1,#4FB3F0);
+  }
+  :root[data-theme="light"]{
+    --bg:#f2f4f8; --glow-a:rgba(143,94,14,.12); --glow-b:rgba(26,106,168,.08);
+    --win:#ffffff; --win-line:rgba(0,0,0,.08); --win-bar:#eaedf4; --txt:rgba(0,0,0,.12); --chip:linear-gradient(150deg,#8F5E0E,#1A6AA8);
+    --dock-bg:rgba(255,255,255,.92); --dock-hl:rgba(255,255,255,.85); --border:rgba(0,0,0,.08);
+    --shadow:0 18px 40px -24px rgba(0,0,0,.18);
+    --item-hl:rgba(255,255,255,.5); --item-sh:rgba(0,0,0,.16);
+    --cur:#1f2430; --cur-ring:rgba(143,94,14,.45);
+    --cap:#2a2110; --cap-o:.5;
+  }
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden}
+  body{
+    background:var(--bg);
+    background-image:radial-gradient(70vw 50vh at 20% 0%,var(--glow-a),transparent 60%),
+                     radial-gradient(60vw 50vh at 100% 30%,var(--glow-b),transparent 55%);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  .c13-screen{position:absolute;inset:0;cursor:auto}
+  /* a window on the desktop — the dock must not cover it when it is away */
+  .c13-win{
+    position:absolute;left:12%;right:12%;top:12%;height:52%;
+    background:var(--win);border:1px solid var(--win-line);border-radius:10px;overflow:hidden;
+    box-shadow:var(--shadow);
+  }
+  .c13-bar{height:18px;background:var(--win-bar);display:flex;align-items:center;gap:5px;padding:0 8px}
+  .c13-bar i{width:7px;height:7px;border-radius:50%;background:var(--txt)}
+  .c13-win p{position:absolute;left:10%;height:6px;border-radius:3px;background:var(--txt);margin:0}
+  .c13-win p:nth-of-type(1){top:34%;width:55%}
+  .c13-win p:nth-of-type(2){top:50%;width:75%}
+  .c13-win p:nth-of-type(3){top:66%;width:40%}
+  .c13-win .c13-chip{position:absolute;right:10%;top:34%;width:20%;height:38%;border-radius:6px;background:var(--chip);opacity:.9}
+  /* the dock lives just under the edge; .is-show brings it up */
+  .c13-dock{
+    --sz:clamp(26px,11vmin,40px);
+    position:absolute;left:50%;bottom:22px;transform:translate(-50%,calc(100% + 26px));
+    display:flex;align-items:flex-end;gap:clamp(5px,2vmin,8px);padding:7px 9px;
+    background:var(--dock-bg);border:1px solid var(--border);border-radius:13px;
+    box-shadow:inset 0 1px 0 var(--dock-hl),var(--shadow);
+    transition:transform 380ms cubic-bezier(.22,1,.36,1);
+  }
+  .c13-screen.is-show .c13-dock{transform:translate(-50%,0)}
+  .c13-item{width:var(--sz);height:var(--sz);border-radius:calc(var(--sz) * .27);box-shadow:0 4px 12px -4px var(--item-sh),inset 0 1px 0 var(--item-hl);transition:transform .16s}
+  .c13-item:nth-child(1){background:var(--g1)}
+  .c13-item:nth-child(2){background:var(--g2)}
+  .c13-item:nth-child(3){background:var(--g3)}
+  .c13-item:nth-child(4){background:var(--g4)}
+  .c13-item:nth-child(5){background:var(--g5)}
+  .c13-item:hover{transform:translateY(-5px) scale(1.1)}
+  /* the demo cursor: a dot inside a soft ring, driven by JS on a loop */
+  .c13-cur{
+    position:absolute;left:0;top:0;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;
+    border:2px solid var(--cur-ring);pointer-events:none;opacity:0;transition:opacity .3s;
+    transform:translate(var(--x,30%),var(--y,40%));
+  }
+  .c13-cur::after{content:"";position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;border-radius:50%;background:var(--cur)}
+  .c13-screen.is-demo .c13-cur{opacity:1}
+  .c13-cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase}
+  @media (prefers-reduced-motion:reduce){.c13-dock,.c13-item,.c13-cur{transition:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/navigation/13-auto-hide-dock.html",
+ "title": "Auto-hide Dock",
+ "description": "A desktop with a window, and a dock that lives just below the bottom edge: it slides up when the pointer reaches the lowest 14% of the screen and drops away when it leaves; a ringed demo cursor glides to the edge and away on a loop until the real pointer takes over.",
+ "useWhen": "Immersive or content-first screens (viewers, editors, kiosks) where navigation should stay out of the way until summoned; onboarding demos of an edge gesture.",
+ "avoidWhen": "Touch-first products (there is no edge to hover) and pages where the dock must be discoverable without a demo.",
+ "agentPrompt": "Change the reveal threshold with EDGE (0.86 = bottom 14%); remove the demo cursor by deleting the KEY path and calling screen.classList.add('is-show') in start(); restyle the window through --win/--win-bar/--txt. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "reveal threshold (EDGE=0.86)",
+  "demo cursor path and loop length (KEY keyframes, the 4.6 s period)",
+  "dock items and gradients (--g1…--g5)",
+  "the window dressing (.c13-win, .c13-chip)",
+  "slide timing (transition 380ms)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "place() applying the same EDGE rule to the demo cursor and the real pointer",
+  "IIFE wrapper",
+  "visibilitychange stop/start of the rAF loop",
+  "prefers-reduced-motion guard (dock simply shown, no cursor)",
+  "native pointer remains visible after demo cursor yields to input",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
+ ],
+ "knownLimitations": [
+  "Hover-only reveal — no touch equivalent; the demo loop is what mobile visitors see",
+  "The demo cursor is a styled span, not the system cursor, so it cannot click anything",
+  "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "dock",
+  "auto-hide",
+  "edge-reveal",
+  "navigation",
+  "macos",
+  "desktop",
+  "cursor",
+  "demo"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="c13-screen" id="c13-screen">
+  <div class="c13-win" aria-hidden="true"><div class="c13-bar"><i></i><i></i><i></i></div><p></p><p></p><p></p><span class="c13-chip"></span></div>
+  <nav class="c13-dock" aria-label="Auto-hiding dock">
+    <span class="c13-item" title="Files"></span><span class="c13-item" title="Mail"></span><span class="c13-item" title="Notes"></span><span class="c13-item" title="Photos"></span><span class="c13-item" title="Music"></span>
+  </nav>
+  <span class="c13-cur" id="c13-cur" aria-hidden="true"></span>
+</div>
+<div class="c13-cap">Auto-hide Dock</div>
+<script>
+(function(){
+  var screen=document.getElementById('c13-screen'),cur=document.getElementById('c13-cur');
+  if(!screen||!cur)return;
+  var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
+  addEventListener('message',function(e){
+    var d=e.data;
+    if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
+      document.documentElement.setAttribute('data-theme',d.theme);
+    }
+  });
+  var EDGE=0.86;                                   /* pointer below 86% of the height reveals the dock */
+  function place(fx,fy){
+    cur.style.setProperty('--x',(fx*100)+'vw');cur.style.setProperty('--y',(fy*100)+'vh');
+    screen.classList.toggle('is-show',fy>EDGE);
+  }
+  /* real pointer: the demo cursor steps aside, the dock follows the true edge rule */
+  var lastInput=0;
+  screen.addEventListener('mousemove',function(e){
+    lastInput=Date.now();screen.classList.remove('is-demo');
+    place(e.clientX/innerWidth,e.clientY/innerHeight);
+  });
+  screen.addEventListener('mouseleave',function(){screen.classList.remove('is-show');});
+  /* autonomous idle: the loop opens on the dock already raised (the wall's first look), the
+     demo cursor then glides away (dock down), wanders, and returns to the edge (dock up) —
+     a 4.6 s loop that resumes a few seconds after the real pointer leaves */
+  var raf=0,t0=null,demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var KEY=[[0.52,0.95,0],[0.52,0.95,0.9],[0.72,0.36,2.1],[0.32,0.42,3.1],[0.52,0.95,4.6]];
+  function ease(k){return k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;}
+  function loop(ts){
+    if(!demoEnabled)return;
+    raf=requestAnimationFrame(loop);
+    if(Date.now()-lastInput<3000){t0=null;return;}
+    if(t0===null){t0=ts;screen.classList.add('is-demo');}
+    var el=((ts-t0)/1000)%4.6,a=KEY[0],b=KEY[1];
+    for(var i=0;i<KEY.length-1;i++){if(el>=KEY[i][2]&&el<=KEY[i+1][2]){a=KEY[i];b=KEY[i+1];break;}}
+    var k=b[2]===a[2]?1:ease((el-a[2])/(b[2]-a[2]));
+    place(a[0]+(b[0]-a[0])*k,a[1]+(b[1]-a[1])*k);
+  }
+  function takeover(){demoEnabled=false;if(raf){cancelAnimationFrame(raf);raf=0;}}
+  window.addEventListener("forever:interactive",takeover);screen.addEventListener("pointerdown",takeover,true);screen.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  function start(){
+    if(reduce){screen.classList.add('is-show');return;}   /* reduced motion: dock simply shown */
+    if(demoEnabled&&!raf){t0=null;raf=requestAnimationFrame(loop);}
+  }
+  function stop(){if(raf){cancelAnimationFrame(raf);raf=0;}}
+  document.addEventListener('visibilitychange',function(){document.hidden?stop():start();});
+  start();
+})();
+</script>
+</body>
+</html>

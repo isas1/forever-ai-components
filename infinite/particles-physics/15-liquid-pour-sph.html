@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Cyan SPH fluid pours into a basin, sloshes and drains on a slow cycle with glowing metaball particles; pointer tilts the liquid.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Liquid Pour SPH</title>
@@ -20,7 +21,7 @@
     --lps-wall:rgba(0,118,148,0.24); --lps-stream:rgba(0,118,148,0.16); --lps-core:3,58,80; --lps-ca:0.30; --lps-ck:0.5;
     --lps-g0:rgba(0,96,126,0.26); --lps-g1:rgba(0,130,166,0.182); --lps-g2:rgba(150,200,215,0);}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--lps-bg);}
-  #lps{display:block;width:100%;height:100%;}
+  #lps-canvas{display:block;width:100%;height:100%;}
   .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1.2 ui-monospace,Menlo,monospace;
        letter-spacing:.14em;color:var(--lps-accent);opacity:var(--lps-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
@@ -47,12 +48,14 @@
   "double-substep loop (2 × dt*0.5) for stability",
   "visibilitychange pause/resume",
   "reduced-motion static pool fallback",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Spatial hash uses string keys — allocation pressure at high N; switch to integer keys for >300 particles",
   "Particle recycling uses Array.indexOf + splice inside tight loop — O(n) per removed particle",
-  "No reduced-motion animation — shows a static settled pool only"
+  "No reduced-motion animation — shows a static settled pool only",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -76,11 +79,16 @@
 </script>
 </head>
 <body>
-<canvas id="lps"></canvas>
+<canvas id="lps-canvas" class="lps-root"></canvas>
 <div class="cap">Liquid Pour SPH</div>
 <script>
 (function(){
-  const cv=document.getElementById('lps'),ctx=cv.getContext('2d');
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
+  const cv=document.getElementById('lps-canvas'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,S;                       // S = world scale (px per world unit)
   // basin walls in world units (origin at canvas center-ish, +y down)
@@ -90,7 +98,7 @@
   let glowR=0;
   // all painted colours come from tokens; a flip re-reads them and re-bakes the glow sprite
   const root=document.documentElement, C={};
-  function syncTheme(){const cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim();
+  function syncTheme(){const FB={'--lps-bg':'#071a22','--lps-fade':'rgba(7,26,34,0.30)','--lps-blend':'lighter','--lps-wall':'rgba(52,214,255,0.16)','--lps-stream':'rgba(52,214,255,0.10)','--lps-core':'210,248,255','--lps-ca':'0.22','--lps-ck':'0.5','--lps-g0':'rgba(120,236,255,0.26)','--lps-g1':'rgba(52,214,255,0.182)','--lps-g2':'rgba(20,120,150,0)'}, cs=getComputedStyle(root), g=n=>cs.getPropertyValue(n).trim()||FB[n];
     C.bg=g('--lps-bg');C.fade=g('--lps-fade');C.wall=g('--lps-wall');C.stream=g('--lps-stream');C.blend=g('--lps-blend');
     C.g0=g('--lps-g0');C.g1=g('--lps-g1');C.g2=g('--lps-g2');C.core=g('--lps-core');C.ca=+g('--lps-ca');C.ck=+g('--lps-ck');
     if(glowR)buildGlow(glowR);}                // a stale sprite would keep the old palette
@@ -156,11 +164,11 @@
   function step(dt){
     const R=h(), R2=R*R;
     // pour / drain ambient cycle
-    phase+=dt*0.16;
+    if(demoEnabled&&!reduce)phase+=dt*0.16;
     const c=Math.sin(phase);                 // -1..1 slow breathing
     pourX=(bx0+bx1)/2 + Math.sin(phase*0.7)*(bx1-bx0)*0.22;
-    if(c>-0.2){ spawn+=dt*N*1.3; const e=Math.floor(spawn); spawn-=e; emit(e); }
-    const draining=c<-0.55;                   // basin opens, fluid escapes
+    if(demoEnabled&&!reduce&&c>-0.2){ spawn+=dt*N*1.3; const e=Math.floor(spawn); spawn-=e; emit(e); }
+    const draining=demoEnabled&&!reduce&&c<-0.55;                   // basin opens, fluid escapes
 
     // integrate (predict)
     for(const p of P){
@@ -206,7 +214,7 @@
       }
     }
     nudge*=0.86;
-    if(P.length<8&&c<=-0.2) phase+=dt*0.4;      // hurry empty basin to refill
+    if(demoEnabled&&P.length<8&&c<=-0.2) phase+=dt*0.4;      // hurry empty basin to refill
   }
 
   // ---- render: metaball-ish glow + crest highlights ----
@@ -247,14 +255,14 @@
   cv.addEventListener('click',()=>{nudge+=(Math.random()-0.5)*S*0.03;});
 
   let raf=0,last=0;
-  function frame(ts){
+  function frame(ts){raf=0;if(document.hidden)return;
     if(!last)last=ts; let dt=(ts-last)/1000; last=ts;
     dt=Math.min(dt,0.033);
     if(!reduce){ for(let s=0;s<2;s++) step(dt*0.5); }
     draw();
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(demoEnabled||(sessionActive)))start();
   }
-  function start(){if(!raf){last=0;raf=requestAnimationFrame(frame);}}
+  function start(){if(!raf&&!document.hidden&&!reduce&&(demoEnabled||(sessionActive)))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{if(reduce)return;document.hidden?stop():start();});
 
@@ -266,6 +274,7 @@
     for(let k=0;k<40;k++) step(0.016);
     draw();
   } else start();
+  ['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;if(reduce){for(let k=0;k<4;k++)step(.016);draw();}else start();}));
 })();
 </script>
 </body>

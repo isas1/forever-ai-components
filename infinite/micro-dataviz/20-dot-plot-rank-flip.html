@@ -25,7 +25,7 @@
     --dprf-val:rgba(28,56,62,0.7); --dprf-ink:#e6f3f5; --dprf-cap-o:.62;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--dprf-bg);}
-  #dprf{display:block;width:100%;height:100%;}
+  #dprf-canvas{display:block;width:100%;height:100%;}
   .dprf-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",Menlo,monospace;
        letter-spacing:.14em;color:var(--dprf-acc);opacity:var(--dprf-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
@@ -52,12 +52,15 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion static frame fallback",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "First deliberate input freezes procedural chart drift after its input paint; hover alone keeps idle demonstration running.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Values are randomly generated — no real data binding",
   "Background color hardcoded in CSS and BG constant; must change both",
-  "Click only triggers newRound during hold phase (phase===1), not during transition"
+  "Click only triggers newRound during hold phase (phase===1), not during transition",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -80,14 +83,23 @@
  ]
 }
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 </head>
 <body>
-<canvas id="dprf"></canvas>
+<canvas id="dprf-canvas" class="dprf-canvas"></canvas>
 <div class="dprf-cap">Dot Plot Rank Flip</div>
 <script>
 (function(){
-  const cv=document.getElementById('dprf'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('dprf-canvas'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const preview=window.__foreverPreview;
+  let demoEnabled=preview?preview.demoEnabled!==false:true;
+  function shouldFrame(){return demoEnabled;}
+  function takeOver(){demoEnabled=false;cancelAnimationFrame(raf);raf=0;if(!document.hidden&&!reduce)raf=requestAnimationFrame(frame);else if(reduce)frame();}
+  window.addEventListener('forever:interactive',takeOver);
+  document.addEventListener('pointerdown',takeOver,{capture:true});
+  document.addEventListener('click',takeOver,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&e.key!=='Escape'&&!/^(Shift|Control|Alt|Meta)$/.test(e.key)&&!e.metaKey&&!e.ctrlKey&&!e.altKey)takeOver();},{capture:true});
   // theme: every colour the canvas draws with is read from the tokens, once per switch.
   // No repaint hook needed here: frame() re-renders every rAF tick in both motion modes.
   const root=document.documentElement, C={};
@@ -183,15 +195,15 @@
       ctx.fillStyle=C.ink;
       ctx.beginPath();ctx.arc(x-dotR*0.28,y-dotR*0.28,dotR*0.34,0,Math.PI*2);ctx.fill();
     });
-    raf=requestAnimationFrame(frame);
+    if(shouldFrame())raf=requestAnimationFrame(frame);else raf=0;
   }
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce&&shouldFrame())raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   cv.addEventListener('pointermove',()=>{nudge=1;});
   cv.addEventListener('click',()=>{if(!reduce&&phase===1){newRound();}});
-  if(reduce){frame();}else start();
+  if(reduce){frame();}else if(demoEnabled)start();else frame();
 })();
 </script>
 </body>

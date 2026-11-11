@@ -1,24 +1,24 @@
-# Forever AI Components
+# Forever — creative web assets
 
-[![600+ components](https://img.shields.io/badge/components-600%2B-blueviolet?style=flat)](https://forevercomponents.com/infinite/)
-[![Themes](https://img.shields.io/badge/themes-62-blue?style=flat)](#component-index-by-theme)
-[![License](https://img.shields.io/badge/license-MIT-green?style=flat)](LICENSE)
-[![Zero deps](https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat)](#)
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-☕-FFDD00?style=flat-square)](https://buymeacoffee.com/isas1)
+[600+ creative web assets](https://forevercomponents.com/)
+[64 themes](#component-index-by-theme)
+[MIT license](LICENSE)
+Zero tile dependencies
+[Support Forever](https://buymeacoffee.com/isas1)
 
 ---
 
 ## Identity
 
-Forever AI Components is a structured design knowledge base and retrieval layer for AI coding agents.
+Creative web assets. Ready to build.
 
-The components are the database. The retrieval layer is the product.
+Discover 600+ animated designs with HTML, CSS and JavaScript you can adapt. Preview live, then bring source into your project.
 
-The primary consumer is an AI agent building or improving a visual interface. The registry contains 600+ curated interface components, each structured with rich metadata across many facets and made retrievable by intent. The value is in the structure: every component is labelled, related, scored, and indexed so an agent can consistently retrieve the right one for a given design task, rather than generating UI blind.
+Designers, developers and coding agents can find assets by intent, then read source and adaptation guidance. The registry provides structured discovery metadata; preview and test the selected design in its intended host before treating it as a production control.
 
 Every component is a single `.html` file. Every component is a URL. Built with CSS, Canvas 2D, and SVG: zero external dependencies, no build step, no framework.
 
-**Live canvas:** https://forevercomponents.com/infinite/
+**Live canvas:** https://forevercomponents.com/
 **Agent entry point:** https://raw.githubusercontent.com/isas1/forever-ai-components/main/agents.json
 **Full index:** https://raw.githubusercontent.com/isas1/forever-ai-components/main/infinite/components.index.json
 
@@ -49,7 +49,7 @@ When solving a UI task, follow this order:
 4. Prefer existing components over generating new UI from scratch
 5. Prefer `perfTier: cheap` unless the task explicitly requires heavy animation
 6. Prefer `labels: accessible` and `labels: mobile-ready` by default
-7. Prefer low `complexity` when the component will be adapted
+7. Compare `kb`, `loc`, editable areas and known limitations before adapting
 8. Only generate new UI if no suitable component exists in the registry
 
 ---
@@ -72,17 +72,17 @@ A few KB: every facet you can filter on, with its values and counts. Fetch this 
 GET https://raw.githubusercontent.com/isas1/forever-ai-components/main/infinite/components.index.json
 ```
 
-A flat array of all 600+ components with their discovery facets (title, description, file, role, technique, perfTier, style, mood, tags, labels, …). Lean by design: the heavy adaptation prose is NOT here. Load once, filter in CODE. Do not paste the whole file into a model context.
+An object containing a `components` array of all 600+ assets with their discovery facets (title, description, file, role, technique, perfTier, style, mood, tags, labels, …). Lean by design: the heavy adaptation prose is NOT here. Load once, filter in CODE. Do not paste the whole file into a model context.
 
 ### Step 3: filter by facet
 
 Filter the array by any combination of structured facets before retrieving source:
 
 ```js
-components
+index.components
   .filter(c => c.useCases?.includes('loader'))
   .filter(c => c.perfTier === 'cheap')
-  .filter(c => c.technique === 'css')
+  .filter(c => c.technique?.includes('css-only'))
   .filter(c => c.labels?.includes('mobile-ready'))
 ```
 
@@ -110,7 +110,7 @@ Parse that block for guidance on how to safely modify the component. One fetch r
 GET https://raw.githubusercontent.com/isas1/forever-ai-components/main/agents.json
 ```
 
-Returns: registry name, component count, index URL, fetch URL pattern, and full facet schema. Use as the agent entry point before loading the full index.
+Returns: registry name, component count, index URL, fetch URL pattern, and facet names; fetch facets.json for values. Use as the agent entry point before loading the full index.
 
 ---
 
@@ -148,13 +148,15 @@ When adapting a retrieved component:
 
 ## Component schema
 
-`components.index.json` (schemaVersion 3) is the lean discovery surface. Each record carries the Identity and Discovery facets below. The Agentic adaptation fields are NOT in the index: they travel embedded in each tile (see the `forever-agent-meta` block in Retrieval step 4).
+`components.index.json` (schemaVersion 4) is the lean discovery surface. Each record carries the Identity and Discovery facets below. The Agentic adaptation fields are NOT in the index: they travel embedded in each tile (see the `forever-agent-meta` block in Retrieval step 4).
 
 **Identity**
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | string | stable unique component id |
+| `id` | number | legacy positional id; do not persist |
+| `slug` | string | stable relative file path without .html; use for identity |
+| `responsive` | boolean or null | catalog responsiveness; null means unknown |
 | `file` | string | path relative to registry root: use as fetch URL suffix |
 | `repoFile` | string | path within the source repository |
 | `themeSlug` | string | machine slug for the theme (e.g. `kinetic-type`) |
@@ -168,14 +170,14 @@ When adapting a retrieved component:
 | Field | Type | Description |
 |---|---|---|
 | `role` | string | primary UI role (e.g. `hero`, `loader`, `background`) |
-| `technique` | enum | `css` `canvas` `svg` `css+canvas` |
-| `style` | string | visual style descriptor |
-| `motion` | enum | `none` `subtle` `moderate` `intense` |
+| `technique` | string[] | controlled techniques, e.g. `css-only`, `canvas`, `svg`, `raf` |
+| `style` | string[] | visual style descriptor |
+| `motion` | enum | `loop`, `ambient`, `reactive`, `physics`, `generative`, `reveal` |
 | `intensity` | enum | relative animation intensity |
-| `interaction` | enum | `passive` `hover` `click` `pointer` |
-| `a11y` | string[] | `reduced-motion` `keyboard` `screen-reader` |
-| `perfTier` | enum | `cheap` `moderate` `expensive` |
-| `palette` | string[] | dominant colours (hex) |
+| `interaction` | string[] | input modes, e.g. `hover`, `click`, `pointer`, `keyboard` |
+| `a11y` | object | static-analysis flags: reducedMotion, keyboard, ariaLabeled, seizureSafe |
+| `perfTier` | enum | `cheap`, `medium`, `heavy` |
+| `palette` | object | scheme, tone, accentHex, bgHex, colors |
 | `deps` | string[] | external dependencies (normally empty) |
 | `useCases` | string[] | UI roles this component serves |
 | `mood` | string[] | emotional register: `calm` `energetic` `elegant` `playful` … |
@@ -191,8 +193,8 @@ Found in the tile's `<script type="application/json" id="forever-agent-meta">` b
 
 | Field | Type | Description |
 |---|---|---|
-| `useWhen` | string[] | situations this component is a good fit for |
-| `avoidWhen` | string[] | situations to avoid this component in |
+| `useWhen` | string | situations this component is a good fit for |
+| `avoidWhen` | string | situations to avoid this component in |
 | `agentPrompt` | string | an example adaptation instruction for an agent |
 | `editableAreas` | string[] | regions that are safe to change |
 | `preserveElements` | string[] | code that must be kept (e.g. reduced-motion, namespacing) |
@@ -217,8 +219,8 @@ When returning components to a user, include:
 Do not retrieve or recommend a component that:
 
 - Has `tier: needs-review` unless no alternative exists
-- Has `perfTier: expensive` for a mobile-primary context
-- Has `interaction: pointer` for a touch-only context without a fallback
+- Has `perfTier: heavy` for a mobile-primary context
+- Has a pointer-only `interaction` array for a touch-only context without a fallback
 
 ---
 
@@ -233,7 +235,7 @@ forever-ai-components/
 │
 └── infinite/
     ├── facets.json                 # filter vocab: facets + values + counts (tiny)
-    ├── components.index.json       # lean discovery index (flat array, filter in code)
+    ├── components.index.json       # lean discovery index (components array, filter in code)
     └── <theme>/
         └── NN-<kebab-name>.html    # self-contained component + embedded adaptation detail
 ```
@@ -242,40 +244,40 @@ forever-ai-components/
 
 ## Component index by theme
 
-600+ components across 62 themes:
+600+ creative web assets across 64 themes:
 
 ### UI Components
 
 | Theme | Count |
 |---|---|
-| Buttons & Toggles | 11 |
-| Cards | 9 |
-| Loaders | 14 |
-| Navigation | 10 |
+| Buttons & Toggles | 37 |
+| Cards | 21 |
+| Loaders | 17 |
+| Navigation | 39 |
 | Backgrounds | 9 |
-| Inputs & Switches | 17 |
-| Cursor & Pointer | 6 |
-| Progress & Status | 10 |
-| Feedback & States | 12 |
-| Drag & Reorder | 9 |
+| Inputs & Switches | 46 |
+| Cursor & Pointer | 9 |
+| Progress & Status | 32 |
+| Feedback & States | 34 |
+| Drag & Reorder | 22 |
 
 ### Animation & Motion
 
 | Theme | Count |
 |---|---|
 | Kinetic Typography | 20 |
-| Micro Data-Viz | 19 |
+| Micro Data-Viz | 32 |
 | CSS 3D & Perspective | 20 |
-| Particles & Physics | 20 |
+| Particles & Physics | 24 |
 | Organic & Nature | 18 |
-| Generative Geometry | 20 |
-| UI Micro-interactions | 17 |
-| Retro & Glitch | 20 |
+| Generative Geometry | 21 |
+| UI Micro-interactions | 24 |
+| Retro & Glitch | 22 |
 | Cosmic & Space | 20 |
-| Text Effects | 6 |
-| SVG Animations | 8 |
-| Audio Visualizers | 8 |
-| Charts & Flow | 10 |
+| Text Effects | 7 |
+| SVG Animations | 5 |
+| Audio Visualizers | 12 |
+| Charts & Flow | 13 |
 | Fractals & Automata | 9 |
 
 ### Generative & Geometric Styles
@@ -304,7 +306,6 @@ forever-ai-components/
 | Constructivist | 10 |
 | Pointillist | 10 |
 | Stained Glass | 2 |
-| Clockwork & Mechanical | 1 |
 
 ### Artist-Inspired
 
@@ -316,7 +317,7 @@ forever-ai-components/
 | Playful Geometric Notation | 8 |
 | Symbolic Pastel Abstraction | 8 |
 | Gold-Leaf Ornamental Studies | 8 |
-| Ukiyo-e Wave & Mountain | 9 |
+| Ukiyo-e Wave & Mountain | 8 |
 | Ukiyo-e Weather & Road | 8 |
 | Pointillist Dot-Field Studies | 8 |
 | Art Nouveau Ornamental Panels | 8 |
@@ -329,11 +330,14 @@ forever-ai-components/
 
 | Theme | Count |
 |---|---|
-| Business Graphics | 5 |
-| Marketing Sections | 2 |
-| Product Flows | 2 |
-| Dev Status | 2 |
+| Business Graphics | 6 |
+| Marketing Sections | 9 |
+| Product Flows | 5 |
+| Dev Status | 7 |
 | Hierarchy & Trees | 6 |
+| Editor Workflows | 16 |
+| Claude Code | 18 |
+| Claude Code Objects | 11 |
 
 ---
 

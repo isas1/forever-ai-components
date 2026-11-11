@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Chartreuse glowing volume slider whose thumb travels while an equalizer of spring-bouncing bars reacts and a numeric readout counts the level.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Volume Slider Pulse</title>
@@ -22,7 +23,7 @@
     --vsp-track:rgba(27,46,25,0.10); --vsp-cap:#1b2e19; --vsp-cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--vsp-bg);}
-  #vsp{display:block;width:100%;height:100%;}
+  #um15-vsp{display:block;width:100%;height:100%;}
   .vsp-cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;
        letter-spacing:.12em;color:var(--vsp-cap);opacity:var(--vsp-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
@@ -48,12 +49,14 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Slider is auto-driven only — no real user drag control",
   "Light re-theme via the [data-theme=light] token block; catalog bg/accent describe the dark default",
-  "Random flicker on bars causes minor frame variance"
+  "Random flicker on bars causes minor frame variance",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -78,11 +81,11 @@
 </script>
 </head>
 <body>
-<canvas id="vsp"></canvas>
+<canvas id="um15-vsp"></canvas>
 <div class="vsp-cap">Volume Slider Pulse</div>
 <script>
 (function(){
-  const cv=document.getElementById('vsp'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('um15-vsp'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const root=document.documentElement;
   let AC='#A9D22D', AC_RGB='169,210,45', THUMB='#F2F7E4', TRACK='rgba(255,255,255,0.08)';
@@ -114,8 +117,8 @@
     S=Math.min(W,H);
   }
   addEventListener('resize',size);size();
-  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.35,1.6);});
-  cv.addEventListener('click',()=>{nudge=1.8;});
+  cv.addEventListener('pointermove',()=>{nudge=Math.min(nudge+0.35,1.6);start();});
+  cv.addEventListener('click',()=>{nudge=1.8;start();});
 
   // eased sine drive -> slider position 0..1 (dwell at the ends)
   function drivePos(){
@@ -211,14 +214,17 @@
   }
 
   function frame(){
-    if(!reduce){ t+=1; nudge*=0.9; }
+    if(demo){t+=1;nudge*=0.9;}else nudge*=0.9;
     render();
-    raf=requestAnimationFrame(frame);
+    if(demo||nudge>.015)raf=requestAnimationFrame(frame);else raf=0;
   }
+  let demo=window.__foreverPreview?.demoEnabled!==false;
   function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();},{once:true});
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){ t=Math.PI/0.018*0.5; render(); } else start();
+  if(reduce){ t=Math.PI/0.018*0.5; render(); } else if(demo)start(); else render();
 })();
 </script>
 </body>

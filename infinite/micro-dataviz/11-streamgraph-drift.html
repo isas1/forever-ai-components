@@ -55,12 +55,16 @@
   "prefers-reduced-motion guard and static fallback",
   "visibilitychange pause/resume",
   "DPR-aware canvas sizing",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "First deliberate input freezes procedural chart drift after its input paint; hover alone keeps idle demonstration running.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Named plum-and-verdigris DARK/LIGHT fallback palettes match CSS tokens; empty hidden-iframe reads never reach canvas gradients."
  ],
  "knownLimitations": [
   "Background color hardcoded in CSS (#0e1424) — must edit to change theme",
   "Streamgraph shows synthetic noise data only, not real data series",
-  "Pointer boost decays quickly; sustained motion needed for lasting effect"
+  "Pointer boost decays quickly; sustained motion needed for lasting effect",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -82,14 +86,23 @@
  ]
 }
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 </head>
 <body>
-<canvas id="sgd-c"></canvas>
+<canvas id="sgd-c" class="sgd-canvas"></canvas>
 <div class="sgd-cap">Streamgraph Drift</div>
 <script>
 (function(){
   const cv=document.getElementById('sgd-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const preview=window.__foreverPreview;
+  let demoEnabled=preview?preview.demoEnabled!==false:true;
+  function shouldFrame(){return demoEnabled;}
+  function takeOver(){demoEnabled=false;cancelAnimationFrame(raf);raf=0;if(!document.hidden&&!reduce)raf=requestAnimationFrame(frame);else if(reduce)frame();}
+  window.addEventListener('forever:interactive',takeOver);
+  document.addEventListener('pointerdown',takeOver,{capture:true});
+  document.addEventListener('click',takeOver,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&e.key!=='Escape'&&!/^(Shift|Control|Alt|Meta)$/.test(e.key)&&!e.metaKey&&!e.ctrlKey&&!e.altKey)takeOver();},{capture:true});
   let W,H,DPR;
   function size(){
     DPR=Math.min(devicePixelRatio||1,2);
@@ -103,10 +116,17 @@
   const N=5, COLS=120;
   let hues=['#5C3A4B','#999086','#925D78','#5E7A78','#D9C2CE'];
   const C={bg0:'',bg1:'',contour:'',seam0:'',seam1:'',edge:''};
+  const DARK=['#5C3A4B','#999086','#925D78','#5E7A78','#D9C2CE','#1E1A1C','#140f11','#f0e0e8','rgba(146,93,120,0)','rgba(146,93,120,0.16)','rgba(217,194,206,0.6)'];
+  const LIGHT=['#d9c3cf','#6b625a','#a86e8b','#5f7f7c','#6d4457','#f7f1f4','#ece0e7','#7a4c63','rgba(122,76,99,0)','rgba(122,76,99,0.18)','rgba(122,76,99,0.55)'];
+  let paletteReady=false;
+  function tokDef(n){var m=document.querySelector('style').textContent.match(new RegExp(n+'\\s*:\\s*([^;}]+)'));return m?m[1].trim():'';}  // dark :root default, for engines that read '' from a fresh frame
   function syncTheme(){            // every colour the canvas draws with comes from the tokens
     const cs=getComputedStyle(root);
-    hues=hues.map((_,i)=>cs.getPropertyValue('--c11-h'+i).trim());
-    for(const k of ['bg0','bg1','contour','seam0','seam1','edge'])C[k]=cs.getPropertyValue('--c11-'+k).trim();
+    const keys=['bg0','bg1','contour','seam0','seam1','edge'];
+    let values=[...hues.map((_,i)=>cs.getPropertyValue('--c11-h'+i).trim()||tokDef('--c11-h'+i)),...keys.map(k=>cs.getPropertyValue('--c11-'+k).trim()||tokDef('--c11-'+k))];
+    paletteReady=values.every(Boolean);
+    if(!paletteReady)values=root.getAttribute('data-theme')==='light'?LIGHT:DARK;
+    hues=values.slice(0,N);keys.forEach((k,i)=>C[k]=values[N+i]);
   }                                // backdrop + seam gradients are rebuilt from C every frame
   addEventListener('message',function(e){
     const d=e.data;
@@ -147,6 +167,7 @@
   }
 
   function frame(){
+    if(!paletteReady)syncTheme();
     if(!reduce){ t+=1+boost*2; boost*=0.95; pushColumn(); pushColumn(); }
     ctx.clearRect(0,0,W,H);
     // subtle vertical vignette backdrop
@@ -204,13 +225,13 @@
     ctx.fillStyle=seam;ctx.fillRect(W-40,0,40,H);
     ctx.fillStyle=C.edge;ctx.fillRect(W-1.2,0,1.2,H);
 
-    if(!reduce) raf=requestAnimationFrame(frame);
+    if(!reduce&&shouldFrame())raf=requestAnimationFrame(frame);else raf=0;
   }
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce&&shouldFrame())raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
-  if(reduce){for(let k=0;k<200;k++){t+=2;pushColumn();}frame();}else start();
+  if(reduce){for(let k=0;k<200;k++){t+=2;pushColumn();}frame();}else if(demoEnabled)start();else frame();
 })();
 </script>
 </body>

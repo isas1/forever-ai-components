@@ -4,19 +4,22 @@
 <title>Log Stream</title>
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:12px/1.65 ui-monospace,Menlo,"Courier New",monospace}
-.trm-wrap{padding:10px 12px;height:100%;display:flex;flex-direction:column;overflow:hidden}
-.trm-header{color:#4ade80;border-bottom:1px solid #1a2a1a;padding-bottom:4px;margin-bottom:6px;font-size:11px;opacity:.8}
-.trm-log{flex:1;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;gap:1px}
-.trm-entry{display:flex;gap:6px;white-space:pre;animation:trm-fadein .25s ease}
-@keyframes trm-fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-.trm-ts{color:#2a4a2a;flex-shrink:0}
-.trm-lvl-info{color:#4ade80}
-.trm-lvl-warn{color:#ffa500}
-.trm-lvl-error{color:#ff5555}
-.trm-lvl-debug{color:#3a6a8a}
-.trm-msg{color:#c8d0c8;flex:1;overflow:hidden;text-overflow:ellipsis}
-.trm-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#4ade80;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:clamp(11px,2.3vmin,12px)/1.55 ui-monospace,Menlo,"Courier New",monospace}
+.lg03-wrap{padding:8px 10px 24px;height:100%;display:flex;flex-direction:column;overflow:hidden}
+.lg03-header{color:#4ade80;border-bottom:1px solid #1a2a1a;padding-bottom:4px;margin-bottom:6px;font-size:inherit;opacity:.8;flex-shrink:0;overflow-wrap:anywhere}
+.lg03-log{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:1px}
+.lg03-entry{display:flex;flex-shrink:0;gap:6px;white-space:nowrap;animation:lg03-fadein .25s ease}
+@keyframes lg03-fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.lg03-ts{color:#8ba28b;flex-shrink:0}
+.lg03-lvl-info{color:#4ade80}
+.lg03-lvl-warn{color:#ffa500}
+.lg03-lvl-error{color:#ff5555}
+.lg03-lvl-debug{color:#81a4bd}
+.lg03-msg{color:#c8d0c8;flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere}
+.lg03-cap{position:fixed;left:8px;bottom:7px;font:600 10px ui-monospace,monospace;color:#4ade80;opacity:.35;letter-spacing:.5px;pointer-events:none;z-index:99}
+.lg03-log::before{content:"";flex:1}
+@media(max-width:300px){.lg03-entry{display:grid;grid-template-columns:auto 1fr;gap:0 6px}.lg03-msg{grid-column:1/-1}}
+@media(prefers-reduced-motion:reduce){.lg03-entry{animation:none}}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/terminal/03-log-stream.html",
@@ -29,7 +32,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:12px/1.65
   "log pool entries (pool array)",
   "scroll interval (setInterval delay 650)",
   "max visible lines (MAX=10)",
-  "level colors (.trm-lvl-* CSS)",
+  "level colors (.lg03-lvl-* CSS)",
   "header label text"
  ],
  "preserveElements": [
@@ -63,14 +66,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:12px/1.65
 }
 </script>
 </head><body>
-<div class="trm-wrap">
-  <div class="trm-header">&#x2b25; LOG STREAM — /var/log/app.log (tail -f)</div>
-  <div class="trm-log" id="trm-log"></div>
+<div class="lg03-wrap" role="img" aria-label="Simulated application log stream with timestamps, severity levels and messages.">
+  <div class="lg03-header">&#x2b25; LOG STREAM · app.log</div>
+  <div class="lg03-log" id="lg03-log"></div>
 </div>
-<div class="trm-cap">log stream</div>
+<div class="lg03-cap" aria-hidden="true">log stream</div>
 <script>(()=>{
   const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
-  const log=document.getElementById('trm-log');
+  const log=document.getElementById('lg03-log');
   const MAX=10;
 
   const pool=[
@@ -103,25 +106,28 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0d1117;font:12px/1.65
     return [n.getHours(),n.getMinutes(),n.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
   }
 
+  function trim(){while(log.children.length>1&&(log.children.length>MAX||log.scrollHeight>log.clientHeight))log.firstChild.remove();}
+  addEventListener('resize',trim);
   function addLine(){
     const e=pool[pi%pool.length]; pi++;
-    const row=document.createElement('div'); row.className='trm-entry';
-    const t=document.createElement('span'); t.className='trm-ts'; t.textContent='['+ts()+']';
-    const lv=document.createElement('span'); lv.className='trm-lvl-'+e.l.toLowerCase(); lv.textContent='['+e.l+']'+' '.repeat(5-e.l.length);
-    const m=document.createElement('span'); m.className='trm-msg'; m.textContent=e.m;
+    const row=document.createElement('div'); row.className='lg03-entry';
+    const t=document.createElement('span'); t.className='lg03-ts'; t.textContent='['+ts()+']';
+    const lv=document.createElement('span'); lv.className='lg03-lvl-'+e.l.toLowerCase(); lv.textContent='['+e.l+']'+' '.repeat(5-e.l.length);
+    const m=document.createElement('span'); m.className='lg03-msg'; m.textContent=e.m;
     row.appendChild(t); row.appendChild(lv); row.appendChild(m);
     log.appendChild(row);
-    while(log.children.length>MAX)log.removeChild(log.firstChild);
+    trim();
   }
 
   let timer=null;
   function stop(){clearInterval(timer);}
   function play(){
+    stop();
     if(reduce){
       for(let i=0;i<MAX;i++)addLine();
       return;
     }
-    for(let i=0;i<6;i++)addLine();
+    if(!log.children.length)for(let i=0;i<6;i++)addLine();
     timer=setInterval(addLine,650);
   }
 

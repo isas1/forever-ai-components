@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="A commit button ringed by orbiting particles that contract under the cursor and pulse outward when deployed.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<title>Orbital Gravity Button</title>
+<script>
+(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
+</script>
+<style>
+  :root{
+    --ogb-bg:#0A0A0A; --ogb-surface:#111111; --ogb-text:#EDEDEA; --ogb-muted:#8A8A85;
+    --ogb-border:rgba(255,255,255,0.14); --ogb-accent:#C7F000; --ogb-line:rgba(199,240,0,0.32); --ogb-soft:rgba(199,240,0,0.14);
+    --ogb-font:ui-sans-serif,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --ogb-mono:ui-monospace,"SF Mono",Menlo,monospace;
+  }
+  :root[data-theme="light"]{
+    --ogb-bg:#FAFAF8; --ogb-surface:#F4F4F0; --ogb-text:#1A1A18; --ogb-muted:#6B6B66;
+    --ogb-border:rgba(0,0,0,0.14); --ogb-accent:#4D7A00; --ogb-line:rgba(77,122,0,0.35); --ogb-soft:rgba(77,122,0,0.12);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--ogb-bg)}
+  .ogb-root{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1em;
+    font:clamp(6px,3.4vmin,22px)/1.2 var(--ogb-font);color:var(--ogb-text);user-select:none;-webkit-user-select:none;box-sizing:border-box}
+  .ogb-field{position:relative;width:22em;height:22em;max-width:84%;max-height:84%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;touch-action:none}
+  .ogb-cv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .ogb-btn{position:relative;z-index:2;padding:1.2em 2.3em;border-radius:.4em;border:1px solid var(--ogb-border);background:var(--ogb-surface);
+    color:var(--ogb-text);font:700 1em var(--ogb-font);letter-spacing:.14em;cursor:pointer;white-space:nowrap;outline:none;
+    transition:transform .15s ease-out,border-color .25s,box-shadow .25s}
+  .ogb-btn:focus-visible{outline:2px solid var(--ogb-accent);outline-offset:.5em}
+  .ogb-btn[aria-pressed="true"]{border-color:var(--ogb-accent);box-shadow:0 0 0 1px var(--ogb-line),0 0 18px var(--ogb-soft)}
+  .ogb-btn:active{transform:scale(.96)!important}
+  .ogb-status{font:.85em var(--ogb-mono);letter-spacing:.14em;color:var(--ogb-muted);text-transform:uppercase;text-align:center;max-width:94%}
+  .ogb-cap{position:fixed;left:8px;bottom:7px;font:10px var(--ogb-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ogb-text);opacity:.28}
+  @media (prefers-reduced-motion:reduce){.ogb-btn{transition:none}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/buttons/22-orbital-gravity-button.html",
+ "title": "Orbital Gravity Button",
+ "description": "Commit button ringed by orbiting particles that contract under the cursor, pulse outward when toggled and turn lime when deployed.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "",
+ "editableAreas": [
+  "Forever Opus tokens on :root (--bg, --surface*, --text*, --border*, --accent) — one lime accent, no gradients",
+  "copy and data values in markup/script"
+ ],
+ "preserveElements": [
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "theme hook: ?theme= bootstrap, forever:theme message listener and :root[data-theme=\"light\"] tokens",
+  "IIFE wrapper, visibilitychange sleep, prefers-reduced-motion guard, time-based (dt) animation"
+ ],
+ "knownLimitations": [
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "cta",
+  "orbital",
+  "particles",
+  "magnetic",
+  "commit"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="ogb-root" role="group" aria-label="Orbital gravity commit button">
+  <div class="ogb-field" id="ogb-field">
+    <canvas class="ogb-cv" id="ogb-cv" aria-hidden="true"></canvas>
+    <button class="ogb-btn" id="ogb-btn" type="button" aria-pressed="false" aria-label="Deploy orbital gravity cluster">DEPLOY CLUSTER</button>
+  </div>
+  <div class="ogb-status" id="ogb-status" aria-live="polite">ORBITAL WELL: DORMANT</div>
+</div>
+<div class="ogb-cap" aria-hidden="true">Orbital Gravity Button</div>
+<script>
+(function(){
+  'use strict';
+  var $=function(i){return document.getElementById(i)};
+  var field=$('ogb-field'),btn=$('ogb-btn'),cv=$('ogb-cv'),status=$('ogb-status'),ctx=cv.getContext('2d');
+  var reduced=function(){return matchMedia('(prefers-reduced-motion: reduce)').matches};
+  var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  var hovering=false,deployed=false,pulse=0,raf=0,last=0,col={},sc=1;
+  var P=[];for(var i=0;i<36;i++)P.push({a:i/36*6.2832,base:88+(i%3)*16,r:88+(i%3)*16,sp:.012+(i%4)*.0035,sz:2+(i%3)*.8});
+
+  function syncTheme(){var c=getComputedStyle(document.documentElement);
+    col={idle:c.getPropertyValue('--ogb-muted').trim(),on:c.getPropertyValue('--ogb-accent').trim(),ring:c.getPropertyValue('--ogb-border').trim()};ensure();}
+  function setTheme(t){if(t==='light'||t==='dark'){document.documentElement.setAttribute('data-theme',t);syncTheme();}}
+  window.addEventListener('message',function(e){if(e.data&&e.data.type==='forever:theme')setTheme(e.data.theme)});
+
+  function size(){var d=Math.min(window.devicePixelRatio||1,2),w=field.clientWidth||320;
+    cv.width=Math.round(w*d);cv.height=Math.round(w*d);sc=w*d/320;ensure();}
+  new ResizeObserver(size).observe(field);
+
+  function takeover(){demoEnabled=false;}
+  window.addEventListener('forever:interactive',takeover);
+  btn.addEventListener('pointerdown',takeover,true);
+  btn.addEventListener('keydown',function(e){if(/^(Enter| )/.test(e.key))takeover();},true);
+
+  field.addEventListener('pointermove',function(e){
+    hovering=true;var r=field.getBoundingClientRect();
+    var dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);
+    btn.style.transform='translate('+(dx*.16).toFixed(1)+'px,'+(dy*.16).toFixed(1)+'px)';ensure();
+  });
+  field.addEventListener('pointerleave',function(){hovering=false;btn.style.transform='translate(0,0)';ensure();});
+  function toggle(){
+    deployed=!deployed;btn.setAttribute('aria-pressed',String(deployed));
+    btn.textContent=deployed?'ONLINE // ACTIVE':'DEPLOY CLUSTER';
+    status.textContent=deployed?'ORBITAL WELL: ENGAGED':'ORBITAL WELL: DORMANT';
+    pulse=48;ensure();
+  }
+  btn.addEventListener('click',toggle);
+
+  function render(now){
+    var dt=last?Math.min(now-last,50)/16.667:1;last=now;
+    var rd=reduced(),spin=!rd&&(demoEnabled||hovering||deployed);
+    ctx.setTransform(sc,0,0,sc,0,0);ctx.clearRect(0,0,320,320);
+    if(pulse>.1)pulse*=Math.pow(.88,dt);else pulse=0;
+    ctx.beginPath();ctx.arc(160,160,95+pulse*.5,0,6.2832);ctx.strokeStyle=col.ring;ctx.lineWidth=1.5;ctx.stroke();
+    var moving=pulse>0;
+    ctx.fillStyle=deployed?col.on:col.idle;
+    for(var i=0;i<P.length;i++){
+      var p=P[i];
+      if(spin)p.a+=(hovering?p.sp*2.2:p.sp)*dt;
+      var tr=(hovering?62:p.base)+pulse,k=rd?.3:.12;
+      p.r+=(tr-p.r)*(1-Math.pow(1-k,dt));
+      if(Math.abs(tr-p.r)>.05)moving=true;
+      ctx.beginPath();ctx.arc(160+Math.cos(p.a)*p.r,160+Math.sin(p.a)*p.r,p.sz,0,6.2832);ctx.fill();
+    }
+    if(!document.hidden&&(spin||moving))raf=requestAnimationFrame(render);else{raf=0;last=0;}
+  }
+  function ensure(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(render);}}
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0;}last=0;}else ensure();
+  });
+  syncTheme();size();
+})();
+</script>
+</body>
+</html>

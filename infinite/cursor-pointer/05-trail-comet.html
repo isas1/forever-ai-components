@@ -1,4 +1,5 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="A hot-cored pink comet springs after the pointer, dragging an additive tapering tail and flinging sparks, lengthening with speed.">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Trail Comet</title>
 <script>
@@ -17,20 +18,20 @@
   --ccp05-bg:#f2f2f6; --ccp05-acc:#d60064; --ccp05-spark:#ff339e;
   --ccp05-blend:source-over; --cap-o:.55;
 }
-html,body{margin:0;height:100%;overflow:hidden}
-body{background:var(--ccp05-bg);display:grid;place-items:center}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ccp05-bg)}
 .ccp05-stage{position:relative;width:100%;height:100%}
 #ccp05-c{display:block;width:100%;height:100%;cursor:none}
+.ccp05-canvas:focus-visible{outline:2px solid var(--ccp05-acc);outline-offset:-4px}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:var(--ccp05-acc);opacity:var(--cap-o);letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style><script type="application/json" id="forever-agent-meta">
 {
  "file": "infinite/cursor-pointer/05-trail-comet.html",
  "title": "Trail Comet",
- "description": "Hot-pink comet spring-follows the cursor, dragging a tapering additive trail that lengthens with speed and flings spark particles. Idle: Lissajous demo loop.",
+ "description": "Hot-pink comet spring-follows the cursor, dragging a tapering additive trail that lengthens with speed and flings spark particles. Lissajous demo stops at first deliberate input.",
  "useWhen": "Dark-background hero sections, creative portfolios, cursor-effect showcases where a premium tactile feel is needed.",
  "avoidWhen": "Light backgrounds (hardcoded dark fill). Forms or text-heavy layouts where a custom cursor competes with reading.",
- "agentPrompt": "Change comet color to cyan: replace all 'rgba(255,92,168,...)' with 'rgba(0,234,255,...)' and update the hot-core stop from rgba(255,210,235,...) to rgba(200,255,255,...). Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Adjust the existing palette tokens and effect parameters while preserving manual control. Arrow keys steer; first click/touch stops the attract path permanently for this mount. Keep demo-v1 lifecycle marker, __foreverPreview.demoEnabled initialization and forever:interactive handler. Preserve reduced motion, visibility suspension and theme switching.",
  "editableAreas": [
   "comet color (rgba(255,92,168,...))",
   "trail max length (MAX=110)",
@@ -44,16 +45,19 @@ body{background:var(--ccp05-bg);display:grid;place-items:center}
   "visibilitychange pause/resume",
   "reduced-motion still() fallback",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "sticky demo-v1 preview lifecycle; stop attract work, retain manual feedback and settling",
+  "pointer/touch takeover, keyboard access and visibility suspension",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background hardcoded to #0a0a0f — change both CSS and ctx.fillStyle to use on light pages",
-  "Reduced-motion renders one static frame, no pointer interactivity"
+  "Control state is local to each mount; format changes preserve preview takeover but create a fresh source instance.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
   "accessible",
-  "mobile-ready",
   "copy-paste-safe",
   "minimal-deps",
   "agent-ready",
@@ -71,16 +75,19 @@ body{background:var(--ccp05-bg);display:grid;place-items:center}
 }
 </script>
 </head><body>
-<div class="ccp05-stage"><canvas id="ccp05-c" role="img" aria-label="Comet tracing the pointer path"></canvas></div>
+<div class="ccp05-stage"><canvas class="ccp05-canvas" tabindex="0" aria-label="Pointer effect. Use arrow keys to steer." id="ccp05-c" role="img" aria-label="Comet tracing the pointer path"></canvas></div>
 <div class="cap">Trail Comet</div>
 <script>(function(){
 var cv=document.getElementById('ccp05-c'),ctx=cv.getContext('2d');
 var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+window.addEventListener('forever:interactive',takeover);
+document.addEventListener('pointerdown',function(e){if(e.button===0)takeover();},{capture:true,passive:true});
 var root=document.documentElement;
 var W=0,H=0,DPR=1,raf=0,running=true,t=0;
 // pointer state: pos = real/target, head = spring-followed comet head
 var px=0,py=0,hx=0,hy=0,vx=0,vy=0;
-var real=false,lastMove=0;
+var real=!demoEnabled,lastMove=0;
 var MAX=110,trail=[];           // ring of {x,y} samples, head-first
 
 // colours JS draws with — read from tokens, re-read + invalidated on theme switch
@@ -88,10 +95,10 @@ var C={};
 function hex2rgb(h){h=h.replace('#','');var n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255];}
 function syncTheme(){
   var cs=getComputedStyle(root);
-  C.bg=cs.getPropertyValue('--ccp05-bg').trim();
-  C.accRgb=hex2rgb(cs.getPropertyValue('--ccp05-acc').trim());
-  C.hotRgb=hex2rgb(cs.getPropertyValue('--ccp05-hot').trim());
-  C.sparkRgb=hex2rgb(cs.getPropertyValue('--ccp05-spark').trim());
+  C.bg=cs.getPropertyValue('--ccp05-bg').trim()||'#0a0a0f';
+  C.accRgb=hex2rgb(cs.getPropertyValue('--ccp05-acc').trim()||'#ff5ca8');
+  C.hotRgb=hex2rgb(cs.getPropertyValue('--ccp05-hot').trim()||'#ffd2eb');
+  C.sparkRgb=hex2rgb(cs.getPropertyValue('--ccp05-spark').trim()||'#ffa0d2');
   C.blend=cs.getPropertyValue('--ccp05-blend').trim()||'lighter';
 }
 // live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'}
@@ -99,7 +106,7 @@ addEventListener('message',function(e){
   var d=e.data;
   if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
     root.setAttribute('data-theme',d.theme);syncTheme();
-    if(reduce)still();     // no rAF loop in reduced motion — force a recolor
+    if(reduce)still();else draw(Math.hypot(vx,vy));     // no rAF loop in reduced motion — force a recolor
   }
 });
 syncTheme();
@@ -120,11 +127,11 @@ function demoPoint(time){
           y:cy+Math.sin(b)*ry};
 }
 function step(){
-  if(!running)return;
+  raf=0;if(!running)return;
   t+=1/60;
   // decide source: real pointer if moved within 2.4s, else self-demo
-  if(real && t-lastMove>2.4){real=false;}
-  if(!real){var d=demoPoint(t);px=d.x;py=d.y;}
+  if(demoEnabled&&real && t-lastMove>2.4){real=false;}
+  if(demoEnabled&&!real){var d=demoPoint(t);px=d.x;py=d.y;}
   // critically-ish damped spring toward target -> head; speed sets trail length
   var k=real?0.22:0.14, dmp=0.74;
   vx=(vx+(px-hx)*k)*dmp; vy=(vy+(py-hy)*k)*dmp;
@@ -136,7 +143,7 @@ function step(){
   var want=Math.min(MAX,18+sp*4.2);
   while(trail.length>want)trail.pop();
   draw(sp);
-  raf=requestAnimationFrame(step);
+  if(demoEnabled||Math.abs(px-hx)+Math.abs(py-hy)+Math.abs(vx)+Math.abs(vy)>.03||trail.some(function(p){return Math.abs(p.x-hx)+Math.abs(p.y-hy)>.03;}))raf=requestAnimationFrame(step);
 }
 function draw(sp){
   ctx.clearRect(0,0,W,H);
@@ -182,16 +189,26 @@ function still(){            // single legible frame for reduced-motion
   for(var i=0;i<70;i++){var dd=demoPoint(2.1-i*0.018);trail.push({x:dd.x,y:dd.y,s:6});}
   draw(6);
 }
-window.addEventListener('resize',function(){resize();if(reduce)still();},{passive:true});
-cv.addEventListener('pointermove',function(e){
-  if(reduce)return;
+window.addEventListener('resize',function(){resize();if(reduce)still();else{draw(0);wake();}},{passive:true});
+function move(e){
   var r=cv.getBoundingClientRect();
   px=e.clientX-r.left;py=e.clientY-r.top;
   real=true;lastMove=t;
-},{passive:true});
+  if(reduce){hx=px;hy=py;trail.forEach(function(p){p.x=hx;p.y=hy;});draw(0);}else wake();
+}
+cv.addEventListener('pointermove',move,{passive:true});cv.addEventListener('pointerdown',move,{passive:true});
+
+cv.addEventListener('keydown',function(e){
+  if(!/^Arrow(Left|Right|Up|Down)$/.test(e.key))return;
+  e.preventDefault();takeover();var r=cv.getBoundingClientRect(),step=Math.max(8,Math.min(W,H)*.06);
+  var x=px+(e.key==='ArrowRight'?step:e.key==='ArrowLeft'?-step:0),y=py+(e.key==='ArrowDown'?step:e.key==='ArrowUp'?-step:0);
+  move({clientX:r.left+Math.max(0,Math.min(W,x)),clientY:r.top+Math.max(0,Math.min(H,y))});
+});
+function takeover(){if(!demoEnabled)return;demoEnabled=false;real=true;wake();}
+function wake(){if(!reduce&&!document.hidden&&!raf){running=true;raf=requestAnimationFrame(step);}}
 function vis(){
   if(document.hidden){running=false;if(raf)cancelAnimationFrame(raf);raf=0;}
-  else if(!reduce&&!running){running=true;lastMove=t;raf=requestAnimationFrame(step);}
+  else wake();
 }
 document.addEventListener('visibilitychange',vis);
 resize();

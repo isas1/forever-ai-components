@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en">
 <head>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta charset="utf-8">
 <meta name="description" content="Amber canvas glyphs drop in one by one with motion trails and spring squash on impact, then the settled word breathes and cycles.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -24,10 +25,11 @@
     --c11-cap:#241b28; --c11-cap-o:.5;
   }
   html,body{margin:0;height:100%;overflow:hidden;background:var(--c11-bg);}
-  #sc-c{display:block;width:100%;height:100%;}
+  #kt11-c{display:block;width:100%;height:100%;}
   .cap{position:fixed;right:10px;bottom:8px;font:600 10px/1.2 ui-monospace,monospace;
        letter-spacing:.16em;color:var(--c11-cap);opacity:var(--c11-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+#kt11-c:focus-visible{outline:2px solid currentColor;outline-offset:-3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -51,12 +53,16 @@
   "visibilitychange pause/resume",
   "prefers-reduced-motion static fallback",
   "IIFE wrapper",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions",
+  "Enter/Space activation and visible focus; manual word/geometry changes finish before the renderer sleeps",
+  "Finish glyph springs using position/velocity completion; do not replace with a timed wake cutoff"
  ],
  "knownLimitations": [
   "Background color hardcoded #0d0b1a — must edit CSS and staticFrame fill to change",
   "Click skips to next word mid-animation with no transition guard",
-  "pointermove nudge is subtle — nearly imperceptible on desktop"
+  "pointermove nudge is subtle — nearly imperceptible on desktop",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -81,11 +87,11 @@
 </script>
 </head>
 <body>
-<canvas id="sc-c"></canvas>
+<canvas id="kt11-c" tabindex="0" role="button" aria-label="Activate kinetic text."></canvas>
 <div class="cap">Stagger Cascade</div>
 <script>
 (function(){
-  const cv=document.getElementById('sc-c'),ctx=cv.getContext('2d');
+  const cv=document.getElementById('kt11-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,fs;
   const root=document.documentElement;
@@ -108,6 +114,20 @@
   const WORDS=["DROP","CASCADE","RHYTHM","FALL","STAGGER"];
   let wi=0, glyphs=[], lineLift=0, lineT=0, phase=0, nudge=0;
 
+  // Glowing glyphs are baked once per character (cleared on resize / theme switch);
+  let gCache={},gKey='';
+  function glyph(ch,glow,blur){
+    const k=[fs,DPR,ACC,glow].join(),id=ch+blur;
+    if(gKey!==k){gKey=k;gCache={};}
+    if(!gCache[id]){
+      const h=Math.ceil(fs*1.1),n=Math.ceil(h*2*DPR),c=document.createElement('canvas'),g=c.getContext('2d');
+      c.width=c.height=n;g.setTransform(DPR,0,0,DPR,n/2,n/2);
+      g.font='800 '+fs+'px ui-monospace,"SF Mono",Menlo,monospace';g.textAlign='center';g.textBaseline='middle';
+      g.shadowColor=glow;g.shadowBlur=fs*blur;g.fillStyle=ACC;g.fillText(ch,0,0);
+      gCache[id]={c:c,h:h};
+    }
+    return gCache[id];
+  }
   function setFont(){ ctx.font='800 '+fs+'px ui-monospace,"SF Mono",Menlo,monospace'; }
 
   function build(){
@@ -126,7 +146,7 @@
   }
   build();
 
-  // elastic settle: spring toward 0 from above
+  let demo=window.__foreverPreview?.demoEnabled!==false;
   function tick(){
     setFont();
     ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
@@ -135,8 +155,7 @@
     const drop=fs*1.6;          // travel distance above baseline
     let allDone=true;
 
-    // whole-line breathing lift once settled
-    if(phase===2){
+    if(phase===2&&demo){
       lineT+=0.018;
       lineLift=Math.sin(lineT)*fs*0.10;
       if(lineT>Math.PI*2+0.4){ wi=(wi+1)%WORDS.length; build(); }
@@ -147,7 +166,6 @@
       if(phase===0){
         if(g.delay>0){ g.delay--; g.y=-drop; allDone=false; continue; }
         if(!g.started){ g.started=true; g.y=-drop; g.v=0; }
-        // spring toward 0
         const k=0.085, damp=0.78;
         g.v+=( -g.y )*k; g.v*=damp; g.y+=g.v;
         if(Math.abs(g.y)<0.4 && Math.abs(g.v)<0.4){ g.y=0; g.v=0; g.done=true; }
@@ -163,7 +181,6 @@
       const g=glyphs[i];
       const gx=cx+g.x, gy=cy+g.y+liftY;
       const settling = phase===0 && g.started && !g.done;
-      // motion trail while falling
       if(g.y<-2){
         const steps=4;
         for(let s=1;s<=steps;s++){
@@ -173,7 +190,6 @@
           ctx.fillText(g.ch, gx, gy - g.y*0.18*s);
         }
       }
-      // squash on impact (when near rest moving down)
       let sx=1, sy=1;
       if(settling && g.y> -fs*0.05 && g.v>0.6){ sy=0.86; sx=1.10; }
       else if(settling && g.v<-0.6){ sy=1.06; sx=0.96; }
@@ -182,36 +198,30 @@
       ctx.save();
       ctx.translate(gx,gy);
       ctx.scale(sx,sy);
-      ctx.textAlign='center';ctx.textBaseline='middle';
-      // soft glow
-      ctx.shadowColor=GLOW;
-      ctx.shadowBlur=fs*0.22;
-      ctx.fillStyle=ACC;
-      ctx.fillText(g.ch,0,0);
-      ctx.shadowBlur=0;
+      const gs=glyph(g.ch,GLOW,0.22);   // soft glow, pre-rendered
+      ctx.drawImage(gs.c,-gs.h,-gs.h,gs.h*2,gs.h*2);
       ctx.restore();
     }
 
-    // baseline guide tick
     ctx.globalAlpha=0.10;ctx.strokeStyle=ACC;ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(cx-fs*2.6,cy+fs*0.62+liftY);
     ctx.lineTo(cx+fs*2.6,cy+fs*0.62+liftY);ctx.stroke();
     ctx.globalAlpha=1;
 
-    raf=requestAnimationFrame(tick);
+    if(demo||!allDone||Math.abs(nudge)>0.02)raf=requestAnimationFrame(tick);else raf=0;
   }
 
-  cv.addEventListener('pointermove',()=>{ nudge=-fs*0.05; });
-  cv.addEventListener('click',()=>{ wi=(wi+1)%WORDS.length; build(); });
+  function takeover(){demo=false;}
+  window.addEventListener('forever:interactive',takeover,{once:true});document.addEventListener('pointerdown',takeover,{once:true});document.addEventListener('keydown',e=>{if(['Enter',' '].includes(e.key))takeover();});
+  cv.addEventListener('pointermove',()=>{nudge=-fs*0.05;start();});
+  cv.addEventListener('click',()=>{takeover();wi=(wi+1)%WORDS.length;build();if(reduce)staticFrame();else start();});
 
   function staticFrame(){
     setFont();
     ctx.fillStyle=BG;ctx.fillRect(0,0,W,H);
     const cx=W/2,cy=H/2;
     ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.shadowColor=GLOW_STATIC;ctx.shadowBlur=fs*0.2;ctx.fillStyle=ACC;
-    for(const g of glyphs) ctx.fillText(g.ch,cx+g.x,cy);
-    ctx.shadowBlur=0;
+    for(const g of glyphs){const gs=glyph(g.ch,GLOW_STATIC,0.2);ctx.drawImage(gs.c,cx+g.x-gs.h,cy-gs.h,gs.h*2,gs.h*2);}
     ctx.globalAlpha=0.10;ctx.strokeStyle=ACC;ctx.lineWidth=1;
     ctx.beginPath();ctx.moveTo(cx-fs*2.6,cy+fs*0.62);ctx.lineTo(cx+fs*2.6,cy+fs*0.62);ctx.stroke();
     ctx.globalAlpha=1;
@@ -231,7 +241,8 @@
     }
   });
   syncTheme();
-  if(reduce){ build(); staticFrame(); } else start();
+  if(reduce){ build(); staticFrame(); } else if(demo)start(); else staticFrame();
+  cv.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();cv.click();}});
 })();
 </script>
 </body>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Tart Tray Timer — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tart Tray Timer</title>
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)})();</script>
+<style>
+:root{--bg:#16221A;--card:#1E2E24;--ink:#F3D6CE;--mute:#B89B93;--rose:#E8B4A8;--gold:#E9C96A;--car:#8C482A;color-scheme:dark}
+:root[data-theme="light"]{--bg:#F9F4F0;--card:#FFFFFF;--ink:#2E1F18;--mute:#7A5B4D;--rose:#B05D4D;--gold:#C68E17;--car:#6D3E24;color-scheme:light}
+.wtb-root,.wtb-root *{box-sizing:border-box;margin:0}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg)}
+.wtb-root{width:100%;height:100%;background:var(--bg);display:grid;place-items:center;overflow:hidden}
+#wtb-stage{width:min(92vmin,640px);aspect-ratio:1;touch-action:none;cursor:pointer;user-select:none;border-radius:8px}
+#wtb-stage:focus-visible{outline:2px solid var(--rose);outline-offset:4px}
+.wtb-canvas{width:100%;height:100%;display:block}
+.wtb-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.wtb-cap{position:fixed;left:8px;bottom:7px;font:10px/1.2 system-ui,sans-serif;color:var(--ink);opacity:.45;pointer-events:none}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/23-tart-tray-timer.html",
+ "title": "Tart Tray Timer",
+ "description": "Choose up to twelve tarts, then watch a tray bake in sequence. Forest pâtisserie palette: pine, rose, pastry gold and caramel.",
+ "useWhen": "An adjustable countdown with animated baking progress and keyboard controls.",
+ "avoidWhen": "Production timekeeping without replacing the accelerated demo clock and adding persistence.",
+ "agentPrompt": "Adapt content through existing data arrays; retain named palette, controls and demo-v1 lifecycle.",
+ "editableAreas": [
+  "Dark/light palette tokens",
+  "Sample data and visible labels",
+  "Animation timing and geometry"
+ ],
+ "preserveElements": [
+  "IIFE and namespaced CSS/IDs",
+  "Initial Manual mode; sticky first-input takeover",
+  "Theme URL/message hook; redraw canvas palette",
+  "Keyboard/focus/live status; reduced motion; hidden pause"
+ ],
+ "knownLimitations": [
+  "Illustrative data; local state resets on remount.",
+  "Accelerated clock: one baking minute takes 1.5 seconds; replace T for real time."
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready",
+  "mobile-ready"
+ ],
+ "tags": [
+  "timer",
+  "baking",
+  "tray",
+  "selection",
+  "countdown"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="wtb-root" role="group" aria-label="Tart Tray Timer">
+<div id="wtb-stage" role="group" tabindex="0" aria-label="Bake tray of twelve tarts. Hover or arrow to preview, tap or Enter to bake that many tarts, two minutes each."><canvas class="wtb-canvas"></canvas></div>
+<div class="wtb-sr" id="wtb-status" role="status" data-fit-clip-ok="screen-reader-only"></div>
+</div>
+<div class="wtb-cap" aria-hidden="true">Tart Tray Timer</div>
+<script>
+(function(){
+var demoEnabled=window.__foreverPreview?.demoEnabled!==false,demoPaused=window.__foreverPreview?.demoEnabled===false,demoSession=false,demoWait=0,hiddenAt=0;
+function stopDemo(e){if(e&&e.type==='keydown'&&!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Home','End','Escape'].includes(e.key))return;if(!demoEnabled)return;demoEnabled=false;if(demoSession){demoPaused=true;cancelAnimationFrame(raf);raf=0}}
+addEventListener('forever:interactive',stopDemo);
+['pointerdown','keydown','wheel'].forEach(function(k){document.addEventListener(k,stopDemo,{capture:true,passive:true})});
+function demoBeat(ms){if(!demoEnabled||RM.matches)return;if(demoSession&&demoFinished()){demoWait+=ms;if(demoWait>1800)demoStart()}}
+var T=1500,N=12,COLS=4; // demo clock: one baking minute passes in 1.5 s
+var R=document.getElementById('wtb-stage'),C=R.firstElementChild,X=C.getContext('2d'),S=document.getElementById('wtb-status');
+var RM=matchMedia('(prefers-reduced-motion: reduce)'),W=1,P,raf=0,last=0;
+var mode=0,n=0,hv=-1,end=0,rem=0,sc=[],sv=[],dl=[],px=-1,py=-1,i;
+for(i=0;i<N;i++){sc.push(1);sv.push(0);dl.push(0)}
+function pal(){var s=getComputedStyle(document.documentElement);P={};['bg','card','ink','mute','rose','gold','car'].forEach(function(k){P[k]=s.getPropertyValue('--'+k).trim()})}
+function mx(a,b,t){var o='#',i,p=function(h,j){return parseInt(h.substr(1+j*2,2),16)};for(i=0;i<3;i++)o+=('0'+Math.round(p(a,i)+(p(b,i)-p(a,i))*t).toString(16)).slice(-2);return o}
+function size(){var r=Math.min(devicePixelRatio||1,2);W=R.clientWidth;C.width=C.height=Math.round(W*r);X.setTransform(r,0,0,r,0,0);wake()}
+function wake(){if(!raf&&!document.hidden){last=performance.now();raf=requestAnimationFrame(tick)}}
+function tick(now){raf=0;var dt=Math.min(now-last,50)/16.667;last=now;demoBeat(dt*16.667);var b=demoPaused?false:step(dt,now);draw();if((b||(demoEnabled&&!RM.matches))&&!demoPaused&&!document.hidden&&!raf)raf=requestAnimationFrame(tick)}
+function pos(i){var p=W*.22;return[W/2+(i%COLS-1.5)*p,W*.4+(Math.floor(i/COLS)-1)*p]}
+function start(k){demoPaused=false;demoSession=demoEnabled;n=k;end=performance.now()+n*2*T;mode=1;for(var j=0;j<N;j++)dl[j]=0;S.textContent='Baking '+n+' tarts, '+n*2+' minutes';wake()}
+function step(dt,now){
+  var b=mode==1,j,ts,f=Math.pow(.8,dt);
+  if(mode==1){rem=Math.max(0,(end-now)/T);if(rem<=0){mode=2;S.textContent='Done';for(j=0;j<n;j++)dl[j]=now+j*55}}
+  for(j=0;j<N;j++){
+    ts=1;if(!RM.matches&&px>=0){var q=pos(j),dx=(q[0]-px)/(W*.22),dy=(q[1]-py)/(W*.22);ts=1+.55*Math.exp(-(dx*dx+dy*dy)*1.6)}
+    if(hv==j)ts=Math.max(ts,1.5);
+    if(dl[j]&&now>=dl[j]){dl[j]=0;if(!RM.matches)sv[j]+=.1}
+    if(RM.matches){ts=hv==j?1.3:1;sc[j]=ts;sv[j]=0}else{sv[j]+=(ts-sc[j])*.2*dt;sv[j]*=f;sc[j]+=sv[j]*dt}
+    if(Math.abs(ts-sc[j])>.002||Math.abs(sv[j])>.002||dl[j])b=true;
+  }
+  return b;
+}
+function tart(x,y,r,br,lit){
+  X.beginPath();for(var i=0;i<=60;i++){var a=i/60*Math.PI*2,q=r*(1+.05*Math.cos(a*10));X[i?'lineTo':'moveTo'](x+Math.cos(a)*q,y+Math.sin(a)*q)}X.closePath();
+  if(!lit){X.strokeStyle=P.rose;X.globalAlpha=.55;X.lineWidth=1.5;X.stroke();X.globalAlpha=1;return}
+  X.fillStyle=mx(P.rose,P.car,.15+.5*br);X.fill();
+  X.fillStyle=mx(P.gold,P.car,.55*br);X.beginPath();X.arc(x,y,r*.7,0,7);X.fill();
+  X.fillStyle=P.car;X.globalAlpha=br*.8;X.beginPath();X.arc(x-r*.2,y-r*.15,r*.13,0,7);X.arc(x+r*.25,y+r*.2,r*.1,0,7);X.fill();X.globalAlpha=1}
+function draw(){
+  var s=W,p=mode==1?1-rem/(n*2):mode==2?1:0,j;
+  X.clearRect(0,0,s,s);
+  for(j=0;j<N;j++){var q=pos(j),lit=j<n&&mode>0,br=mode==0?0:Math.max(0,Math.min(1,p*(n+1.5)-j));
+    tart(q[0],q[1],s*.085*sc[j],br,lit)}
+  var txt=null;if(mode==1)txt=Math.ceil(rem);else if(mode==0&&hv>=0)txt=(hv+1)*2;
+  if(txt!==null){X.fillStyle=P.ink;X.font='700 '+s*.09+'px ui-monospace,Menlo,monospace';X.textAlign='center';X.textBaseline='middle';X.fillText(txt,s/2,s*.9)}
+  else if(mode==2){X.strokeStyle=P.rose;X.lineWidth=s*.012;X.lineCap='round';X.beginPath();X.moveTo(s*.47,s*.9);X.lineTo(s*.495,s*.925);X.lineTo(s*.54,s*.875);X.stroke()}
+}
+function hit(e){var b=R.getBoundingClientRect(),x=(e.clientX-b.left)*W/b.width,y=(e.clientY-b.top)*W/b.width,bi=-1,bd=(W*.1)*(W*.1);
+  px=x;py=y;for(var j=0;j<N;j++){var q=pos(j),dd=(q[0]-x)*(q[0]-x)+(q[1]-y)*(q[1]-y);if(dd<bd){bd=dd;bi=j}}return bi}
+R.addEventListener('pointermove',function(e){hv=hit(e);wake()});
+R.addEventListener('pointerdown',function(e){demoPaused=false;hv=hit(e);wake()});
+R.addEventListener('pointerup',function(e){var j=hit(e);if(j>=0)start(j+1);if(e.pointerType!='mouse'){px=-1;hv=-1}wake()});
+R.addEventListener('pointerleave',function(){px=-1;hv=-1;wake()});
+R.addEventListener('keydown',function(e){demoPaused=false;var k=e.key;
+  if(k=='ArrowRight'||k=='ArrowUp'||k=='ArrowLeft'||k=='ArrowDown'){e.preventDefault();var dd=(k=='ArrowRight'||k=='ArrowUp')?1:-1;if(k=='ArrowUp'||k=='ArrowDown')dd*=COLS;px=-1;hv=Math.max(0,Math.min(N-1,(hv<0?n-1:hv)+dd));wake()}
+  else if(k=='Enter'||k==' '){e.preventDefault();if(hv<0&&n>0)hv=n-1;if(hv>=0)start(hv+1)}
+  else if(k=='Escape'){mode=0;n=0;hv=-1;wake()}});
+R.addEventListener('blur',function(){if(px<0){hv=-1;wake()}});
+document.addEventListener('visibilitychange',function(){if(document.hidden){hiddenAt=performance.now();cancelAnimationFrame(raf);raf=0}else{if(hiddenAt&&mode==1)end+=performance.now()-hiddenAt;hiddenAt=0;wake()}});
+function setTheme(t){document.documentElement.setAttribute('data-theme',t=='light'?'light':'dark');pal();wake()}
+addEventListener('message',function(e){var m=e.data;if(m&&m.type=='forever:theme')setTheme(m.theme)});
+function demoFinished(){return mode==2}
+function demoStart(){demoSession=true;demoPaused=false;demoWait=0;sc=sc.map(function(){return 1});start(6);rem=12}
+new ResizeObserver(size).observe(R);n=6;hv=5;if(!demoEnabled)for(var warm=0;warm<120;warm++)step(1,performance.now());pal();size();if(demoEnabled&&!RM.matches)demoStart();
+RM.addEventListener('change',function(){if(RM.matches)stopDemo();wake()});
+})();
+</script>
+</body>
+</html>

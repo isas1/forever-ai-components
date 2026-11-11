@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Atelier Curtain Compare — Editor Workflows. Split before-and-after harmonic waveform comparator with sliding divider.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier Curtain Compare</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  :root {
+    --at05-bg: #171614;
+    --at05-surface-hi: #24221E;
+    --at05-pit: #11100E;
+    --at05-ink: #F4F1EA;
+    --at05-ink-fg: #171614;
+    --at05-muted: #ADA699;
+    --at05-accent: #EC6A43;
+    --at05-accent-ink: #171614;
+    --at05-moss: #4FA37A;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --at05-bg: #F4F1EA;
+    --at05-surface-hi: #FAF8F5;
+    --at05-pit: #1C1B19;
+    --at05-ink: #1C1B19;
+    --at05-ink-fg: #FAF8F5;
+    --at05-muted: #666158;
+    --at05-accent: #C43B16;
+    --at05-accent-ink: #FAF8F5;
+    --at05-moss: #2D6A4F;
+    color-scheme: light;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background-color: var(--at05-bg); color: var(--at05-ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  .at05-stage {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    padding: clamp(10px, 3vmin, 20px);
+    padding-bottom: clamp(24px, 7vmin, 32px);
+    background-color: var(--at05-bg); color: var(--at05-ink);
+  }
+  .at05-unit {
+    width: min(220px, 100%);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .at05-box {
+    width: 100%; height: clamp(84px, 40vmin, 112px);
+    border: 1.5px solid var(--at05-ink); border-radius: 6px;
+    position: relative; overflow: hidden;
+    cursor: ew-resize; touch-action: none;
+    background: var(--at05-surface-hi);
+    box-shadow: 0 2px 0 var(--at05-ink);
+  }
+  .at05-box:focus-visible { outline: 2px solid var(--at05-accent); outline-offset: 2px; }
+  .at05-layer {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 8px;
+  }
+  .at05-before {
+    background: var(--at05-pit);
+    clip-path: inset(0 50% 0 0);
+  }
+  .at05-wave { width: 100%; height: 68%; display: block; }
+  .at05-warm-main { stroke: var(--at05-moss); stroke-width: 3; fill: none; }
+  .at05-warm-sub { stroke: var(--at05-ink); stroke-width: 1.3; stroke-dasharray: 3 3; fill: none; opacity: 0.7; }
+  .at05-raw-main { stroke: var(--at05-accent); stroke-width: 2.3; stroke-linejoin: bevel; fill: none; }
+  .at05-tag {
+    position: absolute; top: 6px;
+    font-size: 9px; font-weight: 700; line-height: 1.1;
+    padding: 2px 5px; border-radius: 3px; letter-spacing: 0.06em;
+  }
+  .at05-tag-left { left: 6px; background: #FAF8F5; color: #1C1B19; }
+  .at05-tag-right { right: 6px; background: var(--at05-ink); color: var(--at05-ink-fg); }
+  .at05-handle {
+    position: absolute; top: 0; bottom: 0; left: 50%;
+    width: 2px; background: var(--at05-accent);
+    transform: translateX(-50%); pointer-events: none;
+  }
+  .at05-grip {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 22px; height: 28px;
+    background: var(--at05-accent);
+    border: 1.5px solid var(--at05-ink); border-radius: 4px;
+    display: flex; align-items: center; justify-content: center; gap: 2px;
+    box-shadow: 0 2px 0 var(--at05-ink);
+  }
+  .at05-grip-bar { width: 1.5px; height: 12px; background: var(--at05-accent-ink); }
+  .at05-readout {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: clamp(9px, 2.5vw, 10px); font-weight: 600;
+    letter-spacing: 0.08em; color: var(--at05-muted);
+    text-transform: uppercase;
+  }
+  .at05-val { color: var(--at05-ink); }
+  .at05-cap {
+    position: absolute; left: 10px; bottom: 8px;
+    font: 500 11px/1 ui-monospace, monospace;
+    color: var(--at05-ink); opacity: 0.45;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    user-select: none; pointer-events: none;
+  }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/editor-workflows/15-atelier-curtain-compare.html",
+ "title": "Atelier Curtain Compare",
+ "description": "Interactive split-curtain audio waveform comparator contrasting raw clipped harmonics against warm analog saturation.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Keep clip-path inset layer synchronization and demo-v1 takeover intact.",
+ "editableAreas": [
+  "tokens",
+  "svg"
+ ],
+ "preserveElements": [
+  "demo-v1"
+ ],
+ "knownLimitations": [],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "compare",
+  "split",
+  "slider",
+  "waveform",
+  "before-after",
+  "atelier"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="at05-stage">
+  <div class="at05-unit">
+    <div class="at05-box" id="at05-box" role="slider" tabindex="0" aria-valuemin="5" aria-valuemax="95" aria-valuenow="50" aria-label="Waveform Filter Compare">
+      <div class="at05-layer">
+        <svg class="at05-wave" viewBox="0 0 200 70" aria-hidden="true">
+          <path class="at05-warm-main" d="M0 35 Q25 5, 50 35 T100 35 T150 35 T200 35"/>
+          <path class="at05-warm-sub" d="M0 35 Q25 18, 50 35 T100 35 T150 35 T200 35"/>
+        </svg>
+        <span class="at05-tag at05-tag-right">WARM</span>
+      </div>
+      <div class="at05-layer at05-before" id="at05-before">
+        <svg class="at05-wave" viewBox="0 0 200 70" aria-hidden="true">
+          <polyline class="at05-raw-main" points="0,35 12,10 24,60 36,8 48,62 60,15 72,55 84,8 96,62 108,12 120,58 132,10 144,60 156,14 168,56 180,10 192,60 200,35"/>
+        </svg>
+        <span class="at05-tag at05-tag-left">RAW</span>
+      </div>
+      <div class="at05-handle" id="at05-handle" aria-hidden="true">
+        <div class="at05-grip"><span class="at05-grip-bar"></span><span class="at05-grip-bar"></span></div>
+      </div>
+    </div>
+    <div class="at05-readout">
+      <span>HARMONIC SPLIT</span>
+      <span class="at05-val" id="at05-out">50 / 50</span>
+    </div>
+  </div>
+</div>
+<div class="at05-cap" aria-hidden="true">Atelier Curtain Compare</div>
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var box = document.getElementById("at05-box");
+  var before = document.getElementById("at05-before");
+  var handle = document.getElementById("at05-handle");
+  var out = document.getElementById("at05-out");
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var pct = 50;
+  var dragging = false;
+
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "forever:theme" && (e.data.theme === "light" || e.data.theme === "dark")) {
+      root.setAttribute("data-theme", e.data.theme);
+    }
+  });
+
+  function setPct(next) {
+    pct = Math.max(5, Math.min(95, Math.round(next)));
+    before.style.clipPath = "inset(0 " + (100 - pct) + "% 0 0)";
+    handle.style.left = pct + "%";
+    box.setAttribute("aria-valuenow", String(pct));
+    out.textContent = pct + " / " + (100 - pct);
+  }
+
+  var demo = !reduce && (!window.__foreverPreview || window.__foreverPreview.demoEnabled !== false);
+  var rafId = 0, phase = 0.25;
+
+  function tick() {
+    rafId = 0;
+    if (!demo || reduce || document.hidden) return;
+    phase += 0.025;
+    setPct(50 + Math.sin(phase) * 30);
+    rafId = requestAnimationFrame(tick);
+  }
+  function startDemo() { if (demo && !reduce && !rafId) rafId = requestAnimationFrame(tick); }
+  function stopDemo() { if (rafId) { cancelAnimationFrame(rafId); rafId = 0; } }
+  function takeover() { demo = false; stopDemo(); }
+
+  window.addEventListener("forever:interactive", takeover);
+  box.addEventListener("pointerdown", function (e) {
+    takeover();
+    dragging = true;
+    if (box.setPointerCapture) box.setPointerCapture(e.pointerId);
+    var r = box.getBoundingClientRect();
+    if (r.width) setPct(((e.clientX - r.left) / r.width) * 100);
+  });
+  box.addEventListener("pointermove", function (e) {
+    if (!dragging) return;
+    var r = box.getBoundingClientRect();
+    if (r.width) setPct(((e.clientX - r.left) / r.width) * 100);
+  });
+  box.addEventListener("pointerup", function () { dragging = false; });
+  box.addEventListener("pointercancel", function () { dragging = false; });
+  box.addEventListener("keydown", function (e) {
+    takeover();
+    if (e.key === "ArrowRight") { e.preventDefault(); setPct(pct + 5); }
+    else if (e.key === "ArrowLeft") { e.preventDefault(); setPct(pct - 5); }
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) stopDemo(); else if (demo) startDemo();
+  });
+
+  if (demo) startDemo();
+})();
+</script>
+</body>
+</html>

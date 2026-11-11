@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="description" content="A circular core button rotates to an X and fans five glowing stone-toned icon petals outward in a spring arc, auto-opening and closing.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Radial Fan Menu</title>
 <script>
@@ -67,6 +68,9 @@
   .c04-radial--open .c04-radial__petal:hover{border-color:var(--border-glow);color:var(--accent-iris)}
   .cap{position:fixed;left:8px;bottom:7px;font-size:10px;letter-spacing:.08em;color:var(--cap);opacity:var(--cap-o);text-transform:uppercase;font-family:system-ui,sans-serif}
   @media (prefers-reduced-motion:reduce){.c04-radial__core,.c04-radial__petal{transition-duration:.001ms!important}}
+.c04-radial{width:min(190px,92vmin);height:min(190px,92vmin)}
+@media(max-width:220px){.c04-radial__petal{transition-timing-function:var(--ease-out-soft)}}
+  .c04-radial__core:focus-visible,.c04-radial__petal:focus-visible{outline:2px solid var(--accent-cyan);outline-offset:3px}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -75,14 +79,14 @@
  "description": "A core button rotates to an X and fans five glowing stone-toned icon petals outward in a staggered spring arc; auto-cycles open/close as a demo.",
  "useWhen": "Floating action buttons, mobile-style radial nav, speed-dial UIs where compact access to 4-6 actions is needed.",
  "avoidWhen": "More than 6 actions (petals overlap), or contexts requiring always-visible navigation — petals are hidden by default.",
- "agentPrompt": "Change the fan arc from -150 to -30 degrees to -200 to -90 so petals open downward-left, and set R=80 to spread them further apart. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "agentPrompt": "Keep five 46px petals at R=66 across -186 to 6 degrees for roughly 8px gaps. Increase radius or arc when adding actions, and check the smallest viewport. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
  "editableAreas": [
   "petal count (5 .c04-radial__petal buttons)",
-  "fan arc angles (start=-150, end=-30)",
+  "fan arc angles (start=-186, end=6)",
   "orbit radius (R=66)",
   "stagger delay (i*45 ms open, (n-i)*30 ms close)",
   "accent colors (--accent-iris, --accent-cyan)",
-  "idle demo cadence (DEMO_EVERY=3500 ms, OPEN_AT=100 / CLOSE_AT=2100)",
+  "autonomous preview until first deliberate input cadence (DEMO_EVERY=3500 ms, OPEN_AT=100 / CLOSE_AT=2100)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
@@ -91,11 +95,13 @@
   "visibilitychange pause/resume",
   "data-x/data-y coordinate pre-computation",
   "idle demo clock (setInterval tick; loop controls named run()/halt() — 'start' is the arc-angle var)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
-  "Idle demo cycle runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
-  "Arc is hardcoded upper-left quadrant; repositioning requires changing start/end angles"
+  "autonomous preview cycle that stops at first deliberate input runs by default (real input takes over, resumes after a few idle seconds) — remove the demo block for purely on-demand interaction",
+  "Arc opens above the core; repositioning requires changing start/end angles and rechecking petal clearance.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -135,7 +141,7 @@
   if(!root)return;
   var core=root.querySelector('.c04-radial__core');
   var petals=Array.prototype.slice.call(root.querySelectorAll('.c04-radial__petal'));
-  var R=66,start=-150,end=-30,n=petals.length;
+  var R=66,start=-186,end=6,n=petals.length;
   var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
   /* live re-theme: the canvas broadcasts {type:'forever:theme', theme:'light'|'dark'} */
   addEventListener('message',function(e){
@@ -166,17 +172,17 @@
      out at ~0.2s, hold ~1.9s, retract, and the cycle repeats every DEMO_EVERY ms. A real
      click takes over; the demo resumes after RESUME ms without input. */
   var TICK=100,DEMO_EVERY=3500,OPEN_AT=100,CLOSE_AT=2100,RESUME=3600;
-  var demo=!reduce,t=0,idle=0,timer=0;
-  core.addEventListener('click',function(){
-    demo=false;idle=0;setOpen(!root.classList.contains('c04-radial--open'));
-  });
+  var demo=!reduce&&window.__foreverPreview?.demoEnabled!==false,t=0,timer=0;
+  function takeover(){demo=false;halt();}
+  window.addEventListener("forever:interactive",takeover);root.addEventListener("pointerdown",takeover,true);root.addEventListener("keydown",function(e){if(e.target.isContentEditable||e.key.length===1||/^(Enter| |Arrow|Escape|Home|End|Page)/.test(e.key))takeover();},true);
+  core.addEventListener('click',function(){takeover();setOpen(!root.classList.contains('c04-radial--open'));});
   function tick(){
-    if(!demo){idle+=TICK;if(idle>=RESUME){demo=true;t=0;}return;}
+    if(!demo)return;
     var want=t>=OPEN_AT&&t<CLOSE_AT;
     if(want!==root.classList.contains('c04-radial--open'))setOpen(want);
     t+=TICK;if(t>=DEMO_EVERY)t=0;
   }
-  function run(){if(!timer&&!reduce)timer=setInterval(tick,TICK);}   /* 'start' is the arc angle */
+  function run(){if(!timer&&!reduce&&demo)timer=setInterval(tick,TICK);}   /* 'start' is the arc angle */
   function halt(){clearInterval(timer);timer=0;}
   document.addEventListener('visibilitychange',function(){document.hidden?halt():run();});
   if(reduce)setOpen(true);   /* reduced motion: hold one open state, no loop */

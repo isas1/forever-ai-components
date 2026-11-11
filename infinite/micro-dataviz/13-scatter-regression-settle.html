@@ -49,12 +49,15 @@
   "prefers-reduced-motion guard (static late-phase frame)",
   "visibilitychange pause/resume",
   "DPR-aware canvas sizing",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "First input stops automatic resets; a clicked synthetic fit completes its full pass before the renderer sleeps.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Data is fully synthetic and hardcoded — not wired to real data sources",
   "Confidence band is a visual approximation, not a statistically rigorous interval",
-  "pointermove nudges internal state but has no visible effect beyond a minor timing shift"
+  "pointermove nudges internal state but has no visible effect beyond a minor timing shift",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -77,14 +80,23 @@
  ]
 }
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 </head>
 <body>
-<canvas id="srs-c"></canvas>
+<canvas id="srs-c" class="srs-canvas"></canvas>
 <div class="srs-cap">Scatter Regression Settle</div>
 <script>
 (function(){
   const cv=document.getElementById('srs-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const preview=window.__foreverPreview;
+  let demoEnabled=preview?preview.demoEnabled!==false:true;
+  function shouldFrame(){return demoEnabled||(manualSequence&&t<CYC*0.74);}
+  function takeOver(){demoEnabled=false;cancelAnimationFrame(raf);raf=0;if(!document.hidden&&!reduce)raf=requestAnimationFrame(frame);else if(reduce)frame();}
+  window.addEventListener('forever:interactive',takeOver);
+  document.addEventListener('pointerdown',takeOver,{capture:true});
+  document.addEventListener('click',takeOver,{capture:true});
+  document.addEventListener('keydown',e=>{if(e.key!=='Tab'&&e.key!=='Escape'&&!/^(Shift|Control|Alt|Meta)$/.test(e.key)&&!e.metaKey&&!e.ctrlKey&&!e.altKey)takeOver();},{capture:true});
   // theme: every colour the canvas draws with is read from the tokens, once per switch
   const root=document.documentElement, C={};
   let ready=0;
@@ -141,9 +153,9 @@
 
   // cycle: scatter-in -> jitter -> settle+fit-sweep -> hold -> reset
   const CYC=560; // frames
-  let t=0,raf=0,nudge=0;
+  let t=0,raf=0,nudge=0,manualSequence=false;
   cv.addEventListener('pointermove',()=>{nudge=Math.min(1,nudge+0.25);});
-  cv.addEventListener('click',()=>{t=0;});
+  cv.addEventListener('click',()=>{t=0;manualSequence=true;});
 
   function frame(){
     if(!reduce)t=(t+1)%CYC;
@@ -198,9 +210,10 @@
     const x0=0,x1=1;
     ctx.lineWidth=Math.max(1.6,Math.min(W,H)/240);
     ctx.strokeStyle='rgba('+C.rgb+','+(0.92*fade)+')';
-    ctx.shadowColor=C.ac;ctx.shadowBlur=10;
-    ctx.beginPath();ctx.moveTo(DX(x0),DY(yL(x0)));ctx.lineTo(DX(x1),DY(yL(x1)));ctx.stroke();
-    ctx.shadowBlur=0;
+    ctx.beginPath();ctx.moveTo(DX(x0),DY(yL(x0)));ctx.lineTo(DX(x1),DY(yL(x1)));
+    const lw0=ctx.lineWidth,rs=ctx.strokeStyle;      // translucent wide strokes in the accent stand in for a shadow glow
+    ctx.strokeStyle=C.ac;ctx.globalAlpha=.1*fade;ctx.lineWidth=lw0+10;ctx.stroke();ctx.globalAlpha=.18*fade;ctx.lineWidth=lw0+5;ctx.stroke();
+    ctx.globalAlpha=1;ctx.lineWidth=lw0;ctx.strokeStyle=rs;ctx.stroke();
 
     // --- points ---
     const r=Math.max(2,Math.min(W,H)/130);
@@ -232,13 +245,13 @@
     ctx.textBaseline='top';
     ctx.fillText('r = '+rShow.toFixed(2),plot.x0+4,plot.y0-Math.max(11,Math.min(W,H)/30));
 
-    if(!reduce)raf=requestAnimationFrame(frame);
+    if(!reduce&&shouldFrame())raf=requestAnimationFrame(frame);else raf=0;
   }
-  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce&&shouldFrame())raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   ready=1;
-  if(reduce){t=Math.floor(CYC*0.85);frame();}else start();
+  if(reduce){t=Math.floor(CYC*0.85);frame();}else if(demoEnabled)start();else frame();
 })();
 </script>
 </body>

@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Atelier Hold Action — Feedback &amp; States. Safety-lock hold button with SVG perimeter progress stroke and armed latching state.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier Hold Action</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  :root {
+    --at12-bg: #171614; --at12-surface-hi: #211F1C; --at12-ink: #F4F1EA;
+    --at12-muted: #ADA699; --at12-accent: #EC6A43; --at12-accent-ink: #171614;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --at12-bg: #F4F1EA; --at12-surface-hi: #FAF8F5; --at12-ink: #1C1B19;
+    --at12-muted: #666158; --at12-accent: #C43B16; --at12-accent-ink: #FAF8F5;
+    color-scheme: light;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden; background-color: var(--at12-bg); color: var(--at12-ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased; transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  .at12-stage {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    padding: clamp(10px, 3vmin, 20px); padding-bottom: clamp(24px, 7vmin, 32px);
+    background-color: var(--at12-bg); color: var(--at12-ink);
+  }
+  .at12-unit { width: min(176px, 100%); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .at12-btn {
+    appearance: none; position: relative; width: 100%; height: clamp(44px, 18vmin, 52px);
+    background: var(--at12-surface-hi); color: var(--at12-ink); border: none; border-radius: 8px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-family: inherit; font-size: clamp(10px, 2.8vw, 11px); font-weight: 700;
+    box-shadow: 0 2px 0 var(--at12-ink); touch-action: none; padding: 0 10px;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+  .at12-btn.is-armed { background: var(--at12-accent); color: var(--at12-accent-ink); }
+  .at12-btn:focus-visible { outline: 2px solid var(--at12-accent); outline-offset: 2px; }
+  .at12-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .at12-rect-bg { fill: none; stroke: var(--at12-ink); stroke-width: 2; }
+  .at12-rect-bar { fill: none; stroke: var(--at12-accent); stroke-width: 3.5; stroke-dasharray: 420; stroke-dashoffset: 420; }
+  .at12-readout {
+    width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    font-size: clamp(9px, 2.4vw, 10px); font-weight: 600;
+    letter-spacing: 0.06em; color: var(--at12-muted); text-transform: uppercase;
+  }
+  .at12-val { color: var(--at12-ink); }
+  .at12-cap {
+    position: absolute; left: 10px; bottom: 8px; font: 500 11px/1 ui-monospace, monospace;
+    color: var(--at12-ink); opacity: 0.45; letter-spacing: 0.04em; text-transform: uppercase;
+    user-select: none; pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) { .at12-btn { transition-duration: 0.01ms !important; } }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/feedback-states/35-atelier-hold-action.html",
+ "title": "Atelier Hold Action",
+ "description": "Long-press safety confirmation button drawing a continuous SVG perimeter progress stroke before latching ARMED.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Keep stroke-dashoffset perimeter progress and keyboard hold handlers intact.",
+ "editableAreas": [
+  "tokens",
+  "labels"
+ ],
+ "preserveElements": [
+  "demo-v1"
+ ],
+ "knownLimitations": [],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "hold",
+  "long-press",
+  "confirm",
+  "progress",
+  "button",
+  "atelier"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="at12-stage">
+  <div class="at12-unit">
+    <button type="button" class="at12-btn" id="at12-btn" aria-label="Hold to Arm Master">
+      <svg class="at12-svg" viewBox="0 0 164 52" preserveAspectRatio="none" aria-hidden="true">
+        <rect class="at12-rect-bg" x="1.5" y="1.5" width="161" height="49" rx="7"/>
+        <rect class="at12-rect-bar" id="at12-bar" x="1.5" y="1.5" width="161" height="49" rx="7"/>
+      </svg>
+      <span id="at12-lbl">HOLD TO ARM</span>
+    </button>
+    <div class="at12-readout">
+      <span>SAFETY</span>
+      <span class="at12-val" id="at12-out">SAFE</span>
+    </div>
+  </div>
+</div>
+<div class="at12-cap" aria-hidden="true">Atelier Hold Action</div>
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var btn = document.getElementById("at12-btn");
+  var bar = document.getElementById("at12-bar");
+  var lbl = document.getElementById("at12-lbl");
+  var out = document.getElementById("at12-out");
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var rafId = 0, progress = 0, holding = false, armed = false;
+
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "forever:theme" && (e.data.theme === "light" || e.data.theme === "dark")) {
+      root.setAttribute("data-theme", e.data.theme);
+    }
+  });
+
+  function renderProgress(p) {
+    progress = p;
+    bar.style.strokeDashoffset = String(420 * (1 - p));
+  }
+
+  function resetSafe() {
+    armed = false;
+    holding = false;
+    renderProgress(0);
+    btn.classList.remove("is-armed");
+    lbl.textContent = "HOLD TO ARM";
+    out.textContent = "SAFE";
+  }
+
+  function stepHold() {
+    rafId = 0;
+    if (document.hidden) return;
+    if (holding && !armed) {
+      renderProgress(Math.min(1, progress + 0.025));
+      out.textContent = "ARMING " + Math.round(progress * 100) + "%";
+      if (progress >= 1) {
+        armed = true;
+        holding = false;
+        btn.classList.add("is-armed");
+        lbl.textContent = "ARMED (TAP)";
+        out.textContent = "ARMED";
+        return;
+      }
+      rafId = requestAnimationFrame(stepHold);
+    } else if (!holding && !armed && progress > 0) {
+      renderProgress(Math.max(0, progress - 0.06));
+      out.textContent = progress > 0 ? "ABORTED" : "SAFE";
+      if (progress > 0) rafId = requestAnimationFrame(stepHold);
+    }
+  }
+
+  function beginHold() {
+    if (armed) { resetSafe(); return; }
+    if (reduce) {
+      renderProgress(1); armed = true; btn.classList.add("is-armed");
+      lbl.textContent = "ARMED (TAP)"; out.textContent = "ARMED"; return;
+    }
+    holding = true; cancelAnimationFrame(rafId); rafId = requestAnimationFrame(stepHold);
+  }
+  function endHold() {
+    if (!holding) return;
+    holding = false; cancelAnimationFrame(rafId); rafId = requestAnimationFrame(stepHold);
+  }
+
+  var demo = !reduce && (!window.__foreverPreview || window.__foreverPreview.demoEnabled !== false);
+  var demoTimer = null, demoReset = null, initTimer = null;
+
+  function runDemoCycle() {
+    if (!demo || reduce || document.hidden) return;
+    resetSafe(); beginHold();
+    demoReset = setTimeout(function () { if (demo && !reduce) resetSafe(); }, 1850);
+  }
+  function startDemo() { if (demo && !reduce && !demoTimer) demoTimer = setInterval(runDemoCycle, 2600); }
+  function stopDemo() {
+    if (initTimer) { clearTimeout(initTimer); initTimer = null; }
+    if (demoTimer) { clearInterval(demoTimer); demoTimer = null; }
+    if (demoReset) { clearTimeout(demoReset); demoReset = null; }
+  }
+  function takeover() {
+    if (!demo) return;
+    demo = false; stopDemo(); cancelAnimationFrame(rafId); rafId = 0; resetSafe();
+  }
+
+  window.addEventListener("forever:interactive", takeover);
+  btn.addEventListener("pointerdown", function (e) { takeover(); if (btn.setPointerCapture) btn.setPointerCapture(e.pointerId); beginHold(); });
+  btn.addEventListener("pointerup", endHold);
+  btn.addEventListener("pointercancel", endHold);
+  btn.addEventListener("pointerleave", endHold);
+  btn.addEventListener("keydown", function (e) { if ((e.key === " " || e.key === "Enter") && !e.repeat) { takeover(); beginHold(); } });
+  btn.addEventListener("keyup", function (e) { if (e.key === " " || e.key === "Enter") endHold(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { stopDemo(); cancelAnimationFrame(rafId); rafId = 0; }
+    else if (demo) startDemo();
+  });
+  if (demo) { initTimer = setTimeout(runDemoCycle, 240); startDemo(); }
+})();
+</script>
+</body>
+</html>

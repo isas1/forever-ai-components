@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Traced Skeleton — Progress &amp; Status. A self-contained, zero-dependency animated web component.">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Traced Skeleton</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  /* forever brand tokens — dark default, warm-paper light in the [data-theme="light"] block */
+  :root{
+    --ts13-bg:#0a0a0a;--ts13-surface:#111111;--ts13-surface-2:#1e1e1e;--ts13-surface-3:#262626;--ts13-well:#050505;
+    --ts13-text:#ededea;--ts13-muted:#8a8a85;--ts13-faint:#5a5a56;
+    --ts13-border:rgba(255,255,255,.08);--ts13-strong:rgba(255,255,255,.3);
+    --ts13-accent:#3fb680;--ts13-accent-soft:rgba(63,182,128,.14);--ts13-accent-line:rgba(63,182,128,.32);
+    --ts13-sans:Geist,ui-sans-serif,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+    --ts13-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;--ts13-loop:cubic-bezier(.45,0,.55,1);
+  }
+  :root[data-theme="light"]{
+    --ts13-bg:#fafaf8;--ts13-surface:#f4f4f0;--ts13-surface-2:#e2e2dc;--ts13-surface-3:#ffffff;--ts13-well:#eeeee8;
+    --ts13-text:#1a1a18;--ts13-muted:#6b6b66;--ts13-faint:#9a9a93;
+    --ts13-border:rgba(0,0,0,.08);--ts13-strong:rgba(0,0,0,.3);
+    --ts13-accent:#1a7a50;--ts13-accent-soft:rgba(26,122,80,.12);--ts13-accent-line:rgba(26,122,80,.35);
+  }
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--ts13-bg)}
+  .ts13-stage{position:fixed;inset:0;display:grid;place-items:center;font-family:var(--ts13-sans);color:var(--ts13-text)}
+  .ts13-card{position:relative;width:min(80%,400px);aspect-ratio:4/3;background:var(--ts13-surface);border:1px solid var(--ts13-border);
+    border-radius:8px;overflow:hidden;transition:border-color .5s}
+  .ts13-card.ts13-ready{border-color:var(--ts13-strong)}
+  /* the cheap stage: one faint stroke traces the frame, one accent dot pulses per cycle */
+  .ts13-trace{position:absolute;inset:0;width:100%;height:100%;transition:opacity .5s}
+  .ts13-trace rect{fill:none;stroke:var(--ts13-strong);stroke-width:1.2;vector-effect:non-scaling-stroke;
+    stroke-dasharray:.34 .66;stroke-dashoffset:1;animation:ts13-trace 2.4s linear infinite}
+  @keyframes ts13-trace{from{stroke-dashoffset:1}to{stroke-dashoffset:0}}
+  .ts13-dot{position:absolute;top:12px;left:12px;width:7px;height:7px;border-radius:999px;background:var(--ts13-accent);
+    animation:ts13-dot 2.4s var(--ts13-loop) infinite;transition:opacity .4s}
+  @keyframes ts13-dot{0%,100%{opacity:.25;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+  .ts13-bones{position:absolute;inset:0;padding:11% 8% 8%;display:grid;grid-template-rows:1fr auto auto;gap:6%;transition:opacity .25s}
+  .ts13-bone{background:var(--ts13-surface-2);border-radius:5px}
+  .ts13-bone.ts13-l1{height:10px;width:52%}.ts13-bone.ts13-l2{height:8px;width:34%;background:var(--ts13-surface-2);opacity:.7}
+  .ts13-well{background:var(--ts13-well);border:1px solid var(--ts13-strong);border-radius:6px}
+  .ts13-status{position:absolute;bottom:10px;left:13px;font:400 10px/1 var(--ts13-mono);letter-spacing:.02em;color:var(--ts13-faint);transition:opacity .25s}
+  /* the content it resolves into: a component card — preview well, title, mono metadata */
+  .ts13-content{position:absolute;inset:0;padding:11% 8% 8%;display:grid;grid-template-rows:1fr auto auto;gap:6%;opacity:0;transition:opacity .4s .25s}
+  .ts13-preview{position:relative;background:var(--ts13-well);border:1px solid var(--ts13-border);border-radius:6px;overflow:hidden}
+  .ts13-preview svg{position:absolute;inset:0;width:100%;height:100%}
+  .ts13-preview .ts13-core{fill:var(--ts13-accent);stroke:none;opacity:1}
+  .ts13-preview circle:not(.ts13-core){fill:none;stroke:var(--ts13-accent);stroke-width:1.5;opacity:.6;transform-origin:50% 50%}
+  .ts13-preview .ts13-r1{animation:ts13-orbit 6s linear infinite}.ts13-preview .ts13-r2{animation:ts13-orbit 9s linear infinite reverse;opacity:.35}
+  @keyframes ts13-orbit{to{transform:rotate(360deg)}}
+  .ts13-name{font-size:clamp(12px,3.6vmin,15px);font-weight:500;letter-spacing:-.01em;display:flex;justify-content:space-between;align-items:baseline}
+  .ts13-name i{font:400 10px/1 var(--ts13-mono);font-style:normal;color:var(--ts13-accent);background:var(--ts13-accent-soft);padding:4px 7px;border-radius:999px}
+  .ts13-meta{font:400 clamp(9px,2.6vmin,11px)/1 var(--ts13-mono);letter-spacing:.02em;color:var(--ts13-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ts13-ready .ts13-trace,.ts13-ready .ts13-dot,.ts13-ready .ts13-bones,.ts13-ready .ts13-status{opacity:0}
+  .ts13-ready .ts13-content{opacity:1}
+  .ts13-cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 var(--ts13-mono);color:var(--ts13-muted);opacity:.5;
+    letter-spacing:.08em;text-transform:uppercase;user-select:none;pointer-events:none}
+  @media (prefers-reduced-motion:reduce){.ts13-trace rect,.ts13-dot,.ts13-preview circle{animation:none}.ts13-card *{transition:none!important}}
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/progress-status/13-traced-skeleton.html",
+ "title": "Traced Skeleton",
+ "description": "A component card's cheap stage: a faint single stroke traces the frame, an accent dot pulses once per cycle and a mono status reads mounting, fetching source, painting — then the card resolves into a preview well with orbiting rings, a title and mono metadata, and the cycle repeats with the next item.",
+ "useWhen": "Loading states for card grids, galleries and search results where a generic grey shimmer would feel off-brand; anywhere a frame should read as 'alive and coming' rather than empty.",
+ "avoidWhen": "Text-heavy content (use a line skeleton), or contexts needing a real progress figure.",
+ "agentPrompt": "Edit the items array (title + metadata pairs), the phase lengths MOUNT=2600 and READY=2400, the status words in tick(), and replace the .ts13-preview SVG with your own resolved content; recolour via --ts13-accent. Theme: dark tokens live in :root, the light variant in :root[data-theme=\"light\"]; ?theme=light or a {type:'forever:theme'} postMessage switches at runtime.",
+ "editableAreas": [
+  "items array and phase lengths (MOUNT, READY)",
+  "status words in tick()",
+  "resolved content (.ts13-content markup, .ts13-preview SVG)",
+  "trace speed (2.4s on .ts13-trace rect) and dot period",
+  "accent tokens (--ts13-accent, --ts13-accent-soft, --ts13-accent-line)",
+  "theme tokens (:root dark defaults + [data-theme=light] overrides)"
+ ],
+ "preserveElements": [
+  "IIFE wrapper",
+  "aria-busy toggled with the state on the card",
+  "pathLength=1 on the trace rect + vector-effect:non-scaling-stroke (the stroke stays 1.2 px at any size)",
+  "prefers-reduced-motion guard (the resolved card, still)",
+  "visibilitychange pause",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+ ],
+ "knownLimitations": [
+  "The skeleton phase is deliberately low-contrast (bones on surface) — the mount audit reads its first frame as near-flat while it is plainly a loading frame",
+  "The preview well's content is decorative; wire real data into .ts13-content in a product"
+ ],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "mobile-ready",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "skeleton",
+  "placeholder",
+  "loading",
+  "stroke",
+  "trace",
+  "card",
+  "mount",
+  "mono"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="ts13-stage">
+  <div class="ts13-card" id="ts13-card" role="img" aria-busy="true"
+       aria-label="A component card loading: a faint stroke traces its frame and an accent dot pulses, then the card resolves into a preview with its title and metadata">
+    <svg class="ts13-trace" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><rect x=".6" y=".8" width="98.8" height="98.4" rx="3" pathLength="1"/></svg>
+    <span class="ts13-dot"></span>
+    <div class="ts13-bones"><div class="ts13-well"></div><div class="ts13-bone ts13-l1"></div><div class="ts13-bone ts13-l2"></div></div>
+    <div class="ts13-status" id="ts13-status">mounting</div>
+    <div class="ts13-content">
+      <div class="ts13-preview"><svg viewBox="0 0 100 60" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <circle class="ts13-r1" cx="50" cy="30" r="18" stroke-dasharray="20 93"/><circle class="ts13-r2" cx="50" cy="30" r="12" stroke-dasharray="14 61"/><circle class="ts13-core" cx="50" cy="30" r="2.5"/>
+      </svg></div>
+      <div class="ts13-name"><span id="ts13-name">orbital dots</span><i>css</i></div>
+      <div class="ts13-meta" data-fit-clip-ok id="ts13-meta">loaders · 3.8 kb · dark | light</div>
+    </div>
+  </div>
+</div>
+<div class="ts13-cap" aria-hidden="true">Traced Skeleton</div>
+<script>(function(){"use strict";
+  var root=document.documentElement, card=document.getElementById('ts13-card'), status=document.getElementById('ts13-status'),
+      name=document.getElementById('ts13-name'), meta=document.getElementById('ts13-meta');
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  addEventListener('message',function(e){var d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))root.setAttribute('data-theme',d.theme);});
+  var items=[['orbital dots','loaders · 3.8 kb · dark | light'],['hairline cta','marketing · 7.1 kb · themeable'],['pricing stack','sales · 9.4 kb · themeable']], cur=0;
+  // demo loop on a 100 ms clock: mount (trace) 2.6 s → ready 2.4 s → next item
+  var TICK=100, MOUNT=2600, READY=2400, t=MOUNT-1400, ready=false, clock=null;
+  function setReady(on){ ready=on; card.classList.toggle('ts13-ready',on); card.setAttribute('aria-busy',on?'false':'true');
+    if(!on){ cur=(cur+1)%items.length; name.textContent=items[cur][0]; meta.textContent=items[cur][1]; } }
+  function tick(){ t+=TICK;
+    if(!ready){ status.textContent = t<MOUNT*.45?'mounting': t<MOUNT*.8?'fetching source':'painting'; if(t>=MOUNT){t=0;setReady(true);} }
+    else if(t>=READY){ t=0; setReady(false); } }
+  function start(){ if(!clock&&!reduce)clock=setInterval(tick,TICK); }
+  function stop(){ clearInterval(clock); clock=null; }
+  document.addEventListener('visibilitychange',function(){ document.hidden?stop():start(); });
+  if(reduce)setReady(true); // reduced motion: the resolved card is the meaningful still
+  start();
+})();</script>
+</body>
+</html>

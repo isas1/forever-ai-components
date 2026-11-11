@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Soft warm and grey motes drift sideways on a cream paper field with random Brownian jitter, leaving faint fading trails; cursor stirs gusts.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pollen Brownian Drift</title>
@@ -48,12 +49,14 @@
   "IIFE wrapper",
   "reduced-motion static fallback (rest())",
   "visibilitychange pause/resume",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background hardcoded cream (#f2efe6) in both CSS and canvas fill — must change both to retheme",
   "No aria semantics on canvas — decorative only",
-  "Gust decays via 0.95 multiplier per frame; very slow framerate makes gust persist longer"
+  "Gust decays via 0.95 multiplier per frame; very slow framerate makes gust persist longer",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -76,10 +79,15 @@
 </script>
 </head>
 <body>
-<canvas id="pbd-c"></canvas>
+<canvas id="pbd-c" class="pbd-root"></canvas>
 <div class="pbd-cap">Pollen Brownian Drift</div>
 <script>
 (function(){
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false,sessionActive=false,takenOver=window.__foreverPreview?.interactive===true;
+  function stopDemo(){if(!takenOver){sessionActive=false;takenOver=true;}demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);
+  document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
+
   const cv=document.getElementById('pbd-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
   let W,H,DPR,S,N,parts,drift;
@@ -119,7 +127,7 @@
   let gust=0;
   cv.addEventListener('pointermove',e=>{gust=Math.min(gust+0.4,3);});
   cv.addEventListener('click',()=>{gust=Math.min(gust+1.6,4);});
-  function frame(){
+  function frame(){raf=0;if(document.hidden)return;
     // faint diffusion smear: translucent wash leaves fading trails
     ctx.fillStyle=C.wash;ctx.fillRect(0,0,W,H);
     gust*=0.95;
@@ -140,7 +148,7 @@
       ctx.fillStyle='rgba('+R+','+G+','+B+','+p.a+')';
       ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.2832);ctx.fill();
     }
-    raf=requestAnimationFrame(frame);
+    if(!reduce&&(demoEnabled||(gust>.003)))start();
   }
   function rest(){
     ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
@@ -151,10 +159,11 @@
       ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.2832);ctx.fill();}
   }
   let raf=0;
-  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!document.hidden&&!reduce&&(demoEnabled||(gust>.003)))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>{if(reduce)return;document.hidden?stop():start();});
   if(reduce){rest();}else start();
+  ['pointerdown','pointermove','pointerleave','click'].forEach(type=>cv.addEventListener(type,()=>{sessionActive=true;if(reduce){frame();}else start();}));
 })();
 </script>
 </body>

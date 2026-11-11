@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="description" content="Knurled rotary knob that spring-snaps between 12 detents with flashing tick marks and a two-digit value readout in orange.">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Detent Knob</title>
@@ -28,6 +29,8 @@
   .cap{position:fixed;left:9px;bottom:8px;font:600 10px/1.2 ui-monospace,"SFMono-Regular",monospace;
        letter-spacing:.14em;color:var(--dk-cap);opacity:var(--dk-cap-o);text-transform:uppercase;
        pointer-events:none;user-select:none;}
+
+#dk-c{touch-action:none;outline-offset:-4px}#dk-c:focus-visible{outline:2px solid currentColor}
 </style>
 <script type="application/json" id="forever-agent-meta">
 {
@@ -43,21 +46,22 @@
   "spring stiffness (K=0.020)",
   "damping factor (DAMP=0.86)",
   "knob size ratio (R=min(W,H)*0.30)",
-  "auto-advance dwell range (38+random*34)",
-  "idle demo cadence (LEAD=18 / GAP=12 / BACK=108 / CYCLE=180 / RESUME=216 frames, SWEEP=3 detents)",
+  "idle demo cadence (LEAD=18 / GAP=12 / BACK=108 / CYCLE=180, SWEEP=3 detents)",
   "theme tokens (:root dark defaults + [data-theme=light] overrides)"
  ],
  "preserveElements": [
   "DPR-aware canvas sizing",
   "visibilitychange stop/start guards",
   "prefers-reduced-motion snap fallback",
-  "idle demo sweep (same detent path as a real drag; real input takes over, resumes after RESUME)",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "idle demo sweep (same detent path as a real drag; real input takes over, demo stays off until reload)",
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Click nudges one detent at a time — no drag-to-rotate gesture",
-  "Auto-cycles by default; remove autopilot block for production",
-  "Value readout is index 0-11, not a mapped real-world range"
+  "First deliberate input permanently disables idle demo; manual input, finite feedback and settling remain active. Host demoEnabled=false skips the initial attract cycle.",
+  "Value readout is index 0-11, not a mapped real-world range",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -82,24 +86,33 @@
 </script>
 </head>
 <body>
-<canvas id="dk-c"></canvas>
+<canvas class="dk-root" role="slider" tabindex="0" aria-label="Detent knob" aria-valuemin="0" aria-valuemax="11" aria-valuenow="0" id="dk-c"></canvas>
 <div class="cap">Detent Knob</div>
 <script>
 (function(){
   const cv=document.getElementById('dk-c'),ctx=cv.getContext('2d');
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let demoEnabled=window.__foreverPreview?.demoEnabled!==false;
+  function stopDemo(){demoEnabled=false;}
+  addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});document.addEventListener('keydown',e=>{if(e.key!=='Tab')stopDemo();},{capture:true});
   const ACC='#ff5c3a', STEPS=12, TAU=Math.PI*2, STEP=TAU/STEPS;
+  // tip glow sprite, built once
+  const TIP=document.createElement('canvas');TIP.width=TIP.height=32;
+  {const g=TIP.getContext('2d'),r=g.createRadialGradient(16,16,0,16,16,16);
+    r.addColorStop(0,ACC);r.addColorStop(.3,'rgba(255,92,58,.4)');r.addColorStop(1,'rgba(255,92,58,0)');
+    g.fillStyle=r;g.fillRect(0,0,32,32);}
   const root=document.documentElement, C={};
+  // Empty iframe token snapshots need valid palette values before first layout.
   function syncTheme(){
     const cs=getComputedStyle(root);
-    C.bg=cs.getPropertyValue('--dk-bg').trim();
-    C.tick=cs.getPropertyValue('--dk-tick').trim();
-    C.flash=cs.getPropertyValue('--dk-flash').trim();
+    C.bg=cs.getPropertyValue('--dk-bg').trim()||(root.getAttribute('data-theme')==='light'?"#f2f3f6":"#1b1d22");
+    C.tick=cs.getPropertyValue('--dk-tick').trim()||(root.getAttribute('data-theme')==='light'?"rgba(27,33,48,0.18)":"rgba(255,255,255,0.16)");
+    C.flash=cs.getPropertyValue('--dk-flash').trim()||(root.getAttribute('data-theme')==='light'?"#d62500":"#ff5c3a");
   }
   addEventListener('message',function(e){
     const d=e.data;
     if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark')){
-      root.setAttribute('data-theme',d.theme); syncTheme();
+      root.setAttribute('data-theme',d.theme); syncTheme();start();
     }
   });
   syncTheme();
@@ -110,7 +123,8 @@
     cv.width=W*DPR;cv.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);
     cx=W/2;cy=H/2;R=Math.min(W,H)*0.30;
   }
-  addEventListener('resize',size);size();
+  // Resizing clears the bitmap; refresh tokens and wake the parked renderer.
+  addEventListener('resize',()=>{syncTheme();size();start();});size();
 
   // Hooke's-law spring pulling the pointer toward its target detent.
   let target=0;                 // index of detent we're snapping to
@@ -135,12 +149,12 @@
   // setTarget() a click runs — SWEEP detents clockwise starting LEAD frames (~0.3 s) after mount,
   // a pause in the pocket, then the same sweep back, one round trip every CYCLE frames (~3 s).
   // Each landing flashes its notch and steps the readout, exactly as a real nudge does.
-  // A real click takes over (demo stops); it resumes after RESUME frames (~3.6 s) of quiet.
+  // A real click takes over (demo stops); demo stays off until reload.
   const LEAD=18,GAP=12,BACK=108,CYCLE=180,RESUME=216,SWEEP=3;
-  let demo=true,d=0,idleF=0;
+  let demo=demoEnabled,d=0,idleF=0;
   function takeover(){ demo=false;idleF=0; }
   function demoStep(){
-    if(!demo){ if(++idleF>RESUME){ demo=true;idleF=0;d=0; } return; }
+    if(!demo||!demoEnabled)return;
     d++;
     for(let i=0;i<SWEEP;i++){
       if(d===LEAD+i*GAP) setTarget(target+1); else if(d===BACK+i*GAP) setTarget(target-1);
@@ -148,13 +162,13 @@
     if(d>=CYCLE) d=0;
   }
 
-  function frame(){
-    if(!reduce) demoStep();
+  function frame(){raf=0;if(document.hidden)return;
+    if(!reduce&&demoEnabled)demoStep();
     const tAng=target*STEP;
     const f=(tAng-ang)*K;                 // Hooke: F = -k x
     vel=(vel+f)*DAMP;
     ang+=reduce?(tAng-ang):vel;           // reduce -> snap, no loop motion
-    shownValue+=(value-shownValue)*0.22;
+    shownValue=reduce?value:shownValue+(value-shownValue)*.22;
 
     ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,H);
     ctx.save();ctx.translate(cx,cy);
@@ -201,9 +215,9 @@
     grad.addColorStop(0,ACC);grad.addColorStop(1,'rgba(255,92,58,0.25)');
     ctx.strokeStyle=grad;ctx.lineCap='round';ctx.lineWidth=R*0.075;
     ctx.beginPath();ctx.moveTo(0,-R*0.16);ctx.lineTo(0,-R*0.70);ctx.stroke();
-    ctx.fillStyle=ACC;ctx.shadowColor=ACC;ctx.shadowBlur=R*0.18;
+    ctx.drawImage(TIP,-R*0.20,-R*0.70-R*0.20,R*0.40,R*0.40);
+    ctx.fillStyle=ACC;
     ctx.beginPath();ctx.arc(0,-R*0.70,R*0.07,0,TAU);ctx.fill();
-    ctx.shadowBlur=0;
     ctx.restore();
 
     // ---- center hub + value readout ----
@@ -218,11 +232,13 @@
     ctx.fillText('DETENT',0,R*0.21);
 
     ctx.restore();
-    if(!reduce)raf=requestAnimationFrame(frame);
+    cv.setAttribute("aria-valuenow",value);if(!reduce&&((demoEnabled&&demo)||Math.abs(target*STEP-ang)>.001||Math.abs(vel)>.001||Math.abs(value-shownValue)>.001||flash.some(v=>v>.001)))start();
   }
   let raf=0;
-  function start(){if(!raf&&!reduce)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!document.hidden)raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
+  cv.addEventListener('keydown',e=>{if(e.key==='ArrowRight'||e.key==='ArrowUp')setTarget(target+1);else if(e.key==='ArrowLeft'||e.key==='ArrowDown')setTarget(target-1);else if(e.key==='Home')setTarget(0);else if(e.key==='End')setTarget(STEPS-1);else return;e.preventDefault();start();});
+  ['pointerdown','pointermove','pointerup','click'].forEach(type=>document.addEventListener(type,start));
   document.addEventListener('visibilitychange',()=>{document.hidden?stop():start();});
   if(reduce){setTarget(4);ang=target*STEP;shownValue=value;frame();}else{start();}
 })();

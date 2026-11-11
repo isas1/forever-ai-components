@@ -1,16 +1,19 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="description" content="Cyan phosphor-glow waveform traces across a faint scope grid with a ghosting persistence trail on dark background.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Oscilloscope</title>
 <style>
 html,body{margin:0;height:100%;overflow:hidden}
 body{background:#07080d;display:grid;place-items:center}
 #aav03-c{width:100%;height:100%;display:block}
+.aav03-stage{position:fixed;inset:0}
 .aav03-live{position:fixed;top:8px;right:9px;z-index:2;font:600 9px/1 ui-monospace,Menlo,monospace;
   letter-spacing:.1em;text-transform:uppercase;color:#22d3ee;background:rgba(34,211,238,.08);
   border:1px solid rgba(34,211,238,.28);border-radius:5px;padding:5px 8px;cursor:pointer;
   opacity:.55;transition:opacity .25s,background .25s,box-shadow .25s;user-select:none}
 .aav03-live:hover{opacity:1;background:rgba(34,211,238,.16)}
-.aav03-live.on{opacity:1;color:#07080d;background:#22d3ee;box-shadow:0 0 14px rgba(34,211,238,.6)}
+.aav03-live:focus-visible{outline:2px solid #22d3ee;outline-offset:3px}
+.aav03-live.is-on{opacity:1;color:#07080d;background:#22d3ee;box-shadow:0 0 14px rgba(34,211,238,.6)}
 .cap{position:fixed;left:8px;bottom:7px;font:600 10px/1 ui-monospace,Menlo,monospace;
   color:#22d3ee;opacity:.45;letter-spacing:.08em;text-transform:uppercase;user-select:none}
 </style><script type="application/json" id="forever-agent-meta">
@@ -33,12 +36,17 @@ body{background:#07080d;display:grid;place-items:center}
   "IIFE wrapper",
   "prefers-reduced-motion still() fallback",
   "visibilitychange pause/resume",
-  "live mic NEVER connecting to ctx.destination (feedback guard)"
+  "live mic NEVER connecting to ctx.destination (feedback guard)",
+  "First deliberate control stops synthetic attract data. Live microphone stream remains active until teardown; teardown stops tracks and closes audio context.",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Background color hardcoded in both CSS and JS — must update both to change dark theme",
   "Live mic button stays visible even in browsers without getUserMedia support",
-  "Reduced-motion mode renders a static frame but does not disable the live mic path"
+  "Reduced-motion mode renders a static frame but does not disable the live mic path",
+  "Live input depends on browser microphone permission and sandbox capability; user feedback reports unavailable input.",
+  "Microphone acquisition is permission- and sandbox-dependent; mocked tests verify track/context teardown, not hardware access.",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -61,8 +69,8 @@ body{background:#07080d;display:grid;place-items:center}
 }
 </script>
 </head><body>
-<canvas id="aav03-c" role="img" aria-label="Oscilloscope time-domain waveform"></canvas>
-<button class="aav03-live" id="aav03-live" type="button" aria-label="Switch to live microphone input">&#9834; live</button>
+<div class="aav03-stage"><canvas id="aav03-c" role="img" aria-label="Oscilloscope time-domain waveform"></canvas>
+<button class="aav03-live" id="aav03-live" type="button" aria-label="Switch to live microphone input">&#9834; live</button></div>
 <div class="cap">Oscilloscope</div>
 <script>(function(){
 var cv=document.getElementById('aav03-c'),x=cv.getContext('2d'),btn=document.getElementById('aav03-live');
@@ -70,7 +78,8 @@ var reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
 var W=0,H=0,dpr=1,N=512;
 var samp=new Float32Array(N);            // current waveform [-1,1]
 var trail=new Float32Array(N);           // previous sweep, additive ghost
-var live=null;                           // {an,buf} once mic connected
+var live=null,stream=null,source=null,destroyed=false; // {an,buf,ctx} once mic connected
+var demoEnabled=window.__foreverPreview?window.__foreverPreview.demoEnabled!==false:true;
 var ACC='#22d3ee';
 
 function size(){
@@ -166,8 +175,13 @@ function frame(){
   raf=requestAnimationFrame(frame);
 }
 
-function start(){if(run)return;run=true;raf=requestAnimationFrame(frame);}
+function start(){if(run||reduce||(!demoEnabled&&!live))return;run=true;raf=requestAnimationFrame(frame);}
 function stop(){run=false;if(raf)cancelAnimationFrame(raf);raf=0;}
+function stopDemo(){demoEnabled=false;if(!live)stop();}
+window.addEventListener('forever:interactive',stopDemo);document.addEventListener('pointerdown',stopDemo,{capture:true});document.addEventListener('click',stopDemo,{capture:true});
+document.addEventListener('keydown',function(e){if(e.key!=='Tab'&&!e.metaKey&&!e.ctrlKey&&!e.altKey)stopDemo();},{capture:true});
+function cleanup(){destroyed=true;stop();clearTimeout(rt);if(stream)stream.getTracks().forEach(function(track){track.stop();});if(source)source.disconnect();if(live&&live.ctx&&live.ctx.state!=='closed')live.ctx.close();}
+window.addEventListener('pagehide',cleanup,{once:true});
 
 function still(){            // one composed static frame for reduced-motion
   synth(2.4);
@@ -189,16 +203,17 @@ function boot(){
 btn.addEventListener('click',function(){
   if(live){return;}
   var AC=window.AudioContext||window.webkitAudioContext;
-  if(!AC||!navigator.mediaDevices){return;}
+  if(!AC||!navigator.mediaDevices?.getUserMedia){btn.textContent='mic unavailable';return;}
   var ctx=new AC();
-  navigator.mediaDevices.getUserMedia({audio:true}).then(function(stream){
-    var src=ctx.createMediaStreamSource(stream);
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(mediaStream){
+    if(destroyed){mediaStream.getTracks().forEach(function(track){track.stop();});ctx.close();return;}
+    stream=mediaStream;source=ctx.createMediaStreamSource(stream);
     var an=ctx.createAnalyser();an.fftSize=1024;an.smoothingTimeConstant=0.5;
-    src.connect(an);                       // NEVER connect to ctx.destination (feedback)
-    live={an:an,buf:new Uint8Array(an.fftSize)};
-    btn.classList.add('on');btn.textContent='♪ on';
-    if(reduce){still();}
-  }).catch(function(){ if(ctx.close)ctx.close(); });
+    source.connect(an);                       // NEVER connect to ctx.destination (feedback)
+    live={an:an,buf:new Uint8Array(an.fftSize),ctx:ctx};
+    btn.classList.add('is-on');btn.textContent='♪ on';
+    if(reduce){still();}else start();
+  }).catch(function(){if(ctx.close)ctx.close();btn.textContent='mic unavailable';});
 });
 
 var rt;window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(function(){
@@ -207,7 +222,7 @@ var rt;window.addEventListener('resize',function(){clearTimeout(rt);rt=setTimeou
 
 document.addEventListener('visibilitychange',function(){
   if(reduce)return;
-  if(document.hidden)stop();else start();
+  if(document.hidden){stop();if(live)live.ctx.suspend();}else{if(live)live.ctx.resume();if(demoEnabled||live)start();}
 });
 
 boot();

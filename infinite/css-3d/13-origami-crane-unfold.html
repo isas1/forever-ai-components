@@ -11,10 +11,12 @@
    on the canvas's light wall and lets it answer the forever:theme protocol. */
 (function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();
 </script>
+<meta name="forever-preview-lifecycle" content="demo-v1">
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#f4efe6;}
   .ocu-stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
     perspective:760px;perspective-origin:50% 44%;}
+  :root[data-theme="light"] .ocu-stage{background:#f7f3eb;}
   .ocu-scene{position:relative;width:0;height:0;transform-style:preserve-3d;will-change:transform;}
   .ocu-h{position:absolute;left:0;top:0;width:0;height:0;transform-style:preserve-3d;
     transform-origin:0 0;}
@@ -48,12 +50,14 @@
   "prefers-reduced-motion guard (static apply(1) branch)",
   "visibilitychange stop/start",
   "smoothstep fold formula (s*s*(3-2*s))",
-  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)"
+  "theme hook (?theme= bootstrap + forever:theme message listener + theme tokens)",
+  "demo-v1 preview lifecycle: initialize demoEnabled from window.__foreverPreview and stop attract work on the window forever:interactive event; retain manual feedback, settling, cleanup and explicit sessions"
  ],
  "knownLimitations": [
   "Per-frame inline style writes on every hinge and face element may cause layout thrash on older browsers",
   "No aria semantics — add aria-hidden in production",
-  "Pointer yaw only tracks X axis; no vertical tilt tracking"
+  "Pointer yaw only tracks X axis; no vertical tilt tracking",
+  "State remains local to each mounted instance; format/theme remount preserves takeover, not component values."
  ],
  "tier": "curated",
  "labels": [
@@ -78,12 +82,18 @@
 </script>
 </head>
 <body>
-<div class="ocu-stage"><div class="ocu-scene" id="ocuScene"></div></div>
+<div class="ocu-stage"><div class="ocu-scene" id="ocu-ocuScene"></div></div>
 <div class="ocu-cap">Origami Crane Unfold</div>
 <script>
 (function(){
   const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const scene=document.getElementById('ocuScene');
+  let demo=window.__foreverPreview?.demoEnabled!==false, interactionUntil=0;
+  function takeover(){demo=false;interactionUntil=performance.now()+1100;if(!document.hidden)start();}
+  window.addEventListener('forever:interactive',takeover);
+  document.addEventListener('pointerdown',takeover,{capture:true,once:true});
+  document.addEventListener('keydown',e=>{if(['Enter',' ','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key))takeover();},{capture:true,once:true});
+  document.addEventListener('pointermove',()=>{if(!demo){interactionUntil=performance.now()+1100;if(!document.hidden)start();}},{passive:true});
+  const scene=document.getElementById('ocu-ocuScene');
   const U=120;                         // base unit px
   const P1='#efe2c9', P2='#e3cfa6', P3='#d8bf90'; // paper light->dark sides
   const ACC='#c1432a';
@@ -179,7 +189,7 @@
   addEventListener('pointermove',e=>{target=26+(e.clientX/innerWidth-0.5)*40;});
   addEventListener('click',()=>{phase+=Math.PI*0.6;}); // nudge the breath
   function frame(){
-    t+=0.01;phase+=0.0075;
+    if(demo){t+=0.01;phase+=0.0075;}
     const s=Math.cos(phase)*0.5+0.5;        // 0..1
     const fold=s*s*(3-2*s);                  // smoothstep dwell at flat & full
     spin+=(target-spin)*0.045;
@@ -188,9 +198,9 @@
     const lift=(-U*0.05)+ -U*0.32*fold;      // bird rises as it forms
     scene.style.transform=`translateY(${lift}px) rotateX(${tilt}deg) rotateY(${yaw}deg)`;
     apply(fold);
-    raf=requestAnimationFrame(frame);
+    if(demo||performance.now()<interactionUntil)raf=requestAnimationFrame(frame);else raf=0;
   }
-  function start(){if(!raf)raf=requestAnimationFrame(frame);}
+  function start(){if(!raf&&!reduce&&(demo||performance.now()<interactionUntil))raf=requestAnimationFrame(frame);}
   function stop(){cancelAnimationFrame(raf);raf=0;}
   document.addEventListener('visibilitychange',()=>document.hidden?stop():start());
 
@@ -200,12 +210,12 @@
   }
   addEventListener('resize',fit);fit();
 
-  if(reduce){
+  if(reduce||!demo){
     apply(1);
     scene.style.transform=`translateY(${-U*0.37}px) rotateX(-18deg) rotateY(26deg)`;
   }else start();
+  addEventListener('message',e=>{const d=e.data;if(d&&d.type==='forever:theme'&&(d.theme==='light'||d.theme==='dark'))document.documentElement.setAttribute('data-theme',d.theme);});
 })();
 </script>
-<script>(function(){addEventListener("message",function(e){var d=e.data;if(d&&d.type==="forever:theme"&&(d.theme==="light"||d.theme==="dark"))document.documentElement.setAttribute("data-theme",d.theme);});})();</script>
 </body>
 </html>
