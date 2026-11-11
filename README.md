@@ -250,16 +250,16 @@ forever-ai-components/
 
 | Theme | Count |
 |---|---|
-| Buttons & Toggles | 37 |
-| Cards | 21 |
+| Buttons & Toggles | 38 |
+| Cards | 23 |
 | Loaders | 17 |
 | Navigation | 39 |
 | Backgrounds | 9 |
-| Inputs & Switches | 46 |
-| Cursor & Pointer | 9 |
+| Inputs & Switches | 47 |
+| Cursor & Pointer | 12 |
 | Progress & Status | 32 |
 | Feedback & States | 34 |
-| Drag & Reorder | 22 |
+| Drag & Reorder | 23 |
 
 ### Animation & Motion
 
@@ -267,8 +267,8 @@ forever-ai-components/
 |---|---|
 | Kinetic Typography | 20 |
 | Micro Data-Viz | 32 |
-| CSS 3D & Perspective | 20 |
-| Particles & Physics | 24 |
+| CSS 3D & Perspective | 21 |
+| Particles & Physics | 25 |
 | Organic & Nature | 18 |
 | Generative Geometry | 21 |
 | UI Micro-interactions | 24 |

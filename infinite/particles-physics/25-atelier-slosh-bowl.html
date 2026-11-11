@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Atelier Slosh Bowl — Particles &amp; Physics. A ceramic bowl of muted ink that ripples when poked and sloshes when stirred.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier Slosh Bowl</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  :root {
+    --at27-bg: #171614;
+    --at27-ink: #F4F1EA;
+    --at27-muted: #ADA699;
+    --at27-accent: #EC6A43;
+    --at27-ceramic: #EFEBE2;
+    --at27-wall: #D5CEBF;
+    --at27-rim: #F4F1EA;
+    --at27-liquid: #5E7284;
+    --at27-menis: #8497A8;
+    --at27-shadow: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --at27-bg: #F4F1EA;
+    --at27-ink: #1C1B19;
+    --at27-muted: #666158;
+    --at27-accent: #C43B16;
+    --at27-ceramic: #FFFDF8;
+    --at27-wall: #E4DED0;
+    --at27-rim: #1C1B19;
+    --at27-liquid: #566A7C;
+    --at27-menis: #7C90A2;
+    --at27-shadow: rgba(60, 50, 35, 0.2);
+    color-scheme: light;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background-color: var(--at27-bg); color: var(--at27-ink);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    transition: background-color 0.25s ease;
+  }
+  .at27-stage {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: clamp(4px, 2vmin, 14px);
+    background-color: var(--at27-bg);
+  }
+  .at27-bowl {
+    width: min(78vmin, 300px); aspect-ratio: 1 / 0.7;
+    padding: 0; border: 0; background: none; border-radius: 10px;
+    cursor: pointer; touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .at27-bowl:focus-visible { outline: 2px solid var(--at27-accent); outline-offset: 4px; }
+  .at27-cv { display: block; width: 100%; height: 100%; }
+  .at27-say { margin: 0; font-size: clamp(9px, 2.6vmin, 12px); font-weight: 500; letter-spacing: 0.08em; color: var(--at27-muted); user-select: none; }
+  .at27-cap {
+    position: absolute; left: 10px; bottom: 8px;
+    font: 500 11px/1 ui-monospace, monospace;
+    color: var(--at27-ink); opacity: 0.45;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    user-select: none; pointer-events: none;
+  }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/particles-physics/25-atelier-slosh-bowl.html",
+ "title": "Atelier Slosh Bowl",
+ "description": "A ceramic bowl of muted slate ink. Poke it for a ripple, drag sideways to slosh the whole body; three floats ride the surface.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "Canvas colours come from tokens through syncTheme(); the loop stops when the liquid is at rest.",
+ "editableAreas": [
+  "tokens",
+  "fill level",
+  "damping"
+ ],
+ "preserveElements": [
+  "demo-v1"
+ ],
+ "knownLimitations": [],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "liquid",
+  "slosh",
+  "ripple",
+  "canvas",
+  "physics",
+  "atelier"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="at27-stage">
+  <button type="button" class="at27-bowl" id="at27-bowl" aria-label="Bowl of ink. Arrow keys rock it, Enter drops a ripple">
+    <canvas class="at27-cv" id="at27-cv" aria-hidden="true"></canvas>
+  </button>
+  <p class="at27-say">Stir.</p>
+</div>
+<div class="at27-cap" aria-hidden="true">Atelier Slosh Bowl</div>
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  var bowl = document.getElementById("at27-bowl");
+  var cv = document.getElementById("at27-cv");
+  var ctx = cv.getContext("2d");
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var demo = !reduce && (!window.__foreverPreview || window.__foreverPreview.demoEnabled !== false);
+  var N = 48, u = [], v = [], i;
+  var blobs = [{ x: 0.3, v: 0, r: 0.05 }, { x: 0.52, v: 0, r: 0.035 }, { x: 0.7, v: 0, r: 0.045 }];
+  var w = 1, h = 1, dpr = 1, raf = 0, col = {}, last = null, lastDemo = 0, flip = 1;
+  for (i = 0; i < N; i++) { u[i] = demo ? (i / (N - 1) - 0.5) * 22 : 0; v[i] = 0; }
+
+  function syncTheme() {
+    var cs = getComputedStyle(root);
+    ["ceramic", "wall", "rim", "liquid", "menis", "shadow"].forEach(function (k) {
+      col[k] = cs.getPropertyValue("--at27-" + k).trim();
+    });
+  }
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "forever:theme" && (e.data.theme === "light" || e.data.theme === "dark")) {
+      root.setAttribute("data-theme", e.data.theme);
+      syncTheme(); draw();
+    }
+  });
+
+  function size() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    w = bowl.clientWidth || 1; h = bowl.clientHeight || 1;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  }
+  function half(rx, ry, y0) {
+    ctx.beginPath();
+    ctx.moveTo(w / 2 - rx, y0);
+    ctx.ellipse(w / 2, y0, rx, ry, 0, Math.PI, 0, true);
+    ctx.closePath();
+  }
+  function draw() {
+    var y0 = h * 0.2, rx = w * 0.45, ry = h * 0.62, t = w * 0.035, k = h / 200;
+    var xl = w / 2 - rx + t, span = (rx - t) * 2, lev = y0 + ry * 0.36, j, x, y;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = col.shadow;
+    ctx.beginPath(); ctx.ellipse(w / 2, y0 + ry + h * 0.07, rx * 0.62, h * 0.035, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = col.ceramic;
+    ctx.fillRect(w / 2 - rx * 0.3, y0 + ry - h * 0.02, rx * 0.6, h * 0.08);
+    half(rx, ry, y0); ctx.fill();
+    ctx.fillStyle = col.wall;
+    half(rx - t, ry - t, y0); ctx.fill();
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = col.menis;
+    for (j = 0; j < blobs.length; j++) {
+      var bi = Math.min(N - 1, Math.max(0, Math.round(blobs[j].x * (N - 1))));
+      ctx.beginPath(); ctx.arc(xl + blobs[j].x * span, lev + u[bi] * k, blobs[j].r * w, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.beginPath();
+    for (j = 0; j < N; j++) {
+      x = xl + j / (N - 1) * span; y = lev + u[j] * k;
+      if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.lineTo(xl + span, h); ctx.lineTo(xl, h); ctx.closePath();
+    ctx.fillStyle = col.liquid; ctx.fill();
+    ctx.beginPath();
+    for (j = 0; j < N; j++) {
+      x = xl + j / (N - 1) * span; y = lev + u[j] * k + 2.5 * k;
+      if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.strokeStyle = col.menis; ctx.lineWidth = Math.max(2, 4 * k); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = col.rim;
+    ctx.fillRect(w / 2 - rx - 2, y0 - 2, rx * 2 + 4, Math.max(2, 3 * k));
+  }
+
+  function poke(at, amt) {
+    for (var j = 0; j < N; j++) { var d = (j - at * (N - 1)) / 2.6; v[j] += amt * Math.exp(-d * d); }
+  }
+  function rock(amt) { for (var j = 0; j < N; j++) v[j] += amt * (j / (N - 1) - 0.5); }
+  function step() {
+    var j, mean = 0, e = 0;
+    for (j = 0; j < N; j++) {
+      var l = u[j ? j - 1 : 0], r = u[j < N - 1 ? j + 1 : N - 1];
+      v[j] = (v[j] - 0.012 * u[j] + 0.2 * (l + r - 2 * u[j])) * 0.988;
+    }
+    for (j = 0; j < N; j++) { u[j] += v[j]; mean += u[j]; }
+    mean /= N;
+    for (j = 0; j < N; j++) { u[j] -= mean; e += Math.abs(u[j]) + Math.abs(v[j]) * 8; }
+    blobs.forEach(function (b, n) {
+      var bi = Math.min(N - 2, Math.max(1, Math.round(b.x * (N - 1))));
+      b.v = (b.v + (u[bi + 1] - u[bi - 1]) * 0.0006) * 0.97;
+      blobs.forEach(function (o, m) { if (m !== n && Math.abs(o.x - b.x) < 0.02) b.v += (b.x - o.x || 0.01) * 0.02; });
+      b.x += b.v;
+      if (b.x < 0.12) { b.x = 0.12; b.v = Math.abs(b.v) * 0.5; }
+      if (b.x > 0.88) { b.x = 0.88; b.v = -Math.abs(b.v) * 0.5; }
+      e += Math.abs(b.v) * 400;
+    });
+    return e;
+  }
+  function tick(ts) {
+    raf = 0;
+    if (document.hidden) return;
+    if (demo && ts - lastDemo > 2100) {
+      lastDemo = ts; flip = -flip;
+      if (flip > 0) poke(0.25 + Math.random() * 0.5, 2.6); else rock(flip * 2.4 * (Math.random() > 0.5 ? 1 : -1));
+    }
+    var e = step();
+    draw();
+    if (demo || last || e > 1.5) raf = requestAnimationFrame(tick);
+  }
+  function kick() { if (!raf && !reduce && !document.hidden) raf = requestAnimationFrame(tick); }
+  function take() { demo = false; }
+  function where(e) {
+    var r = bowl.getBoundingClientRect();
+    return { x: Math.max(0.03, Math.min(0.97, ((e.clientX - r.left) / r.width - 0.085) / 0.83)), px: e.clientX, py: e.clientY, s: 200 / (r.height || 200) };
+  }
+
+  window.addEventListener("forever:interactive", take);
+  bowl.addEventListener("pointerdown", function (e) {
+    take();
+    last = where(e);
+    if (bowl.setPointerCapture) bowl.setPointerCapture(e.pointerId);
+    poke(last.x, 3); kick();
+  });
+  bowl.addEventListener("pointermove", function (e) {
+    var p = where(e);
+    if (!last && e.pointerType !== "mouse") return;
+    take();
+    if (last) {
+      var dx = (p.px - last.px) * p.s, dy = (p.py - last.py) * p.s;
+      rock(Math.max(-3, Math.min(3, dx * 0.12)));
+      poke(p.x, Math.max(-2, Math.min(2, dy * 0.12 + Math.abs(dx) * 0.03)));
+      last = p;
+    } else poke(p.x, 0.12);
+    kick();
+  });
+  function up() { last = null; }
+  bowl.addEventListener("pointerup", up);
+  bowl.addEventListener("pointercancel", up);
+  bowl.addEventListener("keydown", function (e) {
+    var k = e.key;
+    if (k === "ArrowLeft") rock(-2.6);
+    else if (k === "ArrowRight") rock(2.6);
+    else if (k === "ArrowUp") poke(0.5, -2.4);
+    else if (k === "ArrowDown") poke(0.5, 2.4);
+    else if (k === "Enter" || k === " ") poke(0.5, 3.2);
+    else return;
+    e.preventDefault(); take(); kick();
+  });
+  window.addEventListener("resize", function () { size(); draw(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { if (raf) { cancelAnimationFrame(raf); raf = 0; } } else kick();
+  });
+
+  syncTheme(); size(); draw();
+  if (demo) kick();
+})();
+</script>
+</body>
+</html>
