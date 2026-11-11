@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Atelier Page Turn — CSS 3D. A cloth-bound picture book whose pages fold over from the corner like paper.">
+<meta name="forever-preview-lifecycle" content="demo-v1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atelier Page Turn</title>
+<script>/* theme hook: ?theme=light|dark, before first paint */(function(){var t=new URLSearchParams(location.search).get('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t);})();</script>
+<style>
+  :root {
+    --at30-bg: #171614;
+    --at30-ink: #F4F1EA;
+    --at30-muted: #6E6A62;
+    --at30-accent: #EC6A43;
+    --at30-paper: #EFEBE2;
+    --at30-back: #DAD2C0;
+    --at30-cloth: #A85A3C;
+    --at30-mark: #1C1B19;
+    --at30-leaf: #6F8F68; --at30-clay: #C4683F; --at30-sky: #8FA9BD; --at30-sun: #DDB45C;
+    --at30-shadow: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --at30-bg: #F4F1EA;
+    --at30-ink: #1C1B19;
+    --at30-muted: #B5AE9F;
+    --at30-accent: #C43B16;
+    --at30-paper: #FFFDF8;
+    --at30-back: #E9E2D2;
+    --at30-cloth: #B5694A;
+    --at30-shadow: rgba(60, 50, 35, 0.26);
+    color-scheme: light;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background-color: var(--at30-bg); color: var(--at30-ink); transition: background-color 0.25s ease; }
+  .at30-stage {
+    position: absolute; inset: 0; overflow: hidden;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: clamp(6px, 2.6vmin, 16px);
+    background-color: var(--at30-bg);
+  }
+  .at30-defs { position: absolute; width: 0; height: 0; }
+  .at30-book { width: min(84vmin, 440px); aspect-ratio: 8 / 5; padding: 1.6%; background: var(--at30-cloth); border-radius: 5px; box-shadow: 0 10px 12px -9px var(--at30-shadow); }
+  .at30-pages { position: relative; width: 100%; height: 100%; cursor: pointer; touch-action: none; outline: none; }
+  .at30-pages:focus-visible { outline: 2px solid var(--at30-accent); outline-offset: 6px; }
+  .at30-pg { position: absolute; top: 0; left: 50%; width: 50%; height: 100%; background: var(--at30-paper); overflow: hidden; }
+  .at30-l { left: 0; background: var(--at30-back); }
+  .at30-pg.is-off { visibility: hidden; }
+  .at30-pg.is-plain { background: var(--at30-back); }
+  .at30-pg.is-plain .at30-art { display: none; }
+  .at30-art { display: block; width: 100%; height: 100%; }
+  .at30-turn { position: absolute; inset: 0; display: none; pointer-events: none; }
+  .at30-turn.is-on { display: block; }
+  .at30-turn.is-mir { transform: scaleX(-1); }
+  .at30-flap { transform-origin: 0 0; overflow: visible; }
+  .at30-gut { position: absolute; top: 0; bottom: 0; left: calc(50% - 3px); width: 6px; background: var(--at30-mark); opacity: 0.08; pointer-events: none; }
+  .at30-a { fill: var(--at30-leaf); }
+  .at30-b { fill: var(--at30-clay); }
+  .at30-s { fill: var(--at30-sky); }
+  .at30-d { fill: var(--at30-sun); }
+  .at30-l1 { fill: none; stroke: var(--at30-mark); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .at30-nav { display: flex; align-items: center; gap: clamp(6px, 2.4vmin, 14px); }
+  .at30-btn {
+    width: clamp(28px, 11vmin, 44px); height: clamp(28px, 11vmin, 44px);
+    padding: 0; border: 1.5px solid var(--at30-ink); border-radius: 50%;
+    background: none; color: var(--at30-ink); cursor: pointer;
+    font: 600 clamp(11px, 3.4vmin, 15px)/1 ui-monospace, monospace;
+  }
+  .at30-btn:disabled { opacity: 0.3; cursor: default; }
+  .at30-btn:focus-visible { outline: 2px solid var(--at30-accent); outline-offset: 2px; }
+  .at30-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--at30-muted); }
+  .at30-dot.is-on { background: var(--at30-ink); }
+  .at30-live { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .at30-cap {
+    position: absolute; left: 10px; bottom: 8px;
+    font: 500 11px/1 ui-monospace, monospace;
+    color: var(--at30-ink); opacity: 0.45;
+    letter-spacing: 0.04em; text-transform: uppercase;
+    user-select: none; pointer-events: none;
+  }
+</style>
+<script type="application/json" id="forever-agent-meta">
+{
+ "file": "infinite/css-3d/21-atelier-page-turn.html",
+ "title": "Atelier Page Turn",
+ "description": "A cloth-bound picture book. Drag a corner across the spine and the page folds over like paper; tap a side or use the arrows.",
+ "useWhen": "",
+ "avoidWhen": "",
+ "agentPrompt": "fold() reflects the page across the fold line; top clip, flap clip and flap matrix must change together.",
+ "editableAreas": [
+  "tokens",
+  "page pictures",
+  "page count"
+ ],
+ "preserveElements": [
+  "demo-v1"
+ ],
+ "knownLimitations": [],
+ "tier": "curated",
+ "labels": [
+  "agent-ready",
+  "easy-to-modify",
+  "accessible",
+  "copy-paste-safe",
+  "minimal-deps",
+  "light-ready"
+ ],
+ "tags": [
+  "book",
+  "page-turn",
+  "fold",
+  "clip-path",
+  "gallery",
+  "atelier"
+ ]
+}
+</script>
+</head>
+<body>
+<div class="at30-stage">
+  <svg class="at30-defs" aria-hidden="true">
+    <symbol id="at30-s0" viewBox="0 0 80 100"><circle class="at30-b" cx="40" cy="44" r="13"/><path class="at30-l1" d="M28 70h24M33 77h14"/></symbol>
+    <symbol id="at30-s1" viewBox="0 0 80 100"><path class="at30-s" d="M8 8h64v84H8z" opacity="0.4"/><path class="at30-b" d="M24 52l16-16 16 16v24H24z"/><path class="at30-d" d="M36 60h8v16h-8z"/><path class="at30-l1" d="M20 54l20-20 20 20M12 76h56"/></symbol>
+    <symbol id="at30-s2" viewBox="0 0 80 100"><path class="at30-d" d="M8 8h64v84H8z" opacity="0.28"/><circle class="at30-a" cx="40" cy="42" r="19"/><circle class="at30-a" cx="27" cy="52" r="11"/><circle class="at30-a" cx="53" cy="52" r="11"/><path class="at30-l1" d="M40 46v32M40 60l-7-7M40 56l7-7M14 78h52"/></symbol>
+    <symbol id="at30-s3" viewBox="0 0 80 100"><path class="at30-s" d="M8 8h64v84H8z"/><path class="at30-d" d="M52 20a13 13 0 1 0 8 23 11 11 0 0 1-8-23z"/><path class="at30-a" d="M8 92V70c10-10 22-9 32-1 8-8 20-6 32 4v19z"/><path class="at30-l1" d="M22 30h.1M34 22h.1M26 46h.1"/></symbol>
+  </svg>
+  <div class="at30-book">
+    <div class="at30-pages" id="at30-pages" tabindex="0" role="group" aria-label="Picture book. Arrow keys turn the page">
+      <div class="at30-pg at30-l" id="at30-l"></div>
+      <div class="at30-pg" id="at30-r"><svg class="at30-art" aria-hidden="true"><use href="#at30-s0"/></svg></div>
+      <div class="at30-turn" id="at30-turn">
+        <div class="at30-pg" id="at30-top"><svg class="at30-art" aria-hidden="true"><use href="#at30-s0"/></svg></div>
+        <div class="at30-pg at30-flap" id="at30-flap"><svg class="at30-art" aria-hidden="true"><use href="#at30-s0"/></svg></div>
+      </div>
+      <div class="at30-gut"></div>
+    </div>
+  </div>
+  <div class="at30-nav">
+    <button type="button" class="at30-btn" id="at30-prev" aria-label="Previous page">&lsaquo;</button>
+    <span class="at30-dot"></span><span class="at30-dot"></span><span class="at30-dot"></span><span class="at30-dot"></span><span class="at30-dot"></span>
+    <button type="button" class="at30-btn" id="at30-next" aria-label="Next page">&rsaquo;</button>
+  </div>
+  <p class="at30-live" id="at30-live" aria-live="polite"></p>
+</div>
+<div class="at30-cap" aria-hidden="true">Atelier Page Turn</div>
+<script>
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  function $(id) { return document.getElementById("at30-" + id); }
+  var pages = $("pages"), left = $("l"), right = $("r"), turnEl = $("turn"), top = $("top"), flap = $("flap");
+  var prev = $("prev"), next = $("next"), live = $("live");
+  var dots = [].slice.call(document.querySelectorAll(".at30-dot"));
+  var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var demo = !reduce && (!window.__foreverPreview || window.__foreverPreview.demoEnabled !== false);
+  var N = 4, k = 0, W = 1, H = 1, turn = null, press = null, raf = 0, lastDemo = 0, way = 1;
+
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "forever:theme" && (e.data.theme === "light" || e.data.theme === "dark")) root.setAttribute("data-theme", e.data.theme);
+  });
+
+  /* f: 0..N-1 = picture, -1 = plain back of a sheet, -2 = nothing (cover board shows) */
+  function face(el, f) {
+    el.classList.toggle("is-off", f === -2);
+    el.classList.toggle("is-plain", f === -1);
+    var u = el.querySelector("use");
+    if (u && f >= 0) u.setAttribute("href", "#at30-s" + f);
+  }
+  function rest(say) {
+    turnEl.classList.remove("is-on");
+    face(left, k > 0 ? -1 : -2);
+    face(right, k < N ? k : -2);
+    prev.disabled = k === 0; next.disabled = k === N;
+    dots.forEach(function (d, i) { d.classList.toggle("is-on", i === k); });
+    if (say) live.textContent = "Page " + (k + 1) + " of " + (N + 1);
+  }
+  function cut(pts, mx, my, nx, ny, s) {
+    var o = [], i, a, b, da, db, t;
+    for (i = 0; i < pts.length; i++) {
+      a = pts[i]; b = pts[(i + 1) % pts.length];
+      da = s * ((a[0] - mx) * nx + (a[1] - my) * ny); db = s * ((b[0] - mx) * nx + (b[1] - my) * ny);
+      if (da >= 0) o.push(a);
+      if (da * db < 0) { t = da / (da - db); o.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]); }
+    }
+    return "polygon(" + (o.length ? o : [[0, 0]]).map(function (p) { return (p[0] - W).toFixed(1) + "px " + p[1].toFixed(1) + "px"; }).join(",") + ")";
+  }
+  function fold() {
+    var px = turn.px, py = turn.py, dx = px - W, dy = py - H, d = Math.sqrt(dx * dx + dy * dy), D = Math.sqrt(W * W + H * H);
+    if (d > W) { px = W + dx / d * W; py = H + dy / d * W; }
+    dx = px - W; d = Math.sqrt(dx * dx + py * py);
+    if (d > D) { px = W + dx / d * D; py = py / d * D; }
+    var nx = 2 * W - px, ny = H - py, len = Math.sqrt(nx * nx + ny * ny);
+    if (len < 1) { top.style.clipPath = "none"; flap.style.visibility = "hidden"; return; }
+    nx /= len; ny /= len;
+    var mx = (2 * W + px) / 2, my = (H + py) / 2, rect = [[W, 0], [2 * W, 0], [2 * W, H], [W, H]];
+    top.style.clipPath = cut(rect, mx, my, nx, ny, -1);
+    flap.style.clipPath = cut(rect, mx, my, nx, ny, 1);
+    var a = 1 - 2 * nx * nx, b = -2 * nx * ny, c = 1 - 2 * ny * ny, mn = mx * nx + my * ny;
+    flap.style.visibility = "visible";
+    flap.style.transform = "matrix(" + a.toFixed(4) + "," + b.toFixed(4) + "," + b.toFixed(4) + "," + c.toFixed(4) + "," + (a * W + 2 * mn * nx - W).toFixed(2) + "," + (b * W + 2 * mn * ny).toFixed(2) + ")";
+  }
+  function begin(dir, drag) {
+    if (turn || (dir > 0 ? k >= N : k <= 0)) return false;
+    turn = { dir: dir, px: 2 * W - 2, py: H - 1, tx: 0, drag: !!drag };
+    turnEl.classList.toggle("is-mir", dir < 0);
+    if (dir > 0) { face(top, k); face(flap, -1); face(right, k + 1 < N ? k + 1 : -2); }
+    else { face(top, -1); face(flap, k - 1); face(left, k - 1 > 0 ? -1 : -2); }
+    fold();
+    turnEl.classList.add("is-on");
+    kick();
+    return true;
+  }
+  function go(dir) {
+    if (!reduce) return begin(dir);
+    if (dir > 0 ? k >= N : k <= 0) return false;
+    k += dir; rest(true);
+    return true;
+  }
+
+  function tick(ts) {
+    raf = 0;
+    if (document.hidden) return;
+    if (demo && !turn && ts - lastDemo > 2500) {
+      lastDemo = ts;
+      if (!go(way)) { way = -way; go(way); }
+    }
+    if (turn && !turn.drag) {
+      turn.px += (turn.tx - turn.px) * 0.11 + (turn.tx ? 2 : -2);
+      turn.py = turn.tx ? turn.py + (H - turn.py) * 0.2 : H - Math.sin((1 - turn.px / (2 * W)) * Math.PI) * H * 0.2;
+      if (turn.tx ? turn.px >= turn.tx - 1 : turn.px <= 1) {
+        if (!turn.tx) k += turn.dir;
+        turn = null; rest(true);
+      }
+    }
+    if (turn) fold();
+    if (demo || turn) raf = requestAnimationFrame(tick);
+  }
+  function kick() { if (!raf && !document.hidden) raf = requestAnimationFrame(tick); }
+  function take() { demo = false; }
+  function at(e) {
+    var r = pages.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  window.addEventListener("forever:interactive", take);
+  pages.addEventListener("pointerdown", function (e) {
+    take();
+    if (turn) return;
+    var p = at(e);
+    press = { x: p.x, y: p.y, dir: p.x > W ? 1 : -1 };
+    if (pages.setPointerCapture) pages.setPointerCapture(e.pointerId);
+  });
+  pages.addEventListener("pointermove", function (e) {
+    if (!press) return;
+    var p = at(e);
+    if (!turn) {
+      if (reduce || Math.abs(p.x - press.x) + Math.abs(p.y - press.y) < 6) return;
+      if (!begin(press.dir, true)) { press = null; return; }
+    }
+    turn.px = press.dir > 0 ? p.x : 2 * W - p.x; turn.py = p.y;
+  });
+  function end() {
+    if (!press) return;
+    var dir = press.dir;
+    press = null;
+    if (turn && turn.drag) { turn.drag = false; turn.tx = turn.px < W ? 0 : 2 * W; kick(); }
+    else if (!turn) go(dir);
+  }
+  pages.addEventListener("pointerup", end);
+  pages.addEventListener("pointercancel", end);
+  pages.addEventListener("keydown", function (e) {
+    var dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!dir) return;
+    e.preventDefault(); take(); go(dir);
+  });
+  prev.addEventListener("click", function () { take(); go(-1); });
+  next.addEventListener("click", function () { take(); go(1); });
+  function size() { W = pages.clientWidth / 2 || 1; H = pages.clientHeight || 1; }
+  window.addEventListener("resize", function () { size(); if (turn) fold(); });
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { if (raf) { cancelAnimationFrame(raf); raf = 0; } } else if (demo || turn) kick();
+  });
+
+  size(); rest(false);
+  if (demo) { lastDemo = -1900; kick(); }
+})();
+</script>
+</body>
+</html>
